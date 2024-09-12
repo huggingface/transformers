@@ -39,6 +39,9 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+    SequenceClassifierOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.pytorch_utils import (
@@ -76,6 +79,85 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DeepseekV2Config"
 torch.manual_seed(42)
+
+# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
+def load_balancing_loss_func(
+        gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
+) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        attention_mask (`torch.Tensor`, None):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+        num_experts (`int`, *optional*):
+            Number of experts
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    x =  overall_loss * num_experts
+    return x
+
+
 
 
 def _get_unpad_data(attention_mask):
@@ -340,7 +422,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 class DeepseekV2MLP(nn.Module):
-    #TODO: diff new added
+    #TODO: diff new addeda
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -383,61 +465,40 @@ class MoEGate(nn.Module):
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, hidden_states):
-        bsz, seq_len, h = hidden_states.shape
+        batch_size, seq_len, h = hidden_states.shape
         ### compute gating score
         hidden_states = hidden_states.view(-1, h)
         logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        if self.scoring_func == "softmax":
-            scores = logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
 
         ### select top-k experts
-        if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
-        elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-            group_mask = torch.zeros_like(group_scores)  # [n, n_group]
-            group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
-            score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group)
-                .reshape(bsz * seq_len, -1)
-            )  # [n, e]
-            tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
+        # routing_weights, selected_experts
+        top_k_gates = logits.softmax(dim=-1, dtype=torch.float32)
+        top_k_logits, top_k_indices = top_k_gates.topk(self.top_k, dim=1)
 
         ### norm gate to sum 1
         if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
+            top_k_logits /= top_k_logits.sum(dim=-1, keepdim=True)
         else:
-            topk_weight = topk_weight * self.routed_scaling_factor
-        ### expert-level computation auxiliary loss
-        if self.training and self.alpha > 0.0:
-            scores_for_aux = scores
-            aux_topk = self.top_k
-            # always compute aux loss based on the naive greedy topk method
-            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)
-            if self.seq_aux:
-                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)
-                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)
-                ce.scatter_add_(
-                    1,
-                    topk_idx_for_aux_loss,
-                    torch.ones(bsz, seq_len * aux_topk, device=hidden_states.device),
-                ).div_(seq_len * aux_topk / self.n_routed_experts)
-                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha
-            else:
-                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)
-                ce = mask_ce.float().mean(0)
-                Pi = scores_for_aux.mean(0)
-                fi = ce * self.n_routed_experts
-                aux_loss = (Pi * fi).sum() * self.alpha
-        else:
-            aux_loss = None
-        return topk_idx, topk_weight, aux_loss
+            top_k_logits = top_k_logits * self.routed_scaling_factor
+
+        ### expert-level top_k_logits auxiliary loss
+        # always compute aux loss based on the naive greedy topk method
+        topk_idx_for_aux_loss = top_k_indices.view(batch_size, -1)
+
+        scores_for_seq_aux = top_k_gates.view(batch_size, seq_len, -1)
+        final_hidden_states = torch.zeros(
+            batch_size, self.n_routed_experts, device=hidden_states.device
+        )
+        final_hidden_states.scatter_add_(
+            1,
+            topk_idx_for_aux_loss,
+            torch.ones(batch_size, seq_len * self.top_k, device=hidden_states.device),
+        ).div_(seq_len * self.top_k / self.n_routed_experts)
+        #aux_loss = None
+        aux_loss = (final_hidden_states * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha
+
+        return top_k_indices, top_k_logits, aux_loss, logits
+
 
 
 class AddAuxiliaryLoss(torch.autograd.Function):
@@ -484,25 +545,27 @@ class DeepseekV2MoE(nn.Module):
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
 
-    def forward(self, hidden_states):
-        identity = hidden_states
-        orig_shape = hidden_states.shape
-        topk_idx, topk_weight, aux_loss = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+    def forward(self, layer_input):
+        identity = layer_input
+        orig_shape = layer_input.shape
+        topk_idx, topk_weight, aux_loss, router_logits = self.gate(layer_input)
+
+        layer_input = layer_input.view(-1, layer_input.shape[-1])
         flat_topk_idx = topk_idx.view(-1)
         if self.training:
-            hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
-            y = torch.empty_like(hidden_states)
+            layer_input = layer_input.repeat_interleave(self.num_experts_per_tok, dim=0)
+            y = torch.empty_like(layer_input)
             for i, expert in enumerate(self.experts):
-                y[flat_topk_idx == i] = expert(hidden_states[flat_topk_idx == i])
+                y[flat_topk_idx == i] = expert(layer_input[flat_topk_idx == i])
             y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
-            y = y.to(hidden_states.dtype).view(*orig_shape)
-            y = AddAuxiliaryLoss.apply(y, aux_loss)
+            y = y.to(layer_input.dtype).view(*orig_shape)
+           # aux_loss_test = load_balancing_loss_func(gates, len(self.experts), self.num_experts_per_tok)
+           # y = AddAuxiliaryLoss.apply(y, aux_loss)
         else:
-            y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
+            y = self.moe_infer(layer_input, topk_idx, topk_weight).view(*orig_shape)
         if self.config.n_shared_experts is not None:
             y = y + self.shared_experts(identity)
-        return y
+        return y, router_logits
 
     @torch.no_grad()
     def moe_infer(self, x, topk_ids, topk_weight):
@@ -537,7 +600,6 @@ class DeepseekV2MoE(nn.Module):
         )
         return final_out
 
-
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -566,7 +628,6 @@ class DeepseekV2Attention(nn.Module):
         self.q_head_dim = config.qk_non_pe_head_dim + config.qk_rope_head_dim
         self.is_causal = True
 
-        self.q_lora_rank = None
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.q_head_dim, bias=False)
         else:
@@ -967,23 +1028,22 @@ class DeepseekV2DecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
+        output_router_logits = True
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        attn_output, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            **kwargs,
         )
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states, router_logits = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -993,6 +1053,10 @@ class DeepseekV2DecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+
+        if output_router_logits:
+            outputs += (router_logits,)
+
 
         return outputs
 
@@ -1160,6 +1224,8 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_router_logits = True
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1221,6 +1287,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
@@ -1235,6 +1302,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
+                    output_router_logits,
                     use_cache,
                 )
             else:
@@ -1244,6 +1312,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
                     use_cache=use_cache,
                 )
 
@@ -1261,16 +1330,20 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        if output_router_logits:
+            all_router_logits += (layer_outputs[-1],)
+
         next_cache = None
         if use_cache:
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            router_logits=all_router_logits,
         )
 
 
@@ -1283,6 +1356,8 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         self.model = DeepseekV2Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.num_experts = config.n_routed_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1306,7 +1381,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         return self.model
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1319,7 +1394,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1381,16 +1456,34 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+        output_router_logits = True
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits if return_dict else outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return CausalLMOutputWithPast(
+        aux_loss = aux_loss * 0.0005
+
+       # if not return_dict:
+        output = (logits,) + outputs[1:]
+        if output_router_logits:
+            output = (aux_loss,) + output
+        return (loss,) + output if loss is not None else output
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
