@@ -122,6 +122,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(inputs["pixel_values"].shape[0], 800)
 
+    def test_image_processor_uses_default_attr_when_size_tuple(self):
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, size=(200, 200))
+        self.assertEqual(inputs["pixel_values"].shape[0], 800)
+
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")

@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     convert_to_rgb,
     resize,
@@ -277,8 +277,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 # user may pass size as tuple or as dict with "height/width" similar to other models
                 # but qwen2-vl can't resize to given size, and expects a range of possible sizes from `min` to `max`
                 # thus we check if it's a dict and try to get values from user-passed kwargs
-                min_pixels = size.get("min_pixels", self.min_pixels) if isinstance(size, dict) else self.min_pixels
-                max_pixels = size.get("max_pixels", self.max_pixels) if isinstance(size, dict) else self.max_pixels
+                min_pixels = size.get("min_pixels", self.min_pixels)
+                max_pixels = size.get("max_pixels", self.max_pixels)
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
@@ -395,6 +395,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
+        size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
