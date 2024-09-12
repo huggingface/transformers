@@ -210,7 +210,7 @@ class PixtralAttention(nn.Module):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
 
     def forward(
         self,
@@ -247,7 +247,7 @@ class PixtralAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, patches, -1)
 
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
