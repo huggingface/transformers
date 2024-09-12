@@ -53,7 +53,6 @@ class PixtralProcessor(ProcessorMixin):
     valid_kwargs = [
         "chat_template",
         "patch_size",
-        "vision_feature_select_strategy",
         "image_token",
         "image_break_token",
     ]
@@ -72,7 +71,6 @@ class PixtralProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.patch_size = patch_size
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
