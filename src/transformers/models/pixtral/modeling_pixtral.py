@@ -23,16 +23,13 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_outputs import ModelOutput, BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
-from ..auto import AutoModelForCausalLM
 from .configuration_pixtral import PixtralConfig
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+
 
 logger = logging.get_logger(__name__)
 
@@ -84,24 +81,25 @@ class PixtralCausalLMOutputWithPast(ModelOutput):
 
 class PixtralRotaryEmbedding(nn.Module):
     """
-        The key with pixtral embedding is just that you have a frequency for each pixel positions.
-        If you have height x width pixels (or embedding pixels)
+    The key with pixtral embedding is just that you have a frequency for each pixel positions.
+    If you have height x width pixels (or embedding pixels)
 
-        then the frequency used for ROPE is given by indexing the pre_computed frequency on the
-        width and height.
+    then the frequency used for ROPE is given by indexing the pre_computed frequency on the
+    width and height.
 
-        What you output is of dimension batch, height * width, dim with dim the embed dim.
+    What you output is of dimension batch, height * width, dim with dim the embed dim.
 
-        This simply means that for each image hidden states, you are going to add
-        a corresponding positional embedding, based on it's index in the grid.
+    This simply means that for each image hidden states, you are going to add
+    a corresponding positional embedding, based on it's index in the grid.
     """
+
     def __init__(self, config, device):
         super().__init__()
         self.rope_type = "default"
         self.dim = config.head_dim
         self.base = config.rope_theta
         max_patches_per_side = config.image_size // config.patch_size
-        freqs = 1.0 / (self.base**(torch.arange(0, self.dim, 2).float() / self.dim))
+        freqs = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float() / self.dim))
 
         h = torch.arange(max_patches_per_side, device=freqs.device)
         w = torch.arange(max_patches_per_side, device=freqs.device)
@@ -114,7 +112,7 @@ class PixtralRotaryEmbedding(nn.Module):
                 freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
             ],
             dim=-1,
-        ).reshape(-1, self.dim) # we reshape to only index on the position indexes, not tuple of indexes
+        ).reshape(-1, self.dim)  # we reshape to only index on the position indexes, not tuple of indexes
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
 
         # TODO maybe make it torch compatible later on. We can also just slice
@@ -137,7 +135,6 @@ class PixtralRotaryEmbedding(nn.Module):
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
     def _dynamic_frequency_update(self, position_ids, device):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
@@ -155,7 +152,6 @@ class PixtralRotaryEmbedding(nn.Module):
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
-
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -192,6 +188,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=0):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
 
 class PixtralAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -251,6 +248,7 @@ class PixtralAttention(nn.Module):
 
         return attn_output, attn_weights
 
+
 # Copied from gemma2
 class PixtralMLP(nn.Module):
     def __init__(self, config):
@@ -292,11 +290,10 @@ def position_ids_in_meshgrid(patch_embeds_list):
     for patch in patch_embeds_list:
         height, width = patch.shape[-2:]
         mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
-        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2,-1)
+        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2, -1)
         ids = h_grid * height + v_grid
-        positions.append(ids[:,0])
+        positions.append(ids[:, 0])
     return torch.cat(positions)
-
 
 
 class PixtralAttentionLayer(nn.Module):
@@ -305,8 +302,7 @@ class PixtralAttentionLayer(nn.Module):
         self.attention_norm = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.feed_forward = PixtralMLP(config)
         self.attention = PixtralAttention(config)
-        self.ffn_norm =  PixtralRMSNorm(config.hidden_size, eps=1e-5)
-
+        self.ffn_norm = PixtralRMSNorm(config.hidden_size, eps=1e-5)
 
     def forward(
         self,
@@ -346,7 +342,6 @@ class PixtralAttentionLayer(nn.Module):
         if output_attentions:
             outputs += (attn_weights,)
         return outputs
-
 
 
 class PixtralTransformer(nn.Module):
@@ -433,8 +428,6 @@ class PixtralTransformer(nn.Module):
         )
 
 
-
-
 PIXTRAL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -487,6 +480,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 
 PIXTRAL_INPUTS_DOCSTRING = r"""
     Args:
@@ -562,12 +556,14 @@ PIXTRAL_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
+
 @add_start_docstrings(
     """The PIXTRAL model which consists of a vision backbone and a language model.""",
     PIXTRAL_START_DOCSTRING,
 )
 class PixtralModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -604,13 +600,10 @@ class PixtralModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [
-            self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images
-        ]
+        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images]
 
         # flatten to a single sequence
-        patch_embeds = torch.cat(
-            [p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
+        patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
         patch_embeds = self.ln_pre(patch_embeds)
 
         # positional embeddings

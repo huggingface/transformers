@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -25,11 +25,10 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -39,6 +38,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -97,6 +97,7 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
+    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple:
@@ -107,6 +108,8 @@ def get_resize_output_image_size(
     Args:
         input_image (`np.ndarray`):
             The image to resize.
+        size (`int` or `Tuple[int, int]`):
+            Max image size an input image can be. Must be a dictionary with the key "longest_edge".
         patch_size (`int` or `Tuple[int, int]`):
             The patch_size as `(height, width)` to use for resizing the image. If patch_size is an integer, `(patch_size, patch_size)`
             will be used
@@ -116,10 +119,11 @@ def get_resize_output_image_size(
     Returns:
         `tuple`: The target (height, width) dimension of the output image after resizing.
     """
+    max_height, max_width = size if isinstance(size, (tuple, list)) else (size, size)
     patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
     height, width = get_image_size(input_image, input_data_format)
 
-    ratio = max(height / patch_height, width / patch_width)
+    ratio = max(height / max_height, width / max_width)
 
     if ratio > 1:
         # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
@@ -138,8 +142,9 @@ class PixtralImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": }`):
-            Size of the patches in the model, used to calculate the output image size. Can be overridden by `size` in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 1024}`):
+        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+            Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -167,6 +172,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        patch_size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -177,11 +183,12 @@ class PixtralImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
+        size = size if size is not None else {"longest_edge": 1024}
+        patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
 
         self.do_resize = do_resize
         self.size = size
+        self.patch_size = patch_size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -209,6 +216,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
+        patch_size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -222,7 +230,9 @@ class PixtralImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dict containing the longest possible edge of the image.
+            patch_size (`Dict[str, int]`):
+                Patch size used to calculate the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -230,15 +240,22 @@ class PixtralImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "height" in patch_size and "width" in patch_size:
+        if "longest_edge" in size:
+            size = (size["longest_edge"], size["longest_edge"])
+        elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError("size must contain either 'longest_edge' or 'height' and 'width'.")
+
+        if "height" in patch_size and "width" in patch_size:
+            patch_size = (patch_size["height"], patch_size["width"])
+        else:
+            raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
 
         output_size = get_resize_output_image_size(
             image,
+            size=size,
             patch_size=patch_size,
-            default_to_square=default_to_square,
             input_data_format=input_data_format,
         )
         return resize(
@@ -254,6 +271,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: bool = None,
+        size: Dict[str, int] = None,
         patch_size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
@@ -276,6 +294,8 @@ class PixtralImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Describes the maximum input dimensions to the model.
             patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Patch size in the model. Used to calculate the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -313,7 +333,10 @@ class PixtralImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        patch_size = get_size_dict(patch_size, default_to_square=True)
+
         do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
         patch_size = patch_size if patch_size is not None else self.patch_size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -339,7 +362,7 @@ class PixtralImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_resize=do_resize,
-            size=patch_size,
+            size=size,
             resample=resample,
         )
 
@@ -362,7 +385,13 @@ class PixtralImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, patch_size=patch_size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    patch_size=patch_size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)

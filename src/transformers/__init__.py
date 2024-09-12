@@ -5446,7 +5446,8 @@ if TYPE_CHECKING:
         Pix2StructVisionConfig,
     )
     from .models.pixtral import (
-        PixtralConfig, PixtralProcessor,
+        PixtralConfig,
+        PixtralProcessor,
     )
     from .models.plbart import PLBartConfig
     from .models.poolformer import (
@@ -6023,11 +6024,11 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
+        from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
-        from .models.pixtral import PixtralImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
