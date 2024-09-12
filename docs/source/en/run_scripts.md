@@ -126,7 +126,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 
 The [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) supports distributed training and mixed precision, which means you can also use it in a script. To enable both of these features:
 
-- Add the `fp16` or `bf16` argument to enable mixed precision. Please note that XPU only supports BF16 for mixed precision training.
+- Add the `fp16` or `bf16` argument to enable mixed precision. XPU devices only supports `bf16` for mixed precision training.
 - Set the number of GPUs to use with the `nproc_per_node` argument.
 
 ```bash
