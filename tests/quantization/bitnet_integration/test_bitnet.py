@@ -23,7 +23,6 @@ from transformers import (
     BitNetConfig,
     OPTForCausalLM,
 )
-
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
