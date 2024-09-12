@@ -7,7 +7,7 @@ on:
     types: [completed]
   push:
     branches:
-      - revive_amd_scheduled_ci
+      - run_amd_scheduled_ci_caller*
 
 jobs:
   model-ci:
