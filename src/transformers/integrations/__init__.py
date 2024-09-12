@@ -127,7 +127,7 @@ if TYPE_CHECKING:
         BitLinear,
         pack_weights,
         replace_with_bitnet_linear,
-        unpack_weights
+        unpack_weights,
     )
     from .bitsandbytes import (
         dequantize_and_replace,
