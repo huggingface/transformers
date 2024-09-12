@@ -281,9 +281,9 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, False, True])
         aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [3, 1])
+        self.assertEqual(aspect_ratios, [1, 3])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
-        self.assertEqual(aspect_ratio_ids, 7)
+        self.assertEqual(aspect_ratio_ids, 3)
         num_tiles = inputs.aspect_ratio_mask[0, 0].sum()
         self.assertEqual(num_tiles, 3)
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
@@ -310,9 +310,9 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, True, True])
         aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [2, 1])
+        self.assertEqual(aspect_ratios, [1, 2])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
-        self.assertEqual(aspect_ratio_ids, 5)
+        self.assertEqual(aspect_ratio_ids, 2)
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
         self.assertEqual(aspect_ratio_mask, [1, 1, 0, 0])
 
@@ -355,14 +355,14 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 [1, 1],  # padding
             ],
             [
-                [3, 1],
+                [1, 3],
                 [1, 1],
             ],
         ]
         aspect_ratios = inputs.aspect_ratios.tolist()
         self.assertEqual(aspect_ratios, expected_aspect_ratios)
         aspect_ratio_ids = inputs.aspect_ratio_ids.tolist()
-        expected_aspect_ratio_ids = [[6, 0], [7, 1]]
+        expected_aspect_ratio_ids = [[6, 0], [3, 1]]
         self.assertEqual(aspect_ratio_ids, expected_aspect_ratio_ids)
         aspect_ratio_mask = inputs.aspect_ratio_mask.tolist()
         expected_aspect_ratio_mask = [
