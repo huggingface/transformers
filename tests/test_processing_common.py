@@ -39,6 +39,13 @@ if is_vision_available():
     from PIL import Image
 
 
+def prepare_image_inputs():
+    """This function prepares a list of PIL images"""
+    image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+    image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+    return image_inputs
+
+
 @require_torch
 @require_vision
 class ProcessorTesterMixin:
@@ -75,12 +82,8 @@ class ProcessorTesterMixin:
 
     @require_vision
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        return image_inputs
+        """This function prepares a list of PIL images for testing"""
+        return prepare_image_inputs()
 
     @require_vision
     def prepare_video_inputs(self):
