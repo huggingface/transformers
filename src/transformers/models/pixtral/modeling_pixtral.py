@@ -429,7 +429,7 @@ class PixtralTransformer(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states, hidden_states=[hidden_states], attentions=all_attentions
         )
 
 
