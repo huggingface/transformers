@@ -51,22 +51,21 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.cross_attention_layers.(\d+).gate_attn":                                       r"language_model.model.layers.\1.cross_attn_attn_gate",
     r"text_model.cross_attention_layers.(\d+).gate_ffwd":                                       r"language_model.model.layers.\1.cross_attn_mlp_gate",
     # special key, wqkv needs to be split afterwards
-    r"text_model.cross_attention_layers.(\d+).attention.wq.weight":                             r"language_model.model.layers.\1.cross_attn.q_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).attention.wkv":                                   r"language_model.model.layers.\1.cross_attn.k|v_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.wo":                                    r"language_model.model.layers.\1.cross_attn.o_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
-    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":                  r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.w(q|k|v|o)":                            r"language_model.model.layers.\1.cross_attn.\2_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.(q|k)_norm":                            r"language_model.model.layers.\1.cross_attn.\2_norm",
+    r"text_model.cross_attention_layers.(\d+).attention_norm.weight":                           r"language_model.model.layers.\1.input_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":              r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.w1.weight":                          r"language_model.model.layers.\1.mlp.up_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.w2.weight":                          r"language_model.model.layers.\1.mlp.down_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.w3.weight":                          r"language_model.model.layers.\1.mlp.gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).ffn_norm.weight":                                 r"language_model.model.layers.\1.post_attention_layernorm.weight",
     # self attention layers
-    r"text_model.layers.(\d+).attention.wqkv.weight":                                           r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
-    r"text_model.layers.(\d+).attention.wo":                                                    r"language_model.model.layers.\1.self_attn.o_proj",
-    r"text_model.layers.(\d+).attention.wqkv.layer_norm_weight":                                r"language_model.model.layers.\1.input_layernorm.weight",
-    r"text_model.layers.(\d+).feed_forward.mlp.layer_norm_weight":                              r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.layers.(\d+).feed_forward.mlp.fc2.":                                           r"language_model.model.layers.\1.mlp.down_proj.",
-    r"text_model.layers.(\d+).feed_forward.mlp.fc1.":                                           r"language_model.model.layers.\1.mlp.up|gate_proj.",
+    r"text_model.layers.(\d+).attention.w(q|k|v|o).weight":                                     r"language_model.model.layers.\1.self_attn.\2_proj.weight",
+    r"text_model.layers.(\d+).attention_norm.weight":                                           r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.layers.(\d+).feed_forward.w1.":                                                r"language_model.model.layers.\1.mlp.up_proj.",
+    r"text_model.layers.(\d+).feed_forward.w2.":                                                r"language_model.model.layers.\1.mlp.down_proj.",
+    r"text_model.layers.(\d+).feed_forward.w3.":                                                r"language_model.model.layers.\1.mlp.gate_proj.",
+    r"text_model.layers.(\d+).ffn_norm.weight":                                                 r"language_model.model.layers.\1.post_attention_layernorm.weight",
     # Vision encoder mapping
     r"vision_model.vision_encoder.conv1._linear":                                               r"vision_model.patch_embedding",
     r'vision_model.vision_projection.':                                                         r"multi_modal_projector.",
@@ -175,15 +174,9 @@ def is_param_different_across_shards(key):
         r"multi_modal_projector.(weight|bias)",
         r"language_model.model.embed_tokens.weight",
         r"language_model.lm_head.weight",
-        r"language_model.model.layers.(\d+).self_attn.q\|k\|v\|_proj.weight",
-        r"language_model.model.layers.(\d+).self_attn.o_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.up\|gate_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
-        r"language_model.model.layers.(\d+).cross_attn.q_proj.weight",
-        r"language_model.model.layers.(\d+).cross_attn.k\|v_proj.weight",
-        r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.up\|gate_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
+        r"language_model.model.layers.(\d+).self_attn.(q|k|v|o)_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.(q|k|v|o)_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.(up|down|gate)_proj.weight",
         r"language_model.model.learnable_embedding.weight",
     ]
     return any(re.search(pattern, key) for pattern in patterns)
@@ -294,59 +287,30 @@ def write_model(
         concat_dim = get_concat_dim(new_key)
 
         # Post-process the current_parameter.
-        if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
-            qkv_splits = [
-                torch.split(param, [dim // num_shards, key_value_dim // num_shards, key_value_dim // num_shards])
-                for param in current_parameter
-            ]
-
-            # query
-            queries = [q for q, _, _ in qkv_splits]
-            query = torch.cat([param.view(n_heads_per_shard, dims_per_head, dim) for param in queries], dim=concat_dim)
-            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(query, n_heads, dim, dim)
-
-            # key
-            keys = [k for _, k, _ in qkv_splits]
-            key = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in keys], dim=concat_dim
-            )
-            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(key, num_key_value_heads, key_value_dim, dim)
-
-            # value
-            values = [v for _, _, v in qkv_splits]
-            value = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in values], dim=concat_dim
-            )
-            state_dict[new_key.replace("q|k|v|", "v")] = value.reshape(num_key_value_heads * dims_per_head, dim)
-
-        elif "cross_attn.q_proj.weight" in new_key and "language_model" in new_key:
-            query = torch.cat(
+        if "q_proj.weight" in new_key and "language_model" in new_key:
+            current_parameter = torch.cat(
                 [param.view(n_heads_per_shard, dims_per_head, dim) for param in current_parameter], dim=concat_dim
             )
-            state_dict[new_key] = query.reshape(n_heads * dims_per_head, dim)
+            current_parameter = permute_for_rope(current_parameter, n_heads, dim, dim)
+            state_dict[new_key] = current_parameter.reshape(n_heads * dims_per_head, dim)
 
-        elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
-            key_values = [param.chunk(2) for param in current_parameter]
-            keys = [k for k, _ in key_values]
-            values = [v for _, v in key_values]
-            key = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in keys], dim=concat_dim
+        elif "k_proj.weight" in new_key and "language_model" in new_key:
+            current_parameter = torch.cat(
+                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in current_parameter],
+                dim=concat_dim,
             )
-            value = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in values], dim=concat_dim
+            current_parameter = permute_for_rope(current_parameter, num_key_value_heads, key_value_dim, dim)
+            state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
+
+        elif "v_proj.weight" in new_key and "language_model" in new_key:
+            current_parameter = torch.cat(
+                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in current_parameter],
+                dim=concat_dim,
             )
-            state_dict[new_key.replace("k|v", "k")] = key.reshape(num_key_value_heads * dims_per_head, dim)
-            state_dict[new_key.replace("k|v", "v")] = value.reshape(num_key_value_heads * dims_per_head, dim)
+            state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
 
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
             state_dict[new_key] = current_parameter.view(-1, 2).t().reshape(-1)
-
-        elif "mlp.up|gate_proj." in new_key:
-            gate_and_up = [param.chunk(2) for param in current_parameter]
-            gate = torch.cat([gate for gate, _ in gate_and_up], dim=concat_dim)
-            up = torch.cat([up for _, up in gate_and_up], dim=concat_dim)
-            state_dict[new_key.replace("up|gate", "up")] = up
-            state_dict[new_key.replace("up|gate", "gate")] = gate
 
         elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
             param = torch.cat(
@@ -507,12 +471,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/home/ubuntu/projects/meta_mllama/weights-11b",
+        default="/home/ubuntu/projects/meta_mllama/weights-11b-as-final",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="converted-mllama-11b-debug",
+        default="converted-mllama-11b-as-final",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
