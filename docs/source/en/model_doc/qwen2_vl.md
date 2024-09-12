@@ -229,12 +229,6 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixel
 
 ```
 
-Additionally, you can set the minimum and maximum pixels when calling the processor as follows:
-
-```python
-inputs = processor(text=PROMPT, images=IMAGE, size={"min_pixels": 224*224, "max_pixels": 2048*2048}, return_tensors="pt")
-```
-
 #### Multiple Image Inputs
 
 By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:
