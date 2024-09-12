@@ -16,11 +16,22 @@
 import gc
 import unittest
 
-from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
-                          BitNetConfig, OPTForCausalLM)
-from transformers.testing_utils import (require_accelerate, require_torch_gpu,
-                                        slow, torch_device)
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitNetConfig,
+    OPTForCausalLM,
+)
+
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_accelerate_available, is_torch_available
+
 
 if is_torch_available():
     import torch
@@ -70,8 +81,7 @@ class BitNetTest(unittest.TestCase):
 
     def test_replace_with_bitlinear(self):
 
-        from transformers.integrations import (BitLinear,
-                                               replace_with_bitnet_linear)
+        from transformers.integrations import BitLinear, replace_with_bitnet_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)
