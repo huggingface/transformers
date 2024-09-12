@@ -47,12 +47,13 @@ class PixtralProcessor(ProcessorMixin):
             Shoudl be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        image_token (`str`, *optional*, defaults to `"<image>"`):
+        image_token (`str`, *optional*, defaults to `"[IMG]"`):
             Special token used to denote image location.
+        image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token"]
+    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "image_break_token"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -63,12 +64,16 @@ class PixtralProcessor(ProcessorMixin):
         patch_size=None,
         vision_feature_select_strategy=None,
         chat_template=None,
-        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_break_token="[IMG_BREAK]",
+        image_end_token="[IMG_END]",
         **kwargs,
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
+        self.image_break_token = image_break_token
+        self.image_end_token = image_end_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -142,13 +147,17 @@ class PixtralProcessor(ProcessorMixin):
                 # Replace the image token with the expanded image token sequence
                 pixel_values = image_inputs["pixel_values"]
                 height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+                num_height_tokens = height // self.patch_size
+                num_width_tokens = width // self.patch_size
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
 
                 prompt_strings = []
+                replace_tokens = [self.image_token] * num_width_tokens + [self.image_break_token * num_height_tokens]
+                replace_tokens[-1] = self.image_end_token
+                replace_str = "".join(replace_tokens)
                 for sample in text:
-                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                    sample = sample.replace(self.image_token, replace_str)
                     prompt_strings.append(sample)
             else:
                 logger.warning_once(
