@@ -73,7 +73,7 @@ OLD_KEY_TO_NEW_KEY_MAPPING = {
 }
 
 new_state_dict = {} 
-all_keys = "\n".join(original_state_dict.keys())
+all_keys = "\n"+ "\n".join(original_state_dict.keys())
 old_keys = all_keys
 for old, new in OLD_KEY_TO_NEW_KEY_MAPPING.items():
     all_keys = re.sub(r"\n"+ old,r"\n"+new,all_keys)
@@ -82,7 +82,7 @@ OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
 
 new_dict={}
 
-def permute_for_rope(value,n_heads, config):
+def permute_for_rope(value, n_heads, config):
         dim1 = config.head_dim
         dim2 = config.hidden_size
         return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2) 
@@ -95,12 +95,12 @@ for key, value in original_state_dict.items():
         _config = text_config
         # convert the text model (basically mistral model)
 
-    if "q_proj" in key:
-        value = permute_for_rope(value,_config.num_attention_heads)
-    if "k_proj" in key:
-        value = permute_for_rope(value,_config.num_key_value_heads)
-
     new_key = OLD_TO_NEW[key]
+    if "q_proj" in new_key:
+        value = permute_for_rope(value,_config.num_attention_heads, _config)
+    if "k_proj" in new_key:
+        value = permute_for_rope(value,_config.num_key_value_heads, _config)
+
     new_dict[new_key] = value
 
 with torch.device("meta"):
