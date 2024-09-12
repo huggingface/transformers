@@ -214,7 +214,7 @@ config.vision_feature_layer = -1
 config.image_token_index = 10
 config.vision_feature_select_strategy = "full"
 model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config).to("cuda")
-processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", image_token = "[IMG]")
 processor.tokenizer = tokenizer
 prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -226,5 +226,7 @@ inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
 
 input_ids = torch.tensor([[1, 5, 1091, 19227, 4994, 2811, 1429, 5165, 1897, 1429, 5165, 2811, 16753, 2391, 2811, 1429, 1689, 45971, 1095, 45629, 1897, 1429, 14653, 2811, 1429, 4147, 1278, 3519, 17253, 1897, 1429, 26204, 2811, 16753, 4994, 2811, 1429, 6371, 1897, 1429, 48649, 2811, 16753, 17611, 2811, 16753, 4994, 2811, 1429, 3607, 1897, 1429, 14653, 2811, 1429, 1784, 5970, 1321, 3468, 1044, 1324, 3596, 1046, 5151, 12717, 1044, 13461, 50666, 1429, 8092, 2811, 16753, 4994, 2811, 1429, 3607, 1897, 1429, 31222, 2811, 12161, 1099, 79092, 1897, 1429, 38600, 10432, 31597, 1429, 14653, 2811, 1429, 1784, 6138, 5476, 1317, 2210, 1046, 90463, 1593, 1562, 1278, 8616, 7285, 2613, 47579, 1429, 15760, 2811, 12161, 17611, 1897, 1429, 8092, 4964, 2821, 27028, 6, 3, 7493, 1681, 1278, 17253, 2479, 9406, 1294, 6993, 4]])
 # Generate
+
+
 generate_ids = model.generate(**inputs, max_new_tokens=15)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
