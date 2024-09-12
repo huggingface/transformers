@@ -2385,7 +2385,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         inputs = inputs.to(torch_device)
-        generate_outputs = model.generate(**inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True)
+        generate_outputs = model.generate(
+            **inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True
+        )
 
         token_timestamps_shape = [
             [segment["token_timestamps"].shape for segment in segment_list]
