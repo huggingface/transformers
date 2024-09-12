@@ -528,7 +528,6 @@ _import_structure = {
     ],
     "models.pixtral": [
         "PixtralConfig",
-       
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -647,6 +646,7 @@ _import_structure = {
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
+    "models.pixtral": ["PixtralConfig", "PixtralProcessor"],
     "models.pix2struct": [
         "Pix2StructConfig",
         "Pix2StructProcessor",
@@ -1202,6 +1202,7 @@ else:
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
+    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
@@ -5300,10 +5301,6 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
-    from .models.pixtral import (
-        PixtralConfig,
-       
-    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -5447,6 +5444,9 @@ if TYPE_CHECKING:
         Pix2StructProcessor,
         Pix2StructTextConfig,
         Pix2StructVisionConfig,
+    )
+    from .models.pixtral import (
+        PixtralConfig, PixtralProcessor,
     )
     from .models.plbart import PLBartConfig
     from .models.poolformer import (
@@ -6027,6 +6027,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.pixtral import PixtralImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -7111,10 +7112,6 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
         )
-        from .models.pixtral import (
-            PixtralModel,
-            PixtralPreTrainedModel,
-        )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
@@ -7465,6 +7462,10 @@ if TYPE_CHECKING:
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
             Pix2StructVisionModel,
+        )
+        from .models.pixtral import (
+            PixtralModel,
+            PixtralPreTrainedModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,
