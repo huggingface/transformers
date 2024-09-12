@@ -539,7 +539,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         input_features = input_dict["input_features"]
 
         # Perform beam search
-        output = model.generate(input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True)
+        output = model.generate(
+            input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True
+        )
 
         # Check if beam_indices and sequences_scores are in the output
         self.assertIn("beam_indices", output, "beam_indices not found in the output")
