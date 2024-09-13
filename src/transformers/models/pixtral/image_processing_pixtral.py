@@ -36,7 +36,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging
+from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging, is_torch_tensor
 from ...utils.import_utils import requires_backends
 
 
@@ -83,7 +83,9 @@ class BatchMixFeature(BatchFeature):
         for k, v in self.items():
             # check if v is a floating point
             if isinstance(k, list):
-                new_data[k] = [element.to(*args, **kwargs) for sample in v for element in sample]
+                new_data[k] = [
+                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
+                ]
             if torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)

@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.pixtral.image_processing_pixtral.BatchMixFeature
 class BatchMixFeature(BatchFeature):
-    def to(self, *args, **kwargs) -> "BatchFeature":
+    def to(self, *args, **kwargs) -> "BatchMixFeature":
         """
         Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
         different `dtypes` and sending the `BatchFeature` to a different `device`.
