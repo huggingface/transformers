@@ -255,7 +255,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="cpu",
 )
 
-input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cpu")
 output = model(input_ids)
 print(output.logits)
 
