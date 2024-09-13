@@ -917,7 +917,9 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
                 )
             except Exception:
                 # PyTorch implementation
-                output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+                output = multi_scale_deformable_attention(
+                    value, spatial_shapes_list, sampling_locations, attention_weights
+                )
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1594,14 +1596,18 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         )
 
 
-def conditional_lru_cache(*lru_args, **lru_kwargs):
+def compile_compatible_lru_cache(*lru_args, **lru_kwargs):
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not torch.compiler.is_compiling():
                 # Cache the function only if the model is not being compiled
-                cached_func = lru_cache(*lru_args, **lru_kwargs)(func.__get__(self, type(self)))
-                return cached_func(*args, **kwargs)
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
             else:
                 # Otherwise, just call the original function
                 return func(self, *args, **kwargs)
@@ -1705,7 +1711,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
-    @conditional_lru_cache(maxsize=32)
+    @compile_compatible_lru_cache(maxsize=32)
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
         if spatial_shapes is None:
             spatial_shapes = [
