@@ -39,7 +39,7 @@ def get_last_daily_ci_runs(token):
     #         break
 
     # https://github.com/huggingface/transformers/actions/runs/10259247273
-    workflow_run_id = "10681148424"
+    workflow_run_id = "10789133093"
     return workflow_run_id
 
 
