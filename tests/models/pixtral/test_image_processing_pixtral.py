@@ -49,8 +49,8 @@ class PixtralImageProcessingTester(unittest.TestCase):
         size=None,
         patch_size=None,
         do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
         size = size if size is not None else {"longest_edge": 24}
