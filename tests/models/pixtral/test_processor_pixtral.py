@@ -43,7 +43,7 @@ class PixtralProcessorTest(unittest.TestCase):
         super().setUp()
 
         # FIXME - just load the processor directly from the checkpoint
-        tokenizer = AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/pixtral-12b")
         image_processor = PixtralImageProcessor()
         self.processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
@@ -97,11 +97,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 1)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_image["images"], list)
-        self.assertTrue(len(inputs_image["images"]) == 1)
-        self.assertIsInstance(inputs_image["images"][0], list)
-        self.assertTrue(len(inputs_image["images"][0]) == 1)
-        self.assertIsInstance(inputs_image["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_image["pixel_values"], list)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 1)
+        self.assertIsInstance(inputs_image["pixel_values"][0], list)
+        self.assertTrue(len(inputs_image["pixel_values"][0]) == 1)
+        self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_image["input_ids"]
@@ -117,11 +117,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_url["images"], list)
-        self.assertTrue(len(inputs_url["images"]) == 1)
-        self.assertIsInstance(inputs_url["images"][0], list)
-        self.assertTrue(len(inputs_url["images"][0]) == 1)
-        self.assertIsInstance(inputs_url["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_url["pixel_values"], list)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 1)
+        self.assertIsInstance(inputs_url["pixel_values"][0], list)
+        self.assertTrue(len(inputs_url["pixel_values"][0]) == 1)
+        self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_url["input_ids"]
@@ -144,11 +144,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 1)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_image["images"], list)
-        self.assertTrue(len(inputs_image["images"]) == 1)
-        self.assertIsInstance(inputs_image["images"][0], list)
-        self.assertTrue(len(inputs_image["images"][0]) == 2)
-        self.assertIsInstance(inputs_image["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_image["pixel_values"], list)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 1)
+        self.assertIsInstance(inputs_image["pixel_values"][0], list)
+        self.assertTrue(len(inputs_image["pixel_values"][0]) == 2)
+        self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_image["input_ids"]
@@ -164,11 +164,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_url["images"], list)
-        self.assertTrue(len(inputs_url["images"]) == 1)
-        self.assertIsInstance(inputs_url["images"][0], list)
-        self.assertTrue(len(inputs_url["images"][0]) == 2)
-        self.assertIsInstance(inputs_url["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_url["pixel_values"], list)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 1)
+        self.assertIsInstance(inputs_url["pixel_values"][0], list)
+        self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
+        self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_url["input_ids"]
@@ -195,11 +195,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 2)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_image["images"], list)
-        self.assertTrue(len(inputs_image["images"]) == 2)
-        self.assertIsInstance(inputs_image["images"][0], list)
-        self.assertTrue(len(inputs_image["images"][0]) == 2)
-        self.assertIsInstance(inputs_image["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_image["pixel_values"], list)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 2)
+        self.assertIsInstance(inputs_image["pixel_values"][0], list)
+        self.assertTrue(len(inputs_image["pixel_values"][0]) == 2)
+        self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_image["input_ids"]
@@ -215,11 +215,11 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 2)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
-        self.assertIsInstance(inputs_url["images"], list)
-        self.assertTrue(len(inputs_url["images"]) == 2)
-        self.assertIsInstance(inputs_url["images"][0], list)
-        self.assertTrue(len(inputs_url["images"][0]) == 2)
-        self.assertIsInstance(inputs_url["images"][0][0], torch.Tensor)
+        self.assertIsInstance(inputs_url["pixel_values"], list)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 2)
+        self.assertIsInstance(inputs_url["pixel_values"][0], list)
+        self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
+        self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
         input_ids = inputs_url["input_ids"]
