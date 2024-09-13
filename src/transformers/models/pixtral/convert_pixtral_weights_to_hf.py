@@ -1,4 +1,4 @@
-from transformers import LlavaConfig, LlavaForConditionalGeneration, AutoTokenizer, MistralConfig, PixtralConfig, PreTrainedTokenizerFast
+from transformers import LlavaConfig, LlavaForConditionalGeneration, PixtralProcessor, MistralConfig, PixtralConfig, PreTrainedTokenizerFast, PixtralImageProcessor
 
 import torch
 from safetensors.torch import load_file as safe_load_file
@@ -169,40 +169,42 @@ OLD_KEY_TO_NEW_KEY_MAPPING = {
 
 }
 
-new_state_dict = {} 
-all_keys = "\n"+ "\n".join(original_state_dict.keys())
-old_keys = all_keys
-for old, new in OLD_KEY_TO_NEW_KEY_MAPPING.items():
-    all_keys = re.sub(r"\n"+ old,r"\n"+new,all_keys)
 
-OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
-
-new_dict={}
 
 def permute_for_rope(value, n_heads, config):
         dim1 = value.shape[0]
         dim2 = config.hidden_size
         return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2) 
 
-for key, value in original_state_dict.items():
+def convert_dictionnary(original_state_dict):
+    new_dict={}
 
-    new_key = OLD_TO_NEW[key]
-    if "vision_encoder" in key:
-        _config = vision_config
-        num_attention_heads = _config.num_attention_heads
-    else:
-        _config = text_config
-        if "q_proj" in new_key:
+    all_keys = "\n"+ "\n".join(original_state_dict.keys())
+    old_keys = all_keys
+    for old, new in OLD_KEY_TO_NEW_KEY_MAPPING.items():
+        all_keys = re.sub(r"\n"+ old,r"\n"+new,all_keys)
+
+    OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
+
+    for key, value in original_state_dict.items():
+
+        new_key = OLD_TO_NEW[key]
+        if "vision_encoder" in key:
+            _config = vision_config
             num_attention_heads = _config.num_attention_heads
-        if "k_proj" in new_key:
-            num_attention_heads = _config.num_key_value_heads
-        # convert the text model (basically mistral model)
+        else:
+            _config = text_config
+            if "q_proj" in new_key:
+                num_attention_heads = _config.num_attention_heads
+            if "k_proj" in new_key:
+                num_attention_heads = _config.num_key_value_heads
+            # convert the text model (basically mistral model)
 
 
-    if "q_proj" in new_key or "k_proj" in new_key:
-        value = permute_for_rope(value,num_attention_heads, _config)
+        if "q_proj" in new_key or "k_proj" in new_key:
+            value = permute_for_rope(value,num_attention_heads, _config)
 
-    new_dict[new_key] = value
+        new_dict[new_key] = value
 
 config.text_config.head_dim = 128
 # with torch.device("meta"):
@@ -213,20 +215,15 @@ config.text_config.head_dim = 128
 config.vision_feature_layer = -1
 config.image_token_index = 10
 config.vision_feature_select_strategy = "full"
+config.image_seq_length = 1
 model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config).to("cuda")
-processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", image_token = "[IMG]")
+image_processor = PixtralImageProcessor()
+processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token = "[IMG]")
 processor.tokenizer = tokenizer
-prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+prompt = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-
-prompt = '<s>[INST][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_BREAK][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG][IMG_END]Describe this image in one sentence.[/INST]'
-input_ids_ = torch.tensor([[1, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 13, 5847, 13089, 1593, 3937, 1294, 1925, 19286, 1046, 4]]).long()
 inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
 
-input_ids = torch.tensor([[1, 5, 1091, 19227, 4994, 2811, 1429, 5165, 1897, 1429, 5165, 2811, 16753, 2391, 2811, 1429, 1689, 45971, 1095, 45629, 1897, 1429, 14653, 2811, 1429, 4147, 1278, 3519, 17253, 1897, 1429, 26204, 2811, 16753, 4994, 2811, 1429, 6371, 1897, 1429, 48649, 2811, 16753, 17611, 2811, 16753, 4994, 2811, 1429, 3607, 1897, 1429, 14653, 2811, 1429, 1784, 5970, 1321, 3468, 1044, 1324, 3596, 1046, 5151, 12717, 1044, 13461, 50666, 1429, 8092, 2811, 16753, 4994, 2811, 1429, 3607, 1897, 1429, 31222, 2811, 12161, 1099, 79092, 1897, 1429, 38600, 10432, 31597, 1429, 14653, 2811, 1429, 1784, 6138, 5476, 1317, 2210, 1046, 90463, 1593, 1562, 1278, 8616, 7285, 2613, 47579, 1429, 15760, 2811, 12161, 17611, 1897, 1429, 8092, 4964, 2821, 27028, 6, 3, 7493, 1681, 1278, 17253, 2479, 9406, 1294, 6993, 4]])
-# Generate
-
-
 generate_ids = model.generate(**inputs, max_new_tokens=15)
-processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
