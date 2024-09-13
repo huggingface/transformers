@@ -249,4 +249,7 @@ inputs["input_ids"] = torch.tensor([tokenized.tokens], dtype=torch.long, device=
 inputs["pixel_values"] = torch.tensor(tokenized.images,  device="cuda")
 del inputs["attention_mask"]
 generate_ids = model.generate(**inputs, max_new_tokens=100)
-print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
+"""
+What's the content of the image?The image depicts a vibrant street scene in what appears to be a Chinatown district, characterized by its traditional architectural elements and cultural signage. A prominent feature is the red and white stop sign in the foreground, which has been adorned with a banner that reads "OPTUS." Behind the stop sign, there's an ornate gate with intricate designs and Chinese characters, marking the entrance to the district. The gate is flanked by buildings with colorful facades and signs in both English and Chinese
+"""
