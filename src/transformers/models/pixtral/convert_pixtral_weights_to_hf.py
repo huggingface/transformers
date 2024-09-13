@@ -178,7 +178,10 @@ def convert_mistral_tokenizer():
     vocab = specials_tokens
 
     tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted()
+        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+        bos_token="<s>",
+        unk_token="<unk>",
+        eos_token="</s>",
     )
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
 
