@@ -81,6 +81,16 @@ class PixtralCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+def position_ids_in_meshgrid(patch_embeds_list, max_width):
+    positions = []
+    for patch in patch_embeds_list:
+        height, width = patch.shape[-2:]
+        mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
+        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2,-1)
+        ids = h_grid * max_width + v_grid
+        positions.append(ids[:,0])
+    return torch.cat(positions)
+
 
 class PixtralRotaryEmbedding(nn.Module):
     """
@@ -114,11 +124,11 @@ class PixtralRotaryEmbedding(nn.Module):
                 freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
             ],
             dim=-1,
-        ).reshape(-1, self.dim) # we reshape to only index on the position indexes, not tuple of indexes
+        ).reshape(-1, self.dim//2) # we reshape to only index on the position indexes, not tuple of indexes
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
 
         # TODO maybe make it torch compatible later on. We can also just slice
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("inv_freq", torch.cat((inv_freq, inv_freq), dim=-1), persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -287,15 +297,6 @@ class PixtralRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def position_ids_in_meshgrid(patch_embeds_list):
-    positions = []
-    for patch in patch_embeds_list:
-        height, width = patch.shape[-2:]
-        mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
-        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2,-1)
-        ids = h_grid * height + v_grid
-        positions.append(ids[:,0])
-    return torch.cat(positions)
 
 
 
@@ -614,7 +615,7 @@ class PixtralModel(PixtralPreTrainedModel):
         patch_embeds = self.ln_pre(patch_embeds)
 
         # positional embeddings
-        position_ids = position_ids_in_meshgrid(patch_embeds_list).to(self.device)
+        position_ids = position_ids_in_meshgrid(patch_embeds_list, max_width=self.config.image_size // self.config.patch_size).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
         attention_mask = None

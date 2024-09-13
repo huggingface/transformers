@@ -220,10 +220,33 @@ model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=confi
 image_processor = PixtralImageProcessor()
 processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token = "[IMG]")
 processor.tokenizer = tokenizer
-prompt = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
+prompt = "[INST]\nWhat's the content of the image?"
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
 
-generate_ids = model.generate(**inputs, max_new_tokens=15)
+
+
+messages = [
+    {
+        "role": "user",
+        "content": [{"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": prompt}]
+    },
+]
+
+tok = MistralTokenizer.from_model(model_name)
+
+
+from mistral_common.protocol.instruct.request import ChatCompletionRequest
+tokenized = tok.encode_chat_completion(
+    ChatCompletionRequest(
+        messages=messages,
+        model=model_name,
+    )
+)
+
+inputs["input_ids"] = torch.tensor([tokenized.tokens], dtype=torch.long, device="cuda")
+inputs["pixel_values"] = torch.tensor(tokenized.images,  device="cuda")
+del inputs["attention_mask"]
+generate_ids = model.generate(**inputs, max_new_tokens=100)
 print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
