@@ -11,9 +11,9 @@ from transformers import (
     LlavaConfig,
     LlavaForConditionalGeneration,
     MistralConfig,
-    PixtralVisionConfig,
     PixtralImageProcessor,
     PixtralProcessor,
+    PixtralVisionConfig,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import bytes_to_unicode

@@ -21,8 +21,8 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    PixtralVisionConfig,
     PixtralModel,
+    PixtralVisionConfig,
     is_torch_available,
     is_vision_available,
 )

@@ -5437,8 +5437,8 @@ if TYPE_CHECKING:
         Pix2StructVisionConfig,
     )
     from .models.pixtral import (
-        PixtralVisionConfig,
         PixtralProcessor,
+        PixtralVisionConfig,
     )
     from .models.plbart import PLBartConfig
     from .models.poolformer import (
