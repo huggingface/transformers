@@ -612,11 +612,8 @@ class PixtralModel(PixtralPreTrainedModel):
         ).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
-        # LAST TODO:
         attention_mask = generate_block_attention_mask([p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds)
         out = self.transformer(patch_embeds, attention_mask, position_embedding)
-
-        # remove batch dimension of the single sequence
         return out
 
 def generate_block_attention_mask(patch_embeds_list, tensor):
