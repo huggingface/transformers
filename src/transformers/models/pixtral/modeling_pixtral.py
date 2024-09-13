@@ -483,18 +483,6 @@ class PixtralModel(PixtralPreTrainedModel):
         self.transformer = PixtralTransformer(config)
         self.patch_positional_embedding = PixtralRotaryEmbedding(config, device=self.device)
 
-    @property
-    def max_patches_per_side(self) -> int:
-        return self.args.image_size // self.args.patch_size
-
-    @property
-    def device(self) -> torch.device:
-        return next(self.parameters()).device
-
-    @property
-    def dtype(self) -> torch.device:
-        return next(self.parameters()).dtype
-
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,

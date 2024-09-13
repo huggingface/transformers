@@ -574,7 +574,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_pixtral(self):
         model_id = "hf-internal-testing/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id)
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
