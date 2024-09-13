@@ -166,7 +166,8 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # torchao does not have official support for QAT (Quantization Aware Training)
-        # but torchao support nf4/PEFT, but it is not integrated yet
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        supported_quant_types_for_training = [
+            "int8_weight_only",
+            "int8_dynamic_activation_int8_weight",
+        ]
+        return self.quantization_config.quant_type in supported_quant_types_for_training
