@@ -19,7 +19,7 @@ Processor class for Pixtral.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
@@ -146,21 +146,33 @@ class PixtralProcessor(ProcessorMixin):
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
-        if image_inputs.get("pixel_values") is not None:
+        if image_inputs.get("images") is not None:
             # Replace the image token with the expanded image token sequence
-            pixel_values = image_inputs["pixel_values"]
-            height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_height_tokens = height // self.patch_size
-            num_width_tokens = width // self.patch_size
-
+            images = image_inputs["images"]
+            image_sizes = image_inputs.pop("image_sizes")
             prompt_strings = []
-            replace_tokens = [[self.image_token] * num_width_tokens + [self.image_break_token]] * num_height_tokens
-            # Flatten list
-            replace_tokens = [item for sublist in replace_tokens for item in sublist]
-            replace_tokens[-1] = self.image_end_token
-            replace_str = "".join(replace_tokens)
-            for sample in text:
-                sample = sample.replace(self.image_token, replace_str)
+
+            for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
+                replace_strings = []
+                # First calculate the number of tokens needed for each image and put in a placeholder
+                for image, image_size in zip(sample_images, sample_image_sizes):
+                    height, width = image_size
+                    num_height_tokens = height // self.patch_size
+                    num_width_tokens = width // self.patch_size
+                    replace_tokens = [
+                        [self.image_token] * num_width_tokens + [self.image_break_token]
+                    ] * num_height_tokens
+                    # Flatten list
+                    replace_tokens = [item for sublist in replace_tokens for item in sublist]
+                    replace_tokens[-1] = self.image_end_token
+                    replace_str = "".join(replace_tokens)
+                    replace_strings.append(replace_str)
+                    sample = sample.replace(self.image_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    replace_str = replace_strings.pop(0)
+                    sample = sample.replace("<placeholder>", replace_str, 1)
+
                 prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(
