@@ -46,28 +46,31 @@ class BitNetHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
-            raise ImportError("Loading an BitNet quantized model requires accelerate (`pip install accelerate`)")
+            raise ImportError("Loading a BitNet quantized model requires accelerate (`pip install accelerate`)")
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
-                "Converting into 8-bit weights from tf/flax weights is currently not supported, please make"
+                "Loading ternary weights from tf/flax is currently not supported, please make"
                 " sure the weights are in PyTorch format."
             )
 
         if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+            logger.warning_once(
+                "You don't have a GPU available to load the model, the inference will be slow because of weight unpacking"
+            )
+            return
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
-                "You have loaded an BitNet model on CPU and have a CUDA device available, make sure to set "
+                "You have loaded a BitNet model on CPU and have a CUDA device available, make sure to set "
                 "your model on a GPU device in order to run your model."
             )
         elif device_map is not None:
             if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
-                raise ValueError(
-                    "You are attempting to load an BitNet model with a device_map that contains a CPU or disk device."
-                    " This is not supported. Please remove the CPU or disk device from the device_map."
+                logger.warning_once(
+                    "You are attempting to load a BitNet model with a device_map that contains a CPU or disk device."
+                    "This will degrade the inference speed because of weight unpacking"
                 )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
@@ -97,17 +100,6 @@ class BitNetHfQuantizer(HfQuantizer):
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16`"
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                "torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
-            )
-            torch_dtype = torch.bfloat16
-        return torch_dtype
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         target_dtype = torch.int8

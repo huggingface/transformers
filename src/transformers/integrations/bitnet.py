@@ -27,6 +27,10 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# the weights are ternary so can be represented with 2 bits, and they are packed in uint8 tensors, hence the number of values per item is 4
+VALUES_PER_ITEM = 4
+
+
 def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
     """
     Packs a tensor of quantized weights into a compact format using 2 bits per value.
@@ -43,27 +47,24 @@ def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
         A packed tensor where each element stores 4 quantized values (each using 2 bits) in an 8-bit format.
     """
 
-    quantized_weights += 1
     original_shape = quantized_weights.shape
-    values_per_item = 4
-    row_dim = (original_shape[0] + values_per_item - 1) // values_per_item
+
+    row_dim = (original_shape[0] + VALUES_PER_ITEM - 1) // VALUES_PER_ITEM
 
     if len(original_shape) == 1:
         packed_tensor_shape = (row_dim,)
     else:
         packed_tensor_shape = (row_dim, *original_shape[1:])
 
+    quantized_weights += 1
     packed = torch.zeros(packed_tensor_shape, device=quantized_weights.device, dtype=torch.uint8)
     unpacked = quantized_weights.to(torch.uint8)
 
-    def lshift(t: torch.Tensor, bits: int):
-        return t << bits
-
-    it = min(values_per_item, (original_shape[0] // row_dim) + 1)
+    it = min(VALUES_PER_ITEM, (original_shape[0] // row_dim) + 1)
     for i in range(it):
         start = i * row_dim
         end = min(start + row_dim, original_shape[0])
-        packed[: (end - start)] |= lshift(unpacked[start:end], 2 * i)
+        packed[: (end - start)] |= unpacked[start:end] << 2 * i
 
     return packed
 
@@ -117,19 +118,18 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     we add 1 to the original ternary weights (which are typically -1, 0, and 1) when packing them. When unpacking, we reverse
     this by subtracting 1 to restore the original ternary values.
     """
-    values_per_item = 4
     packed_shape = packed.shape
 
     if len(packed_shape) == 1:
-        original_row_dim = packed_shape[0] * values_per_item
+        original_row_dim = packed_shape[0] * VALUES_PER_ITEM
         unpacked_shape = (original_row_dim,)
     else:
-        original_row_dim = packed_shape[0] * values_per_item
+        original_row_dim = packed_shape[0] * VALUES_PER_ITEM
         unpacked_shape = (original_row_dim, *packed_shape[1:])
 
     unpacked = torch.zeros(unpacked_shape, device=packed.device, dtype=torch.uint8)
 
-    for i in range(values_per_item):
+    for i in range(VALUES_PER_ITEM):
         start = i * packed_shape[0]
         end = start + packed_shape[0]
         mask = 3 << (2 * i)
@@ -146,7 +146,7 @@ class BitLinear(nn.Module):
         self.register_buffer(
             "weight",
             torch.zeros(
-                (out_features // 4, in_features),
+                (out_features // VALUES_PER_ITEM, in_features),
                 dtype=torch.uint8,
                 device=device,
             ),
@@ -167,7 +167,7 @@ class BitLinear(nn.Module):
     @torch.compile
     def activation_quant(self, x, num_bits=8):
         """
-        Activation function : Performs symmetric, per-channel quantization on the input activations.
+        Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
         -----------
         x : torch.Tensor
@@ -190,8 +190,7 @@ class BitLinear(nn.Module):
 
     @torch.compile
     def post_quant_process(self, input, si, sw):
-        out = input / si
-        out = out / sw
+        out = input / (si * sw)
         return out
 
     def forward(self, x):
