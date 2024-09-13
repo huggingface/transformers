@@ -28,6 +28,7 @@ from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tenso
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.pixtral.image_processing_pixtral.BatchMixFeature
 class BatchMixFeature(BatchFeature):
     def to(self, *args, **kwargs) -> "BatchFeature":
         """
