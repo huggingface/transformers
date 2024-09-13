@@ -234,7 +234,7 @@ Note this feature is supported on AMD GPUs.
 
 ## CPU support
 
-Recent versions of `autoawq` supports CPU with ipex kernels. To get started, first install the latest version of `autoawq` by running:
+Recent versions of `autoawq` supports CPU with ipex op optimizations. To get started, first install the latest version of `autoawq` by running:
 
 ```bash
 pip install intel-extension-for-pytorch

@@ -21,6 +21,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqCon
 from transformers.testing_utils import (
     require_accelerate,
     require_auto_awq,
+    require_intel_extension_for_pytorch,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -495,6 +496,7 @@ class AwqScaleTest(unittest.TestCase):
 @slow
 @require_auto_awq
 @require_accelerate
+@require_intel_extension_for_pytorch
 class AwqIPEXTest(unittest.TestCase):
     def test_quantized_model_ipex(self):
         """
@@ -513,4 +515,4 @@ class AwqIPEXTest(unittest.TestCase):
         print(tokenizer.decode(output[0], skip_special_tokens=True))
 
         expected_output = "How to make a cake with flour, sugar, eggs, and baking powder"
-        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
+        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
