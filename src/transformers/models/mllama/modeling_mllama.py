@@ -143,6 +143,34 @@ def prepare_cross_attention_mask(
     return cross_attention_mask, full_text_row_masked_out_mask
 
 
+def prepare_aspect_ratio_attention_mask(
+    aspect_ratio_mask: torch.Tensor,
+    num_patches: int,
+    target_length: int,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    
+    # Expand aspect ratio mask to target_length
+    batch_size, max_num_tiles = aspect_ratio_mask.shape
+    attention_mask = aspect_ratio_mask.view(batch_size, max_num_tiles, 1, 1).to(dtype)
+    attention_mask = attention_mask.repeat(1, 1, target_length, 1)
+    
+    # Mask padding patches
+    pad_patches = target_length - num_patches
+    attention_mask[:, :, -pad_patches:] = 0
+
+    # Invert the mask (0 -> 1, 1 -> 0)
+    attention_mask = 1 - attention_mask
+
+    # Reshape to 2D and create 4D attention mask
+    # (batch_size, 1, max_num_tiles * target_length, max_num_tiles * target_length)
+    attention_mask = attention_mask.reshape(batch_size, max_num_tiles * target_length, 1)
+    attention_mask = attention_mask @ attention_mask.transpose(-1, -2) * torch.finfo(dtype).min
+    attention_mask = attention_mask.unsqueeze(1)
+
+    return attention_mask
+
+
 def expand_num_tokens_to_mult8(x):
     # Compute the number of tokens to pad
     num_padding_patches = (8 - (x.shape[-2] % 8)) % 8
@@ -297,7 +325,9 @@ class MllamaVisionMLP(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        # hidden_states = self.fc2(hidden_states)
+        # TODO: for debugging
+        hidden_states = torch.nn.functional.linear(hidden_states, self.fc2.weight) + self.fc2.bias
         return hidden_states
 
 
@@ -479,29 +509,6 @@ class MllamaVisionEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-# TODO: @pavel fix it
-def build_encoder_attention_mask(
-    hidden_state: torch.Tensor,
-    aspect_ratios: torch.Tensor,
-    num_patches: int,
-    num_max_tiles: int,
-    dtype: torch.dtype,
-    device: torch.device,
-):
-    """
-    Build vision encoder attention mask that omits padding tokens.
-    """
-    masks = []
-    for arx in aspect_ratios:
-        mask_i = torch.ones((num_max_tiles, hidden_state.shape[2], 1), dtype=dtype)
-        mask_i[: arx[0] * arx[1], :num_patches] = 0
-        mask_i = mask_i.view(num_max_tiles * hidden_state.shape[2], -1)
-        mask_i = mask_i @ mask_i.T * torch.finfo(dtype).min
-        mask_i = mask_i.unsqueeze(0)
-        masks.append(mask_i)
-    masks = torch.stack(masks).to(device).expand(-1, 1, -1, -1)
-    return masks
-
 
 class MllamaVisionModel(PreTrainedModel):
     base_model_prefix = "vision_encoder"
@@ -602,21 +609,14 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = F.pad(hidden_state, padding, mode="constant", value=0)
         slice_index = -num_padding_patches if num_padding_patches > 0 else None
 
-        # Now we want to mask out padding tokens, depending on the aspect ratios
-        # if we pre-computed the ratios then this can be vectorized
-        # aspect ratios can be like input ids, and we can call embedding layer on them
-        # TODO: @pavel reafactor it based on aspect_ratio_mask!
-        aspect_ratio = torch.tensor([2, 2], dtype=torch.long, device=hidden_state.device).view(1, 2)
-        attention_mask = build_encoder_attention_mask(
-            hidden_state=hidden_state,
-            aspect_ratios=aspect_ratio,
+        attention_mask = attention_mask.reshape(batch_size * num_concurrent_media, -1)
+        attention_mask = prepare_aspect_ratio_attention_mask(
+            aspect_ratio_mask=attention_mask,
             num_patches=self.num_patches,
-            num_max_tiles=self.max_num_tiles,
+            target_length=hidden_state.shape[2],
             dtype=self.dtype,
-            device=self.device
         )
 
-        # Let's cache the mask per aspect_ratio_ids. Not sure I 100% got how they do it but alright
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         output = self.transformer(
             hidden_state,
@@ -1646,6 +1646,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         position_ids=None,
         pixel_values=None,
         aspect_ratio_ids=None,
+        aspect_ratio_mask=None,
         cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
@@ -1721,6 +1722,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if (input_ids == self.config.image_token_index).any():
             model_inputs["pixel_values"] = pixel_values
             model_inputs["aspect_ratio_ids"] = aspect_ratio_ids
+            model_inputs["aspect_ratio_mask"] = aspect_ratio_mask
 
         return model_inputs
 
