@@ -1173,9 +1173,12 @@ class MllamaTextModel(PreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            if idx in self.cross_attention_layers and cross_attention_states is None:
-                continue
+            
+            # TODO: fix cehck for text only generation
+            # for image generation we do not have `cross_attention_states` on next steps
+            # and we probably should check for `pas_key_values` for this layer
+            # if idx in self.cross_attention_layers and cross_attention_states is None:
+            #     continue
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
