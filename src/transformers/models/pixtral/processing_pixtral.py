@@ -19,13 +19,22 @@ Processor class for Pixtral.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
+
+# Copied from transformers.models.idefics2.processing_idefics2.is_url
+def is_url(val) -> bool:
+    return isinstance(val, str) and val.startswith("http")
+
+
+# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_url
+def is_image_or_image_url(elem):
+    return is_url(elem) or is_valid_image(elem)
 
 
 class PixtralProcessor(ProcessorMixin):
@@ -36,7 +45,7 @@ class PixtralProcessor(ProcessorMixin):
     [`~PixtralProcessor.__call__`] and [`~PixtralProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`PixtralImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -135,6 +144,19 @@ class PixtralProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
+            if is_image_or_image_url(images):
+                images = [[images]]
+            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+                images = [images]
+            elif (
+                not isinstance(images, list)
+                and not isinstance(images[0], list)
+                and not is_image_or_image_url(images[0][0])
+            ):
+                raise ValueError(
+                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
+                )
+            images = [[load_image(im) for im in sample] for sample in images]
             image_inputs = self.image_processor(images, patch_size=self.patch_size, return_tensors=return_tensors)
         else:
             image_inputs = {}
@@ -182,7 +204,7 @@ class PixtralProcessor(ProcessorMixin):
             truncation=truncation,
             max_length=max_length,
         )
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs, "prompt_strings": prompt_strings})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
