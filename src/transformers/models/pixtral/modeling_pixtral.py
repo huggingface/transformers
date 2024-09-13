@@ -301,6 +301,7 @@ class PixtralAttentionLayer(nn.Module):
 class PixtralTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
             self.layers.append(PixtralAttentionLayer(config))
