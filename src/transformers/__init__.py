@@ -572,6 +572,7 @@ _import_structure = {
         "MgpstrProcessor",
         "MgpstrTokenizer",
     ],
+    "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
@@ -2662,6 +2663,12 @@ else:
             "MgpstrForSceneTextRecognition",
             "MgpstrModel",
             "MgpstrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mimi"].extend(
+        [
+            "MimiModel",
+            "MimiPreTrainedModel",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -5341,6 +5348,9 @@ if TYPE_CHECKING:
         MgpstrProcessor,
         MgpstrTokenizer,
     )
+    from .models.mimi import (
+        MimiConfig,
+    )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
     from .models.mobilebert import (
@@ -7202,6 +7212,10 @@ if TYPE_CHECKING:
             MgpstrForSceneTextRecognition,
             MgpstrModel,
             MgpstrPreTrainedModel,
+        )
+        from .models.mimi import (
+            MimiModel,
+            MimiPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,
