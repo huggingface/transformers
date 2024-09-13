@@ -112,7 +112,7 @@ def prepare_cross_attention_mask(
     else:
         # reshape so it can be used by attn module
         batch_size, text_total_length, *_ = cross_attention_mask.shape
-        cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
+        cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=3)
         cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
         cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
