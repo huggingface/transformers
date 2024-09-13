@@ -3437,7 +3437,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
-        # The model's main input name, usually `input_ids`, has be passed for padding
+        # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
                 "You should supply an encoding or a list of encodings to this method "
