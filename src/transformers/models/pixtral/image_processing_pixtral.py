@@ -86,7 +86,7 @@ class BatchMixFeature(BatchFeature):
                 new_data[k] = [
                     element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
                 ]
-            if torch.is_floating_point(v):
+            elif torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
             elif device is not None:

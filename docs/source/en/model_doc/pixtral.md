@@ -36,17 +36,18 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 Here is an example of how to run it:
 
 ```python 
-from transformers import AutoModelForConditionalGeneration, AutoProcessor
+from transformers import LlavaForConditionalGeneration, AutoProcessor
+from PIL import Image
 
 model_id = "hf-internal-testing/pixtral-12b"
-model = AutoModelForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 processor = AutoProcessor.from_pretrained(model_id)
 
 IMG_URLS = [
-    Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-    Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-    Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-    Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
+    "https://picsum.photos/id/237/400/300",
+    "https://picsum.photos/id/231/200/300",
+    "https://picsum.photos/id/27/500/500",
+    "https://picsum.photos/id/17/150/600",
 ]
 PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
