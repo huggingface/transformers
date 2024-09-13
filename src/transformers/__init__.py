@@ -1361,7 +1361,7 @@ else:
             "AlignVisionModel",
         ]
     )
-    (_import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"]),)
+    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
     _import_structure["models.altclip"].extend(
         [
             "AltCLIPModel",

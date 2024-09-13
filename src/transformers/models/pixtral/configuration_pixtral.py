@@ -32,29 +32,27 @@ class PixtralVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, `optional`, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations.
-        intermediate_size (`int`, `optional`, defaults to 4096):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, `optional`, defaults to 24):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, `optional`, defaults to 16):
-            Number of attention heads in the Transformer decoder.
-        num_channels (`int`, `optional`, defaults to 3):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
             Number of input channels in the input images.
-        image_size (`int`, `optional`, defaults to 1024):
+        image_size (`int`, *optional*, defaults to 1024):
             Max dimension of the input images.
-        patch_size (`int`, `optional`, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 16):
             Size of the image patches.
-        hidden_activation (`str`, `optional`, defaults to "gelu"):
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function used in the hidden layers.
-        layer_norm_eps (`float`, `optional`, defaults to 1e-5):
-            Epsilon value for layer normalization.
-        attention_dropout (`float`, `optional`, defaults to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the attention layers.
-        rope_theta (`float`, `optional`, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        tie_word_embeddings (`bool`, `optional`, defaults to False):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the word embeddings with the input embeddings.
 
     Example:
@@ -83,8 +81,7 @@ class PixtralVisionConfig(PretrainedConfig):
         num_channels=3,
         image_size=1024,
         patch_size=16,
-        hidden_activation="gelu",
-        layer_norm_eps=1e-5,
+        hidden_act="gelu",
         attention_dropout=0.0,
         rope_theta=10000.0,
         tie_word_embeddings=False,
@@ -100,8 +97,7 @@ class PixtralVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.image_size = image_size
         self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_activation = hidden_activation
+        self.hidden_act = hidden_act
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
         self.head_dim = hidden_size // num_attention_heads

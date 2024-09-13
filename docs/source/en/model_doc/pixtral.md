@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Pixtral
 
-# Pixtral
-
 ## Overview
 
 The Pixtral model was released by the Mistral AI team on [Vllm](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
@@ -97,3 +95,12 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 
 [[autodoc]] PixtralModel
     - forward
+
+## PixtralImageProcessor
+
+[[autodoc]] PixtralImageProcessor
+    - preprocess
+
+## PixtralProcessor
+
+[[autodoc]] PixtralProcessor
