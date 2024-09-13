@@ -23,6 +23,9 @@ import unittest
 from dataclasses import fields
 from textwrap import dedent
 
+from typing import get_args
+from inspect import isclass
+
 import pytest
 from huggingface_hub.inference._generated import types as inference_specs
 
@@ -984,46 +987,46 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
         # Putting this here for now because this file is already tested by CircleCI, will move later
 
         PIPELINES_TO_TEST = {
-            "audio-classification": (AudioClassificationPipeline, inference_specs.AudioClassificationParameters),
+            "audio-classification": (AudioClassificationPipeline, inference_specs.AudioClassificationInput),
             "automatic-speech-recognition": (
                 AutomaticSpeechRecognitionPipeline,
-                inference_specs.AutomaticSpeechRecognitionParameters,
+                inference_specs.AutomaticSpeechRecognitionInput,
             ),
+            "document-question-answering": (DocumentQuestionAnsweringPipeline, inference_specs.DocumentQuestionAnsweringInput),
+            "image-classification": (ImageClassificationPipeline, inference_specs.ImageClassificationInput),
+            "text-to-audio": (TextToAudioPipeline, inference_specs.TextToAudioInput),
+            "text-classification": (TextClassificationPipeline, inference_specs.TextClassificationInput),
+            "token-classification": (TokenClassificationPipeline, inference_specs.TokenClassificationInput),
+            "question-answering": (QuestionAnsweringPipeline, inference_specs.QuestionAnsweringInput),
+            "table-question-answering": (TableQuestionAnsweringPipeline, inference_specs.TableQuestionAnsweringInput),
+            "visual-question-answering": (VisualQuestionAnsweringPipeline, inference_specs.VisualQuestionAnsweringInput),
+            "fill-mask": (FillMaskPipeline, inference_specs.FillMaskInput),
+            "summarization": (SummarizationPipeline, inference_specs.SummarizationInput),
+            "translation": (TranslationPipeline, inference_specs.TranslationInput),
+            "text2text-generation": (Text2TextGenerationPipeline, inference_specs.Text2TextGenerationInput),
+            "text-generation": (TextGenerationPipeline, inference_specs.TextGenerationInput),
+            "image-segmentation": (ImageSegmentationPipeline, inference_specs.ImageSegmentationInput),
+            "image-to-text": (ImageToTextPipeline, inference_specs.ImageToTextInput),
+            "object-detection": (ObjectDetectionPipeline, inference_specs.ObjectDetectionInput),
+            "depth-estimation": (DepthEstimationPipeline, inference_specs.DepthEstimationInput),
+            "zero-shot-object-detection": (ZeroShotObjectDetectionPipeline, inference_specs.ZeroShotObjectDetectionInput),
+            "zero-shot-classification": (ZeroShotClassificationPipeline, inference_specs.ZeroShotClassificationInput),
+            "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, inference_specs.ZeroShotImageClassificationInput),
+            "video-classification": (VideoClassificationPipeline, inference_specs.VideoClassificationInput)
         }
-        OTHER_PIPELINES = {
-            "text-to-audio": TextToAudioPipeline,
-            "feature-extraction": FeatureExtractionPipeline,
-            "text-classification": TextClassificationPipeline,
-            "token-classification": TokenClassificationPipeline,
-            "question-answering": QuestionAnsweringPipeline,
-            "table-question-answering": TableQuestionAnsweringPipeline,
-            "visual-question-answering": VisualQuestionAnsweringPipeline,
-            "document-question-answering": DocumentQuestionAnsweringPipeline,
-            "fill-mask": FillMaskPipeline,
-            "summarization": SummarizationPipeline,
-            "translation": TranslationPipeline,
-            "text2text-generation": Text2TextGenerationPipeline,
-            "text-generation": TextGenerationPipeline,
-            "zero-shot-classification": ZeroShotClassificationPipeline,
-            "zero-shot-image-classification": ZeroShotImageClassificationPipeline,
-            "zero-shot-audio-classification": ZeroShotAudioClassificationPipeline,
-            "image-classification": ImageClassificationPipeline,
+        PIPELINES_WITHOUT_SPEC = {
             "image-feature-extraction": ImageFeatureExtractionPipeline,
-            "image-segmentation": ImageSegmentationPipeline,
-            "image-to-text": ImageToTextPipeline,
-            "object-detection": ObjectDetectionPipeline,
-            "zero-shot-object-detection": ZeroShotObjectDetectionPipeline,
-            "depth-estimation": DepthEstimationPipeline,
-            "video-classification": VideoClassificationPipeline,
+            "zero-shot-audio-classification": ZeroShotAudioClassificationPipeline,
+            "feature-extraction": FeatureExtractionPipeline,
             "mask-generation": MaskGenerationPipeline,
-            "image-to-image": ImageToImagePipeline,
+            "image-to-image": ImageToImagePipeline,  # The huggingface_hub version of this looks like diffusers
         }
 
         mismatches = []
         for task, (pipeline_cls, js_spec) in PIPELINES_TO_TEST.items():
             docstring = inspect.getdoc(pipeline_cls.__call__).strip()
             docstring_args = self._parse_google_format_docstring_by_indentation(docstring)
-            js_args = [field.name for field in fields(js_spec)]
+            js_args = self.get_arg_names_from_hub_spec(js_spec)
             if set(js_args) != set(docstring_args):
                 mismatches.append((task, js_args, docstring_args))
 
@@ -1037,6 +1040,17 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
                     "",
                 ])
             raise ValueError("\n".join(error))
+
+    def get_arg_names_from_hub_spec(self, hub_spec):
+        arg_names = []
+        for field in fields(hub_spec):
+            for param_type in get_args(field.type):
+                if isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
+                    arg_names.extend(self.get_arg_names_from_hub_spec(param_type))  # Recurse into nested fields
+                    break
+            else:
+                arg_names.append(field.name)  # We only get here if it's not a nested field
+        return arg_names
 
     @staticmethod
     def _parse_google_format_docstring_by_indentation(docstring):
