@@ -136,6 +136,7 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
+        prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
             if self.patch_size is not None and self.vision_feature_select_strategy is not None:
                 # Replace the image token with the expanded image token sequence
@@ -150,7 +151,6 @@ class LlavaProcessor(ProcessorMixin):
                     sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                     prompt_strings.append(sample)
             else:
-                prompt_strings = text
                 logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
