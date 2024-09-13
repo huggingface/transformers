@@ -82,15 +82,6 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 
 [[autodoc]] PixtralVisionConfig
 
-## PixtralImageProcessor
-
-[[autodoc]] PixtralImageProcessor
-    - forward
-
-## PixtralProcessor
-[[autodoc]] PixtralProcessor
-    - forward
-
 ## PixtralModel
 
 [[autodoc]] PixtralModel
