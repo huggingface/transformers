@@ -47,6 +47,9 @@ class PixtralProcessor(ProcessorMixin):
         image_token (`str`, *optional*, defaults to `"[IMG]"`):
             Special token used to denote image location.
         image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
+            Special token used to denote the end of a line of pixels in an image.
+        image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
+            Special token used to denote the end of an image input.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -55,6 +58,7 @@ class PixtralProcessor(ProcessorMixin):
         "patch_size",
         "image_token",
         "image_break_token",
+        "image_end_token",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -150,7 +154,7 @@ class PixtralProcessor(ProcessorMixin):
             num_width_tokens = width // self.patch_size
 
             prompt_strings = []
-            replace_tokens = [self.image_token] * num_width_tokens + [self.image_break_token] * num_height_tokens
+            replace_tokens = [[self.image_token] * num_width_tokens + self.image_break_token] * num_height_tokens
             replace_tokens[-1] = self.image_end_token
             replace_str = "".join(replace_tokens)
             for sample in text:
