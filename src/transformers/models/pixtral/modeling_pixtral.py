@@ -432,7 +432,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
 
 PIXTRAL_INPUTS_DOCSTRING = r"""
     Args:
-        images: list of N_img images of variable sizes,
+        pixel_values: list of N_img images of variable sizes,
                 each of shape (C, H, W)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -510,7 +510,7 @@ class PixtralModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images]
+        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
 
         # flatten to a single sequence
         patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
