@@ -241,9 +241,21 @@ def convert_mistral_model():
         Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
         Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
     ]
-    PROMPT = "<s>[INST][IMG][IMG][IMG][IMG]\nWhat's the content of the image?[/INST]."
+    PROMPT = "<s>[INST]Describe the images[IMG] and [IMG] and [IMG] and [IMG][/INST]"
 
 
+    """
+Describe the content of each of the 4 following images: [IMG_START][IMG_START][IMG_START][IMG_START]Sure, here are the descriptions of the four images:
+
+1. **A black dog with blue eyes** is drinking from a stream in a lush landscape with mountains in the background**.
+
+2. **The dog appears to be in mid-stride, with its tongue outstretched towards the stream**.
+
+3. **The landscape is detailed with green grass and trees, and the stream meanders the mountains**.
+
+4. **In the distance, the dog appears to be running, with a sense of
+
+    """
     # image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
     # inputs["input_ids"] = torch.tensor([tokenized.tokens], dtype=torch.long, device="cuda")
@@ -252,24 +264,33 @@ def convert_mistral_model():
     generate_ids = model.generate(**inputs, max_new_tokens=100)
     print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
+    messages = [
+        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": "Describe the content of each image"}]},
+    ]
+    
+    model_name = "mistralai/Pixtral-12B-2409"
+    tok = MistralTokenizer.from_model(model_name)
+
+
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
+
+
+    EXPECTED_TOKENS = tok.encode_chat_completion(
+        ChatCompletionRequest(
+            messages=[
+                UserMessage(
+                    content=[
+                        TextChunk(text="Describe the images"),
+                    ] + [ImageChunk(image=img) for img in IMG_URLS]
+                )
+            ],
+            model="pixtral",
+        )
+    )
+    assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
 
 convert_mistral_model()
-# messages = [
-#     {"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": prompt}]},
-# ]
 
-# tok = MistralTokenizer.from_model(model_name)
-
-
-# from mistral_common.protocol.instruct.request import ChatCompletionRequest
-
-
-# tokenized = tok.encode_chat_completion(
-#     ChatCompletionRequest(
-#         messages=messages,
-#         model=model_name,
-#     )
-# )
 
 """
 What's the content of the image?The image depicts a vibrant street scene in what appears to be a Chinatown district, characterized by its traditional architectural elements and cultural signage. A prominent feature is the red and white stop sign in the foreground, which has been adorned with a banner that reads "OPTUS." Behind the stop sign, there's an ornate gate with intricate designs and Chinese characters, marking the entrance to the district. The gate is flanked by buildings with colorful facades and signs in both English and Chinese
