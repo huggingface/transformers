@@ -378,13 +378,14 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        non_default_generation_parameters = self._get_non_default_generation_parameters()
-        if len(non_default_generation_parameters) > 0:
+        misplaced_generation_parameters = self._get_non_default_generation_parameters()
+        if len(misplaced_generation_parameters) > 0:
+            misplaced_keys = [parameter_data[0] for parameter_data in misplaced_generation_parameters]
             raise ValueError(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
                 "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}"
+                f"\nKeys with non-default generation parameters: {str(misplaced_keys)}"
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -1017,11 +1018,12 @@ class PretrainedConfig(PushToHubMixin):
             "begin_suppress_tokens": None,
         }
 
-    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+    def _get_non_default_generation_parameters(self) -> List[Tuple[str, Any, Any]]:
         """
-        Gets the non-default generation parameters on the PretrainedConfig instance
+        Finds non-default generation parameters on the PretrainedConfig instance. Returns a list of tuples containing
+        (parameter name, value, expected default value)
         """
-        non_default_generation_parameters = {}
+        non_default_generation_parameters = []
         decoder_attribute_name = None
 
         # Composite models don't have a default config, use their decoder config as a fallback for default values
@@ -1048,16 +1050,18 @@ class PretrainedConfig(PushToHubMixin):
                     continue
                 # 2. If we have a default config, then the instance should hold the same generation defaults
                 if default_config is not None:
-                    is_default_in_config = parameter_value == getattr(default_config, parameter_name)
+                    default_value = getattr(default_config, parameter_name)
+                    is_default_in_config = parameter_value == default_value
                 # 3. if we don't have a default config, then the instance should hold the global generation defaults
                 else:
-                    is_default_generation_value = parameter_value == default_global_value
+                    default_value = default_global_value
+                    is_default_generation_value = parameter_value == default_value
 
                 is_non_default = (is_default_in_config is False) or (
                     is_default_in_config is None and is_default_generation_value is False
                 )
                 if is_non_default:
-                    non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
+                    non_default_generation_parameters.append((parameter_name, parameter_value, default_value))
 
         return non_default_generation_parameters
 

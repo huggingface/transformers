@@ -31,6 +31,7 @@ from transformers import (
     AutoTokenizer,
     DistilBertForSequenceClassification,
     MaskGenerationPipeline,
+    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     TFAutoModelForSequenceClassification,
@@ -233,6 +234,24 @@ class CommonPipelineTest(unittest.TestCase):
             pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
+
+    @require_torch
+    def test_pipeline_with_task_parameters_no_side_effects(self):
+        """
+        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
+        side-effects
+        """
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        self.assertTrue(model.config.num_beams == 1)
+
+        # The `task` parameter used to cause side-effects on `model.config` -- not anymore
+        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
+        self.assertTrue(model.config.num_beams == 1)
+        self.assertTrue(pipe.model.config.num_beams == 4)
+
+        # Under the hood: we hold a shallow copy of the model with a deep copy of the configs
+        self.assertTrue(id(model._parameters) == id(pipe.model._parameters))  # same model reference
+        self.assertTrue(id(model.config) != id(pipe.model.config))  # different config reference
 
 
 @is_pipeline_test

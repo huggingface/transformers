@@ -1715,6 +1715,26 @@ class ModelUtilsTest(TestCasePlus):
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
 
+    def test_save_and_load_config_with_custom_generation_whose_default_is_not_none(self):
+        """
+        Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
+        that gets moved to the generation config and reset on the model config) whose default is not None
+        """
+        model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
+
+        # The default for `num_beams` is 1
+        self.assertTrue(model.config.num_beams == 1)
+
+        # When we save the model, this custom parameter should be moved to the generation config AND the model
+        # config should contain the default value
+        model.config.num_beams = 420
+        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            new_model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
+            self.assertTrue(new_model.generation_config.num_beams == 420)  # moved to generation config
+            self.assertTrue(new_model.config.num_beams == 1)  # reset in the model config
+
 
 @slow
 @require_torch

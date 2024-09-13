@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import csv
 import importlib
 import json
@@ -825,12 +826,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             framework, model = infer_framework_load_model(model, config=model.config)
 
         self.task = task
-        self.model = model
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
+
+        # Create shallow copy of the model with a deep copies of the configs. A pipeline may change the config of the
+        # model and we don't want side-effects on the original object.
+        self.model = copy.copy(model)
+        self.model.config = copy.deepcopy(model.config)
+        if self.model.can_generate():
+            self.model.generation_config = copy.deepcopy(copy.deepcopy(model.generation_config))
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
