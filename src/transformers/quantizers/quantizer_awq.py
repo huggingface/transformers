@@ -46,9 +46,6 @@ class AwqQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("GPU is required to run AWQ quantized model.")
-
         if not is_auto_awq_available():
             raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
 
@@ -105,6 +102,11 @@ class AwqQuantizer(HfQuantizer):
             from ..integrations import post_init_awq_exllama_modules
 
             model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
+
+        if self.quantization_config.version == AWQLinearVersion.IPEX:
+            from ..integrations import post_init_awq_ipex_modules
+
+            model = post_init_awq_ipex_modules(model)
 
     @property
     def is_serializable(self):
