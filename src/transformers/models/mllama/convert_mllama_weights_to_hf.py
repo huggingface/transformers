@@ -55,16 +55,16 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.cross_attention_layers.(\d+).attention.(q|k)_norm":                            r"language_model.model.layers.\1.cross_attn.\2_norm",
     r"text_model.cross_attention_layers.(\d+).attention_norm.weight":                           r"language_model.model.layers.\1.input_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.w1.weight":                          r"language_model.model.layers.\1.mlp.up_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.w1.weight":                          r"language_model.model.layers.\1.mlp.gate_proj.weight",
     r"text_model.cross_attention_layers.(\d+).feed_forward.w2.weight":                          r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.w3.weight":                          r"language_model.model.layers.\1.mlp.gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.w3.weight":                          r"language_model.model.layers.\1.mlp.up_proj.weight",
     r"text_model.cross_attention_layers.(\d+).ffn_norm.weight":                                 r"language_model.model.layers.\1.post_attention_layernorm.weight",
     # self attention layers
     r"text_model.layers.(\d+).attention.w(q|k|v|o).weight":                                     r"language_model.model.layers.\1.self_attn.\2_proj.weight",
     r"text_model.layers.(\d+).attention_norm.weight":                                           r"language_model.model.layers.\1.input_layernorm.weight",
-    r"text_model.layers.(\d+).feed_forward.w1.":                                                r"language_model.model.layers.\1.mlp.up_proj.",
+    r"text_model.layers.(\d+).feed_forward.w1.":                                                r"language_model.model.layers.\1.mlp.gate_proj.",
     r"text_model.layers.(\d+).feed_forward.w2.":                                                r"language_model.model.layers.\1.mlp.down_proj.",
-    r"text_model.layers.(\d+).feed_forward.w3.":                                                r"language_model.model.layers.\1.mlp.gate_proj.",
+    r"text_model.layers.(\d+).feed_forward.w3.":                                                r"language_model.model.layers.\1.mlp.up_proj.",
     r"text_model.layers.(\d+).ffn_norm.weight":                                                 r"language_model.model.layers.\1.post_attention_layernorm.weight",
     # Vision encoder mapping
     r"vision_model.vision_encoder.conv1._linear":                                               r"vision_model.patch_embedding",
@@ -291,7 +291,8 @@ def write_model(
             current_parameter = torch.cat(
                 [param.view(n_heads_per_shard, dims_per_head, dim) for param in current_parameter], dim=concat_dim
             )
-            current_parameter = permute_for_rope(current_parameter, n_heads, dim, dim)
+            if "cross_attn" not in new_key:
+                current_parameter = permute_for_rope(current_parameter, n_heads, dim, dim)
             state_dict[new_key] = current_parameter.reshape(n_heads * dims_per_head, dim)
 
         elif "k_proj.weight" in new_key and "language_model" in new_key:
@@ -299,7 +300,8 @@ def write_model(
                 [param.view(num_local_key_value_heads, dims_per_head, dim) for param in current_parameter],
                 dim=concat_dim,
             )
-            current_parameter = permute_for_rope(current_parameter, num_key_value_heads, key_value_dim, dim)
+            if "cross_attn" not in new_key:
+                current_parameter = permute_for_rope(current_parameter, num_key_value_heads, key_value_dim, dim)
             state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
 
         elif "v_proj.weight" in new_key and "language_model" in new_key:
