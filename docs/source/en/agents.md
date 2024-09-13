@@ -114,7 +114,7 @@ To start with, please install the `agents` extras in order to install all defaul
 pip install transformers[agents]
 ```
 
-Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating.) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
+Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
 
 ```python
 from huggingface_hub import login, InferenceClient
