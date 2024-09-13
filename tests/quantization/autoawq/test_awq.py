@@ -512,5 +512,5 @@ class AwqIPEXTest(unittest.TestCase):
         output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=50256)
         print(tokenizer.decode(output[0], skip_special_tokens=True))
 
-        expected_output = 'How to make a cake with flour, sugar, eggs, and baking powder'
+        expected_output = "How to make a cake with flour, sugar, eggs, and baking powder"
         self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
