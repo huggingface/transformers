@@ -1,8 +1,9 @@
+import argparse
+
 import regex as re
-import requests
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from PIL import Image
+from safetensors.torch import safe_load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -17,6 +18,28 @@ from transformers import (
 )
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 
+
+"""
+# Here is how to get the original tokens!
+model_name = "mistralai/Pixtral-12B-2409"
+tok = MistralTokenizer.from_model(model_name)
+
+from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
+
+EXPECTED_TOKENS = tok.encode_chat_completion(
+    ChatCompletionRequest(
+        messages=[
+            UserMessage(
+                content=[
+                    TextChunk(text="Describe the images"),
+                ] + [ImageChunk(image=img) for img in IMG_URLS]
+            )
+        ],
+        model="pixtral",
+    )
+)
+assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
+"""
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
     # Layer Normalization Weights
@@ -185,7 +208,7 @@ def convert_dictionnary(original_state_dict, vision_config, text_config):
     return new_dict
 
 
-def convert_mistral_model():
+def convert_mistral_model(input_dir, output_dir):
     text_config = MistralConfig(
         attention_dropout=0.0,
         bos_token_id=1,
@@ -208,90 +231,46 @@ def convert_mistral_model():
     )
 
     vision_config = PixtralConfig()
-    config = LlavaConfig(vision_config, text_config)
+    config = LlavaConfig(
+        vision_config,
+        text_config,
+        vision_feature_layer=-1,
+        image_token_index=10,
+        vision_feature_select_strategy="full",
+        image_seq_length=1,
+    )
     config.architectures = ["LlavaForConditionalGeneration"]
-    config.text_config.head_dim = 128
-    config.save_pretrained("../pixtral")
+    config.save_pretrained(output_dir)
 
-    # original_state_dict = safe_load_file("../pixtral/consolidated.safetensors")
-    # new_dict = convert_dictionnary(original_state_dict, vision_config, text_config)
+    original_state_dict = safe_load_file(f"{input_dir}/consolidated.safetensors")
+    new_dict = convert_dictionnary(original_state_dict, vision_config, text_config)
 
-    # config.text_config.head_dim = 128
-    # with torch.device("meta"):
-    #     model = LlavaForConditionalGeneration(config)
-    # model.load_state_dict(new_dict, strict=True, assign=True)
+    with torch.device("meta"):
+        model = LlavaForConditionalGeneration(config)
+    model.load_state_dict(new_dict, strict=True, assign=True)
 
-    # model.save_pretrained("../pixtral")
-    config.vision_feature_layer = -1
-    config.image_token_index = 10
-    config.vision_feature_select_strategy = "full"
-    config.image_seq_length = 1
+    model.save_pretrained(output_dir)
+
     tokenizer = convert_mistral_tokenizer()
-    model = LlavaForConditionalGeneration.from_pretrained(
-        "../pixtral", config=config, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-    ).to("cuda")
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
-
-    IMG_URLS = [
-        Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-        Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-        Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-        Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
-    ]
-    PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
-
-    # image = Image.open(requests.get(url, stream=True).raw)
-    inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
-    generate_ids = model.generate(**inputs, max_new_tokens=500)
-    print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
-
-    # model_name = "mistralai/Pixtral-12B-2409"
-    # tok = MistralTokenizer.from_model(model_name)
-
-    # from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
-
-    # EXPECTED_TOKENS = tok.encode_chat_completion(
-    #     ChatCompletionRequest(
-    #         messages=[
-    #             UserMessage(
-    #                 content=[
-    #                     TextChunk(text="Describe the images"),
-    #                 ] + [ImageChunk(image=img) for img in IMG_URLS]
-    #             )
-    #         ],
-    #         model="pixtral",
-    #     )
-    # )
-    # assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
+    processor.save_pretrained(output_dir)
 
 
-convert_mistral_model()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input_dir",
+        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+    )
+    parser.add_argument(
+        "--output_dir",
+        help="Location to write HF model and tokenizer",
+    )
+
+    args = parser.parse_args()
+    convert_mistral_model(args.input_dir, args.output_dir)
 
 
-"""
-What's the content of the image?The image depicts a vibrant street scene in what appears to be a Chinatown district, characterized by its traditional architectural elements and cultural signage. A prominent feature is the red and white stop sign in the foreground, which has been adorned with a banner that reads "OPTUS." Behind the stop sign, there's an ornate gate with intricate designs and Chinese characters, marking the entrance to the district. The gate is flanked by buildings with colorful facades and signs in both English and Chinese
-"""
-
-"""
-Describe the images.
-Sure, let's break down each image description:
-
-1. **Image 1:**
-   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
-   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
-
-2. **Image 2:**
-   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
-   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
-
-3. **Image 3:**
-   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
-   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
-
-4. **Image 4:**
-   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
-   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
-
-Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
-"""
+if __name__ == "__main__":
+    main()

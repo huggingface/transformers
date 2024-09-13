@@ -36,7 +36,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging, is_torch_tensor
+from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
