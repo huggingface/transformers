@@ -29,7 +29,6 @@ from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
-from wandb.sdk.lib.config_util import ConfigError
 
 import numpy as np
 import packaging.version
@@ -768,6 +767,7 @@ class WandbCallback(TrainerCallback):
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
+            from wandb.sdk.lib.config_util import ConfigError
 
             self._wandb = wandb
         self._initialized = False
@@ -852,8 +852,12 @@ class WandbCallback(TrainerCallback):
             # add number of model parameters to wandb config
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
-            except (AttributeError, ConfigError):
-                logger.info("Could not log the number of model parameters in Weights & Biases.")
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Weights & Biases due to an AttributeError.")
+            except ConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
 
             # log the initial model architecture to an artifact
             if self._log_model.is_enabled:
