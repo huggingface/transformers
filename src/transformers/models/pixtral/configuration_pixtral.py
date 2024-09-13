@@ -62,16 +62,10 @@ class PixtralConfig(PretrainedConfig):
     ```python
     >>> from transformers import PixtralModel, PixtralConfig, CLIPVisionConfig, LlamaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Pixtral 12B style configuration
+    >>> config = PixtralConfig()
 
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
-
-    >>> # Initializing a Pixtral pixtral-1.5-7b style configuration
-    >>> configuration = PixtralConfig(vision_config, text_config)
-
-    >>> # Initializing a model from the pixtral-1.5-7b style configuration
+    >>> # Initializing a model from the pixtral 12B style configuration
     >>> model = PixtralModel(configuration)
 
     >>> # Accessing the model configuration
