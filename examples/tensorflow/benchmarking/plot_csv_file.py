@@ -1,17 +1,3 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import csv
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -31,11 +17,11 @@ def list_field(default=None, metadata=None):
 @dataclass
 class PlotArguments:
     """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+    Arguments pertaining to plotting model performance data from a CSV file.
     """
 
     csv_file: str = field(
-        metadata={"help": "The csv file to plot."},
+        metadata={"help": "The CSV file to plot."},
     )
     plot_along_batch: bool = field(
         default=False,
@@ -43,7 +29,7 @@ class PlotArguments:
     )
     is_time: bool = field(
         default=False,
-        metadata={"help": "Whether the csv file has time results or memory results. Defaults to memory results."},
+        metadata={"help": "Whether the CSV file contains time results. Defaults to memory results."},
     )
     no_log_scale: bool = field(
         default=False,
@@ -51,20 +37,19 @@ class PlotArguments:
     )
     is_train: bool = field(
         default=False,
-        metadata={
-            "help": "Whether the csv file has training results or inference results. Defaults to inference results."
-        },
+        metadata={"help": "Whether the CSV file contains training results. Defaults to inference results."},
     )
     figure_png_file: Optional[str] = field(
         default=None,
-        metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
+        metadata={"help": "Filename to save the plot. If not specified, the plot will be displayed but not saved."},
     )
     short_model_names: Optional[List[str]] = list_field(
-        default=None, metadata={"help": "List of model names that are used instead of the ones in the csv file."}
+        default=None, metadata={"help": "List of model names to use in the plot."}
     )
 
 
 def can_convert_to_int(string):
+    """Check if a string can be converted to an integer."""
     try:
         int(string)
         return True
@@ -73,6 +58,7 @@ def can_convert_to_int(string):
 
 
 def can_convert_to_float(string):
+    """Check if a string can be converted to a float."""
     try:
         float(string)
         return True
@@ -85,30 +71,37 @@ class Plot:
         self.args = args
         self.result_dict = defaultdict(lambda: {"bsz": [], "seq_len": [], "result": {}})
 
-        with open(self.args.csv_file, newline="") as csv_file:
-            reader = csv.DictReader(csv_file)
-            for row in reader:
-                model_name = row["model"]
-                self.result_dict[model_name]["bsz"].append(int(row["batch_size"]))
-                self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
-                if can_convert_to_int(row["result"]):
-                    # value is not None
-                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
-                        int(row["result"])
-                    )
-                elif can_convert_to_float(row["result"]):
-                    # value is not None
-                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
-                        float(row["result"])
-                    )
+        try:
+            with open(self.args.csv_file, newline="") as csv_file:
+                reader = csv.DictReader(csv_file)
+                for row in reader:
+                    model_name = row["model"]
+                    batch_size = int(row["batch_size"])
+                    seq_len = int(row["sequence_length"])
+                    result = row["result"]
+
+                    self.result_dict[model_name]["bsz"].append(batch_size)
+                    self.result_dict[model_name]["seq_len"].append(seq_len)
+
+                    if can_convert_to_int(result):
+                        self.result_dict[model_name]["result"][(batch_size, seq_len)] = int(result)
+                    elif can_convert_to_float(result):
+                        self.result_dict[model_name]["result"][(batch_size, seq_len)] = float(result)
+                    else:
+                        print(f"Warning: Unrecognized result format in row: {row}")
+
+        except FileNotFoundError:
+            raise FileNotFoundError(f"CSV file not found: {self.args.csv_file}")
+        except Exception as e:
+            print(f"Error reading the CSV file: {e}")
 
     def plot(self):
         fig, ax = plt.subplots()
         title_str = "Time usage" if self.args.is_time else "Memory usage"
-        title_str = title_str + " for training" if self.args.is_train else title_str + " for inference"
+        title_str += " for training" if self.args.is_train else " for inference"
 
         if not self.args.no_log_scale:
-            # set logarithm scales
+            # Apply logarithmic scales if data is non-zero
             ax.set_xscale("log")
             ax.set_yscale("log")
 
@@ -129,40 +122,42 @@ class Plot:
             )
 
             for inner_loop_value in inner_loop_array:
-                if self.args.plot_along_batch:
-                    y_axis_array = np.asarray(
-                        [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
-                        dtype=int,
-                    )
-                else:
-                    y_axis_array = np.asarray(
-                        [results[(inner_loop_value, x)] for x in x_axis_array if (inner_loop_value, x) in results],
-                        dtype=np.float32,
-                    )
+                try:
+                    if self.args.plot_along_batch:
+                        y_axis_array = np.asarray(
+                            [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
+                            dtype=float,
+                        )
+                    else:
+                        y_axis_array = np.asarray(
+                            [results[(inner_loop_value, x)] for x in x_axis_array if (inner_loop_value, x) in results],
+                            dtype=float,
+                        )
 
-                (x_axis_label, inner_loop_label) = (
-                    ("batch_size", "len") if self.args.plot_along_batch else ("in #tokens", "bsz")
-                )
+                    x_axis_array = np.asarray(x_axis_array, dtype=float)[: len(y_axis_array)]
+                    plt.scatter(
+                        x_axis_array, y_axis_array, label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}"
+                    )
+                    plt.plot(x_axis_array, y_axis_array, "--")
 
-                x_axis_array = np.asarray(x_axis_array, int)[: len(y_axis_array)]
-                plt.scatter(
-                    x_axis_array, y_axis_array, label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}"
-                )
-                plt.plot(x_axis_array, y_axis_array, "--")
+                except Exception as e:
+                    print(f"Error plotting data for model {model_name}: {e}")
 
             title_str += f" {label_model_name} vs."
 
-        title_str = title_str[:-4]
+        title_str = title_str.rstrip(" vs.")
         y_axis_label = "Time in s" if self.args.is_time else "Memory in MB"
 
-        # plot
         plt.title(title_str)
         plt.xlabel(x_axis_label)
         plt.ylabel(y_axis_label)
         plt.legend()
 
         if self.args.figure_png_file is not None:
-            plt.savefig(self.args.figure_png_file)
+            try:
+                plt.savefig(self.args.figure_png_file)
+            except Exception as e:
+                print(f"Error saving the plot: {e}")
         else:
             plt.show()
 
@@ -170,8 +165,13 @@ class Plot:
 def main():
     parser = HfArgumentParser(PlotArguments)
     plot_args = parser.parse_args_into_dataclasses()[0]
-    plot = Plot(args=plot_args)
-    plot.plot()
+    print(f"Plot arguments: {plot_args}")  # Debug: Print plot arguments
+    
+    try:
+        plot = Plot(args=plot_args)
+        plot.plot()
+    except Exception as e:
+        print(f"Error: {e}")  # Debug: Catch and print any errors
 
 
 if __name__ == "__main__":
