@@ -832,12 +832,16 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.modelcard = modelcard
         self.framework = framework
 
-        # Create shallow copy of the model with a deep copies of the configs. A pipeline may change the config of the
-        # model and we don't want side-effects on the original object.
-        self.model = copy.copy(model)
-        self.model.config = copy.deepcopy(model.config)
-        if self.model.can_generate():
-            self.model.generation_config = copy.deepcopy(copy.deepcopy(model.generation_config))
+        # TODO (joao): Keras model don't support `copy(model)` as of writing, fix me
+        if framework == "pt":
+            # Create shallow copy of the model with a deep copies of the configs. A pipeline may change the config of
+            # the model and we don't want side-effects on the original object.
+            self.model = copy.copy(model)
+            self.model.config = copy.deepcopy(model.config)
+            if self.model.can_generate():
+                self.model.generation_config = copy.deepcopy(model.generation_config)
+        else:
+            self.model = model
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
