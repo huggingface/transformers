@@ -46,6 +46,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 import torch.utils.benchmark as benchmark
 
 def benchmark_fn(f, *args, **kwargs):
+    # Manual warmup
+    for _ in range(5):
+        f(*args, **kwargs)
+        
     t0 = benchmark.Timer(
         stmt="f(*args, **kwargs)",
         globals={"args": args, "kwargs": kwargs, "f": f},
