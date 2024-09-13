@@ -643,13 +643,13 @@ _import_structure = {
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
-    "models.pixtral": ["PixtralVisionConfig", "PixtralProcessor"],
     "models.pix2struct": [
         "Pix2StructConfig",
         "Pix2StructProcessor",
         "Pix2StructTextConfig",
         "Pix2StructVisionConfig",
     ],
+    "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
@@ -1199,8 +1199,8 @@ else:
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
-    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
+    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
@@ -1361,7 +1361,6 @@ else:
             "AlignVisionModel",
         ]
     )
-    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
     _import_structure["models.altclip"].extend(
         [
             "AltCLIPModel",
@@ -2979,6 +2978,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
+    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
