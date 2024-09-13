@@ -857,6 +857,15 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = tokenizer_pretrained_fast.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
 
+        tmpdirname = tempfile.mkdtemp()
+        tokenizer_pretrained_fast.save_pretrained(tmpdirname)
+        tokenizer_fast_reload = AutoTokenizer.from_pretrained(tmpdirname)
+
+        self.assertTrue(isinstance(tokenizer_fast_reload, PreTrainedTokenizerFast))
+        tokens = tokenizer_fast_reload.tokenize("hello", add_special_tokens=True)
+        self.assertEqual(tokens[-1], new_eos_token)
+        shutil.rmtree(tmpdirname)
+
 
 @require_tiktoken
 @require_read_token
