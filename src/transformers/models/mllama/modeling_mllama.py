@@ -99,6 +99,7 @@ def prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
     past_key_values: Cache,
     num_vision_tokens: int,
+    cross_attention_states: torch.Tensor,
     cross_attention_layers: List[int],
     device: str,
     dtype: str,
@@ -129,8 +130,8 @@ def prepare_cross_attention_mask(
 
     # In case we got a new image but already have prev cross-atnn key/values in cache
     # we need to extend the attn-mask and add previuos images' lengths
-    if past_key_values is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:
-        # make all zeros mask for cross-attn-mask from previuos cached hidden_states
+    if past_key_values is not None and cross_attention_states is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:       
+        # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
         # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
         past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
         past_cross_attn_mask = torch.zeros(
@@ -984,6 +985,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         self,
         hidden_states: torch.Tensor,
         cross_attention_states: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
         attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
         past_key_value: Optional[Cache] = None,
@@ -997,7 +999,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
 
         hidden_states, attn_weights, past_key_value = self.cross_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=cross_attention_mask,
             cross_attention_states=cross_attention_states,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -1180,7 +1182,9 @@ class MllamaTextModel(PreTrainedModel):
                     decoder_layer.__call__,
                     hidden_states,
                     cross_attention_states,
+                    cross_attention_mask,
                     causal_mask,
+                    full_text_row_masked_out_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1192,8 +1196,9 @@ class MllamaTextModel(PreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     cross_attention_states=cross_attention_states,
-                    full_text_row_masked_out_mask=None,
+                    cross_attention_mask=cross_attention_mask,
                     attention_mask=causal_mask,
+                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -1249,7 +1254,7 @@ class MllamaTextModel(PreTrainedModel):
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         # TODO: we have only SDPA currently and there's a bug when attn-bias is passed. Need to add eager attn and return the line
         # self.config._attn_implementation == "sdpa" and
-        if not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1611,6 +1616,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             past_key_values=past_key_values,
             num_vision_tokens=self.vision_model.num_patches,
             cross_attention_layers=self.language_model.model.cross_attention_layers,
+            cross_attention_states=cross_attention_states,
             device=self.device,
             dtype=self.dtype,
         )
@@ -1620,8 +1626,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+            cross_attention_mask=cross_attention_mask[:, :, cache_position],
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position],
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
