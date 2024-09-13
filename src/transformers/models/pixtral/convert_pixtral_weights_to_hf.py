@@ -3,7 +3,7 @@ import argparse
 import regex as re
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from safetensors.torch import safe_load_file
+from safetensors.torch import load_file as safe_load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
