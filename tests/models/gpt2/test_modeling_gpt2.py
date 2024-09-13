@@ -1036,22 +1036,26 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
         mismatches = []
         for task, (pipeline_cls, js_spec) in PIPELINES_TO_TEST.items():
             docstring = inspect.getdoc(pipeline_cls.__call__).strip()
-            docstring_args = self._parse_google_format_docstring_by_indentation(docstring)
-            js_args = self.get_arg_names_from_hub_spec(js_spec)
-            if set(js_args) != set(docstring_args):
+            docstring_args = set(self._parse_google_format_docstring_by_indentation(docstring))
+            js_args = set(self.get_arg_names_from_hub_spec(js_spec))
+            if js_args != docstring_args:
                 mismatches.append((task, js_args, docstring_args))
 
         if mismatches:
             error = ["The following tasks have divergent input specs:", ""]
             for mismatch in mismatches:
-                error.extend(
-                    [
-                        f"Task: {mismatch[0]}",
-                        f"Huggingface.js spec: {mismatch[1]}",
-                        f"Transformers args: {mismatch[2]}",
-                        "",
-                    ]
-                )
+                task = mismatch[0]
+                matching_args = mismatch[1] & mismatch[2]
+                huggingface_js_only = mismatch[1] - mismatch[2]
+                transformers_only = mismatch[2] - mismatch[1]
+                error.append(f"Task: {task}")
+                if matching_args:
+                    error.append(f"Matching args: {matching_args}")
+                if huggingface_js_only:
+                    error.append(f"Huggingface.js only: {huggingface_js_only}")
+                if transformers_only:
+                    error.append(f"Transformers args: {transformers_only}")
+                error.append("")
             raise ValueError("\n".join(error))
 
     def get_arg_names_from_hub_spec(self, hub_spec):
