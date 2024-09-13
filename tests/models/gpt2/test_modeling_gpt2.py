@@ -17,14 +17,12 @@
 import datetime
 import gc
 import inspect
-import json
 import math
 import re
 import unittest
-from pathlib import Path
-from subprocess import run
-from tempfile import TemporaryDirectory
 from textwrap import dedent
+from huggingface_hub.inference._generated import types as inference_specs
+from dataclasses import fields
 
 import pytest
 
@@ -956,38 +954,18 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
 
         # Putting this here for now because this file is already tested by CircleCI, will move later
         PIPELINES_TO_TEST = {
-            "audio-classification": AudioClassificationPipeline,
+            "audio-classification": (AudioClassificationPipeline, inference_specs.AudioClassificationParameters)
         }
 
-        js_task_to_input_spec = self._get_huggingface_js_task_specs(PIPELINES_TO_TEST.keys())
-
-        for task, pipeline_cls in PIPELINES_TO_TEST.items():
-            js_spec = js_task_to_input_spec[task]
+        for task, (pipeline_cls, js_spec) in PIPELINES_TO_TEST.items():
             docstring = inspect.getdoc(pipeline_cls.__call__).strip()
             docstring_args = self._parse_google_format_docstring_by_indentation(docstring)
-            if set(js_spec.keys()) != set(docstring_args):
+            if set(fields(js_spec)) != set(docstring_args):
                 raise ValueError(
                     f"Pipeline task {task} has divergent input spec!\n"
                     f"Huggingface.js: {set(js_spec.keys())}\n"
                     f"Transformers: {set(docstring_args)}"
                 )
-
-    @staticmethod
-    def _get_huggingface_js_task_specs(task_list):
-        with TemporaryDirectory() as tempdir:
-            run(["git", "clone", "https://github.com/huggingface/huggingface.js.git", tempdir])
-            tasks_path = Path(tempdir) / "packages/tasks/src/tasks"
-            js_task_to_input_spec = {}
-
-            for task in task_list:
-                subdir = tasks_path / task
-                spec = subdir / "spec/input.json"
-                json_spec = json.load(spec.open())["$defs"]
-                # Might need some custom handling for different tasks here, but they mostly follow this structure
-                json_spec = list(json_spec.values())[0]
-                json_spec = json_spec["properties"]
-                js_task_to_input_spec[task] = json_spec
-        return js_task_to_input_spec
 
     @staticmethod
     def _parse_google_format_docstring_by_indentation(docstring):
