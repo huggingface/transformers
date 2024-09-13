@@ -43,7 +43,6 @@ _CHECKPOINT_FOR_DOC = "llava-hf/llava-1.5-7b-hf"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
 class LlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for Llava causal language model (or autoregressive) outputs.

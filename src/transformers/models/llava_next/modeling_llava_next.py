@@ -144,7 +144,6 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaNext
 class LlavaNextCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaNext causal language model (or autoregressive) outputs.

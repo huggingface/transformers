@@ -145,7 +145,7 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaOnevision
+# Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoCausalLMOutputWithPast with LlavaNextVideo->LlavaOnevision
 class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaOnevision causal language model (or autoregressive) outputs.
@@ -186,6 +186,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaOnevision

@@ -150,7 +150,6 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaNextVideo
 class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaNextVideo causal language model (or autoregressive) outputs.
@@ -1018,7 +1017,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values is not None else None,
+            video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
     def prepare_inputs_for_generation(

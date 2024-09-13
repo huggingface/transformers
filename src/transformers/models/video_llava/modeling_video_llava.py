@@ -40,7 +40,6 @@ _CONFIG_FOR_DOC = "VideoLlavaConfig"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VideoLlava
 class VideoLlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for VideoLlava causal language model (or autoregressive) outputs.

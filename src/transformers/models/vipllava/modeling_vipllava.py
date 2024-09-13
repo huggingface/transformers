@@ -40,7 +40,7 @@ _CONFIG_FOR_DOC = "VipLlavaConfig"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VipLlava
+# Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->VipLlava
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for VipLlava causal language model (or autoregressive) outputs.
