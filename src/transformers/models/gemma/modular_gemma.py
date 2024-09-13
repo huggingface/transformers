@@ -21,6 +21,13 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import is_torchdynamo_compiling, logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaFlashAttention2,
@@ -31,14 +38,6 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import is_torchdynamo_compiling, logging
 
 
 logger = logging.get_logger(__name__)

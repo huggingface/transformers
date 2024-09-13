@@ -548,7 +548,9 @@ class DiffConverterTransformer(CSTTransformer):
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-                if re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement): # OR MATCH ..llama.modeling_llama
+                if re.search(
+                    rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement
+                ):  # OR MATCH ..llama.modeling_llama
                     return cst.RemoveFromParent()
                 if updated_node not in self.all_imports:
                     self.all_imports.append(updated_node)
