@@ -832,7 +832,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.modelcard = modelcard
         self.framework = framework
 
-        # TODO (joao): Keras model don't support `copy(model)` as of writing, fix me
+        # TODO (joao): Keras models don't support `copy(model)` as of writing, fix me
         if framework == "pt":
             # Create shallow copy of the model with a deep copies of the configs. A pipeline may change the config of
             # the model and we don't want side-effects on the original object.
