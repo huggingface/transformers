@@ -56,6 +56,7 @@ def map_dependencies(py_files):
     dependencies = defaultdict(set)
     # First pass: Extract all classes and map to files
     for file_path in py_files:
+        dependencies[file_path].add(None)
         class_to_file = extract_classes_and_imports(file_path)
         for module in class_to_file:
             dependencies[file_path].add(module)
@@ -65,4 +66,4 @@ def map_dependencies(py_files):
 def find_priority_list(py_files):
     dependencies = map_dependencies(py_files)
     ordered_classes = topological_sort(dependencies)
-    return ordered_classes
+    return ordered_classes[::-1]

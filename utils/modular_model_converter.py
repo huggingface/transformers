@@ -516,7 +516,7 @@ class DiffConverterTransformer(CSTTransformer):
         import_statement = self.python_module.code_for_node(node.module)
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                _import = re.search(rf"transformers\.models\..*\.({self.match_patterns})_.*", import_statement)
+                _import = re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", import_statement)
                 if _import:
                     source = _import.groups()[0]
                     if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
@@ -524,6 +524,10 @@ class DiffConverterTransformer(CSTTransformer):
                             f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead"
                         )
                     if import_statement not in self.transformers_imports:
+                        if "models" not in import_statement:
+                            import_statement = "models." + import_statement
+                        if "transformers" not in import_statement:
+                            import_statement = "transformers." + import_statement
                         source_code = get_module_source_from_name(import_statement)
                         tree = cst.parse_module(source_code)
                         self.transformers_imports[import_statement] = tree
@@ -544,7 +548,7 @@ class DiffConverterTransformer(CSTTransformer):
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-                if re.search(rf"transformers\.models\..*\.({self.match_patterns})_.*", full_statement):
+                if re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement): # OR MATCH ..llama.modeling_llama
                     return cst.RemoveFromParent()
                 if updated_node not in self.all_imports:
                     self.all_imports.append(updated_node)

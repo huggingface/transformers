@@ -21,7 +21,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.models.llama.modeling_llama import (
+from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaFlashAttention2,
     LlamaForCausalLM,
