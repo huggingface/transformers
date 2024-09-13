@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import requests
 import unittest
 
+import requests
 import torch
 
 from transformers.testing_utils import require_vision
@@ -22,7 +22,8 @@ from transformers.utils import is_vision_available
 
 if is_vision_available():
     from PIL import Image
-    from transformers import AutoProcessor, PixtralProcessor, PixtralImageProcessor, AutoTokenizer
+
+    from transformers import AutoTokenizer, PixtralImageProcessor, PixtralProcessor
 
 
 @require_vision

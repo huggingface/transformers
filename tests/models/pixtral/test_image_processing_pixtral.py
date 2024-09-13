@@ -18,8 +18,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
-from transformers.models.llava_next.image_processing_llava_next import select_best_resolution
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -214,8 +212,6 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image)
                 self.assertEqual(tuple(encoded_image.shape), expected_output_image_shape)
 
-    @unittest.skip(
-        reason="PixtralImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
-    )  # FIXME Amy
+    @unittest.skip(reason="PixtralImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass
