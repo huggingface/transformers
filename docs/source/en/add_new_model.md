@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How to add a new model to 🤗 Transformers?
+# How to add a model to 🤗 Transformers?
 
 The 🤗 Transformers library is often able to offer new models thanks to community contributors. But this can be a challenging project and requires an in-depth knowledge of the 🤗 Transformers library and the model to implement. At Hugging Face, we're trying to empower more of the community to actively add models and we've put together this guide to walk you through the process of adding a PyTorch model (make sure you have [PyTorch installed](https://pytorch.org/get-started/locally/)).
 
@@ -26,157 +26,9 @@ Along the way, you'll:
 
 A Hugging Face team member will be available to help you along the way so you'll never be alone. 🤗 ❤️
 
-Here is a summary of the steps:
+To get started, open a [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml) issue for the model you want to see in 🤗 Transformers. If you're not especially picky about contributing a specific model, you can filter by the [New model label](https://github.com/huggingface/transformers/labels/New%20model) to see if there are any unclaimed model requests and work on it.
 
-1. Open an issue on transformers
-2. Have a fork of transformers
-3. Find the closest model in the ecosystem
-4. Create a new branch for the addition / a pull request to main
-5. Automatically create the template files using `transformers-cli new-model-addition`
-6. Write integration tests for the `model` and the `processors`/`tokenizer`/`image_processor`/`feature extractor` depending on the modality
-7. Make your modeling code fir the `transformers` philosophy that is available here: 
-8. Write a conversion script if a conversion script is needed. 
-9. Make sure the CIs are green
-10. Ask for a first review to the maintainers for the specific modularity
-11. Iterate on the review
-12. Once ready, ask for a final review to one of the core maintainers of `transformers` **only if the CI is green**.
-
-
-# 1. Open an issue on `transformers`
-
-Now the first thing you need to do is to create an **ISSUE** on github for a [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml). Make sure this model is not already listed with all the other [New model addition requests](https://github.com/huggingface/transformers/labels/New%20model).
-
-# 2. Have a fork of transformers
-
-Once you've opened a new model request, the first step is to fork `transformers` to get up to working speed. 
-
-- If you want to do a silent integration (meaning 0-day integration in transformers) just hit us up on slack / mail and we will create a private for of `transformers` for you and your team. This will allow the core maintainers of `transformers` to review your PR and make it ready for a 0-day merge! 
-- Otherwise, fork the `transformers` library, by clicking on [fork](https://github.com/huggingface/transformers/fork).
-
-
-
-# 3. Find the closest model in the ecosystem
-Now, you are integrating a new model, but hundreds of models already exist in `transformers`, and in the `AI` ecosystem, you should **never** implement from scratch. The first task is to **FIND THE CLOSEST EXISTING MODEL**, and the closest *tokenizer*, *image_processor* or feature extractor.
-
-We can help you on this, but if you want to add this model, it's essential that you understand what makes this model specific and different compared to the most recent models.
-
-At the time of writing, `Llama` is the most popular **Language Model**, and more than 15 models are based on its implementation in transformers: `Cohere`, `Gemma`, `Gemma2`, `Persimmon`, `Mistral`, etc. 
-
-Here is a little help to identify a close model:
-
-- it's a text model?
-    - it's a decoder model: the best base is probably `llama`
-    - it's an encoder-decoder model: the best base is probably `umt5` (most recent code)
-    - it's an encoder only model: we have not seen a new encoder model for a while, so starting from BERT might not be too bad.
-
-- it's a vision model? 
-    - Start from SIGLIP ? 
-
-- it's a multimodal model? 
-    - speetch to text: start from whisper
-    - text to speech: start from bark
-    - image and text to text:
-        - if it uses cross attention between text and images, use idefics as a bases
-        - if it uses image embeddings like Llava, use Llava as a bases.
-    - speech to speech: TODO
-
-
-# 4. Create a new branch for the addition / a pull request to main
-
-Next, create a new branch, call `add-<my-model>` with the name of your model.
-
-# 5. Automatically create the template files using `transformers-cli new-model-addition`
-
-
-# 6. Write integration tests for the `model` and the `processors`/`tokenizer`/`image_processor`/`feature extractor` depending on the modality
-You can do this later on, but it will help you a lot if you have reliable tests so make sure you write what you expect from the `transformers` API, and the expected values.
-
-For example if I am converting a language model called `Bob`, that uses a repo/framework (let's call it bob_git), then I use the `bob_git` api to generate some text:
-```python 
-.... 
-input_text = "Hey? What is the best dish in the world?
-# generate with bob_git
-expected_output = "It's of course KFC"
-```
-
-If you found the closest model, you know that your model should follow the same api, and this for a language model you should write this kind of tests: 
-
-```python
-class LlamaIntegrationTest(unittest.TestCase):
-
-    def test_blop_model(self):
-        """
-        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
-        from llama 3.1.'s RoPE can be detected
-        """
-        # diff on `EXPECTED_TEXT`:
-        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        EXPECTED_TEXT = (
-            "Hey? What is the best dish in the world?. It's of course KFC"
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("bob/bob-1")
-        model = AutoModel.from_pretrained(
-            "bob/bob-1", device_map="auto", torch_dtype=torch.bfloat16
-        )
-        input_text = ["Tell me about the french revolution."]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
-
-        generated_ids = model.generate(**model_inputs, do_sample=False)
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_TEXT)
-
-```
-
-Again, the key here is to look at the tests written for the closest model in transformers, and basically copy what is done there! 
-
-
-# 7. Make your modeling code fit the `transformers` philosophy
-
-This is the core part of adding a model to transformers: refactoring the old code. 
-We have very strict standards, which usually require additional work when converting a model. 
-
-Now, when you add a model, we invite you to simply use **modularity** by creating a `modular_my_model.py`. 
-It will automatically be converted to a flatten `modeling_my_model.py` which won't have inheritance on other `tranformers` models. 
-
-The `modular_my_model.py` is here to help you identify and isolate the **key differences** between your model, and the closest model.
-
-**I can't emphasize more on the fact that this file is a key to have your model re-used across the entire ecosystem.** 
-Other frameworks that have already integrated the closest model will only have to look at isolated differences, and have a very easy time integrating the new changes to fit the new model. 
-It's of much importance if you want `TGI`, `VLLM`, `transformers.js`, `candle`, `optimum`, etc to ship your model as well!
-
-# 8. Write a conversion script if a conversion script is needed. 
-
-Utils are coming to help you write a proper conversion script, in the mean time you can take inspiration from the CLAP conversion script!
-Of course the conversion script from the closets model you found will help you tremendously! 
-
-# 9. Make sure the CIs are green
-
-This is usually easy, but if you have issue with some of the tests we wrote, don't hesitate to ping us! 
-
-# 10. Ask for a first review to the maintainers for the specific modularity
-The correct person to ping is the same as for issue template: 
-
-Models:
-
-- text models: @ArthurZucker
-- vision models: @pavel. @molbap
-- speech models: @ylacombe
-- multimodal models: @zucchini-nlp
-
-
-# 11. Iterate on the review
-🤗 nothing much, if we are too slow to review, don't hesitate to ping us on slack! 
-
-# 12. Once ready, ask for a final review to one of the core maintainers of `transformers` **only if the CI is green**.
-Here, ping either @amyeroberts or @ArthurZucker
-
-
-
-
-If you are a real beginner with the `transformers` library, the following is for you!
-
-# Tips for people who know nothing about `transformers`
+Once you've opened a new model request, the first step is to get familiar with 🤗 Transformers if you aren't already!
 
 ## General overview of 🤗 Transformers
 
