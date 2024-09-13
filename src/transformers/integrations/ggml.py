@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter, GPT2Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -528,7 +528,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
-    "bloom": GGUFBloomConverter
+    "bloom": GGUFBloomConverter,
 }
 
 
