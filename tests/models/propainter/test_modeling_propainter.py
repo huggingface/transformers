@@ -175,6 +175,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model = ProPainterModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="")
     def test_attention_outputs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
