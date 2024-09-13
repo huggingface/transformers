@@ -429,6 +429,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         max_length: int,
         stride: int,
         pad_to_multiple_of: Optional[int],
+        padding_side: Optional[bool],
     ):
         """
         Define the truncation and the padding strategies for fast tokenizers (provided by HuggingFace tokenizers
@@ -450,6 +451,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
+            padding_side (`str`, *optional*):
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
         """
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
@@ -484,7 +488,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
             target = {
                 "length": length,
-                "direction": self.padding_side,
+                "direction": padding_side if padding_side is not None else self.padding_side,
                 "pad_id": self.pad_token_id,
                 "pad_token": self.pad_token,
                 "pad_type_id": self.pad_token_type_id,
@@ -505,6 +509,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -527,6 +532,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
         )
 
         if self._tokenizer.encode_special_tokens != split_special_tokens:
@@ -593,6 +599,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -614,6 +621,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
