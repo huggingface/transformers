@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     MaskedImageModelingOutput,
 )
-from ...modeling_utils import TORCH_INIT_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -3813,54 +3813,57 @@ class ProPainterPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Conv3d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
+
+        # Use Xavier or Kaiming initialization instead of trunc_normal_ for optimizing cpu usage in tests
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.weight.dtype)
+            nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, ProPainterSecondOrderDeformableAlignment) or isinstance(
-            module, ProPainterDeformableAlignment
-        ):
-            num_channels = module.in_channels
-            for k in module.kernel_size:
-                num_channels *= k
+                nn.init.zeros_(module.bias)
+
+        # Simplify and optimize uniform initialization
+        elif isinstance(module, (ProPainterSecondOrderDeformableAlignment, ProPainterDeformableAlignment)):
+            num_channels = module.in_channels * math.prod(module.kernel_size)
             stdv = 1.0 / math.sqrt(num_channels)
-            module.weight.data.uniform_(-stdv, stdv)
+            nn.init.uniform_(module.weight, -stdv, stdv)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
+            # Optimize constant initialization for offset layers
             if hasattr(module.conv_offset[-1], "weight") and module.conv_offset[-1].weight is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
+                nn.init.constant_(module.conv_offset[-1].weight, 0)
             if hasattr(module.conv_offset[-1], "bias") and module.conv_offset[-1].bias is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
-        elif isinstance(module, ProPainterInpaintGenerator) or isinstance(module, ProPainterDiscriminator):
+                nn.init.constant_(module.conv_offset[-1].bias, 0)
+
+        # For ProPainter modules, use more efficient initializers
+        elif isinstance(module, (ProPainterInpaintGenerator, ProPainterDiscriminator)):
             for child in module.children():
                 classname = child.__class__.__name__
-                if classname.find("InstanceNorm2d") != -1:
+                if "InstanceNorm2d" in classname:
                     if hasattr(child, "weight") and child.weight is not None:
-                        nn.init.constant_(child.weight.data, 1.0)
+                        nn.init.constant_(child.weight, 1.0)  # Initialize normalization layer weight to 1
                     if hasattr(child, "bias") and child.bias is not None:
-                        nn.init.constant_(child.bias.data, 0.0)
-                elif hasattr(child, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
-                    nn.init.normal_(child.weight.data, 0.0, 0.02)
+                        nn.init.constant_(child.bias, 0.0)  # Initialize bias to 0
+                elif hasattr(child, "weight") and ("Conv" in classname or "Linear" in classname):
+                    nn.init.xavier_uniform_(child.weight)  # Use Xavier uniform for Conv and Linear layers
                     if hasattr(child, "bias") and child.bias is not None:
-                        nn.init.constant_(child.bias.data, 0.0)
+                        nn.init.constant_(child.bias, 0.0)  # Zero out bias
+
+        # For ProPainterBasicEncoder, use Kaiming normal for Conv layers and constant for BatchNorm layers
         elif isinstance(module, ProPainterBasicEncoder):
             for child in module.children():
                 if isinstance(child, nn.Conv2d):
-                    nn.init.kaiming_normal_(child.weight, mode="fan_out", nonlinearity="relu")
+                    nn.init.kaiming_uniform_(
+                        child.weight, mode="fan_out", nonlinearity="relu"
+                    )  # Use Kaiming uniform for efficiency
                 elif isinstance(child, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
                     if child.weight is not None:
-                        nn.init.constant_(child.weight, 1)
+                        nn.init.constant_(child.weight, 1)  # BatchNorm weight to 1
                     if child.bias is not None:
-                        nn.init.constant_(child.bias, 0)
+                        nn.init.constant_(child.bias, 0)  # BatchNorm bias to 0
+
+        # LayerNorm remains unchanged since it's already efficient
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)  # Zero bias
+            nn.init.ones_(module.weight)  # One for weight
 
 
 PROPAINTER_START_DOCSTRING = r"""
