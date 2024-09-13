@@ -128,7 +128,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=0):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -158,7 +158,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=0):
 class PixtralAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -214,27 +213,26 @@ class PixtralAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixstral
-class PixtralMLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixtral
+class PixstralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_state):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Pixtral
 class PixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        PixtralRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -404,7 +402,6 @@ PIXTRAL_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     PIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->Pixtral,llava->pixtral
 class PixtralPreTrainedModel(PreTrainedModel):
     config_class = PixtralConfig
     base_model_prefix = "model"
@@ -414,6 +411,9 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
+        # important: this ported version of Pixtral isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/LLaVA/tree/main/pixtral should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
