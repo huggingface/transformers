@@ -47,6 +47,7 @@ class PixtralProcessorTest(unittest.TestCase):
         image_processor = PixtralImageProcessor()
         self.processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
+    @unittest.skip("No chat template was set for this model (yet)")
     def test_chat_template(self):
         expected_prompt = "USER: [IMG]\nWhat is shown in this image? ASSISTANT:"
 
@@ -62,6 +63,7 @@ class PixtralProcessorTest(unittest.TestCase):
         formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
 
+    @unittest.skip("No chat template was set for this model (yet)")
     def test_image_token_filling(self):
         # Important to check with non square image
         image = torch.randint(0, 2, (3, 500, 316))
@@ -106,9 +108,9 @@ class PixtralProcessorTest(unittest.TestCase):
         # fmt: off
         input_ids = inputs_image["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the content of the image? ASSISTANT:"
-            [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 2793, 310, 278, 1967, 29973, 319, 1799, 9047, 13566, 29901]
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  4701,  1307,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
         )
         # fmt: on
 
@@ -126,9 +128,9 @@ class PixtralProcessorTest(unittest.TestCase):
         # fmt: off
         input_ids = inputs_url["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the content of the image? ASSISTANT:"
-            [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 2793, 310, 278, 1967, 29973, 319, 1799, 9047, 13566, 29901]
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  4701,  1307,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
         )
         # fmt: on
 
@@ -153,7 +155,7 @@ class PixtralProcessorTest(unittest.TestCase):
         # fmt: off
         input_ids = inputs_image["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
             [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 4328, 1546, 1438, 1023, 4558, 29973, 319, 1799, 9047, 13566, 29901]
         )
@@ -169,11 +171,10 @@ class PixtralProcessorTest(unittest.TestCase):
         self.assertIsInstance(inputs_url["pixel_values"][0], list)
         self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
-
         # fmt: off
         input_ids = inputs_url["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
             [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 4328, 1546, 1438, 1023, 4558, 29973, 319, 1799, 9047, 13566, 29901]
         )
@@ -184,6 +185,7 @@ class PixtralProcessorTest(unittest.TestCase):
             "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:",
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
         ]
+        self.processor.tokenizer.pad_token = "</s>"
         image_inputs = [[self.image_0, self.image_1], [self.image_2]]
 
         # Make small for checking image token expansion
@@ -204,9 +206,9 @@ class PixtralProcessorTest(unittest.TestCase):
         # fmt: off
         input_ids = inputs_image["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
-            [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 4328, 1546, 1438, 1023, 4558, 29973, 319, 1799, 9047, 13566, 29901]
+            [21510, 1058, 1032, 10, 10, 12, 10, 10, 13, 10, 10, 12, 10, 10, 13, 1010, 7493, 1681, 1278, 6592, 2396, 2576, 2295, 8061, 1063, 1349, 4290, 16002, 41150, 1058]
         )
         # fmt: on
 
@@ -224,8 +226,9 @@ class PixtralProcessorTest(unittest.TestCase):
         # fmt: off
         input_ids = inputs_url["input_ids"]
         self.assertEqual(
-            list(input_ids[0]),
+            input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
-            [1, 3148, 1001, 29901, 518, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 29933, 1525, 22311, 3816, 7833, 29954, 3816, 7833, 29954, 3816, 7833, 29954, 29918, 11794, 29962, 13, 5618, 29915, 29879, 278, 4328, 1546, 1438, 1023, 4558, 29973, 319, 1799, 9047, 13566, 29901]
+            [21510, 1058, 1032, 10, 10, 12, 10, 10, 13, 10, 10, 12, 10, 10, 13, 1010, 7493, 1681, 1278, 6592, 2396, 2576, 2295, 8061, 1063, 1349, 4290, 16002, 41150, 1058]
         )
         # fmt: on
+
