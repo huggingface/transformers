@@ -38,7 +38,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging, is_torch_device, is_torch_dtype
 from ...utils.import_utils import requires_backends
 
 
@@ -166,6 +166,54 @@ def get_resize_output_image_size(
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
+
+
+class BatchMixFeature(BatchFeature):
+    def to(self, *args, **kwargs) -> "BatchFeature":
+        """
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
+
+        Args:
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
+
+        Returns:
+            [`BatchFeature`]: The same instance after modification.
+        """
+        requires_backends(self, ["torch"])
+        import torch  # noqa
+
+        new_data = {}
+        device = kwargs.get("device")
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # The first argument is a dtype
+                pass
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            # check if v is a floating point
+            if isinstance(k, list):
+                new_data[k] = [element.to(*args, **kwargs) for sample in v for element in sample]
+            if torch.is_floating_point(v):
+                # cast and send to device
+                new_data[k] = v.to(*args, **kwargs)
+            elif device is not None:
+                new_data[k] = v.to(device=device)
+            else:
+                new_data[k] = v
+        self.data = new_data
+        return self
 
 
 # Hack to get tensor conversion used in BatchFeature without batching the images
@@ -464,4 +512,4 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
         images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
-        return BatchFeature(data={"images": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+        return BatchFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)

@@ -22,11 +22,57 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
-
+from ...utils import TensorType, logging, is_torch_device, is_torch_dtype, requires_backends, is_torch_tensor
 
 logger = logging.get_logger(__name__)
 
+
+class BatchMixFeature(BatchFeature):
+    def to(self, *args, **kwargs) -> "BatchFeature":
+        """
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
+
+        Args:
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
+
+        Returns:
+            [`BatchFeature`]: The same instance after modification.
+        """
+        requires_backends(self, ["torch"])
+        import torch  # noqa
+
+        new_data = {}
+        device = kwargs.get("device")
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # The first argument is a dtype
+                pass
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            # check if v is a floating point
+            if isinstance(v, list):
+                new_data[k] = [element.to(*args, **kwargs)  for sample in v for element in sample if is_torch_tensor(element) ]
+            elif torch.is_floating_point(v):
+                # cast and send to device
+                new_data[k] = v.to(*args, **kwargs)
+            elif device is not None:
+                new_data[k] = v.to(device=device)
+            else:
+                new_data[k] = v
+        self.data = new_data
+        return self
 
 class PixtralProcessor(ProcessorMixin):
     r"""
@@ -88,7 +134,7 @@ class PixtralProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-    ) -> BatchFeature:
+    ) -> BatchMixFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -146,9 +192,9 @@ class PixtralProcessor(ProcessorMixin):
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
-        if image_inputs.get("images") is not None:
+        if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
-            images = image_inputs["images"]
+            images = image_inputs["pixel_values"]
             image_sizes = image_inputs.pop("image_sizes")
             prompt_strings = []
 
@@ -182,7 +228,7 @@ class PixtralProcessor(ProcessorMixin):
             truncation=truncation,
             max_length=max_length,
         )
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchMixFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
