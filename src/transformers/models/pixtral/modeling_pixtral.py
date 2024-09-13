@@ -497,7 +497,7 @@ class PixtralModel(PixtralPreTrainedModel):
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
-        images: List[torch.Tensor],
+        pixel_values: List[torch.Tensor],
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -506,7 +506,7 @@ class PixtralModel(PixtralPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutput]:
         """
         Returns:
-            image_features: tensor of token features for
+            pixel_values: tensor of token features for
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
