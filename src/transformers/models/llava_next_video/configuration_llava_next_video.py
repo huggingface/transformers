@@ -94,6 +94,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
 
     model_type = "llava_next_video"
     is_composition = True
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
