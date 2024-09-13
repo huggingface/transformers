@@ -21,7 +21,6 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     PixtralConfig,
     PixtralModel,
     is_torch_available,
@@ -30,14 +29,12 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -47,6 +44,7 @@ else:
 
 if is_vision_available():
     from PIL import Image
+
 
 class PixtralModelTester:
     def __init__(

@@ -615,4 +615,4 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(ouptut, EXPECTED_GENERATION) 
+        self.assertListEqual(ouptut, EXPECTED_GENERATION)

@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Pixtral model."""
 
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -23,7 +22,7 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     add_start_docstrings,
     logging,
@@ -32,51 +31,6 @@ from .configuration_pixtral import PixtralConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "PixtralConfig"
-
-
-@dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Pixtral
-class PixtralCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for Pixtral causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def position_ids_in_meshgrid(patch_embeds_list, max_width):
@@ -260,7 +214,7 @@ class PixtralAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from gemma2
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixstral
 class PixtralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -276,6 +230,7 @@ class PixtralMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Pixtral
 class PixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -456,21 +411,14 @@ class PixtralPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PixtralVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        # important: this ported version of Pixtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/pixtral should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -557,6 +505,22 @@ PIXTRAL_INPUTS_DOCSTRING = r"""
 """
 
 
+def generate_block_attention_mask(patch_embeds_list, tensor):
+    dtype = tensor.dtype
+    device = tensor.device
+    seq_len = tensor.shape[1]
+    d_min = torch.finfo(dtype).min
+    causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
+
+    block_end_idx = torch.tensor(patch_embeds_list).cumsum(-1)
+    block_start_idx = torch.tensor([0] + patch_embeds_list[:-1]).cumsum(-1)
+    for start, end in zip(block_start_idx, block_end_idx):
+        causal_mask[start:end, start:end] = 0
+
+    causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
+    return causal_mask
+
+
 @add_start_docstrings(
     """The PIXTRAL model which consists of a vision backbone and a language model.""",
     PIXTRAL_START_DOCSTRING,
@@ -590,7 +554,9 @@ class PixtralModel(PixtralPreTrainedModel):
     def dtype(self) -> torch.device:
         return next(self.parameters()).dtype
 
-    def forward(self, images: List[torch.Tensor], output_hidden_states=False, *kwargs) -> torch.Tensor:
+    def forward(
+        self, images: List[torch.Tensor], output_hidden_states=False, *kwargs
+    ) -> Union[Tuple, BaseModelOutput]:
         """
         Args:
             images: list of N_img images of variable sizes,
@@ -612,28 +578,7 @@ class PixtralModel(PixtralPreTrainedModel):
         ).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
-        # LAST TODO:
         attention_mask = generate_block_attention_mask(
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
-        out = self.transformer(patch_embeds, attention_mask, position_embedding)
-        return out
-
-
-def generate_block_attention_mask(patch_embeds_list, tensor):
-    dtype = tensor.dtype
-    device = tensor.device
-    # Get the number of patches (sequence length) from the first element in patch_embeds_list
-    seq_len = tensor.shape[1]
-    d_min = torch.finfo(dtype).min
-    causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
-    # Create an empty attention mask (1: attend, 0: no attend)
-
-    # Fill the mask with 1s within blocks
-    block_end_idx = torch.tensor(patch_embeds_list).cumsum(-1)
-    block_start_idx = torch.tensor([0] + patch_embeds_list[:-1]).cumsum(-1)
-    for start, end in zip(block_start_idx, block_end_idx):
-        causal_mask[start:end, start:end] = 0
-
-    causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
-    return causal_mask
+        return self.transformer(patch_embeds, attention_mask, position_embedding)
