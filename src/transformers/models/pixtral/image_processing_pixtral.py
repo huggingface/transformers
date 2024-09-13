@@ -20,7 +20,6 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
 )
@@ -31,11 +30,10 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    is_valid_image,
     to_numpy_array,
     valid_images,
     validate_kwargs,
-    is_valid_image,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging

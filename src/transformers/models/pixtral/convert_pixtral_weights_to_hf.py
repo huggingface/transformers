@@ -1,5 +1,6 @@
 import regex as re
 import requests
+import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from PIL import Image
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
@@ -15,7 +16,7 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import bytes_to_unicode
-import torch
+
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
     # Layer Normalization Weights
@@ -226,9 +227,9 @@ def convert_mistral_model():
     config.vision_feature_select_strategy = "full"
     config.image_seq_length = 1
     tokenizer = convert_mistral_tokenizer()
-    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True, torch_dtype = torch.bfloat16).to(
-        "cuda"
-    )
+    model = LlavaForConditionalGeneration.from_pretrained(
+        "../pixtral", config=config, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+    ).to("cuda")
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
 
@@ -245,13 +246,10 @@ def convert_mistral_model():
     generate_ids = model.generate(**inputs, max_new_tokens=500)
     print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
-    
     # model_name = "mistralai/Pixtral-12B-2409"
     # tok = MistralTokenizer.from_model(model_name)
 
-
     # from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
-
 
     # EXPECTED_TOKENS = tok.encode_chat_completion(
     #     ChatCompletionRequest(
@@ -266,6 +264,7 @@ def convert_mistral_model():
     #     )
     # )
     # assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
+
 
 convert_mistral_model()
 
