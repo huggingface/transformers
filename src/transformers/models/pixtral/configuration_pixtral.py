@@ -37,9 +37,9 @@ class PixtralConfig(PretrainedConfig):
         intermediate_size (`int`, `optional`, defaults to 4096):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, `optional`, defaults to 24):
-            Number of hidden layers in the Transformer decoder.
+            Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, `optional`, defaults to 16):
-            Number of attention heads in the Transformer decoder.
+            Number of attention heads in the Transformer encoder.
         num_channels (`int`, `optional`, defaults to 3):
             Number of input channels in the input images.
         image_size (`int`, `optional`, defaults to 1024):

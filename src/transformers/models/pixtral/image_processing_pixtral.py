@@ -237,6 +237,8 @@ class PixtralImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 1024}`):
+            Size of the maximum dimension of either the height or width dimension of the image. Used to control how 
+            images are resized. If either the height or width are greater than `size["longest_edge"]` then both the height and width are rescaled by `height / ratio`, `width /ratio` where `ratio = max(height / longest_edge, width / longest_edge)`
         patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
             Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
