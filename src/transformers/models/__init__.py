@@ -163,6 +163,7 @@ from . import (
     mra,
     mt5,
     musicgen,
+    moshi,
     musicgen_melody,
     mvp,
     nemotron,

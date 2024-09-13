@@ -595,6 +595,10 @@ _import_structure = {
         "MusicgenConfig",
         "MusicgenDecoderConfig",
     ],
+    "models.moshi": [
+        "MoshiConfig",
+        "MoshiDecoderConfig",
+    ],
     "models.musicgen_melody": [
         "MusicgenMelodyConfig",
         "MusicgenMelodyDecoderConfig",
@@ -2786,6 +2790,15 @@ else:
             "MusicgenModel",
             "MusicgenPreTrainedModel",
             "MusicgenProcessor",
+        ]
+    )
+    _import_structure["models.moshi"].extend(
+        [
+            "MoshiForCausalLM",
+            "MoshiForConditionalGeneration",
+            "MoshiModel",
+            "MoshiPreTrainedModel",
+            "MoshiProcessor",
         ]
     )
     _import_structure["models.musicgen_melody"].extend(
@@ -5380,6 +5393,10 @@ if TYPE_CHECKING:
         MusicgenConfig,
         MusicgenDecoderConfig,
     )
+    from .models.moshi import (
+        MoshiConfig,
+        MoshiDecoderConfig,
+    )
     from .models.musicgen_melody import (
         MusicgenMelodyConfig,
         MusicgenMelodyDecoderConfig,
@@ -7309,6 +7326,13 @@ if TYPE_CHECKING:
             MusicgenModel,
             MusicgenPreTrainedModel,
             MusicgenProcessor,
+        )
+        from .models.moshi import (
+            MoshiForCausalLM,
+            MoshiForConditionalGeneration,
+            MoshiModel,
+            MoshiPreTrainedModel,
+            MoshiProcessor,
         )
         from .models.musicgen_melody import (
             MusicgenMelodyForCausalLM,
