@@ -149,14 +149,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture]
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
-            renamed_tensor_name = tensor.name
-
-            for tensor_name_mapping in GGUF_TO_TRANSFORMERS_MAPPING["tensors"]:
-                if tensor_name_mapping in renamed_tensor_name:
-                    renamed_tensor_name = renamed_tensor_name.replace(
-                        tensor_name_mapping, GGUF_TO_TRANSFORMERS_MAPPING["tensors"][tensor_name_mapping]
-                    )
-
             name = tensor.name
 
             weights = dequantize(tensor.data, tensor.tensor_type)
