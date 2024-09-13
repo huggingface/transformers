@@ -29,8 +29,7 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Amy Roberts](https://huggingface.co/amyeroberts).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Amy Roberts](https://huggingface.co/amyeroberts). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
 ## PixtralConfig
@@ -41,3 +40,12 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] PixtralModel
     - forward
+
+## PixtralImageProcessor
+
+[[autodoc]] PixtralImageProcessor
+    - preprocess
+
+## PixtralProcessor
+
+[[autodoc]] PixtralProcessor

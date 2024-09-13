@@ -215,7 +215,7 @@ class PixtralAttention(nn.Module):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixtral
-class PixstralMLP(nn.Module):
+class PixtralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
