@@ -82,7 +82,7 @@ class BatchMixFeature(BatchFeature):
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
-            if isinstance(k, list):
+            if isinstance(v, list):
                 new_data[k] = [
                     element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
                 ]
