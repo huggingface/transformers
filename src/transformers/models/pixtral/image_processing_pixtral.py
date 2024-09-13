@@ -281,6 +281,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"longest_edge": 1024}
         patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
+        patch_size = get_size_dict(patch_size, default_to_square=True)
 
         self.do_resize = do_resize
         self.size = size
@@ -296,6 +297,7 @@ class PixtralImageProcessor(BaseImageProcessor):
             "images",
             "do_resize",
             "size",
+            "patch_size",
             "resample",
             "do_rescale",
             "rescale_factor",
