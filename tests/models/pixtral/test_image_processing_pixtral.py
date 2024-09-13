@@ -159,12 +159,12 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").images
+        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0][0])
         self.assertEqual(tuple(encoded_images[0][0].shape), expected_output_image_shape)
 
         # Test batched
-        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").images
+        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
         for encoded_images, images in zip(batch_encoded_images, image_inputs_list):
             for encoded_image, image in zip(encoded_images, images):
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image)
@@ -180,12 +180,12 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").images
+        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0][0])
         self.assertEqual(tuple(encoded_images[0][0].shape), expected_output_image_shape)
 
         # Test batched
-        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").images
+        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
         for encoded_images, images in zip(batch_encoded_images, image_inputs_list):
             for encoded_image, image in zip(encoded_images, images):
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image)
@@ -201,12 +201,12 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").images
+        encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0][0])
         self.assertEqual(tuple(encoded_images[0][0].shape), expected_output_image_shape)
 
         # Test batched
-        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").images
+        batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
         for encoded_images, images in zip(batch_encoded_images, image_inputs_list):
             for encoded_image, image in zip(encoded_images, images):
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image)
