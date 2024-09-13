@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import shutil
 import tempfile
 import unittest
@@ -52,8 +53,28 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def get_Video_processor(self, **kwargs):
+    def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
+    def prepare_processor_dict(self):
+        return {"chat_template": "dummy_template"}
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_processor_to_json_string
+    def test_processor_to_json_string(self):
+        processor = self.get_processor()
+        obj = json.loads(processor.to_json_string())
+        for key, value in self.prepare_processor_dict().items():
+            # chat templates are popped from dict
+            if key != "chat_template":
+                self.assertEqual(obj[key], value)
+                self.assertEqual(getattr(processor, key, None), value)
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
+    def test_chat_template_is_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_loaded = self.processor_class.from_pretrained(tmpdirname)
+            processor_dict = self.prepare_processor_dict()
+            self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
