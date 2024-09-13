@@ -21,10 +21,9 @@ import math
 import re
 import unittest
 from dataclasses import fields
-from textwrap import dedent
-
-from typing import get_args
 from inspect import isclass
+from textwrap import dedent
+from typing import get_args
 
 import pytest
 from huggingface_hub.inference._generated import types as inference_specs
@@ -992,14 +991,20 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
                 AutomaticSpeechRecognitionPipeline,
                 inference_specs.AutomaticSpeechRecognitionInput,
             ),
-            "document-question-answering": (DocumentQuestionAnsweringPipeline, inference_specs.DocumentQuestionAnsweringInput),
+            "document-question-answering": (
+                DocumentQuestionAnsweringPipeline,
+                inference_specs.DocumentQuestionAnsweringInput,
+            ),
             "image-classification": (ImageClassificationPipeline, inference_specs.ImageClassificationInput),
             "text-to-audio": (TextToAudioPipeline, inference_specs.TextToAudioInput),
             "text-classification": (TextClassificationPipeline, inference_specs.TextClassificationInput),
             "token-classification": (TokenClassificationPipeline, inference_specs.TokenClassificationInput),
             "question-answering": (QuestionAnsweringPipeline, inference_specs.QuestionAnsweringInput),
             "table-question-answering": (TableQuestionAnsweringPipeline, inference_specs.TableQuestionAnsweringInput),
-            "visual-question-answering": (VisualQuestionAnsweringPipeline, inference_specs.VisualQuestionAnsweringInput),
+            "visual-question-answering": (
+                VisualQuestionAnsweringPipeline,
+                inference_specs.VisualQuestionAnsweringInput,
+            ),
             "fill-mask": (FillMaskPipeline, inference_specs.FillMaskInput),
             "summarization": (SummarizationPipeline, inference_specs.SummarizationInput),
             "translation": (TranslationPipeline, inference_specs.TranslationInput),
@@ -1009,10 +1014,16 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
             "image-to-text": (ImageToTextPipeline, inference_specs.ImageToTextInput),
             "object-detection": (ObjectDetectionPipeline, inference_specs.ObjectDetectionInput),
             "depth-estimation": (DepthEstimationPipeline, inference_specs.DepthEstimationInput),
-            "zero-shot-object-detection": (ZeroShotObjectDetectionPipeline, inference_specs.ZeroShotObjectDetectionInput),
+            "zero-shot-object-detection": (
+                ZeroShotObjectDetectionPipeline,
+                inference_specs.ZeroShotObjectDetectionInput,
+            ),
             "zero-shot-classification": (ZeroShotClassificationPipeline, inference_specs.ZeroShotClassificationInput),
-            "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, inference_specs.ZeroShotImageClassificationInput),
-            "video-classification": (VideoClassificationPipeline, inference_specs.VideoClassificationInput)
+            "zero-shot-image-classification": (
+                ZeroShotImageClassificationPipeline,
+                inference_specs.ZeroShotImageClassificationInput,
+            ),
+            "video-classification": (VideoClassificationPipeline, inference_specs.VideoClassificationInput),
         }
         PIPELINES_WITHOUT_SPEC = {
             "image-feature-extraction": ImageFeatureExtractionPipeline,
@@ -1033,23 +1044,31 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
         if mismatches:
             error = ["The following tasks have divergent input specs:", ""]
             for mismatch in mismatches:
-                error.extend([
-                    f"Task: {mismatch[0]}",
-                    f"Huggingface.js spec: {mismatch[1]}",
-                    f"Transformers args: {mismatch[2]}",
-                    "",
-                ])
+                error.extend(
+                    [
+                        f"Task: {mismatch[0]}",
+                        f"Huggingface.js spec: {mismatch[1]}",
+                        f"Transformers args: {mismatch[2]}",
+                        "",
+                    ]
+                )
             raise ValueError("\n".join(error))
 
     def get_arg_names_from_hub_spec(self, hub_spec):
         arg_names = []
         for field in fields(hub_spec):
+            # First, recurse into nested fields
+            if isclass(field.type) and issubclass(field.type, inference_specs.BaseInferenceType):
+                arg_names.extend(self.get_arg_names_from_hub_spec(field.type))
+                continue
+            # Next, catch nested fields that are part of a Union[], which is usually caused by Optional[]
             for param_type in get_args(field.type):
                 if isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
                     arg_names.extend(self.get_arg_names_from_hub_spec(param_type))  # Recurse into nested fields
                     break
             else:
-                arg_names.append(field.name)  # We only get here if it's not a nested field
+                # Finally, this line triggers if it's not a nested field
+                arg_names.append(field.name)
         return arg_names
 
     @staticmethod
