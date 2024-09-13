@@ -62,10 +62,9 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_loaded = self.processor_class.from_pretrained(tmpdirname)
-            processor_dict = self.prepare_processor_dict()
-            self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")

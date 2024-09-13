@@ -58,10 +58,9 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertEqual(getattr(processor, key, None), value)
 
     def test_chat_template_is_saved(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_loaded = self.processor_class.from_pretrained(tmpdirname)
-            processor_dict = self.prepare_processor_dict()
-            self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
