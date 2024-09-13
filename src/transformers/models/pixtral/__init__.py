@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_pixtral": ["PixtralConfig"],
+    "configuration_pixtral": ["PixtralVisionConfig"],
     "processing_pixtral": ["PixtralProcessor"],
 }
 
@@ -43,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pixtral import PixtralConfig, PixtralProcessor
+    from .configuration_pixtral import PixtralVisionConfig, PixtralProcessor
 
     try:
         if not is_torch_available():

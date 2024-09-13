@@ -80,9 +80,9 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 """
 
 ```
-## PixtralConfig
+## PixtralVisionConfig
 
-[[autodoc]] PixtralConfig
+[[autodoc]] PixtralVisionConfig
 
 ## PixtralImageProcessor
 

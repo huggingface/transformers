@@ -205,7 +205,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("phi", "PhiConfig"),
         ("phi3", "Phi3Config"),
         ("pix2struct", "Pix2StructConfig"),
-        ("pixtral", "PixtralConfig"),
+        ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),

@@ -21,7 +21,7 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    PixtralConfig,
+    PixtralVisionConfig,
     PixtralModel,
     is_torch_available,
     is_vision_available,
@@ -92,7 +92,7 @@ class PixtralModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return PixtralConfig(
+        return PixtralVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -151,7 +151,7 @@ class PixtralModelModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = PixtralModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PixtralConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(self, config_class=PixtralVisionConfig, has_text_modality=False)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):

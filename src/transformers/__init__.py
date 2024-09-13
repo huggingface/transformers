@@ -643,7 +643,7 @@ _import_structure = {
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
-    "models.pixtral": ["PixtralConfig", "PixtralProcessor"],
+    "models.pixtral": ["PixtralVisionConfig", "PixtralProcessor"],
     "models.pix2struct": [
         "Pix2StructConfig",
         "Pix2StructProcessor",
@@ -5437,7 +5437,7 @@ if TYPE_CHECKING:
         Pix2StructVisionConfig,
     )
     from .models.pixtral import (
-        PixtralConfig,
+        PixtralVisionConfig,
         PixtralProcessor,
     )
     from .models.plbart import PLBartConfig

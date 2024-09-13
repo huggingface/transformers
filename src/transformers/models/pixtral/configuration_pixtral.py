@@ -20,7 +20,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class PixtralConfig(PretrainedConfig):
+class PixtralVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PixtralModel`]. It is used to instantiate an
     Pixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -60,10 +60,10 @@ class PixtralConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PixtralModel, PixtralConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import PixtralModel, PixtralVisionConfig, CLIPVisionConfig, LlamaConfig
 
     >>> # Initializing a Pixtral 12B style configuration
-    >>> config = PixtralConfig()
+    >>> config = PixtralVisionConfig()
 
     >>> # Initializing a model from the pixtral 12B style configuration
     >>> model = PixtralModel(configuration)

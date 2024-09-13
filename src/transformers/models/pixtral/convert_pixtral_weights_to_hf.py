@@ -11,7 +11,7 @@ from transformers import (
     LlavaConfig,
     LlavaForConditionalGeneration,
     MistralConfig,
-    PixtralConfig,
+    PixtralVisionConfig,
     PixtralImageProcessor,
     PixtralProcessor,
     PreTrainedTokenizerFast,
@@ -230,7 +230,7 @@ def convert_mistral_model(input_dir, output_dir):
         vocab_size=131072,
     )
 
-    vision_config = PixtralConfig()
+    vision_config = PixtralVisionConfig()
     config = LlavaConfig(
         vision_config,
         text_config,

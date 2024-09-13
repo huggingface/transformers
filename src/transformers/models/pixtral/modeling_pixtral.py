@@ -27,7 +27,7 @@ from ...utils import (
     add_start_docstrings,
     logging,
 )
-from .configuration_pixtral import PixtralConfig
+from .configuration_pixtral import PixtralVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -300,7 +300,6 @@ class PixtralAttentionLayer(nn.Module):
 class PixtralTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
             self.layers.append(PixtralAttentionLayer(config))
@@ -391,7 +390,7 @@ PIXTRAL_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PixtralConfig`] or [`PixtralVisionConfig`]):
+        config ([`PixtralVisionConfig`] or [`PixtralVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -403,7 +402,7 @@ PIXTRAL_START_DOCSTRING = r"""
     PIXTRAL_START_DOCSTRING,
 )
 class PixtralPreTrainedModel(PreTrainedModel):
-    config_class = PixtralConfig
+    config_class = PixtralVisionConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PixtralVisionAttention"]
