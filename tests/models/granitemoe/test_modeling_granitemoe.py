@@ -540,3 +540,21 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
                 rtol=1e-3,
             )
         )
+
+    @slow
+    def test_model_3b_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXT_COMPLETION = (
+            "Simply put, the theory of relativity states that \n$$\n\\frac{d^2x^\\mu}{d\\tau^2} = "
+            "\\frac{1}{c^2}\\frac{d^2x^\\mu}{dt^2}\n$$\nwhere $x^\\mu$ is a four-vector, $\\tau$ is the proper time"
+        )
+        prompt = "Simply put, the theory of relativity states that "
+        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
+        model = GraniteMoeForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(**model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
