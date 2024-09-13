@@ -23,15 +23,12 @@ try:
     from typing import Unpack
 except ImportError:
     from typing_extensions import Unpack
-import unittest
 
 import numpy as np
 
-from transformers import CLIPTokenizerFast, ProcessorMixin
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    require_tokenizers,
     require_torch,
     require_vision,
 )
@@ -41,12 +38,16 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPImageProcessor
+
+def prepare_image_inputs():
+    """This function prepares a list of PIL images"""
+    image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+    image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+    return image_inputs
 
 
 @require_torch
 @require_vision
-@require_torch
 class ProcessorTesterMixin:
     processor_class = None
 
@@ -81,11 +82,14 @@ class ProcessorTesterMixin:
 
     @require_vision
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        """This function prepares a list of PIL images for testing"""
+        return prepare_image_inputs()
+
+    @require_vision
+    def prepare_video_inputs(self):
+        """This function prepares a list of numpy videos."""
+        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        image_inputs = [video_input] * 3  # batch-size=3
         return image_inputs
 
     def test_processor_to_json_string(self):
@@ -122,8 +126,6 @@ class ProcessorTesterMixin:
         if not is_kwargs_typed_dict:
             self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
 
-    @require_vision
-    @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -138,8 +140,6 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
-    @require_torch
-    @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -155,8 +155,6 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
 
-    @require_vision
-    @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -173,8 +171,6 @@ class ProcessorTesterMixin:
         )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
-    @require_torch
-    @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -190,8 +186,6 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input, size=[224, 224])
         self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
 
-    @require_torch
-    @require_vision
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -215,8 +209,6 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    @require_torch
-    @require_vision
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -241,8 +233,6 @@ class ProcessorTesterMixin:
 
         self.assertEqual(len(inputs["input_ids"][0]), 6)
 
-    @require_torch
-    @require_vision
     def test_doubly_passed_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -262,8 +252,6 @@ class ProcessorTesterMixin:
                 size={"height": 214, "width": 214},
             )
 
-    @require_torch
-    @require_vision
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -290,8 +278,6 @@ class ProcessorTesterMixin:
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    @require_torch
-    @require_vision
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -315,48 +301,3 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-
-class MyProcessor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-
-    def __init__(self, image_processor=None, tokenizer=None, processor_attr_1=1, processor_attr_2=True):
-        super().__init__(image_processor, tokenizer)
-
-        self.processor_attr_1 = processor_attr_1
-        self.processor_attr_2 = processor_attr_2
-
-
-@require_tokenizers
-@require_vision
-class ProcessorTest(unittest.TestCase):
-    processor_class = MyProcessor
-
-    def prepare_processor_dict(self):
-        return {"processor_attr_1": 1, "processor_attr_2": False}
-
-    def get_processor(self):
-        image_processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14")
-        tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-large-patch14")
-        processor = MyProcessor(image_processor, tokenizer, **self.prepare_processor_dict())
-
-        return processor
-
-    def test_processor_to_json_string(self):
-        processor = self.get_processor()
-        obj = json.loads(processor.to_json_string())
-        for key, value in self.prepare_processor_dict().items():
-            self.assertEqual(obj[key], value)
-            self.assertEqual(getattr(processor, key, None), value)
-
-    def test_processor_from_and_save_pretrained(self):
-        processor_first = self.get_processor()
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = processor_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            processor_second = self.processor_class.from_pretrained(tmpdirname)
-
-        self.assertEqual(processor_second.to_dict(), processor_first.to_dict())

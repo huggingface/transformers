@@ -113,6 +113,7 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -133,7 +134,7 @@ class CircleCIJob:
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>>' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
-            {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
+                        {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
@@ -152,7 +153,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = self.parallelism
+            job["parallelism"] = parallel
         job["steps"] = steps
         return job
 
@@ -359,12 +360,13 @@ def create_circleci_config(folder=None):
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": ''},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
+            **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+        f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
 
 
 if __name__ == "__main__":
