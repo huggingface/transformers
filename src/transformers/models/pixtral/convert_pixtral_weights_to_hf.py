@@ -1,9 +1,9 @@
 import regex as re
 import requests
-import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from PIL import Image
-from safetensors.torch import load_file as safe_load_file
+from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers.models import BPE
 
 from transformers import (
     LlavaConfig,
@@ -14,8 +14,7 @@ from transformers import (
     PixtralProcessor,
     PreTrainedTokenizerFast,
 )
-from transformers.convert_slow_tokenizer import *
-
+from transformers.convert_slow_tokenizer import bytes_to_unicode
 
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
@@ -48,6 +47,7 @@ OLD_KEY_TO_NEW_KEY_MAPPING = {
     r"output.weight": r"language_model.lm_head.weight",
     r"norm.weight": r"language_model.model.norm.weight",
 }
+
 
 class MistralConverter:
     """
@@ -148,7 +148,6 @@ def convert_mistral_tokenizer():
     return tokenizer
 
 
-
 def permute_for_rope(value, n_heads, config):
     dim1 = value.shape[0]
     dim2 = config.hidden_size
@@ -184,8 +183,8 @@ def convert_dictionnary(original_state_dict, vision_config, text_config):
         new_dict[new_key] = value
     return new_dict
 
-def convert_mistral_model():
 
+def convert_mistral_model():
     text_config = MistralConfig(
         attention_dropout=0.0,
         bos_token_id=1,
@@ -227,18 +226,32 @@ def convert_mistral_model():
     config.vision_feature_select_strategy = "full"
     config.image_seq_length = 1
     tokenizer = convert_mistral_tokenizer()
-    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True).to("cuda")
+    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True).to(
+        "cuda"
+    )
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
     prompt = "<s>[INST][IMG]\nWhat's the content of the image?[/INST]"
     url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
+
+
+    IMG_URLS = [
+        Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
+        Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+        Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
+        Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
+    ]
+    PROMPT = "<s>[INST][IMG][IMG][IMG][IMG]\nWhat's the content of the image?[/INST]."
+
+
+    # image = Image.open(requests.get(url, stream=True).raw)
+    inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
     # inputs["input_ids"] = torch.tensor([tokenized.tokens], dtype=torch.long, device="cuda")
     # inputs["pixel_values"] = torch.tensor(tokenized.images, device="cuda")
     del inputs["attention_mask"]
     generate_ids = model.generate(**inputs, max_new_tokens=100)
     print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
+
 
 convert_mistral_model()
 # messages = [

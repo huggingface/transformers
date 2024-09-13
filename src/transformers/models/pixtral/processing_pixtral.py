@@ -22,7 +22,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging, is_torch_device, is_torch_dtype, requires_backends, is_torch_tensor
+from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
+
 
 logger = logging.get_logger(__name__)
 
@@ -63,7 +64,9 @@ class BatchMixFeature(BatchFeature):
         for k, v in self.items():
             # check if v is a floating point
             if isinstance(v, list):
-                new_data[k] = [element.to(*args, **kwargs)  for sample in v for element in sample if is_torch_tensor(element) ]
+                new_data[k] = [
+                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
+                ]
             elif torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
@@ -73,6 +76,7 @@ class BatchMixFeature(BatchFeature):
                 new_data[k] = v
         self.data = new_data
         return self
+
 
 class PixtralProcessor(ProcessorMixin):
     r"""

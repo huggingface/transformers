@@ -31,14 +31,14 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_kwargs,
+    is_valid_image,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging, is_torch_device, is_torch_dtype
+from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -444,7 +444,7 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         images_list = make_list_of_images(images)
 
-        if not valid_images(images_list[0][0]):
+        if not valid_images(images_list[0]):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."

@@ -526,9 +526,6 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
-    "models.pixtral": [
-        "PixtralConfig",
-    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -1364,7 +1361,7 @@ else:
             "AlignVisionModel",
         ]
     )
-
+    (_import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"]),)
     _import_structure["models.altclip"].extend(
         [
             "AltCLIPModel",
@@ -2527,12 +2524,6 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.pixtral"].extend(
-        [
-            "PixtralModel",
-            "PixtralPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
