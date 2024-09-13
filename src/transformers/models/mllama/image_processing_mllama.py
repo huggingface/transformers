@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import math
-from collections import defaultdict
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -746,12 +745,12 @@ class MllamaImageProcessor(BaseImageProcessor):
         # num_tiles (List[List[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
         # aspect_ratio_mask (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles) - number of tiles for each image, padded to max_num_images with 0
         encoded_inputs = BatchFeature(
-            data=dict(
-                pixel_values=images,
-                aspect_ratios=aspect_ratios,
-                aspect_ratio_ids=aspect_ratio_ids,
-                aspect_ratio_mask=aspect_ratio_mask,
-            ),
+            data={
+                "pixel_values": images,
+                "aspect_ratios": aspect_ratios,
+                "aspect_ratio_ids": aspect_ratio_ids,
+                "aspect_ratio_mask": aspect_ratio_mask,
+            },
             tensor_type=return_tensors,
         )
         encoded_inputs["num_tiles"] = num_tiles
@@ -815,11 +814,11 @@ class MllamaImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Union[np.ndarray, Tuple[int, int]]:
         """
-        Resizes an image to fit within a tiled canvas while maintaining its aspect ratio. 
+        Resizes an image to fit within a tiled canvas while maintaining its aspect ratio.
         The optimal canvas size is calculated based on the maximum number of tiles and the tile size.
 
-        The function first determines the best tile arrangement for the image, then resizes the image 
-        to fit within this canvas. The resized image and the number of tiles along the height and width 
+        The function first determines the best tile arrangement for the image, then resizes the image
+        to fit within this canvas. The resized image and the number of tiles along the height and width
         dimensions are returned.
 
         Args:
@@ -837,7 +836,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
 
         Returns:
-            `Union[np.ndarray, Tuple[int, int]]`: The resized image and a tuple containing the number of tiles 
+            `Union[np.ndarray, Tuple[int, int]]`: The resized image and a tuple containing the number of tiles
             along the height and width dimensions.
         """
 

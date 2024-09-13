@@ -4544,7 +4544,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
-            _keys = '\n'.join(unexpected_keys)
+            _keys = "\n".join(unexpected_keys)
             # model.vision_model.vision_encoder.transformer.layers.9.self_attn.v_proj.bias
             # model.language_model.layers.16.mlp.down_proj.weight
             _keys = "\n".join(unexpected_keys)
