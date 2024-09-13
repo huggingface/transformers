@@ -204,7 +204,7 @@ class PixtralProcessor(ProcessorMixin):
             truncation=truncation,
             max_length=max_length,
         )
-        return BatchFeature(data={**text_inputs, **image_inputs, "prompt_strings": prompt_strings})
+        return BatchFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
