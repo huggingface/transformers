@@ -20,11 +20,11 @@ import inspect
 import math
 import re
 import unittest
-from textwrap import dedent
-from huggingface_hub.inference._generated import types as inference_specs
 from dataclasses import fields
+from textwrap import dedent
 
 import pytest
+from huggingface_hub.inference._generated import types as inference_specs
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
@@ -950,22 +950,93 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 @is_pipeline_test
 class HuggingfaceJSEquivalencetest(unittest.TestCase):
     def test_huggingface_js_equivalence(self):
-        from transformers import AudioClassificationPipeline
+        from transformers import (
+            AudioClassificationPipeline,
+            AutomaticSpeechRecognitionPipeline,
+            DepthEstimationPipeline,
+            DocumentQuestionAnsweringPipeline,
+            FeatureExtractionPipeline,
+            FillMaskPipeline,
+            ImageClassificationPipeline,
+            ImageFeatureExtractionPipeline,
+            ImageSegmentationPipeline,
+            ImageToImagePipeline,
+            ImageToTextPipeline,
+            MaskGenerationPipeline,
+            ObjectDetectionPipeline,
+            QuestionAnsweringPipeline,
+            SummarizationPipeline,
+            TableQuestionAnsweringPipeline,
+            Text2TextGenerationPipeline,
+            TextClassificationPipeline,
+            TextGenerationPipeline,
+            TextToAudioPipeline,
+            TokenClassificationPipeline,
+            TranslationPipeline,
+            VideoClassificationPipeline,
+            VisualQuestionAnsweringPipeline,
+            ZeroShotAudioClassificationPipeline,
+            ZeroShotClassificationPipeline,
+            ZeroShotImageClassificationPipeline,
+            ZeroShotObjectDetectionPipeline,
+        )
 
         # Putting this here for now because this file is already tested by CircleCI, will move later
+
         PIPELINES_TO_TEST = {
-            "audio-classification": (AudioClassificationPipeline, inference_specs.AudioClassificationParameters)
+            "audio-classification": (AudioClassificationPipeline, inference_specs.AudioClassificationParameters),
+            "automatic-speech-recognition": (
+                AutomaticSpeechRecognitionPipeline,
+                inference_specs.AutomaticSpeechRecognitionParameters,
+            ),
+        }
+        OTHER_PIPELINES = {
+            "text-to-audio": TextToAudioPipeline,
+            "feature-extraction": FeatureExtractionPipeline,
+            "text-classification": TextClassificationPipeline,
+            "token-classification": TokenClassificationPipeline,
+            "question-answering": QuestionAnsweringPipeline,
+            "table-question-answering": TableQuestionAnsweringPipeline,
+            "visual-question-answering": VisualQuestionAnsweringPipeline,
+            "document-question-answering": DocumentQuestionAnsweringPipeline,
+            "fill-mask": FillMaskPipeline,
+            "summarization": SummarizationPipeline,
+            "translation": TranslationPipeline,
+            "text2text-generation": Text2TextGenerationPipeline,
+            "text-generation": TextGenerationPipeline,
+            "zero-shot-classification": ZeroShotClassificationPipeline,
+            "zero-shot-image-classification": ZeroShotImageClassificationPipeline,
+            "zero-shot-audio-classification": ZeroShotAudioClassificationPipeline,
+            "image-classification": ImageClassificationPipeline,
+            "image-feature-extraction": ImageFeatureExtractionPipeline,
+            "image-segmentation": ImageSegmentationPipeline,
+            "image-to-text": ImageToTextPipeline,
+            "object-detection": ObjectDetectionPipeline,
+            "zero-shot-object-detection": ZeroShotObjectDetectionPipeline,
+            "depth-estimation": DepthEstimationPipeline,
+            "video-classification": VideoClassificationPipeline,
+            "mask-generation": MaskGenerationPipeline,
+            "image-to-image": ImageToImagePipeline,
         }
 
+        mismatches = []
         for task, (pipeline_cls, js_spec) in PIPELINES_TO_TEST.items():
             docstring = inspect.getdoc(pipeline_cls.__call__).strip()
             docstring_args = self._parse_google_format_docstring_by_indentation(docstring)
-            if set(fields(js_spec)) != set(docstring_args):
-                raise ValueError(
-                    f"Pipeline task {task} has divergent input spec!\n"
-                    f"Huggingface.js: {set(js_spec.keys())}\n"
-                    f"Transformers: {set(docstring_args)}"
-                )
+            js_args = [field.name for field in fields(js_spec)]
+            if set(js_args) != set(docstring_args):
+                mismatches.append((task, js_args, docstring_args))
+
+        if mismatches:
+            error = ["The following tasks have divergent input specs:", ""]
+            for mismatch in mismatches:
+                error.extend([
+                    f"Task: {mismatch[0]}",
+                    f"Huggingface.js spec: {mismatch[1]}",
+                    f"Transformers args: {mismatch[2]}",
+                    "",
+                ])
+            raise ValueError("\n".join(error))
 
     @staticmethod
     def _parse_google_format_docstring_by_indentation(docstring):
