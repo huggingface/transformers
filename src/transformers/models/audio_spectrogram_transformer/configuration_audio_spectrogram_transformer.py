@@ -14,7 +14,7 @@
 # limitations under the License.
 """Audio Spectogram Transformer (AST) model configuration"""
 
-from typing import Any, List, Tuple
+from typing import Any, Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -124,5 +124,5 @@ class ASTConfig(PretrainedConfig):
     # Overwritten from the parent class: AST is not compatible with `generate`, but has a config parameter sharing the
     # same name (`max_length`). Sharing the same name triggers checks regarding the config -> generation_config
     # generative parameters deprecation cycle, overwriting this function prevents this from happening.
-    def _get_non_default_generation_parameters(self) -> List[Tuple[str, Any, Any]]:
-        return []
+    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+        return {}
