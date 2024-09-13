@@ -107,13 +107,6 @@ class MistralConverter:
         self.additional_special_tokens = additional_special_tokens
 
     def extract_vocab_merges_from_model(self, vocab: str):
-        try:
-            pass
-        except Exception:
-            raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
-            )
-
         bpe_ranks = vocab
         byte_encoder = bytes_to_unicode()
 
