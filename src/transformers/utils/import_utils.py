@@ -849,6 +849,12 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+def is_bitsandbytes_multi_backend_available() -> bool:
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
+
+
 @lru_cache()
 def is_bitsandbytes_available():
     if not is_torch_available():

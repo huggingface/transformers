@@ -75,10 +75,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
 
-        from ..integrations.integration_utils import (
-            is_bitsandbytes_multi_backend_available,
-            validate_bnb_backend_availability,
-        )
+        from ..integrations.integration_utils import validate_bnb_backend_availability
+        from ..utils import is_bitsandbytes_multi_backend_available
 
         bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)

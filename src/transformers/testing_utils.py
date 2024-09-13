@@ -43,7 +43,6 @@ import urllib3
 from transformers import logging as transformers_logging
 
 from .integrations import (
-    is_bitsandbytes_multi_backend_available,
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
@@ -62,6 +61,7 @@ from .utils import (
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_cv2_available,
     is_cython_available,
