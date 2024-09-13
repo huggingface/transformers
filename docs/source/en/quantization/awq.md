@@ -230,3 +230,43 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 Note this feature is supported on AMD GPUs.
 
 </Tip>
+
+
+## CPU support
+
+Recent versions of `autoawq` supports CPU with ipex kernels. To get started, first install the latest version of `autoawq` by running:
+
+```bash
+pip install intel-extension-for-pytorch
+pip install git+https://github.com/casper-hansen/AutoAWQ.git
+```
+
+Get started by passing an `AwqConfig()` with `version="ipex"`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
+
+quantization_config = AwqConfig(version="ipex")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ",
+    quantization_config=quantization_config,
+    device_map="cpu",
+)
+
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
+output = model(input_ids)
+print(output.logits)
+
+tokenizer = AutoTokenizer.from_pretrained("TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ")
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=50256)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+<Tip warning={true}>
+
+Note this feature is supported on Intel CPUs.
+
+</Tip>
