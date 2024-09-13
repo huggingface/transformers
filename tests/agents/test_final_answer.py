@@ -24,12 +24,14 @@ from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from transformers.agents.default_tools import FinalAnswerTool
 from transformers.testing_utils import get_tests_dir, require_torch
 
+from .test_tools_common import ToolTesterMixin
+
 
 if is_torch_available():
     import torch
 
 
-class FinalAnswerToolTester(unittest.TestCase):
+class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.inputs = {"answer": "Final answer"}
         self.tool = FinalAnswerTool()
