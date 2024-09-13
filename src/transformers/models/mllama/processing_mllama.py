@@ -286,8 +286,12 @@ class MllamaProcessor(ProcessorMixin):
             )
             data["cross_attention_mask"] = cross_attention_mask
 
+        # TODO if we do not pop num_tiles we get the error while converting to it tensor,
+        # becasue num_tiles it might be of different lengths
+        num_tiles = data.pop("num_tiles")
         return_tensors = common_kwargs.pop("return_tensors", None)
         batch_encoding = BatchFeature(data=data, tensor_type=return_tensors, **common_kwargs)
+        batch_encoding["num_tiles"] = num_tiles
 
         return batch_encoding
 
