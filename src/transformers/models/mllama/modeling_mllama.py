@@ -264,7 +264,7 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.max_aspect_ratio_id = config.max_aspect_ratio_id
         self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
-        self.is_gated = False  # just for now :wink:
+        self.is_gated = True  # just for now :wink:
 
         precomputed_embeddings = torch.zeros(
             self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
@@ -478,6 +478,29 @@ class MllamaVisionEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+# TODO: @pavel fix it
+def build_encoder_attention_mask(
+    hidden_state: torch.Tensor,
+    aspect_ratios: torch.Tensor,
+    num_patches: int,
+    num_max_tiles: int,
+    dtype: torch.dtype,
+    device: torch.device,
+):
+    """
+    Build vision encoder attention mask that omits padding tokens.
+    """
+    masks = []
+    for arx in aspect_ratios:
+        mask_i = torch.ones((num_max_tiles, hidden_state.shape[2], 1), dtype=dtype)
+        mask_i[: arx[0] * arx[1], :num_patches] = 0
+        mask_i = mask_i.view(num_max_tiles * hidden_state.shape[2], -1)
+        mask_i = mask_i @ mask_i.T * torch.finfo(dtype).min
+        mask_i = mask_i.unsqueeze(0)
+        masks.append(mask_i)
+    masks = torch.stack(masks).to(device).expand(-1, 1, -1, -1)
+    return masks
+
 
 class MllamaVisionModel(PreTrainedModel):
     base_model_prefix = "vision_encoder"
@@ -563,6 +586,8 @@ class MllamaVisionModel(PreTrainedModel):
 
         # apply position embeddings
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches, dim)
+        # TODO: @pavel reafactor it
+        hidden_state = hidden_state + self.positional_embedding[None, None] * (1 - self.gated_positional_embedding.gate.tanh())
         hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply encoder
@@ -579,6 +604,16 @@ class MllamaVisionModel(PreTrainedModel):
         # Now we want to mask out padding tokens, depending on the aspect ratios
         # if we pre-computed the ratios then this can be vectorized
         # aspect ratios can be like input ids, and we can call embedding layer on them
+        # TODO: @pavel reafactor it based on aspect_ratio_mask!
+        aspect_ratio = torch.tensor([2, 2], dtype=torch.long, device=hidden_state.device).view(1, 2)
+        attention_mask = build_encoder_attention_mask(
+            hidden_state=hidden_state,
+            aspect_ratios=aspect_ratio,
+            num_patches=self.num_patches,
+            num_max_tiles=self.max_num_tiles,
+            dtype=self.dtype,
+            device=self.device
+        )
 
         # Let's cache the mask per aspect_ratio_ids. Not sure I 100% got how they do it but alright
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
