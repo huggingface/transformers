@@ -40,7 +40,7 @@ from transformers import LlavaForConditionalGeneration, AutoProcessor
 from PIL import Image
 
 model_id = "hf-internal-testing/pixtral-12b"
-model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
 processor = AutoProcessor.from_pretrained(model_id)
 
 IMG_URLS = [

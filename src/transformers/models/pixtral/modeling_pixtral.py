@@ -194,7 +194,7 @@ class PixtralAttention(nn.Module):
         value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
 
