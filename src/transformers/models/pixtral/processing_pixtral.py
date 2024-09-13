@@ -154,7 +154,9 @@ class PixtralProcessor(ProcessorMixin):
             num_width_tokens = width // self.patch_size
 
             prompt_strings = []
-            replace_tokens = [[self.image_token] * num_width_tokens + self.image_break_token] * num_height_tokens
+            replace_tokens = [[self.image_token] * num_width_tokens + [self.image_break_token]] * num_height_tokens
+            # Flatten list
+            replace_tokens = [item for sublist in replace_tokens for item in sublist]
             replace_tokens[-1] = self.image_end_token
             replace_str = "".join(replace_tokens)
             for sample in text:
