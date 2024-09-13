@@ -15,7 +15,7 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import bytes_to_unicode
-
+import torch
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
     # Layer Normalization Weights
@@ -226,14 +226,11 @@ def convert_mistral_model():
     config.vision_feature_select_strategy = "full"
     config.image_seq_length = 1
     tokenizer = convert_mistral_tokenizer()
-    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True).to(
+    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True, torch_dtype = torch.bfloat16).to(
         "cuda"
     )
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
-    prompt = "<s>[INST][IMG]\nWhat's the content of the image?[/INST]"
-    url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-
 
     IMG_URLS = [
         Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
@@ -241,57 +238,61 @@ def convert_mistral_model():
         Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
         Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
     ]
-    PROMPT = "<s>[INST]Describe the images[IMG] and [IMG] and [IMG] and [IMG][/INST]"
+    PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
-
-    """
-Describe the content of each of the 4 following images: [IMG_START][IMG_START][IMG_START][IMG_START]Sure, here are the descriptions of the four images:
-
-1. **A black dog with blue eyes** is drinking from a stream in a lush landscape with mountains in the background**.
-
-2. **The dog appears to be in mid-stride, with its tongue outstretched towards the stream**.
-
-3. **The landscape is detailed with green grass and trees, and the stream meanders the mountains**.
-
-4. **In the distance, the dog appears to be running, with a sense of
-
-    """
     # image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
-    # inputs["input_ids"] = torch.tensor([tokenized.tokens], dtype=torch.long, device="cuda")
-    # inputs["pixel_values"] = torch.tensor(tokenized.images, device="cuda")
-    del inputs["attention_mask"]
-    generate_ids = model.generate(**inputs, max_new_tokens=100)
+    generate_ids = model.generate(**inputs, max_new_tokens=500)
     print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
-    messages = [
-        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": "Describe the content of each image"}]},
-    ]
     
-    model_name = "mistralai/Pixtral-12B-2409"
-    tok = MistralTokenizer.from_model(model_name)
+    # model_name = "mistralai/Pixtral-12B-2409"
+    # tok = MistralTokenizer.from_model(model_name)
 
 
-    from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
+    # from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
 
 
-    EXPECTED_TOKENS = tok.encode_chat_completion(
-        ChatCompletionRequest(
-            messages=[
-                UserMessage(
-                    content=[
-                        TextChunk(text="Describe the images"),
-                    ] + [ImageChunk(image=img) for img in IMG_URLS]
-                )
-            ],
-            model="pixtral",
-        )
-    )
-    assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
+    # EXPECTED_TOKENS = tok.encode_chat_completion(
+    #     ChatCompletionRequest(
+    #         messages=[
+    #             UserMessage(
+    #                 content=[
+    #                     TextChunk(text="Describe the images"),
+    #                 ] + [ImageChunk(image=img) for img in IMG_URLS]
+    #             )
+    #         ],
+    #         model="pixtral",
+    #     )
+    # )
+    # assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
 
 convert_mistral_model()
 
 
 """
 What's the content of the image?The image depicts a vibrant street scene in what appears to be a Chinatown district, characterized by its traditional architectural elements and cultural signage. A prominent feature is the red and white stop sign in the foreground, which has been adorned with a banner that reads "OPTUS." Behind the stop sign, there's an ornate gate with intricate designs and Chinese characters, marking the entrance to the district. The gate is flanked by buildings with colorful facades and signs in both English and Chinese
+"""
+
+"""
+Describe the images.
+Sure, let's break down each image description:
+
+1. **Image 1:**
+   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
+   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
+
+2. **Image 2:**
+   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
+   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
+
+3. **Image 3:**
+   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
+   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
+
+4. **Image 4:**
+   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
+   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
+
+Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
 """
