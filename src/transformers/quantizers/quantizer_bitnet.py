@@ -68,9 +68,9 @@ class BitNetHfQuantizer(HfQuantizer):
             )
         elif device_map is not None:
             if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
-                logger.warning_once(
+                raise ValueError(
                     "You are attempting to load a BitNet model with a device_map that contains a CPU or disk device."
-                    "This will degrade the inference speed because of weight unpacking"
+                    "This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
