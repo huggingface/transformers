@@ -1220,9 +1220,7 @@ def _get_torchao_quant_type_to_method():
             "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
         }
     else:
-        raise ValueError(
-            "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
-        )
+        raise ValueError("TorchAoConfig requires torchao to be installed, please install with `pip install torchao`")
 
 
 @dataclass
