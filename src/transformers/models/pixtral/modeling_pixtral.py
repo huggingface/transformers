@@ -612,9 +612,13 @@ class PixtralModel(PixtralPreTrainedModel):
         ).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
-        attention_mask = generate_block_attention_mask([p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds)
+        # LAST TODO:
+        attention_mask = generate_block_attention_mask(
+            [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
+        )
         out = self.transformer(patch_embeds, attention_mask, position_embedding)
         return out
+
 
 def generate_block_attention_mask(patch_embeds_list, tensor):
     dtype = tensor.dtype
@@ -622,14 +626,14 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     # Get the number of patches (sequence length) from the first element in patch_embeds_list
     seq_len = tensor.shape[1]
     d_min = torch.finfo(dtype).min
-    causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device) 
+    causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
     # Create an empty attention mask (1: attend, 0: no attend)
-    
+
     # Fill the mask with 1s within blocks
     block_end_idx = torch.tensor(patch_embeds_list).cumsum(-1)
-    block_start_idx = torch.tensor([0]+patch_embeds_list[:-1]).cumsum(-1) 
-    for start, end in zip(block_start_idx, block_end_idx): 
+    block_start_idx = torch.tensor([0] + patch_embeds_list[:-1]).cumsum(-1)
+    for start, end in zip(block_start_idx, block_end_idx):
         causal_mask[start:end, start:end] = 0
 
-    causal_mask = causal_mask[None, None, :, :].expand( tensor.shape[0], 1, -1, -1) 
+    causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
     return causal_mask

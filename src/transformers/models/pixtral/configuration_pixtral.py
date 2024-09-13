@@ -32,39 +32,40 @@ class PixtralConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
+        hidden_size (`int`, `optional`, defaults to 1024):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, `optional`, defaults to 4096):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, `optional`, defaults to 24):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, `optional`, defaults to 16):
+            Number of attention heads in the Transformer decoder.
+        num_channels (`int`, `optional`, defaults to 3):
+            Number of input channels in the input images.
+        image_size (`int`, `optional`, defaults to 1024):
+            Max dimension of the input images.
+        patch_size (`int`, `optional`, defaults to 16):
+            Size of the image patches.
+        hidden_activation (`str`, `optional`, defaults to "gelu"):
+            Activation function used in the hidden layers.
+        layer_norm_eps (`float`, `optional`, defaults to 1e-5):
+            Epsilon value for layer normalization.
+        attention_dropout (`float`, `optional`, defaults to 0.0):
+            Dropout probability for the attention layers.
+        rope_theta (`float`, `optional`, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        tie_word_embeddings (`bool`, `optional`, defaults to False):
+            Whether to tie the word embeddings with the input embeddings.
 
     Example:
 
     ```python
     >>> from transformers import PixtralModel, PixtralConfig, CLIPVisionConfig, LlamaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Pixtral 12B style configuration
+    >>> config = PixtralConfig()
 
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
-
-    >>> # Initializing a Pixtral pixtral-1.5-7b style configuration
-    >>> configuration = PixtralConfig(vision_config, text_config)
-
-    >>> # Initializing a model from the pixtral-1.5-7b style configuration
+    >>> # Initializing a model from the pixtral 12B style configuration
     >>> model = PixtralModel(configuration)
 
     >>> # Accessing the model configuration
