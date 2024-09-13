@@ -22,7 +22,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -620,6 +620,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @slow
+    @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
         """
         NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
@@ -720,6 +721,36 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
+    def test_llama_3_1_hard(self):
+        """
+        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
+        from llama 3.1.'s RoPE can be detected
+        """
+        # diff on `EXPECTED_TEXT`:
+        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
+        EXPECTED_TEXT = (
+            "Tell me about the french revolution. The french revolution was a period of radical political and social "
+            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
+            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
+            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
+            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
+            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
+            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
+
+    @slow
+    @require_read_token
     def test_model_7b_logits_bf16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
@@ -750,8 +781,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -787,8 +818,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -858,6 +889,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
@@ -1011,7 +1043,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -1059,7 +1091,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,

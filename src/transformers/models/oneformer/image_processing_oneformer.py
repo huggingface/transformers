@@ -1160,7 +1160,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`OneFormerForUniversalSegmentationOutput`]):
                 The outputs from [`OneFormerForUniversalSegmentationOutput`].
-            task_type (`str`, *optional)*, defaults to "instance"):
+            task_type (`str`, *optional*, defaults to "instance"):
                 The post processing depends on the task token input. If the `task_type` is "panoptic", we need to
                 ignore the stuff predictions.
             is_demo (`bool`, *optional)*, defaults to `True`):

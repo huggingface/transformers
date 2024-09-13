@@ -816,6 +816,9 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
         is_instance_method = "self" in function_named_args
         is_class_method = "cls" in function_named_args
 
+        # Mark function as decorated
+        func._filter_out_non_signature_kwargs = True
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             valid_kwargs = {}

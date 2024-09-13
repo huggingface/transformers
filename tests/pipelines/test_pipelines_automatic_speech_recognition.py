@@ -549,6 +549,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
+    @require_torch
+    @slow
+    def test_torch_whisper_batched(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
+        EXPECTED_OUTPUT = [
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+            {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
+        ]
+
+        output = speech_recognizer(ds["audio"], batch_size=2)
+        self.assertEqual(output, EXPECTED_OUTPUT)
+
     @slow
     def test_find_longest_common_subsequence(self):
         max_source_positions = 1500
@@ -1496,7 +1513,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_whisper_prompted(self):
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         pipe = pipeline(
             "automatic-speech-recognition",
@@ -1506,7 +1523,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             max_new_tokens=128,
             chunk_length_s=30,
             batch_size=16,
-            device="cuda:0",
         )
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
@@ -1514,7 +1530,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
         whisper_prompt = "Mr. Quillter."
-        prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt")
+        prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt").to(torch_device)
 
         unprompted_result = pipe(sample.copy())["text"]
         prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]

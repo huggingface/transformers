@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import torch
 
 from ..cache_utils import DynamicCache
+from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 
@@ -107,6 +108,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
 
         # Set eos in assistant same as in target model
         self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
@@ -118,6 +120,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 assistant_kwargs[key] = (
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
+
+        # Remove potential default "num_logits_to_keep" key
+        if "num_logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_num_logits_to_keep():
+            del assistant_kwargs["num_logits_to_keep"]
 
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
@@ -152,6 +158,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
+        self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
 
         # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
         # greedily to maximize matches. Disables sampling-related flags to prevent warnings
@@ -170,6 +177,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
                     "Please pass in `min_length` into `.generate()` instead"
                 )
+
+        # We need to roll back the cache in assisted generation, only DynamicCache is supported
+        self.generation_config.cache_implementation = None
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -328,7 +338,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = torch.isin(chosen_ids, self.eos_token_id)
+                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
                     match_indices_eos = torch.nonzero(mask)
                     if match_indices_eos.numel() > 0:
                         first_eos_index = match_indices_eos[0].item()

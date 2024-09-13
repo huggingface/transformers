@@ -434,7 +434,7 @@ def evaluate_call(call, state, static_tools, custom_tools):
                 global PRINT_OUTPUTS
                 PRINT_OUTPUTS += output + "\n"
                 # cap the number of lines
-                return output
+                return None
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
                 return output
@@ -444,6 +444,8 @@ def evaluate_subscript(subscript, state, static_tools, custom_tools):
     index = evaluate_ast(subscript.slice, state, static_tools, custom_tools)
     value = evaluate_ast(subscript.value, state, static_tools, custom_tools)
 
+    if isinstance(value, str) and isinstance(index, str):
+        raise InterpreterError("You're trying to subscript a string with a string index, which is impossible")
     if isinstance(value, pd.core.indexing._LocIndexer):
         parent_object = value.obj
         return parent_object.loc[index]

@@ -344,7 +344,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
-    test_torchscript = True  # torch.autograd functions seems to be not supported
+    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
@@ -513,6 +513,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         ]
 
         self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
+
+    @unittest.skip("Bloom needs a 2D attention for alibi")
+    def test_custom_4d_attention_mask(self):
+        pass
 
 
 @require_torch

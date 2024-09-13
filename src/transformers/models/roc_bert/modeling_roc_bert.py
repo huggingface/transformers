@@ -1151,7 +1151,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
                  ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
                  config.vocab_size]`
 
-            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            kwargs (`Dict[str, any]`, *optional*, defaults to *{}*):
                 Used to hide legacy arguments that have been deprecated.
 
         Returns:
