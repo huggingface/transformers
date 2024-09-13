@@ -162,7 +162,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
-            "image_processor", size=(234, 234), crop_size=(234, 234)
+            "image_processor", do_rescale=True, rescale_factor=-1
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
 
@@ -173,7 +173,7 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 234)
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -194,7 +194,9 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["image_processor"] = self.get_component("image_processor", size=(234, 234))
+        processor_components["image_processor"] = self.get_component(
+            "image_processor", do_rescale=True, rescale_factor=1
+        )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(**processor_components)
@@ -203,10 +205,8 @@ class ProcessorTesterMixin:
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(
-            text=input_str, images=image_input, size=[224, 224], crop_size=(224, 224), return_tensors="pt"
-        )
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 224)
+        inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
 
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -221,13 +221,13 @@ class ProcessorTesterMixin:
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            size={"height": 214, "width": 214},
-            crop_size={"height": 214, "width": 214},
+            do_rescale=True,
+            rescale_factor=-1,
             padding="max_length",
             max_length=76,
         )
 
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 214)
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched(self):
@@ -243,13 +243,13 @@ class ProcessorTesterMixin:
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            size={"height": 214, "width": 214},
-            crop_size={"height": 214, "width": 214},
+            do_rescale=True,
+            rescale_factor=-1,
             padding="longest",
             max_length=76,
         )
 
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 214)
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_data_arg_name][0]) == len(inputs[self.text_data_arg_name][1])
             and len(inputs[self.text_data_arg_name][1]) < 76
@@ -268,9 +268,8 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 images=image_input,
-                images_kwargs={"size": {"height": 222, "width": 222}},
-                size={"height": 214, "width": 214},
-                crop_size={"height": 214, "width": 214},
+                images_kwargs={"do_rescale": True, "rescale_factor": -1},
+                do_rescale=True,
                 return_tensors="pt",
             )
 
@@ -287,17 +286,14 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {
-                "size": {"height": 214, "width": 214},
-                "crop_size": {"height": 214, "width": 214},
-            },
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 214)
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict(self):
@@ -312,15 +308,12 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {
-                "size": {"height": 214, "width": 214},
-                "crop_size": {"height": 214, "width": 214},
-            },
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 214)
+        self.assertLessEqual(inputs[self.images_data_arg_name].mean(), 0)
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 76)
 
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
