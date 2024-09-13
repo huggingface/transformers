@@ -233,6 +233,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.use_scaled_rope = use_scaled_rope
         self.rms_norm_eps = rms_norm_eps
@@ -334,7 +335,7 @@ class MllamaConfig(PretrainedConfig):
             self.vision_config = MllamaVisionConfig(**vision_config)
         elif isinstance(vision_config, MllamaVisionConfig):
             self.vision_config = vision_config
-        
+
         self.image_token_index = image_token_index
 
         if text_config is None:

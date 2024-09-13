@@ -105,9 +105,6 @@ def prepare_cross_attention_mask(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     if cross_attention_mask is None:
         # should we raise error or prepare a full attn mask with all ones?
-        # to prepare all-ones mask we have to know image_seq_length which means in text-only
-        # generation this step needs to be skipped
-        # Actually, for text-only users should call `ModelForCausalLM`
         return None, None
     else:
         # reshape so it can be used by attn module
@@ -132,15 +129,12 @@ def prepare_cross_attention_mask(
 
     # In case we got a new image but already have prev cross-atnn key/values in cache
     # we need to extend the attn-mask and add previuos images' lengths
-    if past_key_values is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:       
-        # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
+    if past_key_values is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:
+        # make all zeros mask for cross-attn-mask from previuos cached hidden_states
         # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
-        # TODO: fix after Meta tels how cross-attn works for new tokens
         past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
         past_cross_attn_mask = torch.zeros(
-            (*cross_attention_mask.shape[:-1], past_cross_attn_kv_length),
-            dtype=dtype,
-            device=device
+            (*cross_attention_mask.shape[:-1], past_cross_attn_kv_length), dtype=dtype, device=device
         )
         # concatenate both on image-seq-length dimension
         cross_attention_mask = torch.cat([past_cross_attn_mask, cross_attention_mask], dim=-1)
@@ -229,7 +223,9 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
         self.is_gated = is_gated
 
         scale = hidden_size**-0.5
-        self.embedding = nn.Parameter(torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale)
+        self.embedding = nn.Parameter(
+            torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale
+        )
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
@@ -1571,7 +1567,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
             # get vision tokens from vision model
             cross_attention_states = self.vision_model(pixel_values, aspect_ratio_ids, aspect_ratio_mask)
-            cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(-1, cross_attention_states.shape[-2],self.hidden_size)
+            cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
+                -1, cross_attention_states.shape[-2], self.hidden_size
+            )
 
         cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
             cross_attention_mask,

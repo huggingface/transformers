@@ -32,6 +32,7 @@ from ..cache_utils import (
     OffloadedCache,
     QuantizedCacheConfig,
 )
+from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -1577,7 +1578,9 @@ class GenerationMixin:
             model_kwargs[cache_name] = (
                 DynamicCache(self.config.get_text_config())
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(self.config.get_text_config()), DynamicCache(self.config.get_text_config()))
+                else EncoderDecoderCache(
+                    DynamicCache(self.config.get_text_config()), DynamicCache(self.config.get_text_config())
+                )
             )
 
     def _supports_num_logits_to_keep(self) -> bool:
@@ -2691,7 +2694,7 @@ class GenerationMixin:
                         model_kwargs["past_key_values"].crop(-1)
 
                     all_outputs.append(outputs)
-                outputs = stack_model_outputs(all_outputs)
+                outputs = stack_model_outputs(all_outputs, self.config.get_text_config())
 
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
@@ -3191,13 +3194,16 @@ class GenerationMixin:
                     )
 
                 inputs_per_sub_batches = _split_model_inputs(
-                    model_inputs, split_size=batch_size, full_batch_size=batch_beam_size
+                    model_inputs,
+                    split_size=batch_size,
+                    full_batch_size=batch_beam_size,
+                    config=self.config.get_text_config(),
                 )
                 outputs_per_sub_batch = [
                     self(**inputs_per_sub_batch, return_dict=True) for inputs_per_sub_batch in inputs_per_sub_batches
                 ]
 
-                outputs = stack_model_outputs(outputs_per_sub_batch)
+                outputs = stack_model_outputs(outputs_per_sub_batch, self.config.get_text_config())
 
             else:  # Unchanged original behavior
                 outputs = self(**model_inputs, return_dict=True)
@@ -4254,7 +4260,7 @@ def _ranking_fast(
     return selected_idx
 
 
-def _split(data, full_batch_size: int, split_size: int = None):
+def _split(data, full_batch_size: int, config: PretrainedConfig, split_size: int = None):
     """
     Takes care of three cases:
     1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
@@ -4272,7 +4278,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
     elif isinstance(data, DynamicCache) or (
         isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
     ):
-        return data.batch_split(full_batch_size, split_size)
+        return data.batch_split(full_batch_size, config, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -4291,7 +4297,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
 
 
 def _split_model_inputs(
-    model_input: Union[ModelOutput, Dict], split_size: int, full_batch_size: int
+    model_input: Union[ModelOutput, Dict], split_size: int, full_batch_size: int, config: PretrainedConfig
 ) -> List[Union[ModelOutput, Dict]]:
     """
     Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
@@ -4327,14 +4333,16 @@ def _split_model_inputs(
 
     # we split the tensors and tuples of tensors
     data_split_list = [
-        {k: _split(model_input[k], full_batch_size, split_size)[i] for k in non_bool_keys}
+        {k: _split(model_input[k], full_batch_size, config, split_size)[i] for k in non_bool_keys}
         for i in range(full_batch_size // split_size)
     ]
     # bool values are the same and replicated for each split
     bool_data = {k: model_input[k] for k in bool_keys}
     # encoder_outputs is a ModelOutput object and should be split by its own
     if "encoder_outputs" in model_input:
-        encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size)
+        encoder_outputs_split = _split_model_inputs(
+            model_input["encoder_outputs"], split_size, full_batch_size, config=config
+        )
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
         ]
@@ -4352,7 +4360,7 @@ def _split_model_inputs(
     return split_model_inputs
 
 
-def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
+def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConfig) -> ModelOutput:
     """
     Stack a list of ModelOutput objects (or its subclasses) along the batch_size dimension. The function infers the
     specific ModelOutput subclass from the list provided.
@@ -4378,9 +4386,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
             return torch.cat(data, dim=0)
         # New cache format
         elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_batch_splits(data)
+            return DynamicCache.from_batch_splits(data, config=config)
         elif isinstance(data[0], EncoderDecoderCache):
-            return EncoderDecoderCache.from_batch_splits(data)
+            return EncoderDecoderCache.from_batch_splits(data, config=config)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

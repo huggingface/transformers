@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -52,11 +53,9 @@ class MllamaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_index=4,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -68,6 +67,7 @@ class MllamaVisionText2TextModelTester:
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
+            "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
@@ -86,7 +86,10 @@ class MllamaVisionText2TextModelTester:
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
+            "vision_chunk_size": 30,
             "hidden_size": 32,
+            "return_intermediate": [0],
+            "vision_output_dim": 2560,
             "projection_dim": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -94,14 +97,14 @@ class MllamaVisionText2TextModelTester:
             "dropout": 0.1,
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
+            # needed to init tile emb dimensions, let's make more to avoid slicing errors
+            "supported_aspect_ratios": [30, 30] * 10,
         },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -111,6 +114,7 @@ class MllamaVisionText2TextModelTester:
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
+        self.pad_token_id = 0
 
         self.batch_size = 3
         self.num_channels = 3
@@ -121,35 +125,36 @@ class MllamaVisionText2TextModelTester:
         return MllamaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
-            projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
         )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [
                 self.batch_size,
+                1,  # num images per batch item
+                4,  # num tiles
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
         )
+        aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device)
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, aspect_ratio_ids
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
+        config, pixel_values, aspect_ratio_ids = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
+
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
+            "aspect_ratio_ids": aspect_ratio_ids,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -170,12 +175,13 @@ class MllamaVisionText2TextModelTester:
 
 
 @require_torch
-class MllamaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `MllamaForConditionalGeneration`.
     """
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -215,7 +221,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_11b_model_integration_generate(self):
-
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
 
@@ -261,7 +266,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_11b_model_integration_forward(self):
-
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
 
@@ -302,8 +306,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**model_kwargs)
 
         actual_cross_attention_key_value = output.cross_attention_key_value[0, 0, 0, 0, :5, 64].cpu()
-        expected_cross_attention_key_value = torch.tensor([-0.0933, 0.2930, 1.2656, -0.9883, -0.2100], dtype=torch_dtype)
-        self.assertTrue(torch.allclose(actual_cross_attention_key_value, expected_cross_attention_key_value, atol=1e-4))
+        expected_cross_attention_key_value = torch.tensor(
+            [-0.0933, 0.2930, 1.2656, -0.9883, -0.2100], dtype=torch_dtype
+        )
+        self.assertTrue(
+            torch.allclose(actual_cross_attention_key_value, expected_cross_attention_key_value, atol=1e-4)
+        )
 
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits = torch.tensor([8.5000, 7.8750, 4.2812, 0.5000, 3.0312], dtype=torch_dtype)

@@ -265,12 +265,13 @@ class MllamaProcessor(ProcessorMixin):
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
-            # if text is not None and not n_images_in_images == n_images_in_text:
-            #     raise ValueError(
-            #         f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
-            #     )
+            if text is not None and not n_images_in_images == n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                )
 
             image_features = self.image_processor(images, **images_kwargs)
+            num_tiles = image_features.pop("num_tiles")
             data.update(image_features)
 
         # Create cross attention mask
@@ -280,18 +281,14 @@ class MllamaProcessor(ProcessorMixin):
             ]
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask,
-                num_tiles=image_features.pop("num_tiles"),
+                num_tiles=num_tiles,
                 max_num_tiles=self.image_processor.max_image_tiles,
                 length=max(len(input_ids) for input_ids in encoding["input_ids"]),
             )
             data["cross_attention_mask"] = cross_attention_mask
 
-        # TODO if we do not pop num_tiles we get the error while converting to it tensor,
-        # becasue num_tiles it might be of different lengths
-        num_tiles = data.pop("num_tiles")
         return_tensors = common_kwargs.pop("return_tensors", None)
         batch_encoding = BatchFeature(data=data, tensor_type=return_tensors, **common_kwargs)
-        batch_encoding["num_tiles"] = num_tiles
 
         return batch_encoding
 

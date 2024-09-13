@@ -431,12 +431,12 @@ class DynamicCache(Cache):
             self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
             self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int, config: PretrainedConfig) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
         for i in range(0, full_batch_size, split_size):
-            current_split = DynamicCache()
+            current_split = DynamicCache(config)
             current_split._seen_tokens = self._seen_tokens
             current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
             current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
@@ -444,10 +444,10 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+    def from_batch_splits(cls, splits: List["DynamicCache"], config: PretrainedConfig) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
-        cache = cls()
+        cache = cls(config)
         for idx in range(len(splits[0])):
             layer_keys = torch.cat([current.key_cache[idx] for current in splits], dim=0)
             layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
@@ -1397,12 +1397,14 @@ class EncoderDecoderCache(Cache):
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
+    def batch_split(
+        self, full_batch_size: int, split_size: int, config: PretrainedConfig
+    ) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         self.check_dynamic_cache(self.batch_split.__name__)
-        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
-        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
+        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size, config)
+        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size, config)
 
         out = []
         for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
@@ -1410,11 +1412,11 @@ class EncoderDecoderCache(Cache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":
+    def from_batch_splits(cls, splits: List["EncoderDecoderCache"], config: PretrainedConfig) -> "EncoderDecoderCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
-        self_attention_cache = DynamicCache()
-        cross_attention_cache = DynamicCache()
+        self_attention_cache = DynamicCache(config)
+        cross_attention_cache = DynamicCache(config)
         for idx in range(len(splits[0])):
             layer_keys = torch.cat([current.self_attention_cache.key_cache[idx] for current in splits], dim=0)
             layer_values = torch.cat([current.self_attention_cache.value_cache[idx] for current in splits], dim=0)
