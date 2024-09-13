@@ -213,24 +213,24 @@ def convert_mistral_model():
     config.text_config.head_dim = 128
     config.save_pretrained("../pixtral")
 
-    original_state_dict = safe_load_file("../pixtral/consolidated.safetensors")
-    new_dict = convert_dictionnary(original_state_dict, vision_config, text_config)
+    # original_state_dict = safe_load_file("../pixtral/consolidated.safetensors")
+    # new_dict = convert_dictionnary(original_state_dict, vision_config, text_config)
 
-    config.text_config.head_dim = 128
-    with torch.device("meta"):
-        model = LlavaForConditionalGeneration(config)
-    model.load_state_dict(new_dict, strict=True, assign=True)
+    # config.text_config.head_dim = 128
+    # with torch.device("meta"):
+    #     model = LlavaForConditionalGeneration(config)
+    # model.load_state_dict(new_dict, strict=True, assign=True)
 
-    model.save_pretrained("../pixtral")
+    # model.save_pretrained("../pixtral")
     config.vision_feature_layer = -1
     config.image_token_index = 10
     config.vision_feature_select_strategy = "full"
     config.image_seq_length = 1
     tokenizer = convert_mistral_tokenizer()
-    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config).to("cuda")
+    model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config, low_cpu_mem_usage=True).to("cuda")
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
-    prompt = "[INST]\nWhat's the content of the image?"
+    prompt = "<s>[INST][IMG]\nWhat's the content of the image?[/INST]"
     url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
@@ -240,6 +240,7 @@ def convert_mistral_model():
     generate_ids = model.generate(**inputs, max_new_tokens=100)
     print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
+convert_mistral_model()
 # messages = [
 #     {"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": prompt}]},
 # ]
