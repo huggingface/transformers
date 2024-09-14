@@ -178,6 +178,14 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_with_add_noise(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        feat_extract(speech_inputs[0], return_tensors="np", add_noise=True).input_values
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
