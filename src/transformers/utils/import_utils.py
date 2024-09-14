@@ -860,7 +860,7 @@ def is_bitsandbytes_available():
     # so those versions of the library are practically only available when CUDA is too.
     if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
         return torch.cuda.is_available()
-    
+
     # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
     return True
 
