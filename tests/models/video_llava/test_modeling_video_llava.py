@@ -320,6 +320,10 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 model_row_output = model(**single_row_input)
 
             for key in model_batched_output:
+                # we can't test videos as their output shapes are linked to number of frames
+                # and we don't have to as it is a CLIP model and can be tested from `ClipModelTester` class
+                if key == "video_hidden_states":
+                    continue
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
