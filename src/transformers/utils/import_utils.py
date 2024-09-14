@@ -849,20 +849,26 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-def is_bitsandbytes_multi_backend_available() -> bool:
-    import bitsandbytes as bnb
-
-    return "multi_backend" in getattr(bnb, "features", set())
-
-
 @lru_cache()
 def is_bitsandbytes_available():
     if not is_torch_available():
         return False
 
-    from transformers.integrations.integration_utils import validate_bnb_backend_availability
+    import torch
 
-    return _bitsandbytes_available and validate_bnb_backend_availability(raise_exception=False)
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        return torch.cuda.is_available() and _bitsandbytes_available
+    else:
+        return _bitsandbytes_available
+
+
+def is_bitsandbytes_multi_backend_available() -> bool:
+    if not is_bitsandbytes_available():
+        return False
+
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
 
 
 def is_flash_attn_2_available():
