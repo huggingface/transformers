@@ -219,7 +219,15 @@ print(output_text)
 
 #### Image Resolution trade-off
 
-The model supports a wide range of resolution inputs. By default, it uses the native resolution for input, but one can reduce the resolution in case of limited GPU RAM, as follows:
+The model supports a wide range of resolution inputs. By default, it uses the native resolution for input, but higher resolutions can enhance performance at the cost of more computation. Users can set the minimum and maximum number of pixels to achieve an optimal configuration for their needs.
+
+```python
+min_pixels = 224*224
+max_pixels = 2048*2048
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
+```
+
+One can reduce the resolution in case of limited GPU RAM, as follows:
 
 ```python
 min_pixels = 256*28*28
@@ -227,14 +235,6 @@ max_pixels = 1024*28*28
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
 This ensures each image gets encoded using a number between 256-1024 tokens.
-
-Alternatively, higher resolutions can enhance performance at the cost of more computation. Users can set the minimum and maximum number of pixels to achieve an optimal configuration for their needs.
-
-```python
-min_pixels = 224*224
-max_pixels = 2048*2048
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
-```
 
 #### Multiple Image Inputs
 
