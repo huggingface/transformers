@@ -849,20 +849,19 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = tokenizer.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
 
-        tokenizer_pretrained_fast = AutoTokenizer.from_pretrained(model_path, add_bos_token=True, add_eos_token=True)
-        self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][0], tokenizer_pretrained_fast.bos_token_id)
-        self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][-1], tokenizer_pretrained_fast.eos_token_id)
+        self.assertEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id)
+        self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)
 
-        tokenizer_pretrained_fast.add_special_tokens({"eos_token": new_eos_token})  # update new eos token
-        tokens = tokenizer_pretrained_fast.tokenize("hello", add_special_tokens=True)
+        tokenizer.add_special_tokens({"eos_token": new_eos_token})  # update new eos token
+        tokens = tokenizer.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
 
         tmpdirname = tempfile.mkdtemp()
-        tokenizer_pretrained_fast.save_pretrained(tmpdirname)
-        tokenizer_fast_reload = AutoTokenizer.from_pretrained(tmpdirname)
+        tokenizer.save_pretrained(tmpdirname)
+        tokenizer_reload = AutoTokenizer.from_pretrained(tmpdirname)
 
-        self.assertTrue(isinstance(tokenizer_fast_reload, PreTrainedTokenizerFast))
-        tokens = tokenizer_fast_reload.tokenize("hello", add_special_tokens=True)
+        self.assertTrue(isinstance(tokenizer_reload, PreTrainedTokenizerFast))
+        tokens = tokenizer_reload.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
         shutil.rmtree(tmpdirname)
 
