@@ -11,6 +11,7 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_ipex_available,
+    is_torch_available,
     logging,
 )
 
@@ -518,6 +519,11 @@ def _validate_bnb_multi_backend_availability(raise_exception):
 
 
 def _validate_bnb_cuda_backend_availability(raise_exception):
+    if not is_torch_available():
+        return False
+
+    import torch
+
     if not torch.cuda.is_available():
         log_msg = (
             "CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. "
@@ -538,6 +544,8 @@ def validate_bnb_backend_availability(raise_exception=False):
     """
     Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
     """
+    if not is_bitsandbytes_available():
+        return False
 
     import bitsandbytes as bnb
 
