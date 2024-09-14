@@ -851,15 +851,15 @@ def is_torch_xpu_available(check_device=False):
 
 @lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available():
+    if not is_torch_available() or not _bitsandbytes_available:
         return False
 
     import torch
 
     if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
-        return torch.cuda.is_available() and _bitsandbytes_available
+        return torch.cuda.is_available()
     else:
-        return _bitsandbytes_available
+        return True
 
 
 def is_bitsandbytes_multi_backend_available() -> bool:
