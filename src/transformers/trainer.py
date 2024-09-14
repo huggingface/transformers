@@ -4462,7 +4462,7 @@ class Trainer:
         commit_message: Optional[str] = "End of training",
         blocking: bool = True,
         token: Optional[str] = None,
-        revision: str = None,
+        revision: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -4476,7 +4476,7 @@ class Trainer:
             token (`str`, *optional*, defaults to `None`):
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
-                Branch to push the uploaded files to.
+                The git revision to commit from. Defaults to the head of the "main" branch.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
