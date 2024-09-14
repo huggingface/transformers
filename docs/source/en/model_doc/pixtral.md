@@ -23,7 +23,7 @@ The Pixtral model was released by the Mistral AI team on [vLLM](https://github.c
 Tips:
 
 - Pixtral is a multimodal model, taking images and text as input, and producing text as output.
-- This model follows the [Llava](llava) family, meaning image embeddings are placed instead of the `[IMG]` token placeholders. The model uses [`PixtralVisionModel`] for its vision encoder.
+- This model follows the [Llava](llava) family, meaning image embeddings are placed instead of the `[IMG]` token placeholders. The model uses [`PixtralVisionModel`] for its vision encoder, and [`MistralForCausalLM`] for its language decoder.
 - The main contribution is the 2d ROPE (rotary postiion embeddings) on the images, and support for arbitrary image sizes (the images are not padded together nor are they resized).
 - The format for one or mulitple prompts is the following:
 ```
