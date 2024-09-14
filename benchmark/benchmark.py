@@ -31,7 +31,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
+
 from huggingface_hub import HfApi
+
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
