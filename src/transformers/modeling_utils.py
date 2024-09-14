@@ -4485,8 +4485,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     continue
                 map_location = None
                 if (
-                    device_map is not None and "" in device_map and
-                    is_quantized and isinstance(hf_quantizer, TorchAoHfQuantizer)
+                    device_map is not None
+                    and "" in device_map
+                    and is_quantized
+                    and isinstance(hf_quantizer, TorchAoHfQuantizer)
                 ):
                     map_location = torch.device(device_map[""])
                 state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
