@@ -10,6 +10,7 @@ from ..utils import (
     get_available_devices,
     is_accelerate_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_ipex_available,
     is_torch_available,
     logging,
@@ -547,8 +548,6 @@ def validate_bnb_backend_availability(raise_exception=False):
     if not is_bitsandbytes_available():
         return False
 
-    import bitsandbytes as bnb
-
-    if "multi_backend" in getattr(bnb, "features", set()):
+    if is_bitsandbytes_multi_backend_available():
         return _validate_bnb_multi_backend_availability(raise_exception)
     return _validate_bnb_cuda_backend_availability(raise_exception)
