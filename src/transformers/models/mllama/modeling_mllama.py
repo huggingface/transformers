@@ -130,7 +130,7 @@ def prepare_cross_attention_mask(
 
     # In case we got a new image but already have prev cross-atnn key/values in cache
     # we need to extend the attn-mask and add previuos images' lengths
-    if past_key_values is not None and cross_attention_states is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:       
+    if past_key_values is not None and cross_attention_states is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:
         # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
         # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
         past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
@@ -169,22 +169,6 @@ def prepare_aspect_ratio_attention_mask(
     attention_mask = attention_mask.unsqueeze(1)
 
     return attention_mask
-
-
-def expand_num_tokens_to_mult8(x):
-    # Compute the number of tokens to pad
-    num_padding_patches = (8 - (x.shape[-2] % 8)) % 8
-    # Compute padding tuple for pad function
-    padding = (0, 0, 0, num_padding_patches)  # (pad_left, pad_right, pad_left for dim -2, pad_right for dim -2)
-    # Pad the tensor
-    x_padded = F.pad(x, padding, mode="constant", value=0)
-    return x_padded, num_padding_patches
-
-
-def contract_num_tokens_from_mult8(x, num_padding_patches):
-    # Calculate the index to slice the tensor up to
-    slice_index = -num_padding_patches if num_padding_patches > 0 else None
-    return x[:, :, slice_index]
 
 
 @dataclass
@@ -508,8 +492,8 @@ class MllamaVisionEncoder(nn.Module):
 
             # SDPA never returns attn weights, so the kwarg isn't used at all
             # TODO: fix this
-            # if output_attentions:
-            #     all_attentions = all_attentions + (layer_outputs[1],)
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -727,7 +711,7 @@ class MllamaTextCrossAttention(nn.Module):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         query_states = self.q_norm(query_states)
 
-        if past_key_value.get_seq_length(self.layer_idx) == 0 or cross_attention_states is not None:
+        if cross_attention_states is not None:
             key_states = self.k_proj(cross_attention_states)
             value_states = self.v_proj(cross_attention_states)
             key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -742,11 +726,13 @@ class MllamaTextCrossAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
-        else:
+        elif past_key_value.get_seq_length(self.layer_idx) != 0:
             key_states, value_states = (
                 past_key_value.key_cache[self.layer_idx],
                 past_key_value.value_cache[self.layer_idx],
             )
+        else:
+            raise ValueError("Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!")
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -1017,8 +1003,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if full_text_row_masked_out_mask is not None:
-            hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
+        hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         outputs = (hidden_states,)
@@ -1027,7 +1012,6 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
             outputs += (attn_weights,)
 
         if use_cache:
-            outputs += (past_key_value,)
             outputs += (past_key_value,)
 
         return outputs
@@ -1180,12 +1164,12 @@ class MllamaTextModel(PreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            
-            # TODO: fix cehck for text only generation
-            # for image generation we do not have `cross_attention_states` on next steps
-            # and we probably should check for `pas_key_values` for this layer
-            # if idx in self.cross_attention_layers and cross_attention_states is None:
-            #     continue
+
+            if (idx in self.cross_attention_layers and
+                cross_attention_states is None and
+                (past_key_values is None or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0))
+            ):
+                continue
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1636,8 +1620,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask[:, :, cache_position],
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position],
+            cross_attention_mask=cross_attention_mask[:, :, cache_position] if cross_attention_mask is not None else None,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position] if cross_attention_mask is not None else None,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
