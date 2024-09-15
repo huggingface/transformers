@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     MaskedImageModelingOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import TORCH_INIT_FUNCTIONS, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -2625,15 +2625,22 @@ class ProPainterDiscriminator(nn.Module):
 
 # Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/pretrained_networks.py
 class ProPainterVgg16(nn.Module):
-    def __init__(self, requires_grad: bool = False, pretrained: bool = True):
+    def __init__(self, requires_grad: bool = False, pretrained: bool = True, is_training: bool = False):
         super().__init__()
-        vgg_pretrained_features = tv.vgg16(pretrained=pretrained).features
+        self.is_training = is_training
+        self.requires_grad = requires_grad
+        self.pretrained = pretrained
+        # This attribute will initiate lazy loading for such a huge model to save on memory and prevent OOM in cases.
+        self.vgg_initialized = False  # Will still lazy load if training
+
+    def _init_vgg(self):
+        vgg_pretrained_features = tv.vgg16(pretrained=self.pretrained).features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
         self.slice3 = nn.Sequential()
         self.slice4 = nn.Sequential()
         self.slice5 = nn.Sequential()
-        self.N_slices = 5
+        # self.N_slices = 5
         for x in range(4):
             self.slice1.add_module(str(x), vgg_pretrained_features[x])
         for x in range(4, 9):
@@ -2644,29 +2651,50 @@ class ProPainterVgg16(nn.Module):
             self.slice4.add_module(str(x), vgg_pretrained_features[x])
         for x in range(23, 30):
             self.slice5.add_module(str(x), vgg_pretrained_features[x])
-        if not requires_grad:
+        if not self.requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
+        self.vgg_initialized = True
 
     def forward(self, frames):
-        hidden_states = self.slice1(frames)
-        hidden_states_relu1_2 = hidden_states
-        hidden_states = self.slice2(hidden_states)
-        hidden_states_relu2_2 = hidden_states
-        hidden_states = self.slice3(hidden_states)
-        hidden_states_relu3_3 = hidden_states
-        hidden_states = self.slice4(hidden_states)
-        hidden_states_relu4_3 = hidden_states
-        hidden_states = self.slice5(hidden_states)
-        hidden_states_relu5_3 = hidden_states
+        device = frames.device
         vgg_outputs = namedtuple("VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"])
-        hidden_states = vgg_outputs(
-            hidden_states_relu1_2,
-            hidden_states_relu2_2,
-            hidden_states_relu3_3,
-            hidden_states_relu4_3,
-            hidden_states_relu5_3,
-        )
+
+        # Skip VGG16 initialization if not in training mode
+        if self.is_training:
+            if not self.vgg_initialized:
+                self._init_vgg()
+            self.to(device)
+            hidden_states = self.slice1(frames)
+            hidden_states_relu1_2 = hidden_states
+            hidden_states = self.slice2(hidden_states)
+            hidden_states_relu2_2 = hidden_states
+            hidden_states = self.slice3(hidden_states)
+            hidden_states_relu3_3 = hidden_states
+            hidden_states = self.slice4(hidden_states)
+            hidden_states_relu4_3 = hidden_states
+            hidden_states = self.slice5(hidden_states)
+            hidden_states_relu5_3 = hidden_states
+            hidden_states = vgg_outputs(
+                hidden_states_relu1_2,
+                hidden_states_relu2_2,
+                hidden_states_relu3_3,
+                hidden_states_relu4_3,
+                hidden_states_relu5_3,
+            )
+        else:
+            # In inference mode, return dummy tensors with the same shape as the VGG outputs
+            batch_size, _, H, W = frames.size()
+            device = frames.device
+
+            slice1_output = torch.zeros((batch_size, 64, H // 1, W // 1), device=device)
+            slice2_output = torch.zeros((batch_size, 128, H // 2, W // 2), device=device)
+            slice3_output = torch.zeros((batch_size, 256, H // 4, W // 4), device=device)
+            slice4_output = torch.zeros((batch_size, 512, H // 8, W // 8), device=device)
+            slice5_output = torch.zeros((batch_size, 512, H // 16, W // 16), device=device)
+
+            # Return namedtuple with dummy outputs
+            hidden_states = vgg_outputs(slice1_output, slice2_output, slice3_output, slice4_output, slice5_output)
 
         return hidden_states
 
@@ -2679,7 +2707,10 @@ class ProPainterScalingLayer(nn.Module):
         self.register_buffer("scale", torch.Tensor([0.458, 0.448, 0.450])[None, :, None, None])
 
     def forward(self, frames):
-        return (frames - self.shift) / self.scale
+        device = frames.device
+        shift = self.shift.to(device)
+        scale = self.scale.to(device)
+        return (frames - shift) / scale
 
 
 # Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
@@ -2725,6 +2756,7 @@ class ProPainterLpips(nn.Module):
         self,
         config: ProPainterConfig,
         use_dropout: bool = True,
+        is_training: bool = False,
     ):
         """Initializes a perceptual loss torch.nn.Module
         use_dropout : bool
@@ -2745,8 +2777,13 @@ class ProPainterLpips(nn.Module):
         ]
         self.length = len(self.num_channels)
 
-        self.net = ProPainterVgg16()
+        self.net = ProPainterVgg16(is_training=is_training)
 
+        if is_training:
+            use_dropout = True
+        else:
+            use_dropout = False
+            
         self.layer0 = ProPainterIntermediateLossLayer(self.num_channels[0], use_dropout=use_dropout)
         self.layer1 = ProPainterIntermediateLossLayer(self.num_channels[1], use_dropout=use_dropout)
         self.layer2 = ProPainterIntermediateLossLayer(self.num_channels[2], use_dropout=use_dropout)
@@ -2756,6 +2793,8 @@ class ProPainterLpips(nn.Module):
         self.layers = nn.ModuleList(self.layers)
 
     def forward(self, frames, pred_images):
+        device = frames.device
+        self.layers.to(device)
         frames = 2 * frames - 1
         pred_images = 2 * pred_images - 1
 
@@ -2770,7 +2809,7 @@ class ProPainterLpips(nn.Module):
             feats0[i], feats1[i] = normalize_tensor(hidden_states0[i]), normalize_tensor(hidden_states1[i])
             diffs[i] = (feats0[i] - feats1[i]) ** 2
 
-        layer_perceptual_losses = [spatial_average(self.layers[i](diffs[i]), keepdim=True) for i in range(self.length)]
+        layer_perceptual_losses = [spatial_average(self.layers[i](diffs[i]), keepdim=True).mean() for i in range(self.length)]
 
         return sum(layer_perceptual_losses)
 
@@ -2782,10 +2821,11 @@ class ProPainterLpipsLoss(nn.Module):
         loss_weight: float = 1.0,
         use_input_norm: bool = True,
         range_norm: bool = False,
+        is_training: bool = False,
     ):
         super().__init__()
         self.config = config
-        self.perceptual = ProPainterLpips(config).eval()
+        self.perceptual = ProPainterLpips(config, is_training=is_training).eval()
         self.loss_weight = loss_weight
         self.use_input_norm = use_input_norm
         self.range_norm = range_norm
@@ -2797,12 +2837,16 @@ class ProPainterLpipsLoss(nn.Module):
             self.register_buffer("std", torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, pred_images, frames):
+        device = pred_images.device
+        mean = self.mean.to(device)
+        std = self.std.to(device)
+
         if self.range_norm:
             pred_images = (pred_images + 1) / 2
             frames = (frames + 1) / 2
         if self.use_input_norm:
-            pred_images = (pred_images - self.mean) / self.std
-            frames = (frames - self.mean) / self.std
+            pred_images = (pred_images - mean) / std
+            frames = (frames - mean) / std
         lpips_loss = self.perceptual(frames.contiguous(), pred_images.contiguous())
         return self.loss_weight * lpips_loss.mean(), None
 
@@ -2835,6 +2879,9 @@ class ProPainterAdversarialLoss(nn.Module):
             self.criterion = nn.ReLU()
 
     def __call__(self, generated_frames, is_real, is_disc=None):
+        device = generated_frames.device
+        real_label = self.real_label.to(device)
+        fake_label = self.fake_label.to(device)
         if self.type == "hinge":
             if is_disc:
                 if is_real:
@@ -2843,7 +2890,7 @@ class ProPainterAdversarialLoss(nn.Module):
             else:
                 return (-generated_frames).mean()
         else:
-            labels = (self.real_label if is_real else self.fake_label).expand_as(generated_frames)
+            labels = (real_label if is_real else fake_label).expand_as(generated_frames)
             loss = self.criterion(generated_frames, labels)
             return loss
 
@@ -3708,10 +3755,10 @@ class ProPainterCanny(nn.Module):
 
 
 class ProPainterLosses:
-    def __init__(self, config: ProPainterConfig) -> None:
+    def __init__(self, config: ProPainterConfig, is_training: bool) -> None:
         self.config = config
         self.l1_loss = L1Loss()
-        self.perc_loss = ProPainterLpipsLoss(config, use_input_norm=True, range_norm=True)
+        self.perc_loss = ProPainterLpipsLoss(config, use_input_norm=True, range_norm=True, is_training=is_training)
         self.adversarial_loss = ProPainterAdversarialLoss(type=config.gan_loss)
         self.flow_loss = ProPainterFlowLoss(config)
         self.edge_loss = ProPainterEdgeLoss(config)
@@ -3767,7 +3814,7 @@ class ProPainterLosses:
                     pred_imgs.view(-1, 3, height, width),
                     frames.view(-1, 3, height, width),
                 )[0]
-                * self.config["losses"]["perceptual_weight"]
+                * self.config.perceptual_weight
             )
             gen_loss += perc_loss
 
@@ -3813,57 +3860,54 @@ class ProPainterPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Conv3d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-
-        # Use Xavier or Kaiming initialization instead of trunc_normal_ for optimizing cpu usage in tests
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            nn.init.xavier_uniform_(module.weight)
+            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+            # `trunc_normal_cpu` not implemented in `half` issues
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.weight.dtype)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
-        # Simplify and optimize uniform initialization
-        elif isinstance(module, (ProPainterSecondOrderDeformableAlignment, ProPainterDeformableAlignment)):
-            num_channels = module.in_channels * math.prod(module.kernel_size)
+                module.bias.data.zero_()
+        elif isinstance(module, ProPainterSecondOrderDeformableAlignment) or isinstance(
+            module, ProPainterDeformableAlignment
+        ):
+            num_channels = module.in_channels
+            for k in module.kernel_size:
+                num_channels *= k
             stdv = 1.0 / math.sqrt(num_channels)
-            nn.init.uniform_(module.weight, -stdv, stdv)
+            module.weight.data.uniform_(-stdv, stdv)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
-            # Optimize constant initialization for offset layers
+                module.bias.data.zero_()
             if hasattr(module.conv_offset[-1], "weight") and module.conv_offset[-1].weight is not None:
-                nn.init.constant_(module.conv_offset[-1].weight, 0)
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
             if hasattr(module.conv_offset[-1], "bias") and module.conv_offset[-1].bias is not None:
-                nn.init.constant_(module.conv_offset[-1].bias, 0)
-
-        # For ProPainter modules, use more efficient initializers
-        elif isinstance(module, (ProPainterInpaintGenerator, ProPainterDiscriminator)):
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
+        elif isinstance(module, ProPainterInpaintGenerator) or isinstance(module, ProPainterDiscriminator):
             for child in module.children():
                 classname = child.__class__.__name__
-                if "InstanceNorm2d" in classname:
+                if classname.find("InstanceNorm2d") != -1:
                     if hasattr(child, "weight") and child.weight is not None:
-                        nn.init.constant_(child.weight, 1.0)  # Initialize normalization layer weight to 1
+                        nn.init.constant_(child.weight.data, 1.0)
                     if hasattr(child, "bias") and child.bias is not None:
-                        nn.init.constant_(child.bias, 0.0)  # Initialize bias to 0
-                elif hasattr(child, "weight") and ("Conv" in classname or "Linear" in classname):
-                    nn.init.xavier_uniform_(child.weight)  # Use Xavier uniform for Conv and Linear layers
+                        nn.init.constant_(child.bias.data, 0.0)
+                elif hasattr(child, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
+                    nn.init.normal_(child.weight.data, 0.0, 0.02)
                     if hasattr(child, "bias") and child.bias is not None:
-                        nn.init.constant_(child.bias, 0.0)  # Zero out bias
-
-        # For ProPainterBasicEncoder, use Kaiming normal for Conv layers and constant for BatchNorm layers
+                        nn.init.constant_(child.bias.data, 0.0)
         elif isinstance(module, ProPainterBasicEncoder):
             for child in module.children():
                 if isinstance(child, nn.Conv2d):
-                    nn.init.kaiming_uniform_(
-                        child.weight, mode="fan_out", nonlinearity="relu"
-                    )  # Use Kaiming uniform for efficiency
+                    nn.init.kaiming_normal_(child.weight, mode="fan_out", nonlinearity="relu")
                 elif isinstance(child, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
                     if child.weight is not None:
-                        nn.init.constant_(child.weight, 1)  # BatchNorm weight to 1
+                        nn.init.constant_(child.weight, 1)
                     if child.bias is not None:
-                        nn.init.constant_(child.bias, 0)  # BatchNorm bias to 0
-
-        # LayerNorm remains unchanged since it's already efficient
+                        nn.init.constant_(child.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)  # Zero bias
-            nn.init.ones_(module.weight)  # One for weight
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 PROPAINTER_START_DOCSTRING = r"""
@@ -4212,10 +4256,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
             pred_imgs_loss = pred_imgs
             # get the local frames
             comp_frames = pixel_values_videos * (1.0 - masks_dilated) + pred_imgs * masks_dilated
+            comp_frames_loss = comp_frames
 
         else:
             height, width = self.size[3], self.size[4]
             comp_frames = [None] * self.video_length
+            pred_imgs_loss = [None] * self.video_length
 
             neighbor_stride = self.config.neighbor_length // 2
             if self.video_length > self.config.subvideo_length:
@@ -4223,7 +4269,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
             else:
                 ref_num = -1
 
-            pred_imgs_loss = [None] * self.video_length
             # ---- feature propagation + transformer ----
             for f in range(0, self.video_length, neighbor_stride):
                 neighbor_ids = list(
@@ -4266,11 +4311,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 )
 
                 pred_img = pred_img.view(-1, 3, height, width)
-
                 pred_img = (pred_img + 1) / 2
                 pred_img = pred_img.cpu().permute(0, 2, 3, 1).detach().numpy() * 255
+
+                binary_masks = masks_dilated.view(-1, 1, height, width)
                 binary_masks = (
-                    masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
+                    binary_masks[neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
                 )
 
                 for i in range(len(neighbor_ids)):
@@ -4283,8 +4329,19 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     else:
                         comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
                     comp_frames[idx] = comp_frames[idx].astype(np.uint8)
+
                     pred_imgs_loss[idx] = pred_img[i]
-        return comp_frames, pred_imgs_loss, all_hidden_states, all_self_attentions
+
+            device = pixel_values_videos.device
+
+            comp_frames_loss = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in comp_frames])
+            comp_frames_loss = comp_frames_loss.view(self.size).to(device).to(torch.float32)
+
+            pred_imgs_loss = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in pred_imgs_loss])
+            pred_imgs_loss = pred_imgs_loss.view(self.size).to(device).to(torch.float32)
+
+    
+        return comp_frames, pred_imgs_loss, comp_frames_loss, all_hidden_states, all_self_attentions
 
     def forward(
         self,
@@ -4445,11 +4502,11 @@ class ProPainterModel(ProPainterPreTrainedModel):
             # original_frames are used for inference part only
             self.original_frames = pixel_values_videos
             self.original_frames = (self.original_frames * 255.0).to(torch.uint8).cpu().numpy()
-            self.original_frames = [[frame.transpose(1, 2, 0) for frame in video] for video in self.original_frames][0]
+            self.original_frames = list(itertools.chain.from_iterable([[frame.transpose(1, 2, 0) for frame in video] for video in self.original_frames]))
 
             pixel_values_videos = pixel_values_videos * 2 - 1
 
-        losses = ProPainterLosses(self.config)
+        losses = ProPainterLosses(self.config, self.training)
 
         self.size = pixel_values_videos.size()
         self.video_length = pixel_values_videos.size(1)
@@ -4460,7 +4517,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         updated_frames, updated_masks = self.image_propagation(pixel_values_videos, masks_dilated, pred_flows_bi)
 
-        comp_frames, pred_imgs_loss, all_hidden_states, all_self_attentions = self.feature_propagation(
+        comp_frames, pred_imgs_loss, comp_frames_loss, all_hidden_states, all_self_attentions = self.feature_propagation(
             pixel_values_videos,
             updated_frames,
             updated_masks,
@@ -4471,15 +4528,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if type(pred_imgs_loss) is list:
-            pred_imgs_loss = (
-                torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
-            )
-            comp_frames_loss = (
-                torch.tensor(np.array(comp_frames)).permute(3, 0, 1, 2).to(masks_dilated.device).to(torch.float32)
-            )
-        else:
-            comp_frames_loss = comp_frames
         gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(
             pred_imgs_loss,
             masks_dilated,

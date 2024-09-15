@@ -47,7 +47,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-
     from transformers import ProPainterModel
 
 
@@ -77,6 +76,7 @@ class ProPainterModelTester:
         num_hidden_layers=2,
         num_attention_heads=1,
         num_frames=8,
+        perceptual_weight = 0.1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +86,7 @@ class ProPainterModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_frames = num_frames
+        self.perceptual_weight = perceptual_weight
 
     def prepare_config_and_inputs(self):
         pixel_values_videos = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
@@ -105,6 +106,7 @@ class ProPainterModelTester:
             num_attention_heads=self.num_attention_heads,
             num_local_frames_flow_complete_net=self.num_frames,
             num_local_frames_propainter=self.num_frames,
+            perceptual_weight=self.perceptual_weight,
         )
 
     @property
@@ -370,7 +372,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     # Because these are initialised by kaiming_normal_ method and due to weight init model's output is not deterministic
                     mean_value = (param.data.mean() * 1e9).round() / 1e9
                     self.assertTrue(
-                        (1e-8 <= abs(mean_value.item()) <= 2 * 1e-1 or mean_value.item() in [0.0, 1.0]),
+                        (1e-8 <= abs(mean_value.item()) <= 1e-3 or mean_value.item() in [0.0, 1.0]),
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
@@ -679,7 +681,6 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
-
 
 # We will verify our results on a video of a boy riding a bicycle
 def prepare_video():
