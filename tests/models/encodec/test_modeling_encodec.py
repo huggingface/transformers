@@ -19,11 +19,14 @@ import inspect
 import os
 import tempfile
 import unittest
-
+import torchaudio
+import random
+import torch.nn.functional as F
 import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
+from transformers.models.encodec.modeling_encodec import Balancer
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -39,8 +42,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EncodecModel
-
+    from transformers import EncodecModel, EncodecDiscriminatorConfig, EncodecDiscriminator
 
 def prepare_inputs_dict(
     config,
@@ -142,6 +144,251 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
     input_name = "input_values"
+
+    # Test copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/msstftd.py#L132
+    @slow
+    def test_discriminator_output_shapes_and_feature_maps(self):
+        disc = EncodecDiscriminator(EncodecDiscriminatorConfig())
+        y = torch.randn(1, 1, 24000)
+        y_hat = torch.randn(1, 1, 24000)
+
+        y_disc_r, fmap_r = disc(y)
+        y_disc_gen, fmap_gen = disc(y_hat)
+        assert len(y_disc_r) == len(y_disc_gen) == len(fmap_r) == len(fmap_gen) == disc.num_discriminators
+
+        assert all([len(fm) == 5 for fm in fmap_r + fmap_gen])
+        assert all([list(f.shape)[:2] == [1, 32] for fm in fmap_r + fmap_gen for f in fm])
+        assert all([len(logits.shape) == 4 for logits in y_disc_r + y_disc_gen])
+
+    # Test copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py#L121
+    @slow
+    def test_balancer_basic(self):
+        x = torch.zeros(1, requires_grad=True)
+        one = torch.ones_like(x)
+        loss_1 = F.l1_loss(x, one)
+        loss_2 = 100 * F.l1_loss(x, -one)
+        losses = {'1': loss_1, '2': loss_2}
+
+        balancer = Balancer(weights={'1': 1, '2': 1}, rescale_grads=False)
+        balancer.backward(losses, x)
+        assert torch.allclose(x.grad, torch.tensor(99.)), x.grad
+
+        loss_1 = F.l1_loss(x, one)
+        loss_2 = 100 * F.l1_loss(x, -one)
+        losses = {'1': loss_1, '2': loss_2}
+        x.grad = None
+        balancer = Balancer(weights={'1': 1, '2': 1}, rescale_grads=True)
+        balancer.backward({'1': loss_1, '2': loss_2}, x)
+        assert torch.allclose(x.grad, torch.tensor(0.)), x.grad
+
+
+    @slow
+    def test_training_with_discriminator(self):
+        
+        model_id = "facebook/encodec_24khz"
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        model.train()
+
+        discriminator_config = EncodecDiscriminatorConfig()
+        discriminator = EncodecDiscriminator(discriminator_config).to(torch_device)
+        discriminator.train()
+
+        generator_optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-4)
+
+        # sine wave for input
+        sample_rate = 24000
+        duration = 1
+        t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
+        frequency = 440  # A4 note
+        audio_input = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0).unsqueeze(0)
+        audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
+
+        inputs = processor(
+            raw_audio=audio_input.squeeze().cpu().numpy(),
+            sampling_rate=sample_rate,
+            return_tensors="pt"
+        )
+        input_values = inputs.input_values.to(torch_device)
+
+        num_epochs = 3
+
+        loss_weights = {
+            'reconstruction_loss': 1.0,
+            'g_adv_loss': 1.0,
+            'fm_loss': 1.0
+        }
+        balancer = Balancer(
+            weights=loss_weights,
+            rescale_grads=True,
+            total_norm=1.0,
+            ema_decay=0.999,
+            per_batch_item=True,
+            epsilon=1e-12,
+            monitor=False
+        )
+
+        for epoch in range(num_epochs):
+            real_audio = input_values
+
+            # update discriminator based on the probability outlined in the paper
+            if sample_rate == 24000:
+                update_discriminator = random.random() < (2/3)
+            elif sample_rate == 48000:
+                update_discriminator = random.random() < 0.5
+            else:
+                raise ValueError("no")
+
+            if update_discriminator:
+                #  Train Discriminator
+                discriminator_optimizer.zero_grad()
+
+                # Generate fake audio with the generator
+                outputs = model(input_values, return_dict=True, return_loss=True)
+                fake_audio = outputs.audio_values.detach()  # Detach to prevent gradients flowing to the generator
+
+                real_audio = input_values
+
+                # Compute discriminator loss on real and fake audio
+                real_logits, _ = discriminator(real_audio)
+                fake_logits, _ = discriminator(fake_audio)
+
+                discriminator_loss = 0
+                for real_logit, fake_logit in zip(real_logits, fake_logits):
+                    discriminator_loss += torch.mean(torch.relu(1 - real_logit)) + torch.mean(torch.relu(1 + fake_logit))
+                discriminator_loss /= discriminator.num_discriminators
+
+                # Backpropagate and update discriminator
+                discriminator_loss.backward()
+                discriminator_optimizer.step()
+
+            #  Train Generator
+            generator_optimizer.zero_grad()
+
+            # Generate fake audio again (this time gradients flow back to the generator)
+            outputs = model(input_values, return_dict=True, return_loss=True)
+            fake_audio = outputs.audio_values  # Do not detach
+
+            # Compute generator adversarial loss and feature matching loss
+            fake_logits, fake_features = discriminator(fake_audio)
+            _, real_features = discriminator(real_audio)
+
+            # Generator adversarial loss
+            g_adv_loss = 0
+            for fake_logit in fake_logits:
+                g_adv_loss += torch.mean(torch.relu(1 - fake_logit))
+            g_adv_loss /= discriminator.num_discriminators
+
+            # Feature matching loss (Equation 2 in paper)
+            fm_loss = 0
+            for k in range(discriminator.num_discriminators):
+                for l in range(len(real_features[k])):
+                    real_feat = real_features[k][l]
+                    fake_feat = fake_features[k][l]
+                    fm_loss += torch.nn.functional.l1_loss(fake_feat, real_feat.detach()) / torch.mean(torch.abs(real_feat.detach()))
+            fm_loss /= (discriminator.num_discriminators * len(real_features[0]))
+
+            # Combine losses using the Balancer
+            losses_to_balance = {
+                'reconstruction_loss': outputs.reconstruction_loss,
+                'g_adv_loss': g_adv_loss,
+                'fm_loss': fm_loss
+            }
+
+            # Model output (the reconstructed audio)
+            model_output = outputs.audio_values
+
+            balancer.backward(losses_to_balance, model_output)
+
+            # Add commitment loss separately as per paper
+            if outputs.commitment_loss is not None:
+                outputs.commitment_loss.backward()
+
+            generator_optimizer.step()
+
+            print(f"Epoch {epoch+1}/{num_epochs}")
+            print(f"Generator adversarial loss: {g_adv_loss.item():.4f}")
+            print(f"Feature matching loss: {fm_loss.item():.4f}")
+            print(f"Reconstruction loss (no commit): {outputs.reconstruction_loss.item():.4f}")
+            if outputs.commitment_loss is not None:
+                print(f"Commitment loss: {outputs.commitment_loss.item():.4f}")
+            print(f"Total generator loss (before balancing): "
+                  f"{outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item():.4f}\n")
+
+    @slow
+    def test_reconstruction_loss(self):
+        model_id = "facebook/encodec_24khz"
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        model.eval()
+
+        sample_rate = 24000
+        duration = 1
+        t = torch.linspace(0, duration, sample_rate)
+        frequency = 440  # A4 note
+        audio_input = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0).unsqueeze(0)
+        audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
+
+        inputs = processor(raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
+        input_values = inputs.input_values.to(torch_device)
+
+        bandwidths = [1.5, 6.0, 12.0, 24.0]
+        for bandwidth in bandwidths:
+            with torch.no_grad():
+                outputs = model(input_values, bandwidth=bandwidth, return_dict=True, return_loss=True)
+
+            print(f"\nBandwidth: {bandwidth}")
+            print(f"reconstruction_loss: {outputs.reconstruction_loss.item()}")
+            print(f"Audio codes shape: {outputs.audio_codes[0].shape}")
+            print(f"Audio values shape: {outputs.audio_values.shape}")
+            print(f"Input max: {input_values.max().item()}, min: {input_values.min().item()}")
+            print(f"Output max: {outputs.audio_values.max().item()}, min: {outputs.audio_values.min().item()}")
+
+            reconstructed_audio = outputs.audio_values
+            mae = torch.mean(torch.abs(input_values - reconstructed_audio))
+            print(f"MAE: {mae.item()}")
+
+            # Compare spectrograms
+            spec_transform = torchaudio.transforms.Spectrogram().to(torch_device)
+            input_spec = spec_transform(input_values.squeeze())
+            output_spec = spec_transform(reconstructed_audio.squeeze())
+            spec_mae = torch.mean(torch.abs(input_spec - output_spec))
+            print(f"Spectrogram MAE: {spec_mae.item()}")
+
+    @slow
+    def test_gradients_exist(self):
+        model_id = "facebook/encodec_24khz"
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        model.train()
+
+        sample_rate = 24000
+        duration = 1
+        t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
+        frequency = 440  # A4 note
+        audio_input = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0).unsqueeze(0)
+        audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
+
+        inputs = processor(
+            raw_audio=audio_input.squeeze().cpu().numpy(),
+            sampling_rate=sample_rate,
+            return_tensors="pt"
+        )
+        input_values = inputs.input_values.to(torch_device)
+
+        outputs = model(input_values, return_dict=True, return_loss=True)
+        total_loss = outputs.reconstruction_loss
+
+        total_loss.backward()
+
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.assertIsNotNone(param.grad, f"Gradient for {name} is None")
+                self.assertFalse(torch.isnan(param.grad).any(), f"Gradient for {name} contains NaN values")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
