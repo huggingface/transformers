@@ -939,6 +939,14 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None:
+            total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
+            if labels.size(-1) != total_size:
+                raise ValueError(
+                    "The labels provided should have same sequence length as total attention mask. "
+                    f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
+                )
+
         outputs = self.visual_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -960,26 +968,12 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         total_loss = None
         if labels is not None and sentence_image_labels is not None:
-            total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
-            if labels.size(-1) != total_size:
-                raise ValueError(
-                    "The labels provided should have same sequence length as total attention mask. "
-                    f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
-                )
-
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             sentence_image_loss = loss_fct(seq_relationship_score.view(-1, 2), sentence_image_labels.view(-1))
             total_loss = masked_lm_loss + sentence_image_loss
 
-        if labels is not None and sentence_image_labels is None:
-            total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
-            if labels.size(-1) != total_size:
-                raise ValueError(
-                    "The labels provided should have same sequence length as total attention mask. "
-                    f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
-                )
-
+        elif labels is not None:
             loss_fct = CrossEntropyLoss()
             total_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 

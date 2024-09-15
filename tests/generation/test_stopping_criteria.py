@@ -26,9 +26,9 @@ if is_torch_available():
     import torch
 
     from transformers.generation import (
+        ConfidenceCriteria,
         EosTokenCriteria,
         MaxLengthCriteria,
-        MaxNewTokensCriteria,
         MaxTimeCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
@@ -76,21 +76,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(10)
         self.assertTrue(all(criteria(input_ids, scores)))
 
-    def test_max_new_tokens_criteria(self):
-        criteria = MaxNewTokensCriteria(start_length=5, max_new_tokens=5)
-
-        input_ids, scores = self._get_tensors(5)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(9)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(10)
-        self.assertTrue(all(criteria(input_ids, scores)))
-
-        criteria_list = StoppingCriteriaList([criteria])
-        self.assertEqual(criteria_list.max_length, 10)
-
     def test_max_time_criteria(self):
         input_ids, scores = self._get_tensors(5)
 
@@ -115,6 +100,23 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(5)
         input_ids[:, -1] = 1
         self.assertListEqual(criteria(input_ids, scores).tolist(), [False, False, False])
+
+    def test_confidence_criteria(self):
+        criteria = ConfidenceCriteria(assistant_confidence_threshold=0.5)
+
+        vocab_size = 250
+        length = 5
+
+        input_ids = ids_tensor((1, length), vocab_size)
+        scores = (torch.randn((1, vocab_size)),)
+
+        # Simulate high confidence by setting the probability of the last token to be high
+        scores[0][0, input_ids[0, -1]] = 10.0  # Logits before softmax
+        self.assertFalse(criteria(input_ids, scores))
+
+        # Simulate low confidence by setting the probability of the last token to be low
+        scores[0][0, input_ids[0, -1]] = -10.0  # Logits before softmax
+        self.assertTrue(criteria(input_ids, scores))
 
     def test_validate_stopping_criteria(self):
         validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 10)
@@ -207,6 +209,24 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         # Length of each token
         token_lengths = embedding_vec[:, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
+
+    def test_single_letter_stop_string(self):
+        true_strings = ["a", "baa", "abc"]  # "abc" is a single token
+        false_strings = ["abbbbbbb", "b"]  # "abbbbbbb" is split into multiple tokens
+        stop_strings = ["a"]
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+
+        scores = None
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        for input_ids in true_input_ids["input_ids"]:
+            self.assertTrue(criteria(input_ids.unsqueeze(0), scores))
+        for input_ids in false_input_ids["input_ids"]:
+            self.assertFalse(criteria(input_ids.unsqueeze(0), scores))
 
     def test_criterias_per_row(self):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"

@@ -20,6 +20,7 @@ import numpy as np
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
+from transformers.image_utils import ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -98,6 +99,8 @@ class Mask2FormerImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -149,6 +152,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Mask2FormerImageProcessingTester(self)
 
     @property
@@ -177,24 +181,36 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(image_processor.size_divisor, 8)
 
     def comm_get_image_processing_inputs(
-        self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
+        self,
+        image_processor_tester,
+        with_segmentation_maps=False,
+        is_instance_map=False,
+        segmentation_type="np",
+        numpify=False,
+        input_data_format=None,
     ):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.image_processing_class(**image_processor_tester.prepare_image_processor_dict())
         # prepare image and target
-        num_labels = self.image_processor_tester.num_labels
+        num_labels = image_processor_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
                 labels_expanded = list(range(num_labels)) * 2
                 instance_id_to_semantic_id = dict(enumerate(labels_expanded))
             annotations = [
-                np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
+                np.random.randint(0, high * 2, img.shape[:2] if numpify else (img.size[1], img.size[0])).astype(
+                    np.uint8
+                )
+                for img in image_inputs
             ]
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
+
+        if input_data_format is ChannelDimension.FIRST and numpify:
+            image_inputs = [np.moveaxis(img, -1, 0) for img in image_inputs]
 
         inputs = image_processing(
             image_inputs,
@@ -202,6 +218,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             pad_and_return_pixel_mask=True,
+            input_data_format=input_data_format,
         )
 
         return inputs
@@ -220,9 +237,29 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 self.assertTrue((pixel_values.shape[-2] % size_divisor) == 0)
 
     def test_call_with_segmentation_maps(self):
-        def common(is_instance_map=False, segmentation_type=None):
+        def common(
+            is_instance_map=False,
+            segmentation_type=None,
+            numpify=False,
+            num_channels=3,
+            input_data_format=None,
+            do_resize=True,
+        ):
+            image_processor_tester = Mask2FormerImageProcessingTester(
+                self,
+                num_channels=num_channels,
+                do_resize=do_resize,
+                image_mean=[0.5] * num_channels,
+                image_std=[0.5] * num_channels,
+            )
+
             inputs = self.comm_get_image_processing_inputs(
-                with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
+                image_processor_tester=image_processor_tester,
+                with_segmentation_maps=True,
+                is_instance_map=is_instance_map,
+                segmentation_type=segmentation_type,
+                numpify=numpify,
+                input_data_format=input_data_format,
             )
 
             mask_labels = inputs["mask_labels"]
@@ -239,6 +276,18 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         common(is_instance_map=True)
         common(is_instance_map=False, segmentation_type="pil")
         common(is_instance_map=True, segmentation_type="pil")
+
+        common(num_channels=1, numpify=True)
+        common(num_channels=1, numpify=True, input_data_format=ChannelDimension.FIRST)
+        common(num_channels=2, numpify=True, input_data_format=ChannelDimension.LAST)
+        common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST, do_resize=False)
+        common(num_channels=5, numpify=True, input_data_format=ChannelDimension.FIRST, do_resize=False)
+
+        with self.assertRaisesRegex(ValueError, expected_regex="Unable to infer channel dimension format"):
+            common(num_channels=5, numpify=True, do_resize=False)
+
+        with self.assertRaisesRegex(TypeError, expected_regex=r"Cannot handle this data type: .*"):
+            common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST)
 
     def test_integration_instance_segmentation(self):
         # load 2 images and corresponding annotations from the hub
@@ -274,7 +323,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -317,7 +366,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         )
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -490,3 +539,16 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
             num_segments_fused = max([el["id"] for el in el_fused])
             self.assertEqual(num_segments_fused, expected_num_segments)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

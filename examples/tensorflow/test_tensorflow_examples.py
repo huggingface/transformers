@@ -316,6 +316,7 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --trust_remote_code
             --model_name_or_path microsoft/resnet-18
             --do_train
             --do_eval

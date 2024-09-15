@@ -24,7 +24,9 @@
   - local: model_sharing
     title: Share your model
   - local: agents
-    title: Agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools, and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
@@ -92,11 +94,17 @@
       title: Visual Question Answering
     - local: tasks/text-to-speech
       title: Text to speech
+    - local: tasks/image_text_to_text
+      title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
     - local: generation_strategies
       title: Customize the generation strategy
+    - local: kv_cache
+      title: Best Practices for Generation with Cache
     title: Generation
   - isExpanded: false
     sections:
@@ -116,7 +124,7 @@
   - local: custom_models
     title: Share a custom model
   - local: chat_templating
-    title: Templates for chat models
+    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -137,6 +145,8 @@
     title: Troubleshoot
   - local: gguf
     title: Interoperability with GGUF files
+  - local: tiktoken
+    title: Interoperability with TikToken files
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -155,8 +165,12 @@
     title: EETQ
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -282,6 +296,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
@@ -364,6 +380,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
@@ -382,6 +400,8 @@
         title: Fuyu
       - local: model_doc/gemma
         title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -400,6 +420,8 @@
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
         title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -430,6 +452,8 @@
         title: MADLAD-400
       - local: model_doc/mamba
         title: Mamba
+      - local: model_doc/mamba2
+        title: mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -460,6 +484,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/nemotron
+        title: Nemotron
       - local: model_doc/nezha
         title: NEZHA
       - local: model_doc/nllb
@@ -470,6 +496,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmoe
+        title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
@@ -494,8 +522,12 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -579,6 +611,8 @@
         title: DeiT
       - local: model_doc/depth_anything
         title: Depth Anything
+      - local: model_doc/depth_anything_v2
+        title: Depth Anything V2
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
@@ -599,6 +633,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -627,6 +663,8 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rt_detr
+        title: RT-DETR
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
@@ -661,6 +699,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zoedepth
+        title: ZoeDepth
       title: Vision models
     - isExpanded: false
       sections:
@@ -670,8 +710,12 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/dac
+        title: dac
       - local: model_doc/encodec
         title: EnCodec
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -746,6 +790,8 @@
         title: BridgeTower
       - local: model_doc/bros
         title: BROS
+      - local: model_doc/chameleon
+        title: Chameleon
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -774,6 +820,8 @@
         title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
       - local: model_doc/kosmos-2
         title: KOSMOS-2
       - local: model_doc/layoutlm
@@ -790,6 +838,10 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
+      - local: model_doc/llava_next_video
+        title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
@@ -810,6 +862,8 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip

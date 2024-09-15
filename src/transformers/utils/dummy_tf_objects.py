@@ -478,13 +478,6 @@ class TFBartPretrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFBertEmbeddings(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 class TFBertForMaskedLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -772,13 +765,6 @@ class TFConvBertForTokenClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFConvBertLayer(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 class TFConvBertModel(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1038,6 +1024,34 @@ class TFDeiTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFEfficientFormerForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEfficientFormerForImageClassificationWithTeacher(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEfficientFormerModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEfficientFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAdaptiveEmbedding(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1172,34 +1186,6 @@ class TFDPRQuestionEncoder(metaclass=DummyObject):
 
 
 class TFDPRReader(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFEfficientFormerForImageClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFEfficientFormerForImageClassificationWithTeacher(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFEfficientFormerModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFEfficientFormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1717,13 +1703,6 @@ class TFLongformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFLongformerSelfAttention(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 class TFLxmertForPreTraining(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -2179,13 +2158,6 @@ class TFRemBertForTokenClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFRemBertLayer(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 class TFRemBertModel(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -2383,13 +2355,6 @@ class TFRoFormerForSequenceClassification(metaclass=DummyObject):
 
 
 class TFRoFormerForTokenClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFRoFormerLayer(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

@@ -13,7 +13,7 @@ TOKENIZER_CLASSES = {
     name: (getattr(transformers, name), getattr(transformers, name + "Fast")) for name in SLOW_TO_FAST_CONVERTERS
 }
 
-dataset = datasets.load_dataset("xnli", split="test+validation")
+dataset = datasets.load_dataset("facebook/xnli", split="test+validation")  # no-script
 
 total = 0
 perfect = 0

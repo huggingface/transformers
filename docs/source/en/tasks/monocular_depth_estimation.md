@@ -23,23 +23,26 @@ a single camera viewpoint.
 Monocular depth estimation has various applications, including 3D reconstruction, augmented reality, autonomous driving,
 and robotics. It is a challenging task as it requires the model to understand the complex relationships between objects
 in the scene and the corresponding depth information, which can be affected by factors such as lighting conditions,
-occlusion, and texture.
+occlusion, and texture. 
+
+There are two main depth estimation categories:
+
+- **Absolute depth estimation**: This task variant aims to provide exact depth measurements from the camera. The term is used interchangeably with metric depth estimation, where depth is provided in precise measurements in meters or feet. Absolute depth estimation models output depth maps with numerical values that represent real-world distances.
+
+- **Relative depth estimation**: Relative depth estimation aims to predict the depth order of objects or points in a scene without providing the precise measurements. These models output a depth map that indicates which parts of the scene are closer or farther relative to each other without the actual distances to A and B.
+
+In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), a state-of-the-art zero-shot relative depth estimation model, and [ZoeDepth](https://huggingface.co/docs/transformers/main/en/model_doc/zoedepth), an absolute depth estimation model.
 
 <Tip>
 
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/depth-anything)
+Check the [Depth Estimation](https://huggingface.co/tasks/depth-estimation) task page to view all compatible architectures and checkpoints.
 
 </Tip>
 
-In this guide you'll learn how to:
-
-* create a depth estimation pipeline
-* run depth estimation inference by hand
-
-Before you begin, make sure you have all the necessary libraries installed:
+Before we begin, we need to install the latest version of Transformers:
 
 ```bash
-pip install -q transformers
+pip install -q -U transformers
 ```
 
 ## Depth estimation pipeline
@@ -49,9 +52,11 @@ Instantiate a pipeline from a [checkpoint on the Hugging Face Hub](https://huggi
 
 ```py
 >>> from transformers import pipeline
+>>> import torch
 
->>> checkpoint = "vinvino02/glpn-nyu"
->>> depth_estimator = pipeline("depth-estimation", model=checkpoint)
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> checkpoint = "depth-anything/Depth-Anything-V2-base-hf"
+>>> pipe = pipeline("depth-estimation", model=checkpoint, device=device)
 ```
 
 Next, choose an image to analyze:
@@ -60,19 +65,19 @@ Next, choose an image to analyze:
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://unsplash.com/photos/HwBAsSbPBDU/download?ixid=MnwxMjA3fDB8MXxzZWFyY2h8MzR8fGNhciUyMGluJTIwdGhlJTIwc3RyZWV0fGVufDB8MHx8fDE2Nzg5MDEwODg&force=true&w=640"
+>>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 >>> image
 ```
 
 <div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-estimation-example.jpg" alt="Photo of a busy street"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Photo of a bee"/>
 </div>
 
 Pass the image to the pipeline.
 
 ```py
->>> predictions = depth_estimator(image)
+>>> predictions = pipe(image)
 ```
 
 The pipeline returns a dictionary with two entries. The first one, called `predicted_depth`, is a tensor with the values
@@ -99,17 +104,17 @@ Here we'll use the same checkpoint as before:
 ```py
 >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
->>> checkpoint = "vinvino02/glpn-nyu"
+>>> checkpoint = "Intel/zoedepth-nyu-kitti"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
->>> model = AutoModelForDepthEstimation.from_pretrained(checkpoint)
+>>> model = AutoModelForDepthEstimation.from_pretrained(checkpoint).to(device)
 ```
 
 Prepare the image input for the model using the `image_processor` that will take care of the necessary image transformations
 such as resizing and normalization:
 
 ```py
->>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
+>>> pixel_values = image_processor(image, return_tensors="pt").pixel_values.to(device)
 ```
 
 Pass the prepared inputs through the model:
@@ -119,28 +124,100 @@ Pass the prepared inputs through the model:
 
 >>> with torch.no_grad():
 ...     outputs = model(pixel_values)
-...     predicted_depth = outputs.predicted_depth
 ```
 
-Visualize the results:
+Let's post-process and visualize the results. 
+
+We need to pad and then resize the outputs so that predicted depth map has the same dimension as the original image. After resizing we will remove the padded regions from the depth. 
 
 ```py
 >>> import numpy as np
+>>> import torch.nn.functional as F
 
->>> # interpolate to original size
->>> prediction = torch.nn.functional.interpolate(
-...     predicted_depth.unsqueeze(1),
-...     size=image.size[::-1],
-...     mode="bicubic",
-...     align_corners=False,
-... ).squeeze()
->>> output = prediction.numpy()
+>>> predicted_depth = outputs.predicted_depth.unsqueeze(dim=1)
+>>> height, width = pixel_values.shape[2:]
 
->>> formatted = (output * 255 / np.max(output)).astype("uint8")
->>> depth = Image.fromarray(formatted)
->>> depth
+>>> height_padding_factor = width_padding_factor = 3
+>>> pad_h = int(np.sqrt(height/2) * height_padding_factor)
+>>> pad_w = int(np.sqrt(width/2) * width_padding_factor)
+
+>>> if predicted_depth.shape[-2:] != pixel_values.shape[-2:]:
+>>>    predicted_depth = F.interpolate(predicted_depth, size= (height, width), mode='bicubic', align_corners=False)
+
+>>> if pad_h > 0:
+     predicted_depth = predicted_depth[:, :, pad_h:-pad_h,:]
+>>> if pad_w > 0:
+     predicted_depth = predicted_depth[:, :, :, pad_w:-pad_w]
 ```
 
+We can now visualize the results (the function below is taken from the [GaussianObject](https://github.com/GaussianObject/GaussianObject/blob/ad6629efadb57902d5f8bc0fa562258029a4bdf1/pred_monodepth.py#L11) framework).
+
+```py
+import matplotlib
+
+def colorize(value, vmin=None, vmax=None, cmap='gray_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), gamma_corrected=False, value_transform=None):
+    """Converts a depth map to a color image.
+
+    Args:
+        value (torch.Tensor, numpy.ndarray): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
+        vmin (float, optional): vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
+        vmax (float, optional):  vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
+        cmap (str, optional): matplotlib colormap to use. Defaults to 'magma_r'.
+        invalid_val (int, optional): Specifies value of invalid pixels that should be colored as 'background_color'. Defaults to -99.
+        invalid_mask (numpy.ndarray, optional): Boolean mask for invalid regions. Defaults to None.
+        background_color (tuple[int], optional): 4-tuple RGB color to give to invalid pixels. Defaults to (128, 128, 128, 255).
+        gamma_corrected (bool, optional): Apply gamma correction to colored image. Defaults to False.
+        value_transform (Callable, optional): Apply transform function to valid pixels before coloring. Defaults to None.
+
+    Returns:
+        numpy.ndarray, dtype - uint8: Colored depth map. Shape: (H, W, 4)
+    """
+    if isinstance(value, torch.Tensor):
+        value = value.detach().cpu().numpy()
+
+    value = value.squeeze()
+    if invalid_mask is None:
+        invalid_mask = value == invalid_val
+    mask = np.logical_not(invalid_mask)
+
+    # normalize
+    vmin = np.percentile(value[mask],2) if vmin is None else vmin
+    vmax = np.percentile(value[mask],85) if vmax is None else vmax
+    if vmin != vmax:
+        value = (value - vmin) / (vmax - vmin)  # vmin..vmax
+    else:
+        # Avoid 0-division
+        value = value * 0.
+
+    # squeeze last dim if it exists
+    # grey out the invalid values
+
+    value[invalid_mask] = np.nan
+    cmapper = matplotlib.colormaps.get_cmap(cmap)
+    if value_transform:
+        value = value_transform(value)
+        # value = value / value.max()
+    value = cmapper(value, bytes=True)  # (nxmx4)
+
+    # img = value[:, :, :]
+    img = value[...]
+    img[invalid_mask] = background_color
+
+    #     return img.transpose((2, 0, 1))
+    if gamma_corrected:
+        # gamma correction
+        img = img / 255
+        img = np.power(img, 2.2)
+        img = img * 255
+        img = img.astype(np.uint8)
+    return img
+
+>>> result = colorize(predicted_depth.cpu().squeeze().numpy())
+>>> Image.fromarray(result)
+```
+
+
+
 <div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-visualization.png" alt="Depth estimation visualization"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-visualization-zoe.png" alt="Depth estimation visualization"/>
 </div>

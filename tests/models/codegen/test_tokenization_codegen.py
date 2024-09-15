@@ -99,7 +99,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
@@ -127,6 +127,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @unittest.skip
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
         # And get both CodeGen and Roberta to work at the same time (mostly an issue of adding a space before the string)
@@ -253,15 +254,16 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
 
         text = "\nif len_a > len_b:\n    result = a\nelse:\n    result = b\n\n\n\n#"
-        expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
+        expected_truncated_text = "\nif len_a > len_b:\n      result = a\nelse:\n      result = b"
 
         input_ids = tokenizer.encode(text)
         truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
-        self.assertEqual(decoded_text, expected_trucated_text)
+        self.assertEqual(decoded_text, expected_truncated_text)
         # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
 
     # tokenizer has no padding token
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 

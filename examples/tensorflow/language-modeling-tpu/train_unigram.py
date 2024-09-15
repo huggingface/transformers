@@ -42,6 +42,15 @@ def parse_args():
         "--dataset_config", type=str, default="wikitext-103-raw-v1", help="Configuration name of the dataset."
     )
     parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--batch_size",
         type=int,
         default=1000,
@@ -69,7 +78,9 @@ def parse_args():
 
 
 def main(args):
-    dataset = datasets.load_dataset(args.dataset_name, args.dataset_config, split="train")
+    dataset = datasets.load_dataset(
+        args.dataset_name, args.dataset_config, split="train", trust_remote_code=args.trust_remote_code
+    )
 
     if args.limit is not None:
         max_train_samples = min(len(dataset), args.limit)

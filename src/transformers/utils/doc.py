@@ -385,7 +385,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -411,7 +411,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -446,7 +446,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -482,7 +482,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -511,7 +511,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -546,7 +546,7 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -571,7 +571,7 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -803,7 +803,7 @@ TF_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> from transformers import AutoProcessor, {model_class}
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -828,7 +828,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import tensorflow as tf
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -863,7 +863,7 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     >>> from transformers import AutoImageProcessor, {model_class}
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -886,7 +886,7 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> import tensorflow as tf
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")

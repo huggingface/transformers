@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
@@ -179,13 +180,9 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
         use_autobackbone = False
         if self.is_hybrid:
-            if backbone_config is None and backbone is None:
-                logger.info("Initializing the config with a `BiT` backbone.")
+            if backbone_config is None:
                 backbone_config = {
                     "global_padding": "same",
                     "layer_type": "bottleneck",
@@ -193,8 +190,8 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-                backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, dict):
+
+            if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, PretrainedConfig):
@@ -210,9 +207,8 @@ class DPTConfig(PretrainedConfig):
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
 
-        elif backbone_config is not None:
+        elif backbone is not None or backbone_config is not None:
             use_autobackbone = True
-
             if isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
@@ -221,31 +217,37 @@ class DPTConfig(PretrainedConfig):
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
+
+            # We only use load_backbone when config.is_hydrid is False
+            verify_backbone_config_arguments(
+                use_timm_backbone=use_timm_backbone,
+                use_pretrained_backbone=use_pretrained_backbone,
+                backbone=backbone,
+                backbone_config=backbone_config,
+                backbone_kwargs=backbone_kwargs,
+            )
         else:
-            self.backbone_config = backbone_config
+            self.backbone_config = None
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
-
-        if use_autobackbone and backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
-        self.num_attention_heads = None if use_autobackbone else num_attention_heads
-        self.intermediate_size = None if use_autobackbone else intermediate_size
-        self.hidden_dropout_prob = None if use_autobackbone else hidden_dropout_prob
-        self.attention_probs_dropout_prob = None if use_autobackbone else attention_probs_dropout_prob
-        self.layer_norm_eps = None if use_autobackbone else layer_norm_eps
-        self.image_size = None if use_autobackbone else image_size
-        self.patch_size = None if use_autobackbone else patch_size
-        self.num_channels = None if use_autobackbone else num_channels
-        self.qkv_bias = None if use_autobackbone else qkv_bias
+
+        # ViT parameters used if not using a hybrid backbone
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.qkv_bias = qkv_bias
+        self.use_autobackbone = use_autobackbone
         self.backbone_out_indices = None if use_autobackbone else backbone_out_indices
 
         if readout_type not in ["ignore", "add", "project"]:

@@ -92,6 +92,8 @@
     title: Lo que 🤗 Transformers puede hacer
   - local: tasks_explained
     title: Como los 🤗 Transformers resuelven tareas
+  - local: tokenizer_summary
+    title: Descripción general de los tokenizadores
   - local: attention
     title: Mecanismos de atención
   - local: pad_truncation

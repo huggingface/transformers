@@ -89,16 +89,19 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
                 " to use your existing tokenizer, you will have to revert to a version prior to 4.17.0 of"
                 " transformers."
             )
-
         self._wrap_decode_method_backend_tokenizer()
 
     # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
     def _wrap_decode_method_backend_tokenizer(self):
         orig_decode_method = self.backend_tokenizer.decode
 
+        ## define this as a local variable to avoid circular reference
+        ## See: https://github.com/huggingface/transformers/issues/30930
+        end_of_word_suffix = self.backend_tokenizer.model.end_of_word_suffix
+
         def new_decode_method(*args, **kwargs):
             text = orig_decode_method(*args, **kwargs)
-            text = text.replace(self.backend_tokenizer.model.end_of_word_suffix, " ").strip()
+            text = text.replace(end_of_word_suffix, " ").strip()
             return text
 
         self.backend_tokenizer.decode = new_decode_method

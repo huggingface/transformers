@@ -50,7 +50,7 @@ def fit(model, loss, opt, train_dataset, epochs, train_batch_size, max_steps=Non
 
 def get_datasets(tokenizer, train_batch_size, eval_batch_size):
     # Load dataset
-    train_dataset, test_dataset = load_dataset("imdb", split=["train", "test"])
+    train_dataset, test_dataset = load_dataset("stanfordnlp/imdb", split=["train", "test"])
 
     # Preprocess train dataset
     train_dataset = train_dataset.map(

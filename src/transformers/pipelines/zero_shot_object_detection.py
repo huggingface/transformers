@@ -156,6 +156,8 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
             image_features = self.image_processor(image, return_tensors=self.framework)
+            if self.framework == "pt":
+                image_features = image_features.to(self.torch_dtype)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,

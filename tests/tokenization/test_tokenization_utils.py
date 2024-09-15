@@ -35,7 +35,15 @@ from transformers import (
     is_tokenizers_available,
 )
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
-from transformers.testing_utils import CaptureStderr, require_flax, require_tf, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    CaptureStderr,
+    require_flax,
+    require_sentencepiece,
+    require_tf,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 
 if is_tokenizers_available():
@@ -284,3 +292,25 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    def test_len_tokenizer(self):
+        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+                tokenizer = tokenizer_class.from_pretrained("bert-base-uncased")
+                added_tokens_size = len(tokenizer.added_tokens_decoder)
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size)
+
+                tokenizer.add_tokens(["<test_token>"])
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
+
+    @require_sentencepiece
+    def test_sentencepiece_cohabitation(self):
+        from sentencepiece import sentencepiece_model_pb2 as _original_protobuf  # noqa: F401
+
+        from transformers.convert_slow_tokenizer import import_protobuf  # noqa: F401
+
+        # Now this will try to import sentencepiece_model_pb2_new.py. This should not fail even if the protobuf
+        # was already imported.
+        import_protobuf()

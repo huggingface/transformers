@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import ResNetConfig, TvpConfig
-from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers import ResNetConfig, TimmBackboneConfig, TvpConfig
+from transformers.testing_utils import require_timm, require_torch, require_vision, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
@@ -191,7 +191,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="TVPModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for TVP
@@ -211,6 +211,39 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @require_timm
+    def test_backbone_selection(self):
+        def _validate_backbone_init():
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                # Confirm out_indices propogated to backbone
+                if model.__class__.__name__ == "TvpModel":
+                    self.assertEqual(len(model.vision_model.backbone.out_indices), 2)
+                elif model.__class__.__name__ == "TvpForVideoGrounding":
+                    self.assertEqual(len(model.model.vision_model.backbone.out_indices), 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Force load_backbone path
+        config.is_hybrid = False
+
+        # We load through configs, as the modeling file assumes config.backbone_config is always set
+        config.use_pretrained_backbone = False
+        config.backbone_kwargs = None
+
+        # Load a timm backbone
+        # We hack adding hidden_sizes to the config to test the backbone loading
+        backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
+        config.backbone_config = backbone_config
+        _validate_backbone_init()
+
+        # Load a HF backbone
+        backbone_config = ResNetConfig.from_pretrained("facebook/dinov2-small", out_indices=[-2, -1])
+        config.backbone_config = backbone_config
+        _validate_backbone_init()
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -223,7 +256,7 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp") if is_vision_available() else None
+        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp")
 
     def test_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
@@ -264,3 +297,41 @@ class TvpModelIntegrationTests(unittest.TestCase):
         assert outputs.logits.shape == expected_shape
         expected_slice = torch.tensor([[0.5061, 0.4988]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits, expected_slice, atol=1e-4))
+
+    def test_interpolate_inference_no_head(self):
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()  # 480X640
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding, interpolate_pos_encoding=True)
+
+        expected_shape = torch.Size((1, 1212, 128))
+        assert outputs.last_hidden_state.shape == expected_shape
+
+    def test_interpolate_inference_with_head(self):
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()  # 480X640
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding, interpolate_pos_encoding=True, output_hidden_states=True)
+
+        expected_shape = torch.Size((1, 1212, 128))
+        assert outputs.hidden_states[-1].shape == expected_shape

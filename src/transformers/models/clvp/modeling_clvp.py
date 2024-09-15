@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D
+from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -132,7 +132,7 @@ def _pad_extra_bos_eos_tokens(
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
-            if torch.isin(each_input_id, pad_token_id).sum():
+            if isin_mps_friendly(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
                     [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
@@ -238,6 +238,9 @@ class ClvpRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class ClvpRotaryPositionalEmbedding(nn.Module):
@@ -732,7 +735,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
-            config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            config = self.config.get_text_config()
             factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
@@ -1513,19 +1516,19 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.speech_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.speech_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.speech_config)}."
             )
 
         if not isinstance(config.decoder_config, ClvpDecoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.decoder_config is expected to be of type `ClvpDecoderConfig` but is of type"
                 f" {type(config.decoder_config)}."
             )

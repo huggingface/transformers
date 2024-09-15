@@ -520,8 +520,6 @@ src/transformers/models/deprecated/transfo_xl/modeling_transfo_xl_utilities.py
 src/transformers/models/deprecated/van/configuration_van.py
 src/transformers/models/deprecated/van/convert_van_to_pytorch.py
 src/transformers/models/deprecated/van/modeling_van.py
-src/transformers/models/deta/convert_deta_resnet_to_pytorch.py
-src/transformers/models/deta/convert_deta_swin_to_pytorch.py
 src/transformers/models/detr/convert_detr_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/detr/convert_detr_to_pytorch.py
 src/transformers/models/dialogpt/convert_dialogpt_original_pytorch_checkpoint_to_pytorch.py
@@ -541,9 +539,6 @@ src/transformers/models/dpr/modeling_tf_dpr.py
 src/transformers/models/dpt/configuration_dpt.py
 src/transformers/models/dpt/convert_dpt_hybrid_to_pytorch.py
 src/transformers/models/dpt/convert_dpt_to_pytorch.py
-src/transformers/models/efficientformer/configuration_efficientformer.py
-src/transformers/models/efficientformer/convert_efficientformer_original_pytorch_checkpoint_to_pytorch.py
-src/transformers/models/efficientformer/modeling_efficientformer.py
 src/transformers/models/efficientnet/configuration_efficientnet.py
 src/transformers/models/efficientnet/convert_efficientnet_to_pytorch.py
 src/transformers/models/efficientnet/modeling_efficientnet.py
@@ -611,12 +606,6 @@ src/transformers/models/gpt_sw3/convert_megatron_to_pytorch.py
 src/transformers/models/gptj/configuration_gptj.py
 src/transformers/models/gptj/modeling_flax_gptj.py
 src/transformers/models/gptj/modeling_tf_gptj.py
-src/transformers/models/gptsan_japanese/configuration_gptsan_japanese.py
-src/transformers/models/gptsan_japanese/convert_gptsan_tf_checkpoint_to_pytorch.py
-src/transformers/models/gptsan_japanese/modeling_gptsan_japanese.py
-src/transformers/models/graphormer/collating_graphormer.py
-src/transformers/models/graphormer/configuration_graphormer.py
-src/transformers/models/graphormer/modeling_graphormer.py
 src/transformers/models/groupvit/configuration_groupvit.py
 src/transformers/models/groupvit/convert_groupvit_nvlab_to_hf.py
 src/transformers/models/hubert/configuration_hubert.py
@@ -642,9 +631,6 @@ src/transformers/models/instructblip/modeling_instructblip.py
 src/transformers/models/instructblip/processing_instructblip.py
 src/transformers/models/jamba/configuration_jamba.py
 src/transformers/models/jamba/modeling_jamba.py
-src/transformers/models/jukebox/configuration_jukebox.py
-src/transformers/models/jukebox/convert_jukebox.py
-src/transformers/models/jukebox/modeling_jukebox.py
 src/transformers/models/kosmos2/convert_kosmos2_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/led/configuration_led.py
 src/transformers/models/led/modeling_led.py
@@ -688,9 +674,6 @@ src/transformers/models/maskformer/convert_maskformer_swin_to_pytorch.py
 src/transformers/models/maskformer/modeling_maskformer_swin.py
 src/transformers/models/mbart/convert_mbart_original_checkpoint_to_pytorch.py
 src/transformers/models/mbart/modeling_flax_mbart.py
-src/transformers/models/mega/configuration_mega.py
-src/transformers/models/mega/convert_mega_original_pytorch_checkpoint_to_pytorch.py
-src/transformers/models/mega/modeling_mega.py
 src/transformers/models/megatron_bert/convert_megatron_bert_checkpoint.py
 src/transformers/models/megatron_bert/modeling_megatron_bert.py
 src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py
@@ -725,7 +708,6 @@ src/transformers/models/mt5/modeling_tf_mt5.py
 src/transformers/models/musicgen/convert_musicgen_transformers.py
 src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py
 src/transformers/models/mvp/modeling_mvp.py
-src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
 src/transformers/models/nllb_moe/convert_nllb_moe_sharded_original_checkpoint_to_pytorch.py
 src/transformers/models/nllb_moe/modeling_nllb_moe.py
@@ -766,8 +748,6 @@ src/transformers/models/pvt/configuration_pvt.py
 src/transformers/models/pvt/convert_pvt_to_pytorch.py
 src/transformers/models/pvt/image_processing_pvt.py
 src/transformers/models/pvt/modeling_pvt.py
-src/transformers/models/qdqbert/configuration_qdqbert.py
-src/transformers/models/qdqbert/modeling_qdqbert.py
 src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2.py
@@ -778,8 +758,6 @@ src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
 src/transformers/models/rag/retrieval_rag.py
-src/transformers/models/realm/modeling_realm.py
-src/transformers/models/realm/retrieval_realm.py
 src/transformers/models/recurrent_gemma/modeling_recurrent_gemma.py
 src/transformers/models/reformer/convert_reformer_trax_checkpoint_to_pytorch.py
 src/transformers/models/regnet/configuration_regnet.py
@@ -863,8 +841,6 @@ src/transformers/models/timesformer/convert_timesformer_to_pytorch.py
 src/transformers/models/timm_backbone/configuration_timm_backbone.py
 src/transformers/models/timm_backbone/modeling_timm_backbone.py
 src/transformers/models/trocr/convert_trocr_unilm_to_pytorch.py
-src/transformers/models/tvlt/configuration_tvlt.py
-src/transformers/models/tvlt/modeling_tvlt.py
 src/transformers/models/umt5/configuration_umt5.py
 src/transformers/models/umt5/convert_umt5_checkpoint_to_pytorch.py
 src/transformers/models/umt5/modeling_umt5.py
@@ -890,9 +866,6 @@ src/transformers/models/visual_bert/modeling_visual_bert.py
 src/transformers/models/vit/convert_dino_to_pytorch.py
 src/transformers/models/vit/convert_vit_timm_to_pytorch.py
 src/transformers/models/vit/modeling_flax_vit.py
-src/transformers/models/vit_hybrid/configuration_vit_hybrid.py
-src/transformers/models/vit_hybrid/convert_vit_hybrid_timm_to_pytorch.py
-src/transformers/models/vit_hybrid/modeling_vit_hybrid.py
 src/transformers/models/vit_mae/convert_vit_mae_to_pytorch.py
 src/transformers/models/vit_mae/modeling_tf_vit_mae.py
 src/transformers/models/vit_msn/configuration_vit_msn.py
@@ -922,8 +895,6 @@ src/transformers/models/xglm/modeling_xglm.py
 src/transformers/models/xlm/convert_xlm_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/xlm/modeling_tf_xlm.py
 src/transformers/models/xlm/modeling_xlm.py
-src/transformers/models/xlm_prophetnet/configuration_xlm_prophetnet.py
-src/transformers/models/xlm_prophetnet/modeling_xlm_prophetnet.py
 src/transformers/models/xlm_roberta/modeling_flax_xlm_roberta.py
 src/transformers/models/xlm_roberta/modeling_tf_xlm_roberta.py
 src/transformers/models/xlm_roberta/modeling_xlm_roberta.py
@@ -947,7 +918,6 @@ src/transformers/pipelines/audio_classification.py
 src/transformers/pipelines/audio_utils.py
 src/transformers/pipelines/automatic_speech_recognition.py
 src/transformers/pipelines/base.py
-src/transformers/pipelines/conversational.py
 src/transformers/pipelines/depth_estimation.py
 src/transformers/pipelines/document_question_answering.py
 src/transformers/pipelines/feature_extraction.py

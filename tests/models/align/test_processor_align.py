@@ -18,7 +18,6 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
@@ -26,15 +25,17 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AlignProcessor, EfficientNetImageProcessor
 
 
 @require_vision
-class AlignProcessorTest(unittest.TestCase):
+class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = AlignProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -62,8 +63,6 @@ class AlignProcessorTest(unittest.TestCase):
         image_processor_map = {
             "do_resize": True,
             "size": 20,
-            "do_center_crop": True,
-            "crop_size": 18,
             "do_normalize": True,
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
@@ -83,15 +82,6 @@ class AlignProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        return image_inputs
 
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
@@ -159,7 +149,6 @@ class AlignProcessorTest(unittest.TestCase):
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str, padding="max_length", max_length=64)
-
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 

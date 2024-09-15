@@ -207,7 +207,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -236,7 +236,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tgt_lang="ron_Latn",
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified
@@ -253,7 +253,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -290,7 +290,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
-    @unittest.skip("Need to fix this after #26538")
+    @unittest.skip(reason="Need to fix this after #26538")
     def test_training_new_tokenizer(self):
         pass
 

@@ -1,5 +1,5 @@
 absl-py==1.0.0
-aiohttp==3.9.0
+aiohttp==3.10.2
 aiosignal==1.2.0
 alembic==1.7.7
 appdirs==1.4.4
@@ -20,7 +20,7 @@ boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
 cachetools==5.0.0
-certifi==2023.7.22
+certifi==2024.7.4
 cffi==1.15.0
 chardet==4.0.0
 charset-normalizer==2.0.12
@@ -34,7 +34,7 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==42.0.0
+cryptography==43.0.1
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
@@ -79,7 +79,7 @@ gym-notices==0.0.6
 h5py==3.6.0
 huggingface-hub==0.4.0
 hypothesis==6.39.4
-idna==3.3
+idna==3.7
 imageio==2.16.1
 importlib-metadata==4.11.3
 importlib-resources==5.4.0
@@ -97,7 +97,7 @@ jinja2-time==0.2.0
 jmespath==0.10.0
 joblib==1.2.0
 jsonschema==4.4.0
-keras==2.8.0
+keras==2.13.1
 Keras-Preprocessing==1.1.2
 kiwisolver==1.4.0
 kubernetes==12.0.1
@@ -115,7 +115,7 @@ mujoco-py==2.1.2.14
 multidict==6.0.2
 multiprocess==0.70.12.2
 mypy-extensions==0.4.3
-nltk==3.7
+nltk==3.9
 numba==0.55.1
 numpy==1.22.3
 oauthlib==3.2.2
@@ -133,7 +133,7 @@ pbr==5.8.1
 pexpect==4.8.0
 phonemizer==3.0.1
 pickleshare==0.7.5
-Pillow==10.2.0
+Pillow==10.3.0
 Pint==0.16.1
 plac==1.3.4
 platformdirs==2.5.1
@@ -187,7 +187,7 @@ rsa==4.8
 s3transfer==0.3.7
 sacrebleu==1.5.1
 sacremoses==0.0.49
-scikit-learn==1.0.2
+scikit-learn==1.5.0
 scipy==1.8.0
 segments==2.2.0
 sentencepiece==0.1.96
@@ -205,7 +205,7 @@ tensorboard==2.8.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5
-tensorflow==2.11.1
+tensorflow==2.12.1
 tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 text-unidecode==1.3
@@ -217,7 +217,7 @@ timm==0.5.4
 tokenizers==0.11.6
 tomli==2.0.1
 toolz==0.11.2
-torch==1.13.1
+torch==2.2.0
 torchaudio==0.11.0
 torchvision==0.12.0
 tqdm==4.66.3
@@ -229,7 +229,7 @@ tzlocal==4.1
 unidic==1.1.0
 unidic-lite==1.0.8
 uritemplate==4.1.1
-urllib3==1.26.18
+urllib3==1.26.19
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1
@@ -237,4 +237,4 @@ Werkzeug==3.0.3
 wrapt==1.14.0
 xxhash==3.0.0
 yarl==1.7.2
-zipp==3.7.0
+zipp==3.19.1

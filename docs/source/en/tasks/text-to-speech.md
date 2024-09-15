@@ -281,7 +281,7 @@ containing the corresponding speaker embedding.
 ```py
 >>> import os
 >>> import torch
->>> from speechbrain.pretrained import EncoderClassifier
+>>> from speechbrain.inference.classifiers import EncoderClassifier
 
 >>> spk_model_name = "speechbrain/spkrec-xvect-voxceleb"
 
@@ -580,7 +580,7 @@ Load the model from the 🤗 Hub:
 >>> model = SpeechT5ForTextToSpeech.from_pretrained("YOUR_ACCOUNT/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Pick an example from the test dataset obtain a speaker embedding. 
+Pick an example from the test dataset to obtain a speaker embedding. 
 
 ```py 
 >>> example = dataset["test"][304]

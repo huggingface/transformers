@@ -56,15 +56,15 @@ impact performance. Here's a breakdown of your options:
 If your model can comfortably fit onto a single GPU, you have two primary options:
 
 1. DDP - Distributed DataParallel
-2. ZeRO - depending on the situation and configuration used, this method may or may not be faster, however, it's worth experimenting with it.
+2. [Zero Redundancy Optimizer (ZeRO)](https://arxiv.org/abs/1910.02054) - depending on the situation and configuration used, this method may or may not be faster, however, it's worth experimenting with it.
 
 **Case 2: Your model doesn't fit onto a single GPU:**
 
 If your model is too large for a single GPU, you have several alternatives to consider:
 
 1. PipelineParallel (PP)
-2. ZeRO
-3. TensorParallel (TP)
+2. [ZeRO](https://arxiv.org/abs/1910.02054)
+3. [TensorParallel](#tensor-parallelism) (TP)
 
 With very fast inter-node connectivity (e.g., NVLINK or NVSwitch) all three strategies (PP, ZeRO, TP) should result in 
 similar performance. However, without these, PP will be faster than TP or ZeRO. The degree of TP may also 

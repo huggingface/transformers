@@ -19,12 +19,11 @@ import tempfile
 import unittest
 from typing import List
 
-import numpy as np
-
 from transformers import (
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,
 )
@@ -37,6 +36,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_torch_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -45,16 +46,17 @@ if is_torch_available():
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor, UdopProcessor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 @require_pytesseract
 @require_sentencepiece
 @require_tokenizers
-class UdopProcessorTest(unittest.TestCase):
+class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
     maxDiff = None
+    processor_class = UdopProcessor
 
     def setUp(self):
         image_processor_map = {
@@ -70,6 +72,11 @@ class UdopProcessorTest(unittest.TestCase):
 
         self.tokenizer_pretrained_name = "microsoft/udop-large"
 
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizers()[0]
+        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
@@ -84,17 +91,6 @@ class UdopProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()
@@ -185,7 +181,7 @@ class UdopProcessorTest(unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd")
+        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
         processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
 
         def preprocess_data(examples):
@@ -223,7 +219,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
