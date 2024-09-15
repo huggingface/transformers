@@ -540,7 +540,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
-
     @slow
     @require_bitsandbytes
     def test_integration_test_4bit_batch2(self):
