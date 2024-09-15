@@ -2222,6 +2222,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # distribution that has old embeddings' mean and covariance. as described in this article:
         # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
         if new_num_tokens > old_num_tokens:
+            logger.warning(
+                "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html."
+            )
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
