@@ -502,7 +502,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         generate_kwargs["num_frames"] = num_frames
 
             tokens = self.model.generate(
-                inputs=inputs,
+                input_features=inputs,
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
