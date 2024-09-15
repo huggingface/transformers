@@ -293,23 +293,34 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.max_aspect_ratio_id = config.max_aspect_ratio_id
         self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
-        self.is_gated = True  # just for now :wink:
+        self.scale = config.vision_input_dim**-0.5
+        
+        self.gate = nn.Parameter(torch.zeros(1))
 
-        precomputed_embeddings = torch.zeros(
+        # position embedding
+        position_embedding = torch.randn(self.num_patches, self.hidden_size)
+        self.embedding = nn.Parameter(self.scale * position_embedding)
+        
+        # tile position embedding
+        precomputed_tile_embeddings = torch.zeros(
             self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
         )
-        self.gate = nn.Parameter(torch.zeros(1))
-        self.weight = torch.nn.Parameter(precomputed_embeddings)
+        self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
+
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        embeddings = self.weight[aspect_ratio_ids]
+        
+        # position embeddings
+        gated_position_embedding = (1 - self.gate.tanh()) * self.embedding
+        hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
+
+        # precomputed tile position embeddings
+        tile_position_embedding = self.tile_embedding[aspect_ratio_ids]
         batch = hidden_state.shape[0]
-        embeddings = embeddings.reshape(batch, -1, self.num_patches, self.hidden_size)
+        tile_position_embedding = tile_position_embedding.reshape(batch, -1, self.num_patches, self.hidden_size)
+        gated_tile_position_embedding = self.gate.tanh() * tile_position_embedding
+        hidden_state = hidden_state + gated_tile_position_embedding
 
-        if self.is_gated:
-            embeddings = embeddings * self.gate.tanh()
-
-        hidden_state = hidden_state + embeddings
         return hidden_state
 
 
@@ -538,8 +549,6 @@ class MllamaVisionModel(PreTrainedModel):
         )
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
-        positional_embedding = torch.randn(self.num_patches, self.hidden_size)
-        self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
         self.gated_positional_embedding = MllamaPrecomputedPositionEmbedding(config)
 
         self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
@@ -594,8 +603,6 @@ class MllamaVisionModel(PreTrainedModel):
 
         # apply position embeddings
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches, dim)
-        # TODO: @pavel reafactor it
-        hidden_state = hidden_state + self.positional_embedding[None, None] * (1 - self.gated_positional_embedding.gate.tanh())
         hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply encoder

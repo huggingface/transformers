@@ -79,7 +79,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2":       r"vision_model.\1.layers.\2.post_attention_layernorm",
     r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
     r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
-    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.weight',
+    r'vision_model.vision_encoder.positional_embedding\b':                                      r'vision_model.gated_positional_embedding.embedding',
+    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.tile_embedding',
     r'vision_model.vision_encoder.gated_positional_embedding_gate':                             r'vision_model.gated_positional_embedding.gate',
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
@@ -330,7 +331,7 @@ def write_model(
         elif new_key.endswith("gate"):
             state_dict[new_key] = current_parameter[0].view(1)
 
-        elif "tile_pos_embed.embedding" in new_key or "gated_positional_embedding.weight" in new_key:
+        elif "tile_pos_embed.embedding" in new_key or "gated_positional_embedding.tile_embedding" in new_key:
             # pre-compute the embeddings
             state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
 
