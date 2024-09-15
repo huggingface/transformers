@@ -247,7 +247,7 @@ def write_model(
         num_local_key_value_heads = n_heads_per_shard
         key_value_dim = dim
 
-    print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
+    print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     if num_shards == 1:
         loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu", mmap=True)]
     else:
@@ -256,13 +256,15 @@ def write_model(
             for i in range(num_shards)
         ]
 
-    print("1. Converting language model")
+    print("Converting model...")
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
     cross_attention_frequency = math.ceil(n_layers / n_layers_cross_attention)
-    cross_layer_shift = list(range(n_layers))[cross_attention_frequency - 1 :: cross_attention_frequency]
-    attn_layer_shift = [k for k in range(len(cross_layer_shift) + n_layers) if k not in cross_layer_shift]
+    n_total_layers = n_layers + n_layers_cross_attention
+    cross_layer_shift = list(range(cross_attention_frequency - 1, n_total_layers, cross_attention_frequency + 1))
+    attn_layer_shift = [k for k in range(n_total_layers) if k not in cross_layer_shift]
+
 
     state_dict = {}
     for key in all_keys:
@@ -310,9 +312,6 @@ def write_model(
                 dim=concat_dim,
             )
             state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
-
-        elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
-            state_dict[new_key] = current_parameter.view(-1, 2).t().reshape(-1)
 
         elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
             param = torch.cat(
