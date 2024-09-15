@@ -6008,7 +6008,6 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5Config
-    from .models.timesfm import TimesFMConfig
     from .models.table_transformer import (
         TableTransformerConfig,
     )
@@ -6020,6 +6019,7 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
+    from .models.timesfm import TimesFMConfig
     from .models.timesformer import (
         TimesformerConfig,
     )
@@ -8430,11 +8430,6 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
-        from .models.timesfm import (
-            TimesFMForPrediction,
-            TimesFMModel,
-            TimesFMPreTrainedModel,
-        )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,
             TableTransformerModel,
@@ -8458,6 +8453,11 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
+        )
+        from .models.timesfm import (
+            TimesFMForPrediction,
+            TimesFMModel,
+            TimesFMPreTrainedModel,
         )
         from .models.timesformer import (
             TimesformerForVideoClassification,
