@@ -53,6 +53,7 @@ from .integrations import (
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
+    GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
@@ -102,6 +103,7 @@ from .utils import (
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
+    is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
@@ -113,6 +115,7 @@ from .utils import (
     is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
+    is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
@@ -368,6 +371,14 @@ def require_grokadamw(test_case):
     return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
 
 
+def require_schedulefree(test_case):
+    """
+    Decorator marking a test that requires schedulefree. These tests are skipped when schedulefree isn't installed.
+    https://github.com/facebookresearch/schedule_free
+    """
+    return unittest.skipUnless(is_schedulefree_available(), "test requires schedulefree")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -407,11 +418,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     )(test_case)
 
 
-def require_gguf(test_case):
+def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
     Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
     """
-    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
+    return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
+        test_case
+    )
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
@@ -1223,6 +1236,13 @@ def require_cython(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
+
+
+def require_tiktoken(test_case):
+    """
+    Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
+    """
+    return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
 
 
 def get_gpu_count():
