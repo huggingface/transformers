@@ -78,10 +78,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_1":       r"vision_model.\1.layers.\2.input_layernorm",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2":       r"vision_model.\1.layers.\2.post_attention_layernorm",
     r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
-    r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
+    r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.layernorm_\1.\2',
     r'vision_model.vision_encoder.positional_embedding\b':                                      r'vision_model.gated_positional_embedding.embedding',
-    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.tile_embedding',
+    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.tile_embedding.weight',
     r'vision_model.vision_encoder.gated_positional_embedding_gate':                             r'vision_model.gated_positional_embedding.gate',
+    r"vision_model.vision_encoder.pre_tile_pos_embed.embedding":                                r"vision_model.pre_tile_positional_embedding.embedding.weight",
+    r"vision_model.vision_encoder.post_tile_pos_embed.embedding":                               r"vision_model.post_tile_positional_embedding.embedding.weight",
+    r"vision_model.vision_encoder.pre_tile_pos_embed.gate":                                     r"vision_model.pre_tile_positional_embedding.gate",
+    r"vision_model.vision_encoder.post_tile_pos_embed.gate":                                    r"vision_model.post_tile_positional_embedding.gate",
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
@@ -159,6 +163,7 @@ def pre_compute_positional_embedding(embedding):
         aspect_ratio_id = i + 1  # we keep 0 index for padding
         current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
         precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
+    precomputed_embeddings = precomputed_embeddings.flatten(1)
     return precomputed_embeddings
 
 
@@ -230,6 +235,7 @@ def write_model(
     num_channels = 3
     # intermediate size: 28672 for 90B, 5120 for 11B
     intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])
+    intermediate_layers_indices = [3, 7, 15, 23, 30]  # TODO: Check for 90B model
 
     # vision model
     n_layers_vision = 32  # constant
@@ -338,7 +344,9 @@ def write_model(
         elif new_key.endswith("gate"):
             state_dict[new_key] = current_parameter[0].view(1)
 
-        elif "tile_pos_embed.embedding" in new_key or "gated_positional_embedding.tile_embedding" in new_key:
+        elif (
+            "tile_positional_embedding.embedding" in new_key or "gated_positional_embedding.tile_embedding" in new_key
+        ):
             # pre-compute the embeddings
             state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
 
@@ -360,12 +368,13 @@ def write_model(
     # Write configs
     config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
+        hidden_size=dim_vision,  # Constant, taken directly from your notes
+        intermediate_size=dim_vision * 4,
         num_hidden_layers=n_layers_vision,
-        vision_input_dim=dim_vision,  # Constant, taken directly from your notes
-        return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
-        num_global_layers=n_layers_vision_global,
-        vision_chunk_size=params["vision_chunk_size"],
         num_attention_heads=n_heads_vision,
+        num_global_layers=n_layers_vision_global,
+        intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
+        image_size=params["vision_chunk_size"],
         max_num_tiles=4,
         supported_aspect_ratios=get_all_supported_aspect_ratios(4),
     )
@@ -373,7 +382,6 @@ def write_model(
         **config_parameters,
         num_hidden_layers=len(cross_layer_shift) + n_layers,
         cross_attention_layers=cross_layer_shift,
-        vision_input_dim=dim_vision,  # Constant, aligned with vision config
         attention_bias=False,  # Constant set to False
         tie_word_embeddings=False,  # Constant set to False
         intermediate_size=intermediate_size,

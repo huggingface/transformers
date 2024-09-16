@@ -35,6 +35,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mllama"] = [
         "MllamaForConditionalGeneration",
+        "MllamaForCausalLM",
         "MllamaPreTrainedModel",
     ]
 
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mllama import (
             MllamaForConditionalGeneration,
+            MllamaForCausalLM,
             MllamaPreTrainedModel,
         )
 

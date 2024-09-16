@@ -87,41 +87,32 @@ class MllamaVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         num_global_layers=8,
-        vision_chunk_size=448,
         projection_dim=4096,
-        vision_input_dim=1280,
         vision_output_dim=7680,
-        return_intermediate=None,
+        intermediate_layers_indices=[3, 7, 15, 23, 30],
         max_num_tiles=4,  # same as vision max num chunks? yes ;-)
         norm_eps=1.0e-5,
         in_channels=3,
         supported_aspect_ratios=None,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.layer_norm_eps = layer_norm_eps
         self.vision_output_dim = vision_output_dim
-        self.vision_chunk_size = vision_chunk_size
         self.patch_size = patch_size
         self.projection_dim = projection_dim
-        self.vision_input_dim = vision_input_dim
-        if return_intermediate is None:
-            return_intermediate = [3, 7, 15, 23, 30]
-        self.return_intermediate = return_intermediate
+        self.intermediate_layers_indices = intermediate_layers_indices
         self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
         self.norm_eps = norm_eps
         self.in_channels = in_channels
-
-        self.hidden_size = vision_input_dim
         self.attention_heads = num_attention_heads
-        self.intermediate_size = 4 * vision_input_dim
-        self.hidden_act = hidden_act
         self.supported_aspect_ratios = supported_aspect_ratios
 
     @property

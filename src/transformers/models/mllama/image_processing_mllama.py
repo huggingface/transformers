@@ -343,8 +343,6 @@ def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: in
             The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
     """
     batch_size = len(aspect_ratios)
-
-    # TODO: in original code there is also max_images = max(max_images, 1)
     max_num_images = max([len(row) for row in aspect_ratios])
 
     aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)

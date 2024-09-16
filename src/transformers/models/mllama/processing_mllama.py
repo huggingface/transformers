@@ -21,11 +21,10 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-# TODO: uncomment
-# try:
-#     from typing import Unpack
-# except ImportError:
-from typing_extensions import Unpack
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -171,17 +170,17 @@ class MllamaProcessor(ProcessorMixin):
 
         processor(
             images=your_pil_image,
-            text=["What is that?"],
-            images_kwargs = {"size": {"height": 224, "width": 224}},
+            text=["<|image|><|begin_of_text|>If I had to write a haiku for this one"],
+            images_kwargs = {"size": {"height": 448, "width": 448}},
             text_kwargs = {"padding": "left"},
             common_kwargs = {"return_tensors": "pt"},
         )
         ```
 
     Args:
-        image_processor ([`EfficientNetImageProcessor`]):
+        image_processor ([`MllamaImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`BertTokenizer`, `BertTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
             The tokenizer is a required input.
 
     """
@@ -246,9 +245,6 @@ class MllamaProcessor(ProcessorMixin):
         text_kwargs = output_kwargs["text_kwargs"]
         images_kwargs = output_kwargs["images_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
-
-        # remove the return_tensors key modality kwargs
-        images_kwargs.pop("return_tensors", None)
 
         data = {}
         if text is not None:

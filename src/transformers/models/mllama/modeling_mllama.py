@@ -32,7 +32,9 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
@@ -42,6 +44,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MllamaConfig"
 
 
+# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -76,7 +79,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     """
     if attention_mask is not None and attention_mask.dim() == 4:
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-        causal_mask = attention_mask.to(device)
+        causal_mask = attention_mask
     else:
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
@@ -95,7 +98,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     return causal_mask
 
 
-def prepare_cross_attention_mask(
+def _prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
     past_key_values: Cache,
     num_vision_tokens: int,
@@ -147,7 +150,7 @@ def prepare_cross_attention_mask(
     return cross_attention_mask, full_text_row_masked_out_mask
 
 
-def prepare_aspect_ratio_attention_mask(
+def _prepare_aspect_ratio_attention_mask(
     aspect_ratio_mask: torch.Tensor,
     num_patches: int,
     target_length: int,
@@ -174,95 +177,20 @@ def prepare_aspect_ratio_attention_mask(
     return attention_mask
 
 
-@dataclass
-class MllamaOutput(ModelOutput):
-    loss: torch.FloatTensor = None
-    logits: torch.FloatTensor = None
-    past_key_values: List[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-
-
-class MllamaPatchEmbedding(nn.Module):
-    """Conv2D Patching layer implemented as linear layer operation.
-    (can be later replaced with Conv2d(bias=False) + .flatten(2).transpose(1, 2) with small logits mismatch)
-
-    Arguments:
-        in_channels: Input channels.
-        out_channels: Output channels.
-        kernel_size: Size of convolution kernel.
-        stride (default 1): Stride for convolution.
-    Input: (bsz, in_channels, width, height)
-    Output: (bsz, num_tokens, out_channels)
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: Union[int, Tuple[int, int]],
-        stride: Union[int, Tuple[int, int]],
-    ) -> None:
+class MllamaPrecomputedAspectRatioEmbedding(nn.Module):
+    def __init__(self, config: MllamaVisionConfig, is_gated: bool = True):
         super().__init__()
-
-        if isinstance(kernel_size, int):
-            kernel_size = (kernel_size, kernel_size)
-
-        self.out_channels = out_channels
-        self.in_channels = in_channels
-        self.kernel_size = kernel_size
-        self.stride = stride
-
-        self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
-
-        # param equivalent to Conv2d weight, it will be reshaped in forward to fit Linear layer,
-        # to be fully equivalent original implementation
-        self.weight = torch.nn.Parameter(
-            torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
-            requires_grad=True,
-        )
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.unfold(hidden_state)
-        hidden_state = hidden_state.permute(0, 2, 1)
-        hidden_state = hidden_state.to(self.weight.data.device)
-        hidden_state = F.linear(hidden_state, self.weight.view(self.out_channels, -1))
-        return hidden_state
-
-
-class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
-    def __init__(self, max_num_tiles, max_aspect_ratio_id, hidden_size, is_gated, **kwargs):
-        super().__init__()
-        self.max_num_tiles = max_num_tiles
-        self.hidden_size = hidden_size
+        self.max_num_tiles = config.max_num_tiles
+        self.hidden_size = config.hidden_size
+        self.max_aspect_ratio_id = config.max_aspect_ratio_id
         self.is_gated = is_gated
 
-        scale = hidden_size**-0.5
-        self.embedding = nn.Parameter(
-            torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale
-        )
+        self.embedding = nn.Embedding(self.max_aspect_ratio_id + 1, self.max_num_tiles * self.hidden_size)
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
-    @staticmethod
-    def _dynamic_resize(embedding: torch.Tensor, num_tiles: int):
-        # TODO this no longer really hodls as we need to take into account the pre-computation!
-        embedding = embedding.permute(2, 3, 0, 1)
-
-        embedding_new = F.interpolate(
-            embedding,
-            size=(num_tiles, num_tiles),
-            mode="bilinear",
-            align_corners=True,
-        )
-        # reshape the weights to the correct shape
-        embedding_new = embedding_new.permute(2, 3, 0, 1)
-        return embedding_new
-
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        # TODO use torch.nn.functionnal.embedding for compile compatibility
-        embeddings = self.embedding[aspect_ratio_ids]
+        embeddings = self.embedding(aspect_ratio_ids)
         embeddings = embeddings.reshape(-1, self.max_num_tiles, 1, self.hidden_size)
 
         if self.is_gated:
@@ -273,14 +201,13 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
 
 
 class MllamaPrecomputedPositionEmbedding(nn.Module):
-    def __init__(self, config, *args, **kwargs):
-        self.config = config
-        super().__init__(**kwargs)
+    def __init__(self, config: MllamaVisionConfig):
+        super().__init__()
         self.max_num_tiles = config.max_num_tiles
         self.max_aspect_ratio_id = config.max_aspect_ratio_id
-        self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
-        self.hidden_size = config.vision_input_dim
-        self.scale = config.vision_input_dim**-0.5
+        self.num_patches = (config.image_size // config.patch_size) ** 2 + 1
+        self.hidden_size = config.hidden_size
+        self.scale = config.hidden_size**-0.5
 
         self.gate = nn.Parameter(torch.zeros(1))
 
@@ -289,10 +216,9 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.embedding = nn.Parameter(self.scale * position_embedding)
 
         # tile position embedding
-        precomputed_tile_embeddings = torch.zeros(
-            self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
+        self.tile_embedding = nn.Embedding(
+            self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size
         )
-        self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
         # position embeddings
@@ -300,9 +226,11 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
 
         # precomputed tile position embeddings
-        tile_position_embedding = self.tile_embedding[aspect_ratio_ids]
-        batch = hidden_state.shape[0]
-        tile_position_embedding = tile_position_embedding.reshape(batch, -1, self.num_patches, self.hidden_size)
+        tile_position_embedding = self.tile_embedding(aspect_ratio_ids)
+        batch_size = hidden_state.shape[0]
+        tile_position_embedding = tile_position_embedding.reshape(
+            batch_size, self.max_num_tiles, self.num_patches, self.hidden_size
+        )
         gated_tile_position_embedding = self.gate.tanh() * tile_position_embedding
         hidden_state = hidden_state + gated_tile_position_embedding
 
@@ -334,10 +262,6 @@ class MllamaVisionSdpaAttention(nn.Module):
         self.num_kv_heads = getattr(config, "num_kv_heads", config.attention_heads)
         self.head_dim = config.hidden_size // config.attention_heads
 
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
@@ -512,17 +436,15 @@ class MllamaVisionModel(PreTrainedModel):
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
         self.max_num_tiles = config.max_num_tiles
-        self.hidden_size = config.vision_input_dim
+        self.hidden_size = config.hidden_size
         self.in_channels = config.in_channels
-        self.vision_selection_layers = config.return_intermediate
+        self.intermediate_layers_indices = config.intermediate_layers_indices
 
-        self.image_size = [config.vision_chunk_size, config.vision_chunk_size]
-        self.patch_size = [config.patch_size, config.patch_size]
-        self.num_patches_height = self.image_size[0] // self.patch_size[0]
-        self.num_patches_width = self.image_size[1] // self.patch_size[1]
-        self.num_patches = self.num_patches_height * self.num_patches_width + 1
-        self.scale = config.vision_input_dim**-0.5
+        self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
+        self.scale = config.hidden_size**-0.5
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.in_channels,
@@ -536,27 +458,16 @@ class MllamaVisionModel(PreTrainedModel):
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
         self.gated_positional_embedding = MllamaPrecomputedPositionEmbedding(config)
 
-        self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
-            max_num_tiles=config.max_num_tiles,
-            max_aspect_ratio_id=config.max_aspect_ratio_id,
-            hidden_size=self.hidden_size,
-            is_gated=True,
-        )
-        self.post_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
-            max_num_tiles=config.max_num_tiles,
-            max_aspect_ratio_id=config.max_aspect_ratio_id,
-            hidden_size=self.hidden_size,
-            is_gated=True,
-        )
+        self.pre_tile_positional_embedding = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
+        self.post_tile_positional_embedding = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
 
         # layer norms
-        self.ln_post = nn.LayerNorm(self.hidden_size)
-        self.ln_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_post = nn.LayerNorm(self.hidden_size)
 
         # encoders
         self.transformer = MllamaVisionEncoder(config, config.num_hidden_layers, is_gated=False)
         self.global_transformer = MllamaVisionEncoder(config, config.num_global_layers, is_gated=True)
-        self.output_dim = config.projection_dim
 
     def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
         batch_size, _, hidden_size = hidden_state.shape
@@ -579,7 +490,7 @@ class MllamaVisionModel(PreTrainedModel):
         # tile embeddings
         _, num_patches, dim = hidden_state.shape
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
-        hidden_state = self.pre_tile_pos_embed(hidden_state, aspect_ratio_ids)
+        hidden_state = self.pre_tile_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply cls token
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_patches, dim)
@@ -591,7 +502,7 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply encoder
-        hidden_state = self.ln_pre(hidden_state)
+        hidden_state = self.layernorm_pre(hidden_state)
 
         # Compute the number of tokens to pad
         num_padding_patches = (8 - (hidden_state.shape[-2] % 8)) % 8
@@ -603,7 +514,7 @@ class MllamaVisionModel(PreTrainedModel):
 
         if attention_mask is not None:
             attention_mask = attention_mask.reshape(batch_size * num_concurrent_media, -1)
-            attention_mask = prepare_aspect_ratio_attention_mask(
+            attention_mask = _prepare_aspect_ratio_attention_mask(
                 aspect_ratio_mask=attention_mask,
                 num_patches=self.num_patches,
                 target_length=hidden_state.shape[2],
@@ -616,18 +527,20 @@ class MllamaVisionModel(PreTrainedModel):
             attention_mask=attention_mask,
             output_hidden_states=True,
         )
-        hidden_state = output[0]  # last-hidden-state
+        hidden_state, all_intermediate_hidden_states = output[0], output[1]
         intermediate_hidden_states = [
-            hidden_state for idx, hidden_state in enumerate(output[1]) if idx in self.vision_selection_layers
+            hidden_state
+            for idx, hidden_state in enumerate(all_intermediate_hidden_states)
+            if idx in self.intermediate_layers_indices
         ]
-        intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)  # hidden-states stacked
+        intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
 
         # apply global encoder
-        hidden_state = self.ln_post(hidden_state)
+        hidden_state = self.layernorm_post(hidden_state)
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
         )
-        hidden_state = self.post_tile_pos_embed(hidden_state, aspect_ratio_ids)
+        hidden_state = self.post_tile_positional_embedding(hidden_state, aspect_ratio_ids)
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles * (num_patches + num_padding_patches), dim
         )
@@ -650,7 +563,7 @@ class MllamaVisionModel(PreTrainedModel):
         return hidden_state
 
 
-# Copied from Mllama
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mllama
 class MllamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -692,10 +605,10 @@ class MllamaTextCrossAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.q_norm = MllamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MllamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -757,6 +670,7 @@ class MllamaTextCrossAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -764,7 +678,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -791,6 +706,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -891,7 +807,7 @@ MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention, "sdpa"
 MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention, "sdpa": MllamaTextSelfAttention}
 
 
-# Copied from gemma2
+# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2MLP with Gemma2->MllamaText
 class MllamaTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -907,12 +823,12 @@ class MllamaTextMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# Copied from LlamaDecoderLayer
+# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
-    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
         super().__init__()
-        self.layer_id = layer_id
-        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_id)
+        self.layer_idx = layer_idx
+        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = MllamaTextMLP(config)
         self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -929,6 +845,28 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -943,6 +881,7 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = residual + hidden_states.to(residual.device)
 
@@ -966,10 +905,10 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
 class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
 
-    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
         super().__init__()
-        self.layer_id = layer_id
-        self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_id)
+        self.layer_idx = layer_idx
+        self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
@@ -1079,6 +1018,23 @@ class MllamaRotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+MLLAMA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MllamaConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 class MllamaPreTrainedModel(PreTrainedModel):
@@ -1338,10 +1294,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
-    def __init__(self, config, attn_implementation):
+    def __init__(self, config):
         super().__init__(config)
-        self.model = MllamaTextModel._from_config(config, attn_implementation=attn_implementation)
         self.vocab_size = config.vocab_size
+        self.model = MllamaTextModel._from_config(config, attn_implementation=config._attn_implementation)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1400,10 +1356,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LlamaForCausalLM
+        >>> from transformers import AutoTokenizer, MllamaForCausalLM
 
-        >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        >>> model = MllamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-11b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-11b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1541,7 +1497,87 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         return model_inputs
 
 
-MLLAMA_START_DOCSTRING = ""  # TODO add docstring to MLLAMA start and other classes
+MLLAMA_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`MllamaImageProcessor.__call__`] for details ([]`MllamaProcessor`] uses
+            [`MllamaImageProcessor`] for processing images).
+        aspect_ratio_mask: Optional[List[List[int]]] = None, # TODO
+        aspect_ratio_ids: Optional[torch.Tensor] = None, # TODO
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attention_mask: Optional[torch.Tensor] = None, # TODO
+        cross_attention_states: Optional[torch.Tensor] = None, # TODO
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
 
 
 @add_start_docstrings(
@@ -1553,23 +1589,23 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.hidden_size = self.config.text_config.hidden_size
+        self.max_num_tiles = config.vision_config.max_num_tiles
+        self.vision_output_dim = config.vision_config.vision_output_dim
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+
         self.vision_model = MllamaVisionModel._from_config(
             config.vision_config, attn_implementation=config._attn_implementation
+        )
+        self.language_model = MllamaForCausalLM._from_config(
+            config.text_config, attn_implementation=config._attn_implementation
         )
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
-            #! originally bias=True, but bias was not used in original forward pass
             bias=True,
         )
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = MllamaForCausalLM(config.text_config, attn_implementation=config._attn_implementation)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.post_init()
-        self.hidden_size = self.config.text_config.hidden_size
-        self.max_num_tiles = config.vision_config.max_num_tiles
-        self.vision_output_dim = config.vision_config.vision_output_dim
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1593,11 +1629,13 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
-        aspect_ratio_mask: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
+        pixel_values: Optional[torch.FloatTensor] = None,
+        aspect_ratio_mask: Optional[List[List[int]]] = None,
         aspect_ratio_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[List[List[List[int]]]] = None,
         cross_attention_mask: Optional[torch.Tensor] = None,
@@ -1612,7 +1650,44 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
-    ) -> MllamaOutput:
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, MllamaForConditionalGeneration
+
+        >>> model = MllamaForConditionalGeneration.from_pretrained("<mllama-checkpoint>")
+        >>> processor = AutoProcessor.from_pretrained("<mllama-checkpoint>")
+
+        >>> prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "TODO: fill this out"
+        ```"""
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1635,7 +1710,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 -1, cross_attention_states.shape[-2], self.hidden_size
             )
 
-        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+        cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
             cross_attention_mask,
             past_key_values=past_key_values,
             num_vision_tokens=self.vision_model.num_patches,
@@ -1645,17 +1720,18 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
+        if cross_attention_mask is not None:
+            cross_attention_mask = cross_attention_mask[:, :, cache_position]
+        if full_text_row_masked_out_mask is not None:
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+
         outputs = self.language_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask[:, :, cache_position]
-            if cross_attention_mask is not None
-            else None,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position]
-            if cross_attention_mask is not None
-            else None,
+            cross_attention_mask=cross_attention_mask,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,

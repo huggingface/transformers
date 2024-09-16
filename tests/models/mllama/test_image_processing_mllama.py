@@ -286,7 +286,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(aspect_ratio_mask, [1, 1, 1, 0])
 
         # image fits 1x1 grid (width x height)
-        # image fits 1x1 grid (width x height)
         image = Image.new("RGB", (20, 39))
         inputs = image_processor(image, return_tensors="np")
         pixel_values = inputs.pixel_values
