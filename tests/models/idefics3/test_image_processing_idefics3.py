@@ -225,16 +225,12 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
-            encoded_images = image_processing(
-                image_inputs[0], return_tensors="pt"
-            ).pixel_values
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            encoded_images = image_processing(
-                image_inputs, return_tensors="pt"
-            ).pixel_values
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
                 tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)

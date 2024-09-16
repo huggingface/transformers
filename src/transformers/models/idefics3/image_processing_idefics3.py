@@ -266,7 +266,9 @@ def to_pil_image(
     image = to_numpy_array(image)
 
     # If the channel has been moved to first dim, we put it back at the end.
-    image = to_channel_dimension_format(image, ChannelDimension.LAST, infer_channel_dimension_format(image, num_channels=(1, 3, 4)))
+    image = to_channel_dimension_format(
+        image, ChannelDimension.LAST, infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+    )
 
     # If there is a single channel, we squeeze it, as otherwise PIL can't handle it.
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
@@ -459,6 +461,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         image,
         max_image_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -633,7 +636,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         batch_size = len(images)
         max_num_images = max(len(images_) for images_ in images)
         input_data_format = (
-            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4)) if input_data_format is None else input_data_format
+            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4))
+            if input_data_format is None
+            else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
 
@@ -787,7 +792,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         if data_format is not None:
             images_list = [
                 [
-                    to_channel_dimension_format(image, data_format, infer_channel_dimension_format(image, num_channels=(1, 3, 4)))
+                    to_channel_dimension_format(
+                        image, data_format, infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+                    )
                     for image in images
                 ]
                 for images in images_list
