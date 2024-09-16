@@ -104,7 +104,6 @@ class ProPainterModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_local_frames_flow_complete_net=self.num_frames,
             num_local_frames_propainter=self.num_frames,
             perceptual_weight=self.perceptual_weight,
         )
@@ -121,7 +120,7 @@ class ProPainterModelTester:
         result = model(pixel_values_videos, flow_masks, masks_dilated)
         self.parent.assertEqual(
             torch.tensor(result.reconstruction).shape,
-            (self.num_frames, self.image_size, self.image_size, 3),
+            (self.batch_size, self.num_frames, self.image_size, self.image_size, 3),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -713,7 +712,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((80, 240, 432, 3))
+        expected_shape = torch.Size((1, 80, 240, 432, 3))
         self.assertEqual(torch.tensor(outputs.reconstruction).shape, expected_shape)
 
         expected_slice = torch.tensor([[117, 116, 122], [118, 117, 123], [118, 119, 124]], dtype=torch.uint8).to(
@@ -722,7 +721,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(
             torch.allclose(
-                torch.tensor(outputs.reconstruction)[0, 0, :3, :3].to(torch_device),
+                torch.tensor(outputs.reconstruction)[0, 0, 0, :3, :3].to(torch_device),
                 expected_slice,
                 atol=1e-4,
             )
@@ -747,7 +746,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((80, 240, 512, 3))
+        expected_shape = torch.Size((1, 80, 240, 512, 3))
         self.assertEqual(torch.tensor(outputs.reconstruction).shape, expected_shape)
 
         expected_slice = torch.tensor([[114, 110, 112], [117, 113, 115], [113, 109, 112]], dtype=torch.uint8).to(
@@ -755,7 +754,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(
             torch.allclose(
-                torch.tensor(outputs.reconstruction)[0, 0, :3, :3].to(torch_device),
+                torch.tensor(outputs.reconstruction)[0, 0, 0, :3, :3].to(torch_device),
                 expected_slice,
                 atol=1e-4,
             )

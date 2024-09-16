@@ -4260,8 +4260,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         else:
             height, width = self.size[3], self.size[4]
-            comp_frames = [None] * self.video_length
-            pred_imgs_loss = [None] * self.video_length
+            comp_frames = [[None] * self.video_length for _ in range(self.size[0])]
+            pred_imgs_loss = [[None] * self.video_length for _ in range(self.size[0])]
 
             neighbor_stride = self.config.neighbor_length // 2
             if self.video_length > self.config.subvideo_length:
@@ -4270,6 +4270,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 ref_num = -1
 
             # ---- feature propagation + transformer ----
+            batch_idxs = range(self.size[0])
             for f in range(0, self.video_length, neighbor_stride):
                 neighbor_ids = list(
                     range(
@@ -4284,7 +4285,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 selected_pred_flows_bi = (
                     pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :],
                     pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :],
-                )
+                ) 
 
                 # 1.0 indicates mask
                 l_t = len(neighbor_ids)
@@ -4299,46 +4300,51 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
-                )
+                ) 
+    
                 pred_img = (
                     inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
-                )
-                all_hidden_states = (
-                    inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
-                )
-                all_self_attentions = (
-                    inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
-                )
+                ) 
 
-                pred_img = pred_img.view(-1, 3, height, width)
-                pred_img = (pred_img + 1) / 2
-                pred_img = pred_img.cpu().permute(0, 2, 3, 1).detach().numpy() * 255
+                if output_hidden_states:
+                    all_hidden_states = (
+                        inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+                    ) 
+                if output_attentions:
+                    all_self_attentions = (
+                        inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
+                    ) 
+                
+                pred_img = [pred_img[batch_idx].view(-1, 3, height, width) for batch_idx in batch_idxs]
+                pred_img = [(pred_img[batch_idx] + 1) / 2 for batch_idx in batch_idxs]
+                pred_img = [pred_img[batch_idx].cpu().permute(0, 2, 3, 1).detach().numpy() * 255 for batch_idx in batch_idxs]
 
-                binary_masks = masks_dilated.view(-1, 1, height, width)
-                binary_masks = (
-                    binary_masks[neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
-                )
+                binary_masks = [(
+                masks_dilated[batch_idx, neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
+            ) for batch_idx in batch_idxs]
 
                 for i in range(len(neighbor_ids)):
                     idx = neighbor_ids[i]
-                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] + self.original_frames[idx] * (
-                        1 - binary_masks[i]
-                    )
-                    if comp_frames[idx] is None:
-                        comp_frames[idx] = img
-                    else:
-                        comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
-                    comp_frames[idx] = comp_frames[idx].astype(np.uint8)
-
-                    pred_imgs_loss[idx] = pred_img[i]
-
+                    img = [np.array(pred_img[batch_idx][i]).astype(np.uint8) * binary_masks[batch_idx][i] + self.original_frames[batch_idx][idx] * (
+                        1 - binary_masks[batch_idx][i]
+                    ) for batch_idx in batch_idxs]
+                    
+                    for batch_idx in batch_idxs:
+                        if comp_frames[batch_idx][idx] is None:
+                            comp_frames[batch_idx][idx] = img[batch_idx]
+                        else:
+                            comp_frames[batch_idx][idx] = comp_frames[batch_idx][idx].astype(np.float32) * 0.5 + img[batch_idx].astype(np.float32) * 0.5
+                        comp_frames[batch_idx][idx] = comp_frames[batch_idx][idx].astype(np.uint8)
+                        
+                        pred_imgs_loss[batch_idx][idx] = pred_img[batch_idx][i]
+            
             device = pixel_values_videos.device
 
-            comp_frames_loss = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in comp_frames])
-            comp_frames_loss = comp_frames_loss.view(self.size).to(device).to(torch.float32)
+            comp_frames_loss = torch.stack([torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in comp_frames[batch_idx]])for batch_idx in batch_idxs])
+            comp_frames_loss = comp_frames_loss.to(device).to(torch.float32)
 
-            pred_imgs_loss = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in pred_imgs_loss])
-            pred_imgs_loss = pred_imgs_loss.view(self.size).to(device).to(torch.float32)
+            pred_imgs_loss = torch.stack([torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in pred_imgs_loss[batch_idx]])for batch_idx in batch_idxs])
+            pred_imgs_loss = pred_imgs_loss.to(device).to(torch.float32)
 
     
         return comp_frames, pred_imgs_loss, comp_frames_loss, all_hidden_states, all_self_attentions
@@ -4502,7 +4508,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             # original_frames are used for inference part only
             self.original_frames = pixel_values_videos
             self.original_frames = (self.original_frames * 255.0).to(torch.uint8).cpu().numpy()
-            self.original_frames = list(itertools.chain.from_iterable([[frame.transpose(1, 2, 0) for frame in video] for video in self.original_frames]))
+            self.original_frames = [[frame.transpose(1, 2, 0) for frame in video] for video in self.original_frames]
 
             pixel_values_videos = pixel_values_videos * 2 - 1
 
