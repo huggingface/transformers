@@ -319,13 +319,15 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
+                if present.
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
-                timestamps.
+                timestamps. If there are previous tokens (pre-prompt) to decode, they will only appear in the decoded
+                text if they contain timestamp tokens.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
@@ -611,6 +613,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()

@@ -296,6 +296,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
@@ -860,6 +862,8 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip

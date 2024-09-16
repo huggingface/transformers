@@ -229,8 +229,6 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixel
 
 ```
 
-
-
 #### Multiple Image Inputs
 
 By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:

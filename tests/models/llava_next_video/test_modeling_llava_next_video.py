@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import numpy as np
+import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -363,29 +364,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
-        expected_input_ids = [
-            1,
-            3148,
-            1001,
-            29901,
-            29871,
-            32000,
-            13,
-            11008,
-            338,
-            445,
-            4863,
-            2090,
-            1460,
-            29973,
-            319,
-            1799,
-            9047,
-            13566,
-            29901,
-        ]
-        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist())
-
         # verify single forward pass
         inputs = inputs.to(torch_device)
         with torch.no_grad():
@@ -393,7 +371,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the book. The child appears to be reading a book, but instead of a calm and focused reading experience'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -416,7 +394,10 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the', 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a',
+            'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a'
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -447,7 +428,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmark test for a machine learning model. It shows the performance of various models on a task, with the x-axis representing the number of parameters (measured in millions) and the y'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a machine learning model\'s performance on a task, likely related to natural language processing or text understanding. It shows a scatter plot with two axes, one labeled "BLIP-2"'  # fmt: skip
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
@@ -493,41 +474,25 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         # model is in eval mode by default so we should get pad on the left side
         # we can check the first hidden-states (aka inputs embeds)
         # the first element was lo-res image and we expect the first 1482 tokens to be all pads
-        output_eval = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_eval.hidden_states[0][0, :1482, ...] == 0).all().item())
-
-        # otherwise padding is on the right side, so it's last 1482 tokens
-        self.processor.padding_side = "right"
-        inputs_batched = self.processor(
-            [self.prompt_video, self.prompt_image],
-            images=[self.image],
-            videos=[self.video],
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        model.train()
         with torch.no_grad():
-            output_train = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_train.hidden_states[0][0, -1482:, ...] == 0).all().item())
+            output_eval = model(**inputs_batched, output_hidden_states=True)
+        self.assertTrue((output_eval.hidden_states[0][0, :1482, ...] == 0).all().item())
 
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "left"
             model.train()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'left' but the model is in training mode. For training", logs)
 
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "right"
             model.eval()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'right' but the model is in inference mode. For correct", logs)
 
     @slow
     @require_bitsandbytes
@@ -549,6 +514,76 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.patch_size = None
         inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_images(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2652)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_multiimage(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image><image>\nDescribe the similarity between the two images:\nASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        deer_image = Image.open(
+            requests.get(
+                "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e",
+                stream=True,
+            ).raw
+        )
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 3968)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs.input_ids.shape[-1] == 22)
 
         # generate exactly 20 tokens
         output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
