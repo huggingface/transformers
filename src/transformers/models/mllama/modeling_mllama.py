@@ -1122,6 +1122,8 @@ class MllamaTextModel(PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            # Check if there are image-related cross attention states
+            # as input or in cache, otherwise skip cross attention layer
             if (idx in self.cross_attention_layers and
                 cross_attention_states is None and
                 (past_key_values is None or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0))
