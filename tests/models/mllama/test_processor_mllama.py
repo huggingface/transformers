@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import unittest
+
 import numpy as np
 
 from transformers import MllamaProcessor
@@ -66,7 +67,9 @@ class MllamaProcessorTest(unittest.TestCase):
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
         cross_attention_mask = inputs["cross_attention_mask"]
         self.assertEqual(cross_attention_mask.shape, (1, 7, 1, 4))
-        self.assertTrue(np.all(cross_attention_mask == 1), f"Cross attention mask is not all ones: {cross_attention_mask}")
+        self.assertTrue(
+            np.all(cross_attention_mask == 1), f"Cross attention mask is not all ones: {cross_attention_mask}"
+        )
 
         # Test batch
         text = [
@@ -96,7 +99,7 @@ class MllamaProcessorTest(unittest.TestCase):
         first_sample_mask = cross_attention_mask[0].copy()
         first_image_first_tile_attention = first_sample_mask[:, :1, :1]  # text tokens, images, tiles
         self.assertTrue(np.all(first_image_first_tile_attention == 1), f"Cross attention mask is not all ones: {first_image_first_tile_attention}")
-        
+
         # zero out first tile of first image
         first_image_first_tile_attention[:, :1, :1] = 0
         self.assertTrue(np.all(first_image_first_tile_attention == 0), f"Cross attention mask is not all zeros: {first_image_first_tile_attention}")

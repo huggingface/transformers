@@ -21,6 +21,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 
+
 try:
     from typing import Unpack
 except ImportError:

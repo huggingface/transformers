@@ -318,10 +318,14 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, num_hidden_layers: int) -> None:
+    def __init__(self, num_hidden_layers: int = None) -> None:
         super().__init__()
-        self.key_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
-        self.value_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
+        if num_hidden_layers is None:
+            self.key_cache: List[torch.Tensor] = []
+            self.value_cache: List[torch.Tensor] = []
+        else:
+            self.key_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
+            self.value_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
@@ -377,7 +381,10 @@ class DynamicCache(Cache):
             self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
-        if self.key_cache[layer_idx] == []:
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+        elif self.key_cache[layer_idx] == []:
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
@@ -389,7 +396,7 @@ class DynamicCache(Cache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
-        if self.key_cache[layer_idx] == []:
+        if len(self.key_cache) <= layer_idx or (len(self.key_cache) > layer_idx and self.key_cache[layer_idx] == []):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -406,10 +413,12 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
+    ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
-        cache = cls(len(past_key_values))
+        cache = cls(num_hidden_layers)
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
@@ -1339,12 +1348,12 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         cache = cls(
-            self_attention_cache=DynamicCache(len(past_key_values)),
-            cross_attention_cache=DynamicCache(len(past_key_values)),
+            self_attention_cache=DynamicCache(num_hidden_layers),
+            cross_attention_cache=DynamicCache(num_hidden_layers),
         )
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):

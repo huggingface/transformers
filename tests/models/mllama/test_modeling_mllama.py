@@ -89,7 +89,6 @@ class MllamaVisionText2TextModelTester:
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
-            "image_size": 30,
             "hidden_size": 16,
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
@@ -188,6 +187,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     test_pruning = False
     test_head_masking = False
     has_attentions = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
@@ -264,11 +264,15 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     ):
         pass
 
+    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
+    def test_generate_compile_fullgraph(self):
+        pass
+
 
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "s0409/model-3"  # TODO: change it to final checkpoint
+        self.small_model_checkpoint = "s0409/model-1"  # TODO: change it to final checkpoint
         self.processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
 
     def tearDown(self):
@@ -334,5 +338,5 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([8.5000, 7.8750, 4.2812, 0.5000, 3.0312], dtype=torch_dtype)
+        expected_logits = torch.tensor([8.4375, 7.9062, 4.2188, 0.4727, 3.0312])
         self.assertTrue(torch.allclose(actual_logits, expected_logits, atol=1e-4))

@@ -59,8 +59,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mllama import (
-            MllamaForConditionalGeneration,
             MllamaForCausalLM,
+            MllamaForConditionalGeneration,
             MllamaPreTrainedModel,
         )
 

@@ -2689,8 +2689,8 @@ else:
     )
     _import_structure["models.mllama"].extend(
         [
-            "MllamaForConditionalGeneration",
             "MllamaForCausalLM",
+            "MllamaForConditionalGeneration",
             "MllamaPreTrainedModel",
         ]
     )
@@ -7259,8 +7259,8 @@ if TYPE_CHECKING:
             MixtralPreTrainedModel,
         )
         from .models.mllama import (
-            MllamaForConditionalGeneration,
             MllamaForCausalLM,
+            MllamaForConditionalGeneration,
             MllamaPreTrainedModel,
         )
         from .models.mobilebert import (

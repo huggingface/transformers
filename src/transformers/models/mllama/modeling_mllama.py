@@ -15,7 +15,6 @@
 """PyTorch Mllama model."""
 
 import math
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -28,7 +27,7 @@ from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
@@ -951,6 +950,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         outputs = (hidden_states,)
+        print(hidden_states.shape, full_text_row_masked_out_mask.shape)
 
         if output_attentions:
             outputs += (attn_weights,)
@@ -1291,7 +1291,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
 class MllamaForCausalLM(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model"
-    _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
     def __init__(self, config):
@@ -1585,8 +1584,6 @@ MLLAMA_INPUTS_DOCSTRING = r"""
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel):
-    _tied_weights_keys = ["language_model.lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1720,9 +1717,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
-        if cross_attention_mask is not None:
+        if cross_attention_mask is not None and cache_position is not None:
             cross_attention_mask = cross_attention_mask[:, :, cache_position]
-        if full_text_row_masked_out_mask is not None:
             full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
 
         outputs = self.language_model(

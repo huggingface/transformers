@@ -1920,6 +1920,12 @@ class GenerationTesterMixin:
                 "max_new_tokens": 10,
             }
 
+            max_cache_len = input_ids.shape[1] + generation_kwargs["max_new_tokens"]
+            config = config.get_text_config()
+            past_key_values = StaticCache(
+                config, batch_size=half_batch_size, max_cache_len=max_cache_len, device=torch_device
+            )
+
             for model_inputs in input_ids_sets:
                 # eager dynamic cache
                 output_dynamic = model.generate(model_inputs, **generation_kwargs)
@@ -1929,7 +1935,9 @@ class GenerationTesterMixin:
                 compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
                 generation_config = copy.deepcopy(model.generation_config)
                 generation_config.update(**generation_kwargs)
-                output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
+                output_compiled = compiled_generate(
+                    model_inputs, generation_config=generation_config, past_key_values=past_key_values
+                )
                 self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
     def test_generate_methods_with_num_logits_to_keep(self):
