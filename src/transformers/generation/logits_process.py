@@ -1913,7 +1913,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             number_timestamp_tokens = generate_config.number_timestamp_tokens
         else:
             # Whisper uses by default 1501 timestamp tokens, from <|0.00|> to <|30.00|> with a step of 20ms
-            number_timestamp_tokens = 1501 
+            number_timestamp_tokens = 1501
 
         self.timestamp_end = self.timestamp_begin + number_timestamp_tokens - 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id

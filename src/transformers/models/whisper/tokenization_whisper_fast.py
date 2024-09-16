@@ -147,11 +147,11 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self.task = task
         self.predict_timestamps = predict_timestamps
 
-    @property 
+    @property
     def timestamp_end(self) -> int:
         timestamp_ids = [value for key, value in self.added_tokens_encoder.items() if self.timestamp_pat.match(key)]
         return max(timestamp_ids)
-    
+
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._batch_encode_plus
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)

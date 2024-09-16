@@ -328,12 +328,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
-    
-    @property 
+
+    @property
     def timestamp_end(self) -> int:
         timestamp_ids = [value for key, value in self.added_tokens_encoder.items() if self.timestamp_pat.match(key)]
         return max(timestamp_ids)
-        
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
