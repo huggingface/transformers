@@ -344,7 +344,9 @@ def write_model(
         elif new_key.endswith("gate"):
             state_dict[new_key] = current_parameter[0].view(1)
 
-        elif "tile_positional_embedding.embedding" in new_key or "gated_positional_embedding.tile_embedding" in new_key:
+        elif (
+            "tile_positional_embedding.embedding" in new_key or "gated_positional_embedding.tile_embedding" in new_key
+        ):
             # pre-compute the embeddings
             state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
 
