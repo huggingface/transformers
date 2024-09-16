@@ -19,7 +19,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_moshi": [
         "MoshiConfig",
-        "MoshiDecoderConfig",
     ],
 }
 
@@ -39,7 +38,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_moshi import (
         MoshiConfig,
-        MoshiDecoderConfig,
     )
 
     try:

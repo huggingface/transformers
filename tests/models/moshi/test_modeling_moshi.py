@@ -27,7 +27,6 @@ from pytest import mark
 from transformers import (
     EncodecConfig,
     MoshiConfig,
-    MoshiDecoderConfig,
     MoshiProcessor,
     PretrainedConfig,
     T5Config,
@@ -155,7 +154,7 @@ class MoshiDecoderTester:
         return config, inputs_dict
 
     def get_config(self):
-        config = MoshiDecoderConfig(
+        config = MoshiConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -185,7 +184,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = MoshiDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MoshiDecoderConfig, hidden_size=16)
+        self.config_tester = ConfigTester(self, config_class=MoshiConfig, hidden_size=16)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1025,7 +1024,7 @@ class MoshiTester:
             codebook_size=self.codebook_size,
             codebook_dim=self.vocab_size,
         )
-        decoder_config = MoshiDecoderConfig(
+        decoder_config = MoshiConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,

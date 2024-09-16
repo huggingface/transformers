@@ -593,11 +593,9 @@ _import_structure = {
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
         "MusicgenConfig",
-        "MusicgenDecoderConfig",
     ],
     "models.moshi": [
         "MoshiConfig",
-        "MoshiDecoderConfig",
     ],
     "models.musicgen_melody": [
         "MusicgenMelodyConfig",
@@ -5395,7 +5393,6 @@ if TYPE_CHECKING:
     )
     from .models.moshi import (
         MoshiConfig,
-        MoshiDecoderConfig,
     )
     from .models.musicgen_melody import (
         MusicgenMelodyConfig,
