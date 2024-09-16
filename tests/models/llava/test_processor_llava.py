@@ -53,9 +53,9 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         obj = json.loads(processor.to_json_string())
         for key, value in self.prepare_processor_dict().items():
             # chat templates are popped from dict
-            self.assertFalse(key == "chat_template")
-            self.assertEqual(obj[key], value)
-            self.assertEqual(getattr(processor, key, None), value)
+            if key != "chat_template":
+                self.assertEqual(obj[key], value)
+                self.assertEqual(getattr(processor, key, None), value)
 
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
