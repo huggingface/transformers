@@ -348,6 +348,8 @@ class WhisperGenerationMixin:
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimeStampLogitsProcessor`.
+                By default, Whisper uses 1501 timestamp tokens.  If a custom number of timestamp tokens is needed,
+                it should be specified by setting `generation_config.num_timestamp_tokens`.
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
