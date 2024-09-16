@@ -835,10 +835,10 @@ class MllamaTextMLP(nn.Module):
 
 # Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
-    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
         super().__init__()
-        self.layer_id = layer_id
-        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_id)
+        self.layer_idx = layer_idx
+        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = MllamaTextMLP(config)
         self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -915,10 +915,10 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
 class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
 
-    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
         super().__init__()
-        self.layer_id = layer_id
-        self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_id)
+        self.layer_idx = layer_idx
+        self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
