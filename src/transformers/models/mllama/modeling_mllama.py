@@ -476,12 +476,12 @@ class MllamaVisionModel(PreTrainedModel):
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
         self.gated_positional_embedding = MllamaPrecomputedPositionEmbedding(config)
 
-        self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
-        self.post_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
+        self.pre_tile_positional_embedding = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
+        self.post_tile_positional_embedding = MllamaPrecomputedAspectRatioEmbedding(config, is_gated=True)
 
         # layer norms
-        self.ln_post = nn.LayerNorm(self.hidden_size)
-        self.ln_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_post = nn.LayerNorm(self.hidden_size)
 
         # encoders
         self.transformer = MllamaVisionEncoder(config, config.num_hidden_layers, is_gated=False)
@@ -508,7 +508,7 @@ class MllamaVisionModel(PreTrainedModel):
         # tile embeddings
         _, num_patches, dim = hidden_state.shape
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
-        hidden_state = self.pre_tile_pos_embed(hidden_state, aspect_ratio_ids)
+        hidden_state = self.pre_tile_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply cls token
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_patches, dim)
@@ -520,7 +520,7 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply encoder
-        hidden_state = self.ln_pre(hidden_state)
+        hidden_state = self.layernorm_pre(hidden_state)
 
         # Compute the number of tokens to pad
         num_padding_patches = (8 - (hidden_state.shape[-2] % 8)) % 8
@@ -551,11 +551,11 @@ class MllamaVisionModel(PreTrainedModel):
         intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
 
         # apply global encoder
-        hidden_state = self.ln_post(hidden_state)
+        hidden_state = self.layernorm_post(hidden_state)
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
         )
-        hidden_state = self.post_tile_pos_embed(hidden_state, aspect_ratio_ids)
+        hidden_state = self.post_tile_positional_embedding(hidden_state, aspect_ratio_ids)
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles * (num_patches + num_padding_patches), dim
         )
