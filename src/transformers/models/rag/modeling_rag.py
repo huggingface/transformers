@@ -1558,7 +1558,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 generation_config=generation_config,
                 synced_gpus=False,
                 streamer=None,
-                logits_warper=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1580,7 +1579,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=False,
-                logits_warper=None,
                 **model_kwargs,
             )
         else:

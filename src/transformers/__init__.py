@@ -57,7 +57,8 @@ _import_structure = {
     "agents": [
         "Agent",
         "CodeAgent",
-        "HfEngine",
+        "HfApiEngine",
+        "ManagedAgent",
         "PipelineTool",
         "ReactAgent",
         "ReactCodeAgent",
@@ -65,6 +66,7 @@ _import_structure = {
         "Tool",
         "Toolbox",
         "ToolCollection",
+        "TransformersEngine",
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
@@ -312,6 +314,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
         "Data2VecAudioConfig",
         "Data2VecTextConfig",
@@ -416,6 +419,7 @@ _import_structure = {
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FalconConfig"],
+    "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -459,6 +463,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
+    "models.granite": ["GraniteConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -529,6 +534,7 @@ _import_structure = {
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
     ],
+    "models.llava_onevision": ["LlavaOnevisionConfig", "LlavaOnevisionProcessor"],
     "models.longformer": [
         "LongformerConfig",
         "LongformerTokenizer",
@@ -599,6 +605,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmoe": ["OlmoeConfig"],
     "models.oneformer": [
         "OneFormerConfig",
         "OneFormerProcessor",
@@ -655,7 +662,16 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_audio": [
+        "Qwen2AudioConfig",
+        "Qwen2AudioEncoderConfig",
+        "Qwen2AudioProcessor",
+    ],
     "models.qwen2_moe": ["Qwen2MoeConfig"],
+    "models.qwen2_vl": [
+        "Qwen2VLConfig",
+        "Qwen2VLProcessor",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -924,6 +940,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_mlu_available",
+        "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
         "is_torch_tpu_available",
@@ -942,6 +959,7 @@ _import_structure = {
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
+        "TorchAoConfig",
     ],
 }
 
@@ -1167,6 +1185,9 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
+    _import_structure["models.llava_onevision"].extend(
+        ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
+    )
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
@@ -1180,6 +1201,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
@@ -1231,6 +1253,7 @@ else:
         "HybridCache",
         "MambaCache",
         "OffloadedCache",
+        "OffloadedStaticCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
@@ -1267,7 +1290,6 @@ else:
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
-            "ForceTokensLogitsProcessor",
             "GenerationMixin",
             "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
@@ -1301,6 +1323,13 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
+
+    # PyTorch domain libraries integration
+    _import_structure["integrations.executorch"] = [
+        "TorchExportableModuleWithStaticCache",
+        "convert_and_export_with_cache",
+    ]
+
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
@@ -1478,7 +1507,6 @@ else:
             "BertForQuestionAnswering",
             "BertForSequenceClassification",
             "BertForTokenClassification",
-            "BertLayer",
             "BertLMHeadModel",
             "BertModel",
             "BertPreTrainedModel",
@@ -1502,7 +1530,6 @@ else:
             "BigBirdForQuestionAnswering",
             "BigBirdForSequenceClassification",
             "BigBirdForTokenClassification",
-            "BigBirdLayer",
             "BigBirdModel",
             "BigBirdPreTrainedModel",
             "load_tf_weights_in_big_bird",
@@ -1565,10 +1592,13 @@ else:
     _import_structure["models.blip_2"].extend(
         [
             "Blip2ForConditionalGeneration",
+            "Blip2ForImageTextRetrieval",
             "Blip2Model",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
+            "Blip2TextModelWithProjection",
             "Blip2VisionModel",
+            "Blip2VisionModelWithProjection",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -1618,7 +1648,6 @@ else:
             "CanineForQuestionAnswering",
             "CanineForSequenceClassification",
             "CanineForTokenClassification",
-            "CanineLayer",
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
@@ -1705,7 +1734,6 @@ else:
             "ConvBertForQuestionAnswering",
             "ConvBertForSequenceClassification",
             "ConvBertForTokenClassification",
-            "ConvBertLayer",
             "ConvBertModel",
             "ConvBertPreTrainedModel",
             "load_tf_weights_in_convbert",
@@ -1747,6 +1775,12 @@ else:
             "CvtForImageClassification",
             "CvtModel",
             "CvtPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dac"].extend(
+        [
+            "DacModel",
+            "DacPreTrainedModel",
         ]
     )
     _import_structure["models.data2vec"].extend(
@@ -1928,7 +1962,6 @@ else:
             "QDQBertForQuestionAnswering",
             "QDQBertForSequenceClassification",
             "QDQBertForTokenClassification",
-            "QDQBertLayer",
             "QDQBertLMHeadModel",
             "QDQBertModel",
             "QDQBertPreTrainedModel",
@@ -2133,6 +2166,13 @@ else:
             "FalconPreTrainedModel",
         ]
     )
+    _import_structure["models.falcon_mamba"].extend(
+        [
+            "FalconMambaForCausalLM",
+            "FalconMambaModel",
+            "FalconMambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.fastspeech2_conformer"].extend(
         [
             "FastSpeech2ConformerHifiGan",
@@ -2173,7 +2213,6 @@ else:
             "FNetForQuestionAnswering",
             "FNetForSequenceClassification",
             "FNetForTokenClassification",
-            "FNetLayer",
             "FNetModel",
             "FNetPreTrainedModel",
         ]
@@ -2274,7 +2313,6 @@ else:
             "GPTNeoXForQuestionAnswering",
             "GPTNeoXForSequenceClassification",
             "GPTNeoXForTokenClassification",
-            "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
         ]
@@ -2282,7 +2320,6 @@ else:
     _import_structure["models.gpt_neox_japanese"].extend(
         [
             "GPTNeoXJapaneseForCausalLM",
-            "GPTNeoXJapaneseLayer",
             "GPTNeoXJapaneseModel",
             "GPTNeoXJapanesePreTrainedModel",
         ]
@@ -2294,6 +2331,13 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.granite"].extend(
+        [
+            "GraniteForCausalLM",
+            "GraniteModel",
+            "GranitePreTrainedModel",
         ]
     )
     _import_structure["models.grounding_dino"].extend(
@@ -2492,6 +2536,12 @@ else:
             "LlavaNextVideoPreTrainedModel",
         ]
     )
+    _import_structure["models.llava_onevision"].extend(
+        [
+            "LlavaOnevisionForConditionalGeneration",
+            "LlavaOnevisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.longformer"].extend(
         [
             "LongformerForMaskedLM",
@@ -2501,7 +2551,6 @@ else:
             "LongformerForTokenClassification",
             "LongformerModel",
             "LongformerPreTrainedModel",
-            "LongformerSelfAttention",
         ]
     )
     _import_structure["models.longt5"].extend(
@@ -2534,7 +2583,6 @@ else:
             "LxmertModel",
             "LxmertPreTrainedModel",
             "LxmertVisualFeatureEncoder",
-            "LxmertXLayer",
         ]
     )
     _import_structure["models.m2m_100"].extend(
@@ -2558,7 +2606,9 @@ else:
             "Mamba2PreTrainedModel",
         ]
     )
-    _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
+    _import_structure["models.marian"].extend(
+        ["MarianForCausalLM", "MarianModel", "MarianMTModel", "MarianPreTrainedModel"]
+    )
     _import_structure["models.markuplm"].extend(
         [
             "MarkupLMForQuestionAnswering",
@@ -2641,7 +2691,6 @@ else:
             "MobileBertForQuestionAnswering",
             "MobileBertForSequenceClassification",
             "MobileBertForTokenClassification",
-            "MobileBertLayer",
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
@@ -2687,7 +2736,6 @@ else:
             "MPNetForQuestionAnswering",
             "MPNetForSequenceClassification",
             "MPNetForTokenClassification",
-            "MPNetLayer",
             "MPNetModel",
             "MPNetPreTrainedModel",
         ]
@@ -2777,7 +2825,6 @@ else:
             "NystromformerForQuestionAnswering",
             "NystromformerForSequenceClassification",
             "NystromformerForTokenClassification",
-            "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
         ]
@@ -2787,6 +2834,13 @@ else:
             "OlmoForCausalLM",
             "OlmoModel",
             "OlmoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmoe"].extend(
+        [
+            "OlmoeForCausalLM",
+            "OlmoeModel",
+            "OlmoePreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -2884,7 +2938,6 @@ else:
             "PerceiverForMultimodalAutoencoding",
             "PerceiverForOpticalFlow",
             "PerceiverForSequenceClassification",
-            "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
         ]
@@ -2980,6 +3033,13 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_audio"].extend(
+        [
+            "Qwen2AudioEncoder",
+            "Qwen2AudioForConditionalGeneration",
+            "Qwen2AudioPreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen2_moe"].extend(
         [
             "Qwen2MoeForCausalLM",
@@ -2987,6 +3047,13 @@ else:
             "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_vl"].extend(
+        [
+            "Qwen2VLForConditionalGeneration",
+            "Qwen2VLModel",
+            "Qwen2VLPreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -3006,11 +3073,9 @@ else:
     )
     _import_structure["models.reformer"].extend(
         [
-            "ReformerAttention",
             "ReformerForMaskedLM",
             "ReformerForQuestionAnswering",
             "ReformerForSequenceClassification",
-            "ReformerLayer",
             "ReformerModel",
             "ReformerModelWithLMHead",
             "ReformerPreTrainedModel",
@@ -3031,7 +3096,6 @@ else:
             "RemBertForQuestionAnswering",
             "RemBertForSequenceClassification",
             "RemBertForTokenClassification",
-            "RemBertLayer",
             "RemBertModel",
             "RemBertPreTrainedModel",
             "load_tf_weights_in_rembert",
@@ -3078,7 +3142,6 @@ else:
             "RoCBertForQuestionAnswering",
             "RoCBertForSequenceClassification",
             "RoCBertForTokenClassification",
-            "RoCBertLayer",
             "RoCBertModel",
             "RoCBertPreTrainedModel",
             "load_tf_weights_in_roc_bert",
@@ -3092,7 +3155,6 @@ else:
             "RoFormerForQuestionAnswering",
             "RoFormerForSequenceClassification",
             "RoFormerForTokenClassification",
-            "RoFormerLayer",
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
@@ -3149,7 +3211,6 @@ else:
             "SegformerDecodeHead",
             "SegformerForImageClassification",
             "SegformerForSemanticSegmentation",
-            "SegformerLayer",
             "SegformerModel",
             "SegformerPreTrainedModel",
         ]
@@ -3208,7 +3269,6 @@ else:
         [
             "SplinterForPreTraining",
             "SplinterForQuestionAnswering",
-            "SplinterLayer",
             "SplinterModel",
             "SplinterPreTrainedModel",
         ]
@@ -3221,7 +3281,6 @@ else:
             "SqueezeBertForSequenceClassification",
             "SqueezeBertForTokenClassification",
             "SqueezeBertModel",
-            "SqueezeBertModule",
             "SqueezeBertPreTrainedModel",
         ]
     )
@@ -3420,7 +3479,6 @@ else:
             "ViltForMaskedLM",
             "ViltForQuestionAnswering",
             "ViltForTokenClassification",
-            "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
         ]
@@ -3440,7 +3498,6 @@ else:
             "VisualBertForQuestionAnswering",
             "VisualBertForRegionToPhraseAlignment",
             "VisualBertForVisualReasoning",
-            "VisualBertLayer",
             "VisualBertModel",
             "VisualBertPreTrainedModel",
         ]
@@ -3456,7 +3513,6 @@ else:
     _import_structure["models.vit_mae"].extend(
         [
             "ViTMAEForPreTraining",
-            "ViTMAELayer",
             "ViTMAEModel",
             "ViTMAEPreTrainedModel",
         ]
@@ -3636,7 +3692,6 @@ else:
             "YosoForQuestionAnswering",
             "YosoForSequenceClassification",
             "YosoForTokenClassification",
-            "YosoLayer",
             "YosoModel",
             "YosoPreTrainedModel",
         ]
@@ -3783,7 +3838,6 @@ else:
     )
     _import_structure["models.bert"].extend(
         [
-            "TFBertEmbeddings",
             "TFBertForMaskedLM",
             "TFBertForMultipleChoice",
             "TFBertForNextSentencePrediction",
@@ -3849,7 +3903,6 @@ else:
             "TFConvBertForQuestionAnswering",
             "TFConvBertForSequenceClassification",
             "TFConvBertForTokenClassification",
-            "TFConvBertLayer",
             "TFConvBertModel",
             "TFConvBertPreTrainedModel",
         ]
@@ -4080,7 +4133,6 @@ else:
             "TFLongformerForTokenClassification",
             "TFLongformerModel",
             "TFLongformerPreTrainedModel",
-            "TFLongformerSelfAttention",
         ]
     )
     _import_structure["models.lxmert"].extend(
@@ -4181,7 +4233,6 @@ else:
             "TFRemBertForQuestionAnswering",
             "TFRemBertForSequenceClassification",
             "TFRemBertForTokenClassification",
-            "TFRemBertLayer",
             "TFRemBertModel",
             "TFRemBertPreTrainedModel",
         ]
@@ -4227,7 +4278,6 @@ else:
             "TFRoFormerForQuestionAnswering",
             "TFRoFormerForSequenceClassification",
             "TFRoFormerForTokenClassification",
-            "TFRoFormerLayer",
             "TFRoFormerModel",
             "TFRoFormerPreTrainedModel",
         ]
@@ -4565,6 +4615,13 @@ else:
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.dinov2"].extend(
+        [
+            "FlaxDinov2Model",
+            "FlaxDinov2ForImageClassification",
+            "FlaxDinov2PreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "FlaxDistilBertForMaskedLM",
@@ -4747,7 +4804,8 @@ if TYPE_CHECKING:
     from .agents import (
         Agent,
         CodeAgent,
-        HfEngine,
+        HfApiEngine,
+        ManagedAgent,
         PipelineTool,
         ReactAgent,
         ReactCodeAgent,
@@ -4755,6 +4813,7 @@ if TYPE_CHECKING:
         Tool,
         Toolbox,
         ToolCollection,
+        TransformersEngine,
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
@@ -4997,6 +5056,10 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.dac import (
+        DacConfig,
+        DacFeatureExtractor,
+    )
     from .models.data2vec import (
         Data2VecAudioConfig,
         Data2VecTextConfig,
@@ -5115,6 +5178,7 @@ if TYPE_CHECKING:
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
+    from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -5161,6 +5225,7 @@ if TYPE_CHECKING:
         GPTNeoXJapaneseConfig,
     )
     from .models.gptj import GPTJConfig
+    from .models.granite import GraniteConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5232,6 +5297,10 @@ if TYPE_CHECKING:
     from .models.llava_next_video import (
         LlavaNextVideoConfig,
         LlavaNextVideoProcessor,
+    )
+    from .models.llava_onevision import (
+        LlavaOnevisionConfig,
+        LlavaOnevisionProcessor,
     )
     from .models.longformer import (
         LongformerConfig,
@@ -5313,6 +5382,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmoe import OlmoeConfig
     from .models.oneformer import (
         OneFormerConfig,
         OneFormerProcessor,
@@ -5378,7 +5448,16 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_audio import (
+        Qwen2AudioConfig,
+        Qwen2AudioEncoderConfig,
+        Qwen2AudioProcessor,
+    )
     from .models.qwen2_moe import Qwen2MoeConfig
+    from .models.qwen2_vl import (
+        Qwen2VLConfig,
+        Qwen2VLProcessor,
+    )
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
@@ -5680,6 +5759,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_mlu_available,
+        is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
@@ -5700,6 +5780,7 @@ if TYPE_CHECKING:
         GPTQConfig,
         HqqConfig,
         QuantoConfig,
+        TorchAoConfig,
     )
 
     try:
@@ -5726,7 +5807,8 @@ if TYPE_CHECKING:
         from .models.llama import LlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
-        from .models.mbart import MBart50Tokenizer, MBartTokenizer
+        from .models.mbart import MBartTokenizer
+        from .models.mbart50 import MBart50Tokenizer
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.nllb import NllbTokenizer
@@ -5906,6 +5988,7 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
+        from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -5931,6 +6014,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
@@ -5976,6 +6060,7 @@ if TYPE_CHECKING:
             HybridCache,
             MambaCache,
             OffloadedCache,
+            OffloadedStaticCache,
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
@@ -6011,7 +6096,6 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
-            ForceTokensLogitsProcessor,
             GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
@@ -6043,6 +6127,10 @@ if TYPE_CHECKING:
             WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
+        )
+        from .integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
@@ -6195,7 +6283,6 @@ if TYPE_CHECKING:
             BertForQuestionAnswering,
             BertForSequenceClassification,
             BertForTokenClassification,
-            BertLayer,
             BertLMHeadModel,
             BertModel,
             BertPreTrainedModel,
@@ -6215,7 +6302,6 @@ if TYPE_CHECKING:
             BigBirdForQuestionAnswering,
             BigBirdForSequenceClassification,
             BigBirdForTokenClassification,
-            BigBirdLayer,
             BigBirdModel,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
@@ -6264,10 +6350,13 @@ if TYPE_CHECKING:
         )
         from .models.blip_2 import (
             Blip2ForConditionalGeneration,
+            Blip2ForImageTextRetrieval,
             Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
+            Blip2TextModelWithProjection,
             Blip2VisionModel,
+            Blip2VisionModelWithProjection,
         )
         from .models.bloom import (
             BloomForCausalLM,
@@ -6307,7 +6396,6 @@ if TYPE_CHECKING:
             CanineForQuestionAnswering,
             CanineForSequenceClassification,
             CanineForTokenClassification,
-            CanineLayer,
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
@@ -6380,7 +6468,6 @@ if TYPE_CHECKING:
             ConvBertForQuestionAnswering,
             ConvBertForSequenceClassification,
             ConvBertForTokenClassification,
-            ConvBertLayer,
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
@@ -6412,6 +6499,10 @@ if TYPE_CHECKING:
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
+        )
+        from .models.dac import (
+            DacModel,
+            DacPreTrainedModel,
         )
         from .models.data2vec import (
             Data2VecAudioForAudioFrameClassification,
@@ -6561,7 +6652,6 @@ if TYPE_CHECKING:
             QDQBertForQuestionAnswering,
             QDQBertForSequenceClassification,
             QDQBertForTokenClassification,
-            QDQBertLayer,
             QDQBertLMHeadModel,
             QDQBertModel,
             QDQBertPreTrainedModel,
@@ -6722,6 +6812,11 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
+        from .models.falcon_mamba import (
+            FalconMambaForCausalLM,
+            FalconMambaModel,
+            FalconMambaPreTrainedModel,
+        )
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
@@ -6755,7 +6850,6 @@ if TYPE_CHECKING:
             FNetForQuestionAnswering,
             FNetForSequenceClassification,
             FNetForTokenClassification,
-            FNetLayer,
             FNetModel,
             FNetPreTrainedModel,
         )
@@ -6843,13 +6937,11 @@ if TYPE_CHECKING:
             GPTNeoXForQuestionAnswering,
             GPTNeoXForSequenceClassification,
             GPTNeoXForTokenClassification,
-            GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
         from .models.gpt_neox_japanese import (
             GPTNeoXJapaneseForCausalLM,
-            GPTNeoXJapaneseLayer,
             GPTNeoXJapaneseModel,
             GPTNeoXJapanesePreTrainedModel,
         )
@@ -6859,6 +6951,11 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.granite import (
+            GraniteForCausalLM,
+            GraniteModel,
+            GranitePreTrainedModel,
         )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
@@ -7008,6 +7105,10 @@ if TYPE_CHECKING:
             LlavaNextVideoForConditionalGeneration,
             LlavaNextVideoPreTrainedModel,
         )
+        from .models.llava_onevision import (
+            LlavaOnevisionForConditionalGeneration,
+            LlavaOnevisionPreTrainedModel,
+        )
         from .models.longformer import (
             LongformerForMaskedLM,
             LongformerForMultipleChoice,
@@ -7016,7 +7117,6 @@ if TYPE_CHECKING:
             LongformerForTokenClassification,
             LongformerModel,
             LongformerPreTrainedModel,
-            LongformerSelfAttention,
         )
         from .models.longt5 import (
             LongT5EncoderModel,
@@ -7043,7 +7143,6 @@ if TYPE_CHECKING:
             LxmertModel,
             LxmertPreTrainedModel,
             LxmertVisualFeatureEncoder,
-            LxmertXLayer,
         )
         from .models.m2m_100 import (
             M2M100ForConditionalGeneration,
@@ -7060,7 +7159,7 @@ if TYPE_CHECKING:
             Mamba2Model,
             Mamba2PreTrainedModel,
         )
-        from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
+        from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel, MarianPreTrainedModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
             MarkupLMForSequenceClassification,
@@ -7126,7 +7225,6 @@ if TYPE_CHECKING:
             MobileBertForQuestionAnswering,
             MobileBertForSequenceClassification,
             MobileBertForTokenClassification,
-            MobileBertLayer,
             MobileBertModel,
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
@@ -7162,7 +7260,6 @@ if TYPE_CHECKING:
             MPNetForQuestionAnswering,
             MPNetForSequenceClassification,
             MPNetForTokenClassification,
-            MPNetLayer,
             MPNetModel,
             MPNetPreTrainedModel,
         )
@@ -7234,7 +7331,6 @@ if TYPE_CHECKING:
             NystromformerForQuestionAnswering,
             NystromformerForSequenceClassification,
             NystromformerForTokenClassification,
-            NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
         )
@@ -7242,6 +7338,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmoe import (
+            OlmoeForCausalLM,
+            OlmoeModel,
+            OlmoePreTrainedModel,
         )
         from .models.oneformer import (
             OneFormerForUniversalSegmentation,
@@ -7317,7 +7418,6 @@ if TYPE_CHECKING:
             PerceiverForMultimodalAutoencoding,
             PerceiverForOpticalFlow,
             PerceiverForSequenceClassification,
-            PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
@@ -7390,12 +7490,22 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_audio import (
+            Qwen2AudioEncoder,
+            Qwen2AudioForConditionalGeneration,
+            Qwen2AudioPreTrainedModel,
+        )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
             Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
+        )
+        from .models.qwen2_vl import (
+            Qwen2VLForConditionalGeneration,
+            Qwen2VLModel,
+            Qwen2VLPreTrainedModel,
         )
         from .models.rag import (
             RagModel,
@@ -7409,11 +7519,9 @@ if TYPE_CHECKING:
             RecurrentGemmaPreTrainedModel,
         )
         from .models.reformer import (
-            ReformerAttention,
             ReformerForMaskedLM,
             ReformerForQuestionAnswering,
             ReformerForSequenceClassification,
-            ReformerLayer,
             ReformerModel,
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
@@ -7430,7 +7538,6 @@ if TYPE_CHECKING:
             RemBertForQuestionAnswering,
             RemBertForSequenceClassification,
             RemBertForTokenClassification,
-            RemBertLayer,
             RemBertModel,
             RemBertPreTrainedModel,
             load_tf_weights_in_rembert,
@@ -7469,7 +7576,6 @@ if TYPE_CHECKING:
             RoCBertForQuestionAnswering,
             RoCBertForSequenceClassification,
             RoCBertForTokenClassification,
-            RoCBertLayer,
             RoCBertModel,
             RoCBertPreTrainedModel,
             load_tf_weights_in_roc_bert,
@@ -7481,7 +7587,6 @@ if TYPE_CHECKING:
             RoFormerForQuestionAnswering,
             RoFormerForSequenceClassification,
             RoFormerForTokenClassification,
-            RoFormerLayer,
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
@@ -7526,7 +7631,6 @@ if TYPE_CHECKING:
             SegformerDecodeHead,
             SegformerForImageClassification,
             SegformerForSemanticSegmentation,
-            SegformerLayer,
             SegformerModel,
             SegformerPreTrainedModel,
         )
@@ -7571,7 +7675,6 @@ if TYPE_CHECKING:
         from .models.splinter import (
             SplinterForPreTraining,
             SplinterForQuestionAnswering,
-            SplinterLayer,
             SplinterModel,
             SplinterPreTrainedModel,
         )
@@ -7582,7 +7685,6 @@ if TYPE_CHECKING:
             SqueezeBertForSequenceClassification,
             SqueezeBertForTokenClassification,
             SqueezeBertModel,
-            SqueezeBertModule,
             SqueezeBertPreTrainedModel,
         )
         from .models.stablelm import (
@@ -7731,7 +7833,6 @@ if TYPE_CHECKING:
             ViltForMaskedLM,
             ViltForQuestionAnswering,
             ViltForTokenClassification,
-            ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
         )
@@ -7747,7 +7848,6 @@ if TYPE_CHECKING:
             VisualBertForQuestionAnswering,
             VisualBertForRegionToPhraseAlignment,
             VisualBertForVisualReasoning,
-            VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
         )
@@ -7759,7 +7859,6 @@ if TYPE_CHECKING:
         )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
-            ViTMAELayer,
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
@@ -7901,7 +8000,6 @@ if TYPE_CHECKING:
             YosoForQuestionAnswering,
             YosoForSequenceClassification,
             YosoForTokenClassification,
-            YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
         )
@@ -8035,7 +8133,6 @@ if TYPE_CHECKING:
             TFBartPretrainedModel,
         )
         from .models.bert import (
-            TFBertEmbeddings,
             TFBertForMaskedLM,
             TFBertForMultipleChoice,
             TFBertForNextSentencePrediction,
@@ -8089,7 +8186,6 @@ if TYPE_CHECKING:
             TFConvBertForQuestionAnswering,
             TFConvBertForSequenceClassification,
             TFConvBertForTokenClassification,
-            TFConvBertLayer,
             TFConvBertModel,
             TFConvBertPreTrainedModel,
         )
@@ -8274,7 +8370,6 @@ if TYPE_CHECKING:
             TFLongformerForTokenClassification,
             TFLongformerModel,
             TFLongformerPreTrainedModel,
-            TFLongformerSelfAttention,
         )
         from .models.lxmert import (
             TFLxmertForPreTraining,
@@ -8364,7 +8459,6 @@ if TYPE_CHECKING:
             TFRemBertForQuestionAnswering,
             TFRemBertForSequenceClassification,
             TFRemBertForTokenClassification,
-            TFRemBertLayer,
             TFRemBertModel,
             TFRemBertPreTrainedModel,
         )
@@ -8402,7 +8496,6 @@ if TYPE_CHECKING:
             TFRoFormerForQuestionAnswering,
             TFRoFormerForSequenceClassification,
             TFRoFormerForTokenClassification,
-            TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
         )
@@ -8665,6 +8758,11 @@ if TYPE_CHECKING:
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
+        )
+        from .models.dinov2 import (
+            FlaxDinov2ForImageClassification,
+            FlaxDinov2Model,
+            FlaxDinov2PreTrainedModel,
         )
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,

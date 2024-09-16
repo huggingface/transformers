@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
@@ -207,11 +208,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
+            param_kwargs = {}
+            if self.is_bnb_supports_quant_storage_module:
+                param_kwargs["module"] = module
+
             new_value = bnb.nn.Params4bit.from_prequantized(
                 data=param_value,
                 quantized_stats=quantized_stats,
                 requires_grad=False,
                 device=target_device,
+                **param_kwargs,
             )
         else:
             new_value = param_value.to("cpu")
@@ -317,6 +323,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             return False
 
         return True
+
+    @cached_property
+    def is_bnb_supports_quant_storage_module(self) -> bool:
+        """
+        determines if the current version of bitsandbytes supports
+        the `module` parameter in `Params4bit.from_prequantized`
+        :return:
+        """
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
 
     @property
     def is_trainable(self) -> bool:

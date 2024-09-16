@@ -587,11 +587,20 @@ class WhisperTokenizer(PreTrainedTokenizer):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
+        cur_max_timestamp = 0
+        prev_segments_len = 0
         for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+
+                if start_timestamp_position < cur_max_timestamp:
+                    # next segment has started
+                    prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = end_timestamp_position
+
                 # strip timestamp tokens from the text output
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
@@ -600,8 +609,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     {
                         "text": text,
                         "timestamp": (
-                            start_timestamp_position * time_precision,
-                            end_timestamp_position * time_precision,
+                            (start_timestamp_position + prev_segments_len) * time_precision,
+                            (end_timestamp_position + prev_segments_len) * time_precision,
                         ),
                     }
                 )
@@ -664,13 +673,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
+                if present.
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
-                timestamps.
+                timestamps. If there are previous tokens (pre-prompt) to decode, they will only appear in the decoded
+                text if they contain timestamp tokens.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
@@ -869,6 +880,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()

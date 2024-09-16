@@ -254,12 +254,12 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
 
         text = "\nif len_a > len_b:\n    result = a\nelse:\n    result = b\n\n\n\n#"
-        expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
+        expected_truncated_text = "\nif len_a > len_b:\n      result = a\nelse:\n      result = b"
 
         input_ids = tokenizer.encode(text)
         truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
-        self.assertEqual(decoded_text, expected_trucated_text)
+        self.assertEqual(decoded_text, expected_truncated_text)
         # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
 
     # tokenizer has no padding token

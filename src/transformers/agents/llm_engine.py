@@ -20,6 +20,8 @@ from typing import Dict, List, Optional
 
 from huggingface_hub import InferenceClient
 
+from ..pipelines.base import Pipeline
+
 
 class MessageRole(str, Enum):
     USER = "user"
@@ -65,7 +67,9 @@ llama_role_conversions = {
 }
 
 
-class HfEngine:
+class HfApiEngine:
+    """This engine leverages Hugging Face's Inference API service, either serverless or with a dedicated endpoint."""
+
     def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
         self.model = model
         self.client = InferenceClient(self.model, timeout=120)
@@ -90,6 +94,36 @@ class HfEngine:
         for stop_seq in stop_sequences:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
+        return response
+
+
+class TransformersEngine:
+    """This engine uses a pre-initialized local text-generation pipeline."""
+
+    def __init__(self, pipeline: Pipeline):
+        self.pipeline = pipeline
+
+    def __call__(
+        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+    ) -> str:
+        # Get clean message list
+        messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
+
+        # Get LLM output
+        output = self.pipeline(
+            messages,
+            stop_strings=stop_sequences,
+            max_length=1500,
+            tokenizer=self.pipeline.tokenizer,
+        )
+
+        response = output[0]["generated_text"][-1]["content"]
+
+        # Remove stop sequences from LLM output
+        if stop_sequences is not None:
+            for stop_seq in stop_sequences:
+                if response[-len(stop_seq) :] == stop_seq:
+                    response = response[: -len(stop_seq)]
         return response
 
 

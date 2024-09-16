@@ -686,6 +686,7 @@ class WhisperGenerationMixin:
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
                 is_shortform=is_shortform,
                 batch_size=batch_size,
+                attention_mask=attention_mask,
                 kwargs=kwargs,
             )
 
@@ -790,6 +791,7 @@ class WhisperGenerationMixin:
         do_condition_on_prev_tokens,
         is_shortform,
         batch_size,
+        attention_mask,
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -837,6 +839,7 @@ class WhisperGenerationMixin:
                 prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
                 **generate_kwargs,
             )
 
@@ -951,7 +954,9 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
-        def split_by_batch_index(values, key, batch_idx, is_shortform):
+        def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
+            if beam_indices is not None and key == "scores":
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -982,7 +987,10 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
+            {
+                k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
+                for k, v in seek_outputs.items()
+            }
             for i in range(sequence_tokens.shape[0])
         ]
 
@@ -1170,6 +1178,9 @@ class WhisperGenerationMixin:
         return return_dict_in_generate
 
     def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
+        if return_timestamps is None and hasattr(generation_config, "return_timestamps"):
+            return_timestamps = generation_config.return_timestamps
+
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
