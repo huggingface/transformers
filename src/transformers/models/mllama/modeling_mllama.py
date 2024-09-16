@@ -575,7 +575,7 @@ class MllamaVisionModel(PreTrainedModel):
         return hidden_state
 
 
-# Copied from Mllama
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mllama
 class MllamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -814,7 +814,7 @@ MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention}
 MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention}
 
 
-# Copied from gemma2
+# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2MLP with Gemma2->MllamaText
 class MllamaTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -830,7 +830,7 @@ class MllamaTextMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# Copied from LlamaDecoderLayer
+# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
     def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
         super().__init__()
@@ -852,6 +852,28 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -866,6 +888,7 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = residual + hidden_states.to(residual.device)
 
