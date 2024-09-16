@@ -517,7 +517,7 @@ class WhisperGenerationMixin:
             logprob_threshold=logprob_threshold,
             generation_config=generation_config,
         )
-        timestamp_begin = self._set_return_timestamps(
+        timestamp_begin, timestamp_end = self._set_return_timestamps(
             return_timestamps=return_timestamps, is_shortform=is_shortform, generation_config=generation_config
         )
         self._set_language_and_task(
@@ -703,6 +703,7 @@ class WhisperGenerationMixin:
                     seek_outputs=seek_outputs,
                     time_offset=time_offset,
                     timestamp_begin=timestamp_begin,
+                    timestamp_end=timestamp_end,
                     seek_num_frames=seek_num_frames,
                     time_precision=time_precision,
                     input_stride=input_stride,
@@ -1209,7 +1210,15 @@ class WhisperGenerationMixin:
             # We set the timestamp begin token larger than the vocab size, such that the timestamp condition is never met in the decoding loop
             timestamp_begin = self.config.vocab_size + 1
 
-        return timestamp_begin
+        if hasattr(generation_config, "number_timestamp_tokens"):
+            number_timestamp_tokens = generation_config.number_timestamp_tokens
+        else:
+            # Whisper uses by default 1501 timestamp tokens, from <|0.00|> to <|30.00|> with a step of 20ms
+            number_timestamp_tokens = 1501
+
+        timestamp_end = timestamp_begin + number_timestamp_tokens - 1
+
+        return timestamp_begin, timestamp_end
 
     @staticmethod
     def _set_language_and_task(language, task, is_multilingual, generation_config):
@@ -1757,6 +1766,7 @@ class WhisperGenerationMixin:
         seek_outputs,
         time_offset,
         timestamp_begin,
+        timestamp_end,
         seek_num_frames,
         time_precision,
         input_stride,
@@ -1766,7 +1776,7 @@ class WhisperGenerationMixin:
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-        timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
+        timestamp_tokens: torch.Tensor = (timestamp_begin <= seek_sequence) & (seek_sequence <= timestamp_end)
         single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
         timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
         timestamp_segment_indices.add_(1)
