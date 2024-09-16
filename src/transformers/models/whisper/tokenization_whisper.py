@@ -329,6 +329,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
+    @property
+    def timestamp_end(self) -> int:
+        timestamp_ids = [value for key, value in self.added_tokens_encoder.items() if self.timestamp_pat.match(key)]
+        return max(timestamp_ids)
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
@@ -534,13 +539,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
         """
         timestamp_begin = self.all_special_ids[-1] + 1
+        timestamp_end = self.timestamp_end
         outputs = [[]]
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
 
         for token in token_ids:
-            if token >= timestamp_begin:
+            if timestamp_begin <= token <= timestamp_end:
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
@@ -576,7 +582,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
         timestamp_begin = self.all_special_ids[-1] + 1
-        timestamp_tokens = token_ids >= timestamp_begin
+        timestamp_end = self.timestamp_end
+        timestamp_tokens = (timestamp_begin <= token_ids) & (token_ids <= timestamp_end)
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
@@ -916,6 +923,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     chunk = new_chunk()
     time_offset = 0.0
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
+    timestamp_end = tokenizer.timestamp_end
     previous_tokens = []
     previous_token_timestamps = []
     skip = False
@@ -954,7 +962,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 first_timestamp = stride_left / time_precision + timestamp_begin
             if stride_right:
                 for token in reversed(token_ids):
-                    if token >= timestamp_begin:
+                    if timestamp_begin <= token <= timestamp_end:
                         # There can be several token in the right stride
                         # But the last one is ALWAYS going to be skipped
                         if (
@@ -1000,7 +1008,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 else:
                     # 2/ This is a regular special token, ignoring it
                     pass
-            elif token >= timestamp_begin:
+            elif timestamp_begin <= token <= timestamp_end:
                 # 3/ Timestamp token
                 time = (token - timestamp_begin) * time_precision + time_offset
                 time = round(time, 2)
