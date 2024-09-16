@@ -1,0 +1,46 @@
+name: Slow CI Reminder
+
+# For security reason, don't use `pull_request` but `pull_request_target`!
+on:
+  pull_request_target:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  remind:
+    name: remind
+    runs-on: ubuntu-22.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - name: Find comment
+      uses: peter-evans/find-comment@v2
+      id: find_comment
+      with:
+        issue-number: ${{ github.event.number }}
+        body-includes: Please trigger Slow CI and make sure all tests are passing before merging this pull request.
+
+    - run: |
+        echo ${{ steps.find_comment.outputs.comment-id }}
+
+    - name: Delete previous comment (if found)
+      if: steps.find_comment.outputs.comment-id != ''
+      uses: actions/github-script@v6
+      with:
+        result-encoding: string
+        github-token: ${{ secrets.comment_bot_token }}
+        script: |
+          github.rest.issues.deleteComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            comment_id: ${{ steps.find_comment.outputs.comment-id }},
+          })
+
+    - name: Add comment
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        message: 'Please trigger Slow CI and make sure all tests are passing before merging this pull request.'
+        pr_number: ${{ github.event.number }}
+        GITHUB_TOKEN: ${{ secrets.comment_bot_token }}
