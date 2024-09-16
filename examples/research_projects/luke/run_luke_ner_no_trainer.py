@@ -543,7 +543,7 @@ def main():
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         data_collator = DataCollatorForLukeTokenClassification(
-            tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None)
+            tokenizer, pad_to_multiple_of=(8 if accelerator.mixed_precision != "no" else None)
         )
 
     train_dataloader = DataLoader(

@@ -538,7 +538,7 @@ def main():
         tokenizer,
         model=model,
         label_pad_token_id=label_pad_token_id,
-        pad_to_multiple_of=8 if accelerator.use_fp16 else None,
+        pad_to_multiple_of=8 if accelerator.mixed_precision != "no" else None,
     )
 
     def postprocess_text(preds, labels):
