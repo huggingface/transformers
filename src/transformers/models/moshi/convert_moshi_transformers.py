@@ -223,6 +223,8 @@ def convert_checkpoint(
     original_checkpoint.update({f"audio_encoder.{key}": value for (key, value) in audio_checkpoint.items()})
     
     model = _convert_model(original_checkpoint, model, convert_list, device, config)
+    
+    # TODO: set generation config
 
     model.save_pretrained(pytorch_dump_folder_path)
 
