@@ -181,53 +181,6 @@ class MllamaOutput(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class MllamaPatchEmbedding(nn.Module):
-    """Conv2D Patching layer implemented as linear layer operation.
-    (can be later replaced with Conv2d(bias=False) + .flatten(2).transpose(1, 2) with small logits mismatch)
-
-    Arguments:
-        in_channels: Input channels.
-        out_channels: Output channels.
-        kernel_size: Size of convolution kernel.
-        stride (default 1): Stride for convolution.
-    Input: (bsz, in_channels, width, height)
-    Output: (bsz, num_tokens, out_channels)
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: Union[int, Tuple[int, int]],
-        stride: Union[int, Tuple[int, int]],
-    ) -> None:
-        super().__init__()
-
-        if isinstance(kernel_size, int):
-            kernel_size = (kernel_size, kernel_size)
-
-        self.out_channels = out_channels
-        self.in_channels = in_channels
-        self.kernel_size = kernel_size
-        self.stride = stride
-
-        self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
-
-        # param equivalent to Conv2d weight, it will be reshaped in forward to fit Linear layer,
-        # to be fully equivalent original implementation
-        self.weight = torch.nn.Parameter(
-            torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
-            requires_grad=True,
-        )
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.unfold(hidden_state)
-        hidden_state = hidden_state.permute(0, 2, 1)
-        hidden_state = hidden_state.to(self.weight.data.device)
-        hidden_state = F.linear(hidden_state, self.weight.view(self.out_channels, -1))
-        return hidden_state
-
-
 class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
     def __init__(self, max_num_tiles, max_aspect_ratio_id, hidden_size, is_gated, **kwargs):
         super().__init__()
