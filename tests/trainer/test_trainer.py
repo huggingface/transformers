@@ -32,7 +32,15 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, ModelCard, create_branch, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import (
+    HfFolder,
+    ModelCard,
+    create_branch,
+    delete_repo,
+    list_repo_commits,
+    list_repo_files,
+    model_info,
+)
 from packaging import version
 from parameterized import parameterized
 from requests.exceptions import HTTPError
@@ -4085,6 +4093,26 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
             branch_name = re_search.groups()[0]
             self.assertEqual(branch_name, branch)
+
+    def test_push_to_hub_private(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-private"),
+                push_to_hub=True,
+                hub_token=self._token,
+            )
+
+            trainer.push_to_hub(private=True)
+
+            info = model_info(f"{USER}/test-trainer-private", token=self._token)
+
+            self.assertTrue(info.private)
+
+            trainer.push_to_hub(private=False)
+
+            info = model_info(f"{USER}/test-trainer-private", token=self._token)
+
+            self.assertFalse(info.private)
 
 
 @require_torch

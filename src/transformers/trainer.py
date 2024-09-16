@@ -50,7 +50,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import ModelCard, create_repo, upload_folder
+from huggingface_hub import ModelCard, create_repo, model_info, update_repo_visibility, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -4372,6 +4372,21 @@ class Trainer:
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
+    def _update_repo_visibility(self, token: Optional[str] = None):
+        if self.hub_model_id is None:
+            raise ValueError("`_update_repo_visiblity` should be used after `init_hf_repo` to ensure repo exists.")
+        visibility = model_info(self.hub_model_id, token=token).private
+        if visibility and visibility == self.args.hub_private_repo:
+            return
+        logger.warning(
+            f"{self.hub_model_id} visibility will be changed to {'Private' if self.args.hub_private_repo else 'Public'}."
+        )
+        update_repo_visibility(
+            repo_id=self.hub_model_id,
+            private=self.args.hub_private_repo,
+            token=token,
+        )
+
     def create_model_card(
         self,
         language: Optional[str] = None,
@@ -4525,6 +4540,7 @@ class Trainer:
         blocking: bool = True,
         token: Optional[str] = None,
         revision: Optional[str] = None,
+        private: Optional[bool] = None,
         **kwargs,
     ) -> str:
         """
@@ -4539,6 +4555,8 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
+            private (`bool`, *optional*, defaults to `args.hub_private_repo`):
+                Controls repo visibility at creation and changes visiblity of existing repo.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4553,10 +4571,14 @@ class Trainer:
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
         token = token if token is not None else self.args.hub_token
+        if private is not None:
+            self.args.hub_private_repo = private
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
             self.init_hf_repo(token=token)
+
+        self._update_repo_visibility(token=token)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
