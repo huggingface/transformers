@@ -486,7 +486,6 @@ class MllamaVisionModel(PreTrainedModel):
         # encoders
         self.transformer = MllamaVisionEncoder(config, config.num_hidden_layers, is_gated=False)
         self.global_transformer = MllamaVisionEncoder(config, config.num_global_layers, is_gated=True)
-        self.output_dim = config.projection_dim
 
     def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
         batch_size, _, hidden_size = hidden_state.shape
