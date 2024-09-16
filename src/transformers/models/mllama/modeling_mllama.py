@@ -1296,10 +1296,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
-    def __init__(self, config, attn_implementation):
+    def __init__(self, config):
         super().__init__(config)
-        self.model = MllamaTextModel._from_config(config, attn_implementation=attn_implementation)
         self.vocab_size = config.vocab_size
+        self.model = MllamaTextModel._from_config(config, attn_implementation=config._attn_implementation)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1499,8 +1499,21 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         return model_inputs
 
 
-MLLAMA_START_DOCSTRING = ""  # TODO add docstring to MLLAMA start and other classes
+MLLAMA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MllamaConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 @add_start_docstrings(
     """The MLLAMA model which consists of a vision backbone and a language model.""",
@@ -1511,23 +1524,23 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.hidden_size = self.config.text_config.hidden_size
+        self.max_num_tiles = config.vision_config.max_num_tiles
+        self.vision_output_dim = config.vision_config.vision_output_dim
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+
         self.vision_model = MllamaVisionModel._from_config(
             config.vision_config, attn_implementation=config._attn_implementation
+        )
+        self.language_model = MllamaForCausalLM._from_config(
+            config.text_config, attn_implementation=config._attn_implementation
         )
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
-            #! originally bias=True, but bias was not used in original forward pass
             bias=True,
         )
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = MllamaForCausalLM(config.text_config, attn_implementation=config._attn_implementation)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.post_init()
-        self.hidden_size = self.config.text_config.hidden_size
-        self.max_num_tiles = config.vision_config.max_num_tiles
-        self.vision_output_dim = config.vision_config.vision_output_dim
-
         self.post_init()
 
     def get_input_embeddings(self):
