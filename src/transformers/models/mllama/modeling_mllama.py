@@ -131,7 +131,11 @@ def _prepare_cross_attention_mask(
 
     # In case we got a new image but already have prev cross-atnn key/values in cache
     # we need to extend the attn-mask and add previuos images' lengths
-    if past_key_values is not None and cross_attention_states is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:
+    if (
+        past_key_values is not None
+        and cross_attention_states is not None
+        and past_key_values.get_seq_length(cross_attention_layers[0]) != 0
+    ):
         # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
         # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
         past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
@@ -150,7 +154,6 @@ def _prepare_aspect_ratio_attention_mask(
     target_length: int,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-
     # Expand aspect ratio mask to target_length
     batch_size, max_num_tiles = aspect_ratio_mask.shape
     attention_mask = aspect_ratio_mask.view(batch_size, max_num_tiles, 1, 1).to(dtype)
@@ -232,11 +235,11 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         #     self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
         # )
         # self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
-        self.tile_embedding = nn.Embedding(self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size)
-
+        self.tile_embedding = nn.Embedding(
+            self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size
+        )
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-
         # position embeddings
         gated_position_embedding = (1 - self.gate.tanh()) * self.embedding
         hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
@@ -244,7 +247,9 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         # precomputed tile position embeddings
         tile_position_embedding = self.tile_embedding(aspect_ratio_ids)
         batch_size = hidden_state.shape[0]
-        tile_position_embedding = tile_position_embedding.reshape(batch_size, self.max_num_tiles, self.num_patches, self.hidden_size)
+        tile_position_embedding = tile_position_embedding.reshape(
+            batch_size, self.max_num_tiles, self.num_patches, self.hidden_size
+        )
         gated_tile_position_embedding = self.gate.tanh() * tile_position_embedding
         hidden_state = hidden_state + gated_tile_position_embedding
 
@@ -544,7 +549,9 @@ class MllamaVisionModel(PreTrainedModel):
         )
         hidden_state, all_intermediate_hidden_states = output[0], output[1]
         intermediate_hidden_states = [
-            hidden_state for idx, hidden_state in enumerate(all_intermediate_hidden_states) if idx in self.intermediate_layers_indices
+            hidden_state
+            for idx, hidden_state in enumerate(all_intermediate_hidden_states)
+            if idx in self.intermediate_layers_indices
         ]
         intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
 
@@ -660,7 +667,9 @@ class MllamaTextCrossAttention(nn.Module):
                 past_key_value.value_cache[self.layer_idx],
             )
         else:
-            raise ValueError("Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!")
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -1125,9 +1134,13 @@ class MllamaTextModel(PreTrainedModel):
 
             # Check if there are image-related cross attention states
             # as input or in cache, otherwise skip cross attention layer
-            if (idx in self.cross_attention_layers and
-                cross_attention_states is None and
-                (past_key_values is None or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0))
+            if (
+                idx in self.cross_attention_layers
+                and cross_attention_states is None
+                and (
+                    past_key_values is None
+                    or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0)
+                )
             ):
                 continue
 
@@ -1575,13 +1588,18 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
+        if cross_attention_mask is not None:
+            cross_attention_mask = cross_attention_mask[:, :, cache_position]
+        if full_text_row_masked_out_mask is not None:
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+
         outputs = self.language_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask[:, :, cache_position] if cross_attention_mask is not None else None,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position] if cross_attention_mask is not None else None,
+            cross_attention_mask=cross_attention_mask,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
