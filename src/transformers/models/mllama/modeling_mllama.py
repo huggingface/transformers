@@ -1335,10 +1335,10 @@ class MllamaForCausalLM(PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LlamaForCausalLM
+        >>> from transformers import AutoTokenizer, MllamaForCausalLM
 
-        >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        >>> model = MllamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-11b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-11b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
