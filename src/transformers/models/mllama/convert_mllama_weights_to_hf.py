@@ -235,6 +235,7 @@ def write_model(
     num_channels = 3
     # intermediate size: 28672 for 90B, 5120 for 11B
     intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])
+    intermediate_layers_indices = [3, 7, 15, 23, 30]  # TODO: Check for 90B model
 
     # vision model
     n_layers_vision = 32  # constant
@@ -362,7 +363,7 @@ def write_model(
     vision_config = MllamaVisionConfig(
         num_hidden_layers=n_layers_vision,
         vision_input_dim=dim_vision,  # Constant, taken directly from your notes
-        return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
+        intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
         num_global_layers=n_layers_vision_global,
         image_size=params["vision_chunk_size"],
         num_attention_heads=n_heads_vision,
@@ -392,7 +393,7 @@ def write_model(
     del model.config._name_or_path
 
     print("Saving the model.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    # model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
     # Safety check: reload the converted model

@@ -456,7 +456,7 @@ class MllamaVisionModel(PreTrainedModel):
         self.max_num_tiles = config.max_num_tiles
         self.hidden_size = config.vision_input_dim
         self.in_channels = config.in_channels
-        self.vision_selection_layers = config.return_intermediate
+        self.intermediate_layers_indices = config.intermediate_layers_indices
 
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.vision_input_dim**-0.5
@@ -543,7 +543,7 @@ class MllamaVisionModel(PreTrainedModel):
         )
         hidden_state, all_intermediate_hidden_states = output[0], output[1]
         intermediate_hidden_states = [
-            hidden_state for idx, hidden_state in enumerate(all_intermediate_hidden_states) if idx in self.vision_selection_layers
+            hidden_state for idx, hidden_state in enumerate(all_intermediate_hidden_states) if idx in self.intermediate_layers_indices
         ]
         intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
 

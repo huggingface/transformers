@@ -88,7 +88,7 @@ class MllamaVisionText2TextModelTester:
             "is_training": True,
             "image_size": 30,
             "hidden_size": 32,
-            "return_intermediate": [0],
+            "intermediate_layers_indices": [0],
             "vision_output_dim": 2560,
             "projection_dim": 32,
             "num_hidden_layers": 2,
