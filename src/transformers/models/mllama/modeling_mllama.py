@@ -320,9 +320,7 @@ class MllamaVisionMLP(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        # hidden_states = self.fc2(hidden_states)
-        # TODO: for debugging
-        hidden_states = torch.nn.functional.linear(hidden_states, self.fc2.weight) + self.fc2.bias
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 
