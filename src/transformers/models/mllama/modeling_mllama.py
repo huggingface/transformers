@@ -197,12 +197,6 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
-        # TODO: move to init
-        # scale = hidden_size**-0.5
-        # self.embedding = nn.Parameter(
-        #     torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale
-        # )
-
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
         embeddings = self.embedding(aspect_ratio_ids)
         embeddings = embeddings.reshape(-1, self.max_num_tiles, 1, self.hidden_size)
@@ -230,11 +224,6 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.embedding = nn.Parameter(self.scale * position_embedding)
 
         # tile position embedding
-        # TODO: move to init
-        # precomputed_tile_embeddings = torch.zeros(
-        #     self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
-        # )
-        # self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
         self.tile_embedding = nn.Embedding(
             self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size
         )
@@ -1039,6 +1028,23 @@ class MllamaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+MLLAMA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MllamaConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
@@ -1499,21 +1505,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         return model_inputs
 
 
-MLLAMA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MllamaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 @add_start_docstrings(
     """The MLLAMA model which consists of a vision backbone and a language model.""",
