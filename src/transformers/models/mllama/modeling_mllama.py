@@ -149,12 +149,12 @@ def prepare_aspect_ratio_attention_mask(
     target_length: int,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    
+
     # Expand aspect ratio mask to target_length
     batch_size, max_num_tiles = aspect_ratio_mask.shape
     attention_mask = aspect_ratio_mask.view(batch_size, max_num_tiles, 1, 1).to(dtype)
     attention_mask = attention_mask.repeat(1, 1, target_length, 1)
-    
+
     # Mask padding patches
     pad_patches = target_length - num_patches
     attention_mask[:, :, -pad_patches:] = 0
@@ -278,13 +278,13 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
         self.scale = config.vision_input_dim**-0.5
-        
+
         self.gate = nn.Parameter(torch.zeros(1))
 
         # position embedding
         position_embedding = torch.randn(self.num_patches, self.hidden_size)
         self.embedding = nn.Parameter(self.scale * position_embedding)
-        
+
         # tile position embedding
         precomputed_tile_embeddings = torch.zeros(
             self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
@@ -293,7 +293,7 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
 
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        
+
         # position embeddings
         gated_position_embedding = (1 - self.gate.tanh()) * self.embedding
         hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
@@ -492,8 +492,8 @@ class MllamaVisionEncoder(nn.Module):
 
             # SDPA never returns attn weights, so the kwarg isn't used at all
             # TODO: fix this
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            # if output_attentions:
+            #     all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -1022,12 +1022,14 @@ class MllamaRotaryEmbedding(nn.Module):
         self,
         config: Optional[MllamaTextConfig] = None,
         device=None,
-        rope_type="default",
     ):
         super().__init__()
+        self.rope_type = config.rope_scaling["rope_type"]
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        self.rope_type = rope_type
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
@@ -1040,7 +1042,9 @@ class MllamaRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -1050,7 +1054,7 @@ class MllamaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if "dynamic" in self.config.rope_type:
+        if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block

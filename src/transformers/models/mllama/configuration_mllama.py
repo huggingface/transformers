@@ -167,12 +167,45 @@ class MllamaTextConfig(PretrainedConfig):
             The ignore index for the loss function.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-        The index of the layer to select the vision feature.
-
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     Example:
 
     ```python
@@ -208,7 +241,7 @@ class MllamaTextConfig(PretrainedConfig):
         use_scaled_rope=True,
         intermediate_size=14336,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_position_embeddings=16_384,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
@@ -228,7 +261,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.num_hidden_layers = num_hidden_layers
         if cross_attention_layers is None:
-            cross_attention_layers = [3, 7, 11, 15, 19, 23, 27, 31]
+            cross_attention_layers = [3, 8, 13, 18, 23, 28, 33, 38]
         self.cross_attention_layers = cross_attention_layers
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -241,7 +274,8 @@ class MllamaTextConfig(PretrainedConfig):
         self.dropout = dropout
         self.hidden_activation = hidden_activation
         self.attention_bias = attention_bias
-        self.rope_type = "default"
+        self.rope_scaling = rope_scaling
+        self.max_position_embeddings = max_position_embeddings
         rope_config_validation(self)
 
         super().__init__(
