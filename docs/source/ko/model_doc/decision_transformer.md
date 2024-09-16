@@ -14,28 +14,25 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Decision Transformer
+# 결정 트랜스포머 (Decision Transformer)
 
-## Overview
+## 개요
 
-The Decision Transformer model was proposed in [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)  
-by Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch.
+결정 변환기(Decision Transformer) 모델은 Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch가 작성한 논문 [결정 트랜스포머 : 시퀀스 모델링을 통한 강화 학습(Decision Transformer: Reinforcement Learning via Sequence Modeling)](https://arxiv.org/abs/2106.01345)에서 제안되었습니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다 :
 
-*We introduce a framework that abstracts Reinforcement Learning (RL) as a sequence modeling problem. 
-This allows us to draw upon the simplicity and scalability of the Transformer architecture, and associated advances
- in language modeling such as GPT-x and BERT. In particular, we present Decision Transformer, an architecture that 
- casts the problem of RL as conditional sequence modeling. Unlike prior approaches to RL that fit value functions or 
- compute policy gradients, Decision Transformer simply outputs the optimal actions by leveraging a causally masked 
- Transformer. By conditioning an autoregressive model on the desired return (reward), past states, and actions, our 
- Decision Transformer model can generate future actions that achieve the desired return. Despite its simplicity, 
- Decision Transformer matches or exceeds the performance of state-of-the-art model-free offline RL baselines on 
- Atari, OpenAI Gym, and Key-to-Door tasks.*
+*우리는 강화 학습(RL)을 시퀀스 모델링 문제로 추상화하는 프레임워크를 소개합니다. 
+이를 통해 우리는 Transformer 아키텍처의 단순성과 확장성을 활용하고, GPT-x 및 BERT와 같은 언어 모델링에서의 발전을 적용할 수 있습니다. 
+특히, 우리는 강화 학습 문제를 조건부 시퀀스 모델링으로 해석하는 결정 변환기(Decision Transformer)를 제안합니다. 
+가치 함수를 맞추거나 정책 그래디언트를 계산하는 기존의 RL 접근 방식과 달리,
+결정 변환기는 인과적으로 마스킹된 Transformer를 활용하여 최적의 행동을 단순히 출력합니다. 
+자가회귀 모델을 원하는 보상(리턴), 과거 상태, 행동에 조건화하여 결정 변환기 모델은 원하는 보상을 달성할 수 있는 미래 행동을 생성할 수 있습니다. 
+이 모델은 단순함에도 불구하고, Atari, OpenAI Gym, Key-to-Door 작업에서 최첨단 무모델 오프라인 강화 학습(RL) 기준 성능과 동등하거나 이를 초과합니다.*
 
-This version of the model is for tasks where the state is a vector.
+이 버전의 모델은 상태가 벡터인 작업에 사용됩니다.
 
-This model was contributed by [edbeeching](https://huggingface.co/edbeeching). The original code can be found [here](https://github.com/kzl/decision-transformer).
+이 모델은 [edbeeching](https://huggingface.co/edbeeching) 에 의해 제공되었으며, 원본 코드는 [여기](https://github.com/kzl/decision-transformer)에서 확인할 수 있습니다.
 
 ## DecisionTransformerConfig
 
