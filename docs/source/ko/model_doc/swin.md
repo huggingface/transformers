@@ -27,7 +27,7 @@ Swin Transformer는 Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Swin Transformer 아키텍처. 원본 논문 <a href="https://arxiv.org/abs/2102.03334">에서 발췌</a>.</small>
+<small> Swin Transformer 아키텍처. <a href="https://arxiv.org/abs/2102.03334">원본 논문</a>에서 발췌.</small>
 
 이 모델은 [novice03](https://huggingface.co/novice03)이 기여하였습니다. Tensorflow 버전은 [amyeroberts](https://huggingface.co/amyeroberts)가 기여했습니다. 원본 코드는 [여기](https://github.com/microsoft/Swin-Transformer)에서 확인할 수 있습니다.
 
