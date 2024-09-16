@@ -661,8 +661,8 @@
         title: (번역중) ALIGN
       - local: in_translation
         title: (번역중) AltCLIP
-      - local: in_translation
-        title: (번역중) BLIP
+      - local: modeldoc/blip
+        title: BLIP
       - local: in_translation
         title: (번역중) BLIP-2
       - local: in_translation
