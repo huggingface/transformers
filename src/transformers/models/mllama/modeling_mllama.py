@@ -95,7 +95,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     return causal_mask
 
 
-def prepare_cross_attention_mask(
+def _prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
     past_key_values: Cache,
     num_vision_tokens: int,
@@ -143,7 +143,7 @@ def prepare_cross_attention_mask(
     return cross_attention_mask, full_text_row_masked_out_mask
 
 
-def prepare_aspect_ratio_attention_mask(
+def _prepare_aspect_ratio_attention_mask(
     aspect_ratio_mask: torch.Tensor,
     num_patches: int,
     target_length: int,
@@ -599,7 +599,7 @@ class MllamaVisionModel(PreTrainedModel):
         slice_index = -num_padding_patches if num_padding_patches > 0 else None
 
         attention_mask = attention_mask.reshape(batch_size * num_concurrent_media, -1)
-        attention_mask = prepare_aspect_ratio_attention_mask(
+        attention_mask = _prepare_aspect_ratio_attention_mask(
             aspect_ratio_mask=attention_mask,
             num_patches=self.num_patches,
             target_length=hidden_state.shape[2],
@@ -1607,7 +1607,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 -1, cross_attention_states.shape[-2], self.hidden_size
             )
 
-        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+        cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
             cross_attention_mask,
             past_key_values=past_key_values,
             num_vision_tokens=self.vision_model.num_patches,
