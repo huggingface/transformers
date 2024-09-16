@@ -211,12 +211,11 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):
 
 
 class MllamaPrecomputedPositionEmbedding(nn.Module):
-    def __init__(self, config, *args, **kwargs):
-        self.config = config
-        super().__init__(**kwargs)
+    def __init__(self, config: MllamaVisionConfig):
+        super().__init__()
         self.max_num_tiles = config.max_num_tiles
         self.max_aspect_ratio_id = config.max_aspect_ratio_id
-        self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
+        self.num_patches = (config.image_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
         self.scale = config.vision_input_dim**-0.5
 
@@ -452,16 +451,14 @@ class MllamaVisionModel(PreTrainedModel):
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
         self.max_num_tiles = config.max_num_tiles
         self.hidden_size = config.vision_input_dim
         self.in_channels = config.in_channels
         self.vision_selection_layers = config.return_intermediate
 
-        self.image_size = [config.vision_chunk_size, config.vision_chunk_size]
-        self.patch_size = [config.patch_size, config.patch_size]
-        self.num_patches_height = self.image_size[0] // self.patch_size[0]
-        self.num_patches_width = self.image_size[1] // self.patch_size[1]
-        self.num_patches = self.num_patches_height * self.num_patches_width + 1
+        self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.vision_input_dim**-0.5
 
         self.patch_embedding = nn.Conv2d(

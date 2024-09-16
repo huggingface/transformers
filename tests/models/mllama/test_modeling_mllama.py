@@ -86,7 +86,7 @@ class MllamaVisionText2TextModelTester:
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
-            "vision_chunk_size": 30,
+            "image_size": 30,
             "hidden_size": 32,
             "return_intermediate": [0],
             "vision_output_dim": 2560,

@@ -364,7 +364,7 @@ def write_model(
         vision_input_dim=dim_vision,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
         num_global_layers=n_layers_vision_global,
-        vision_chunk_size=params["vision_chunk_size"],
+        image_size=params["vision_chunk_size"],
         num_attention_heads=n_heads_vision,
         max_num_tiles=4,
         supported_aspect_ratios=get_all_supported_aspect_ratios(4),

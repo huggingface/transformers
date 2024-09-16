@@ -87,7 +87,6 @@ class MllamaVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         num_global_layers=8,
-        vision_chunk_size=448,
         projection_dim=4096,
         vision_input_dim=1280,
         vision_output_dim=7680,
@@ -106,7 +105,6 @@ class MllamaVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.layer_norm_eps = layer_norm_eps
         self.vision_output_dim = vision_output_dim
-        self.vision_chunk_size = vision_chunk_size
         self.patch_size = patch_size
         self.projection_dim = projection_dim
         self.vision_input_dim = vision_input_dim
