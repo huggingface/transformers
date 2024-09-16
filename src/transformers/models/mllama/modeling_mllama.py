@@ -188,31 +188,17 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
         self.hidden_size = hidden_size
         self.is_gated = is_gated
 
-        scale = hidden_size**-0.5
-        self.embedding = nn.Parameter(
-            torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale
-        )
+        self.embedding = nn.Embedding(max_aspect_ratio_id + 1, self.max_num_tiles * self.hidden_size)
+        # TODO: move to init
+        # scale = hidden_size**-0.5
+        # self.embedding = nn.Parameter(
+        #     torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale
+        # )
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
-    @staticmethod
-    def _dynamic_resize(embedding: torch.Tensor, num_tiles: int):
-        # TODO this no longer really hodls as we need to take into account the pre-computation!
-        embedding = embedding.permute(2, 3, 0, 1)
-
-        embedding_new = F.interpolate(
-            embedding,
-            size=(num_tiles, num_tiles),
-            mode="bilinear",
-            align_corners=True,
-        )
-        # reshape the weights to the correct shape
-        embedding_new = embedding_new.permute(2, 3, 0, 1)
-        return embedding_new
-
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        # TODO use torch.nn.functionnal.embedding for compile compatibility
-        embeddings = self.embedding[aspect_ratio_ids]
+        embeddings = self.embedding(aspect_ratio_ids)
         embeddings = embeddings.reshape(-1, self.max_num_tiles, 1, self.hidden_size)
 
         if self.is_gated:
@@ -239,10 +225,12 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.embedding = nn.Parameter(self.scale * position_embedding)
 
         # tile position embedding
-        precomputed_tile_embeddings = torch.zeros(
-            self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
-        )
-        self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
+        # TODO: move to init
+        # precomputed_tile_embeddings = torch.zeros(
+        #     self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
+        # )
+        # self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
+        self.tile_embedding = nn.Embedding(self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size)
 
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
@@ -252,9 +240,9 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
 
         # precomputed tile position embeddings
-        tile_position_embedding = self.tile_embedding[aspect_ratio_ids]
-        batch = hidden_state.shape[0]
-        tile_position_embedding = tile_position_embedding.reshape(batch, -1, self.num_patches, self.hidden_size)
+        tile_position_embedding = self.tile_embedding(aspect_ratio_ids)
+        batch_size = hidden_state.shape[0]
+        tile_position_embedding = tile_position_embedding.reshape(batch_size, self.max_num_tiles, self.num_patches, self.hidden_size)
         gated_tile_position_embedding = self.gate.tanh() * tile_position_embedding
         hidden_state = hidden_state + gated_tile_position_embedding
 

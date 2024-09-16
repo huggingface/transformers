@@ -80,8 +80,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
     r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
     r'vision_model.vision_encoder.positional_embedding\b':                                      r'vision_model.gated_positional_embedding.embedding',
-    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.tile_embedding',
+    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.tile_embedding.weight',
     r'vision_model.vision_encoder.gated_positional_embedding_gate':                             r'vision_model.gated_positional_embedding.gate',
+    r"vision_model.vision_encoder.pre_tile_pos_embed.embedding":                                r"vision_model.pre_tile_pos_embed.embedding.weight",
+    r"vision_model.vision_encoder.post_tile_pos_embed.embedding":                               r"vision_model.post_tile_pos_embed.embedding.weight",
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
@@ -159,6 +161,7 @@ def pre_compute_positional_embedding(embedding):
         aspect_ratio_id = i + 1  # we keep 0 index for padding
         current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
         precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
+    precomputed_embeddings = precomputed_embeddings.flatten(1)
     return precomputed_embeddings
 
 
