@@ -42,6 +42,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MllamaConfig"
 
 
+# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -76,7 +77,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     """
     if attention_mask is not None and attention_mask.dim() == 4:
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-        causal_mask = attention_mask.to(device)
+        causal_mask = attention_mask
     else:
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
