@@ -616,21 +616,62 @@ than the JSON schemas used for tools, no helper functions are necessary.
 Here's an example of a RAG template in action:
 
 ```python
-document1 = {
-    "title": "The Moon: Our Age-Old Foe",
-    "contents": "Man has always dreamed of destroying the moon. In this essay, I shall..."
-}
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-document2 = {
-    "title": "The Sun: Our Age-Old Friend",
-    "contents": "Although often underappreciated, the sun provides several notable benefits..."
-}
+# Load the model and tokenizer
+model_id = "CohereForAI/c4ai-command-r-v01-4bit"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+device = model.device # Get the device the model is loaded on
 
-model_input = tokenizer.apply_chat_template(
-    messages,
-    documents=[document1, document2]
-)
+# Define conversation input
+conversation = [
+    {"role": "user", "content": "What has Man always dreamed of?"}
+]
+
+# Define documents for retrieval-based generation
+documents = [
+    {
+        "title": "The Moon: Our Age-Old Foe", 
+        "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
+    },
+    {
+        "title": "The Sun: Our Age-Old Friend",
+        "text": "Although often underappreciated, the sun provides several notable benefits..."
+    }
+]
+
+# Tokenize conversation and documents using a RAG template, returning PyTorch tensors.
+input_ids = tokenizer.apply_chat_template(
+    conversation=conversation,
+    documents=documents,
+    chat_template="rag",
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt").to(device)
+
+# Generate a response 
+gen_tokens = model.generate(
+    input_ids,
+    max_new_tokens=100,
+    do_sample=True,
+    temperature=0.3,
+    )
+
+# Decode and print the generated text along with generation prompt
+gen_text = tokenizer.decode(gen_tokens[0])
+print(gen_text)
 ```
+
+**Note on `documents` input:**
+
+The `documents` input is not widely supported by many models, and chat templates often discard this input. Users should be cautious about relying on `documents` unless the model explicitly supports it.
+
+To verify if a model supports the `documents` input, check if it is included in the `chat_template` key within the `tokenizer_config.json` file in the model's card.
+
+As an example, Cohere's [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024) support the `documents` input through their `rag` chat template. You can see additional examples of grounded generation using this feature in their model cards.
+
+
 
 ## Advanced: How do chat templates work?
 
