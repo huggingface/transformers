@@ -20,6 +20,17 @@ import re
 import types
 
 
+def auto_docstring(*docstr):
+    # Automatically writes docstring based on ast for module when building the doc
+    def docstring_decorator(fn):
+        class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
+
+        fn.__doc__ = "".join("Dummy docstring for now") + (fn.__doc__ if fn.__doc__ is not None else "")
+        return fn
+
+    return docstring_decorator
+
+
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
