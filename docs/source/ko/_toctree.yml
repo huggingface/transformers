@@ -589,7 +589,7 @@
         title: (번역중) ResNet
       - local: in_translation
         title: (번역중) SegFormer
-      - local: mode_doc/swin
+      - local: model_doc/swin
         title: Swin Transformer
       - local: in_translation
         title: (번역중) Swin Transformer V2
