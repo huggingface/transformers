@@ -16,11 +16,12 @@
 # limitations under the License.
 import base64
 import importlib
+import inspect
 import io
 import json
 import os
 import tempfile
-from functools import lru_cache
+from functools import lru_cache, wraps
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
@@ -35,6 +36,7 @@ from ..dynamic_module_utils import (
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
+    TypeHintParsingException,
     cached_file,
     get_json_schema,
     is_accelerate_available,
@@ -85,6 +87,20 @@ launch_gradio_demo({class_name})
 """
 
 
+def validate_after_init(cls):
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def new_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        if not isinstance(self, PipelineTool):
+            self.validate_arguments()
+
+    cls.__init__ = new_init
+    return cls
+
+
+@validate_after_init
 class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -115,17 +131,35 @@ class Tool:
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
-    def validate_attributes(self):
+    def validate_arguments(self):
         required_attributes = {
             "description": str,
             "name": str,
             "inputs": Dict,
-            "output_type": type,
+            "output_type": str,
         }
+        authorized_types = ["string", "integer", "number", "image", "audio", "any"]
+
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
             if not isinstance(attr_value, expected_type):
-                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
+                raise TypeError(f"You must set an attribute {attr} of type {expected_type.__name__}.")
+        for input_name, input_content in self.inputs.items():
+            assert "type" in input_content, f"Input '{input_name}' should specify a type."
+            if input_content["type"] not in authorized_types:
+                raise Exception(
+                    f"Input '{input_name}': type '{input_content['type']}' is not an authorized value, should be one of {authorized_types}."
+                )
+            assert "description" in input_content, f"Input '{input_name}' should have a description."
+
+        assert getattr(self, "output_type", None) in authorized_types
+
+        if not isinstance(self, PipelineTool):
+            signature = inspect.signature(self.forward)
+            if not set(signature.parameters.keys()) == set(self.inputs.keys()):
+                raise Exception(
+                    "Tool's 'forward' method should take 'self' as its first argument, then its next arguments should match the keys of tool attribute 'inputs'."
+                )
 
     def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -817,24 +851,30 @@ def tool(tool_function: Callable) -> Tool:
     Decorator that turns a function into an instance of a specific Tool subclass
 
     Args:
-        tool_function: Your function. Should have type hints for each input and for the output, and a description with 'Args:' part where each argument is described.
+        tool_function: Your function. Should have type hints for each input and a type hint for the output.
+        Should also have a docstring description including an 'Args:' part where each argument is described.
     """
     parameters = get_json_schema(tool_function)["function"]
+    if "return" not in parameters:
+        raise TypeHintParsingException("Tool return type not found: make sure your function has a return type hint!")
     class_name = f"{parameters['name'].capitalize()}Tool"
-    specific_tool_class = type(
-        class_name,
-        (Tool,),
-        {
-            "name": parameters["name"],
-            "description": parameters["description"],
-            "inputs": parameters["parameters"],
-            "output_type": parameters["return"]["type"],
-        },
+
+    class SpecificTool(Tool):
+        name = parameters["name"]
+        description = parameters["description"]
+        inputs = parameters["parameters"]["properties"]
+        output_type = parameters["return"]["type"]
+
+        @wraps(tool_function)
+        def forward(self, *args, **kwargs):
+            return tool_function(*args, **kwargs)
+
+    original_signature = inspect.signature(tool_function)
+    new_parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)] + list(
+        original_signature.parameters.values()
     )
+    new_signature = original_signature.replace(parameters=new_parameters)
+    SpecificTool.forward.__signature__ = new_signature
 
-    def forward(self, *args, **kwargs):
-        return tool_function(*args, **kwargs)
-
-    setattr(specific_tool_class, "forward", forward)
-
-    return specific_tool_class()
+    SpecificTool.__name__ = class_name
+    return SpecificTool()

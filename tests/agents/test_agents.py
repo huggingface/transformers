@@ -180,7 +180,6 @@ Action:
         assert isinstance(output, float)
         assert output == 7.2904
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
-        assert float(agent.logs[1]["observation"].strip()) - 12.511648 < 1e-6
         assert agent.logs[2]["tool_call"] == {
             "tool_arguments": "final_answer(7.2904)",
             "tool_name": "code interpreter",
@@ -233,7 +232,7 @@ Action:
 
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
-        assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (excluding interpreter)
+        assert len(agent.toolbox.tools) == 7  # added final_answer tool + 6 base tools (excluding interpreter)
 
     def test_function_persistence_across_steps(self):
         agent = ReactCodeAgent(

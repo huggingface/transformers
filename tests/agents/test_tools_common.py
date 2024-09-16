@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Dict, Union
 
 import numpy as np
+import pytest
 
 from transformers import is_torch_available, is_vision_available
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText
-from transformers.agents.tools import tool
+from transformers.agents.tools import Tool, tool
 from transformers.testing_utils import get_tests_dir, is_agent_test
 
 
@@ -112,8 +113,59 @@ class ToolTests(unittest.TestCase):
 
             Args:
                 a: The first argument
-                b: The third one
+                b: The second one
             """
             return b + 2, a
 
         assert coolfunc.output_type == "number"
+
+    def test_tool_init_vanilla(self):
+        class HFModelDownloadsTool(Tool):
+            name = "model_download_counter"
+            description = """
+            This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub.
+            It returns the name of the checkpoint."""
+
+            inputs = {
+                "task": {
+                    "type": "string",
+                    "description": "the task category (such as text-classification, depth-estimation, etc)",
+                }
+            }
+            output_type = "integer"
+
+            def forward(self, task):
+                return "best model"
+
+        tool = HFModelDownloadsTool()
+        assert list(tool.inputs.keys())[0] == "task"
+
+    def test_tool_init_decorator_raises_issues(self):
+        with pytest.raises(Exception) as e:
+
+            @tool
+            def coolfunc(a: str, b: int):
+                """Cool function
+
+                Args:
+                    a: The first argument
+                    b: The second one
+                """
+                return a + b
+
+            assert coolfunc.output_type == "number"
+        assert "Tool return type not found" in str(e)
+
+        with pytest.raises(Exception) as e:
+
+            @tool
+            def coolfunc(a: str, b: int) -> int:
+                """Cool function
+
+                Args:
+                    a: The first argument
+                """
+                return b + a
+
+            assert coolfunc.output_type == "number"
+        assert "docstring has no description for the argument" in str(e)
