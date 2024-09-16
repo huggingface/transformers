@@ -361,12 +361,13 @@ def write_model(
     # Write configs
     config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
+        hidden_size=dim_vision,  # Constant, taken directly from your notes
+        intermediate_size=dim_vision * 4,
         num_hidden_layers=n_layers_vision,
-        vision_input_dim=dim_vision,  # Constant, taken directly from your notes
-        intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
-        num_global_layers=n_layers_vision_global,
-        image_size=params["vision_chunk_size"],
         num_attention_heads=n_heads_vision,
+        num_global_layers=n_layers_vision_global,
+        intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
+        image_size=params["vision_chunk_size"],
         max_num_tiles=4,
         supported_aspect_ratios=get_all_supported_aspect_ratios(4),
     )
@@ -374,7 +375,6 @@ def write_model(
         **config_parameters,
         num_hidden_layers=len(cross_layer_shift) + n_layers,
         cross_attention_layers=cross_layer_shift,
-        vision_input_dim=dim_vision,  # Constant, aligned with vision config
         attention_bias=False,  # Constant set to False
         tie_word_embeddings=False,  # Constant set to False
         intermediate_size=intermediate_size,

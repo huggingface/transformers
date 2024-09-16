@@ -216,8 +216,8 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.max_num_tiles = config.max_num_tiles
         self.max_aspect_ratio_id = config.max_aspect_ratio_id
         self.num_patches = (config.image_size // config.patch_size) ** 2 + 1
-        self.hidden_size = config.vision_input_dim
-        self.scale = config.vision_input_dim**-0.5
+        self.hidden_size = config.hidden_size
+        self.scale = config.hidden_size**-0.5
 
         self.gate = nn.Parameter(torch.zeros(1))
 
@@ -454,12 +454,12 @@ class MllamaVisionModel(PreTrainedModel):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
         self.max_num_tiles = config.max_num_tiles
-        self.hidden_size = config.vision_input_dim
+        self.hidden_size = config.hidden_size
         self.in_channels = config.in_channels
         self.intermediate_layers_indices = config.intermediate_layers_indices
 
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
-        self.scale = config.vision_input_dim**-0.5
+        self.scale = config.hidden_size**-0.5
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.in_channels,

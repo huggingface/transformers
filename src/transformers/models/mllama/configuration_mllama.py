@@ -88,7 +88,6 @@ class MllamaVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_global_layers=8,
         projection_dim=4096,
-        vision_input_dim=1280,
         vision_output_dim=7680,
         intermediate_layers_indices=[3, 7, 15, 23, 30],
         max_num_tiles=4,  # same as vision max num chunks? yes ;-)
@@ -99,6 +98,7 @@ class MllamaVisionConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.num_channels = num_channels
@@ -107,17 +107,12 @@ class MllamaVisionConfig(PretrainedConfig):
         self.vision_output_dim = vision_output_dim
         self.patch_size = patch_size
         self.projection_dim = projection_dim
-        self.vision_input_dim = vision_input_dim
         self.intermediate_layers_indices = intermediate_layers_indices
         self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
         self.norm_eps = norm_eps
         self.in_channels = in_channels
-
-        self.hidden_size = vision_input_dim
         self.attention_heads = num_attention_heads
-        self.intermediate_size = 4 * vision_input_dim
-        self.hidden_act = hidden_act
         self.supported_aspect_ratios = supported_aspect_ratios
 
     @property
