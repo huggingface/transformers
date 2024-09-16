@@ -63,7 +63,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.bos_token = processor.tokenizer.bos_token
         cls.image_token = processor.image_token.content
         cls.fake_image_token = processor.fake_image_token.content
-        cls.global_img_token = processor.global_img_token
+        cls.global_img_token = processor.global_image_tag
 
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
         cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)

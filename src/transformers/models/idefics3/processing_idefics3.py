@@ -146,7 +146,7 @@ class Idefics3Processor(ProcessorMixin):
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
-        self.global_img_token = "<global-img>"
+        self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
 
         # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
@@ -226,20 +226,8 @@ class Idefics3Processor(ProcessorMixin):
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
             image_seq_len (`int`, *optional*):
-                The length of the image sequence. If not provided, the default value of 169 is used.
+                The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
                 image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
-            padding (`Union[bool, str, PaddingStrategy]`, *optional*, defaults to `False`):
-                Padding strategy applied to the input ids. See [`PreTrainedTokenizerFast.pad`] for more information.
-            truncation (`Union[bool, str, TruncationStrategy]`, *optional*):
-                Truncation strategy applied to the input ids. See [`PreTrainedTokenizerFast.truncate`] for more information.
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding/truncation length. See
-                [`PreTrainedTokenizerFast.__call__`] for more information.
-            is_split_into_words (`bool`, *optional*, defaults to `False`):
-                Whether the input text is split into words or not. If set to `True`, the tokenizer will skip the
-                tokenization process and assume the input is already tokenized.
-            add_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether to add special tokens or not. See [`PreTrainedTokenizerFast.__call__`] for more information.
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
@@ -294,7 +282,7 @@ class Idefics3Processor(ProcessorMixin):
 
             fake_image_token = self.fake_image_token.content
             image_token = self.image_token.content
-            global_img_token = self.global_img_token
+            global_img_token = self.global_image_tag
 
             prompt_strings = []
             for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
