@@ -732,8 +732,8 @@
       title: (번역중) 멀티모달 모델
     - isExpanded: false
       sections:
-      - local: in_translation
-        title: (번역중) Decision Transformer
+      - local: model_doc/decision_transformer
+        title: 결정 트랜스포머 (Decision Transformer)
       - local: in_translation
         title: (번역중) Trajectory Transformer
       title: (번역중) 강화학습 모델
