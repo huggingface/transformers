@@ -1367,7 +1367,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
             self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
-
     @require_liger_kernel
     @require_torch_gpu
     def test_use_liger_kernel_trainer(self):
