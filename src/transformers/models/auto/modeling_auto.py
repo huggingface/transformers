@@ -194,6 +194,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("phi", "PhiModel"),
         ("phi3", "Phi3Model"),
         ("phimoe", "PhiMoEModel"),
+        ("pixtral", "PixtralModel"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
         ("prophetnet", "ProphetNetModel"),

@@ -767,7 +767,7 @@ class MistralModel(MistralPreTrainedModel):
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             return_legacy_cache = True
             logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.46. "
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
             )
 
@@ -871,7 +871,7 @@ class MistralModel(MistralPreTrainedModel):
         # to infer the attention mask.
 
         # cache_position must be valid here no matter which cache we use
-        past_seen_tokens = cache_position[0] if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 

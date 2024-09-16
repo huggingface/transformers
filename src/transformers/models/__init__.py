@@ -188,6 +188,7 @@ from . import (
     phimoe,
     phobert,
     pix2struct,
+    pixtral,
     plbart,
     poolformer,
     pop2piano,
