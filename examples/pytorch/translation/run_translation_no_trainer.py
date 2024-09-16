@@ -517,11 +517,18 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+        # For fp8, we pad to multiple of 16.
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
         data_collator = DataCollatorForSeq2Seq(
             tokenizer,
             model=model,
             label_pad_token_id=label_pad_token_id,
-            pad_to_multiple_of=8 if accelerator.mixed_precision != "no" else None,
+            pad_to_multiple_of=pad_to_multiple_of,
         )
 
     train_dataloader = DataLoader(
