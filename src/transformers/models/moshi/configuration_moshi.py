@@ -87,6 +87,8 @@ class MoshiConfig(PretrainedConfig):
         depth_num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention in the depth decoder.
             If it is not specified, will default to `depth_num_key_value_heads`.
+        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
+            Whether input and output word embeddings should be tied.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -155,6 +157,7 @@ class MoshiConfig(PretrainedConfig):
         depth_ffn_dim=5632,
         depth_head_dim=None,
         depth_num_key_value_heads=None,
+        tie_word_embeddings=False,
         **kwargs):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -186,7 +189,7 @@ class MoshiConfig(PretrainedConfig):
         self.depth_head_dim = depth_head_dim or depth_hidden_size // depth_num_attention_heads
         self.depth_num_key_value_heads = depth_num_key_value_heads if depth_num_key_value_heads is not None else depth_num_attention_heads
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         
         if "audio_encoder" not in kwargs:
             raise ValueError("Config has to be initialized with audio_encoder config")

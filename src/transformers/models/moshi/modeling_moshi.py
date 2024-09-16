@@ -692,11 +692,7 @@ class MoshiDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size if not is_depth_layer else config.depth_hidden_size
         self.use_flexible_linear = use_flexible_linear
 
-        # depth_ffn_dim
-        # depth_hidden_size
-        # depth doesn't use pos embedding
-        
-        self.self_attn = MOSHI_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = MOSHI_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx, is_depth_attention=is_depth_layer)
 
         self.mlp = MoshiGatingMLP(config) if not use_flexible_linear else MoshiGatingMLP(config, config.num_codebooks, is_depth_layer)
         self.input_layernorm = MoshiRMSNorm(self.hidden_size, eps=config.rms_norm_eps)

@@ -94,8 +94,8 @@ def _preprocess_state_dict(state_dict, config):
         input_projections.append(state_dict.pop(f"depformer_in.{codebook_idx}.weight"))
         lm_heads.append(state_dict.pop(f"linears.{codebook_idx}.weight"))
     
-    state_dict["depth_decoder.input_projections.weight"] = torch.stack(input_projections, dim = 1)        
-    state_dict["depth_decoder.lm_heads.weight"] = torch.stack(lm_heads, dim = 1)       
+    state_dict["depth_decoder.input_projections.weight"] = torch.stack(input_projections, dim = 0)
+    state_dict["depth_decoder.lm_heads.weight"] = torch.stack(lm_heads, dim = 0)
 
     return state_dict
     
@@ -133,6 +133,11 @@ def _convert_model(
             for old_layer_name, new_layer_name in convert_list:
                 if old_layer_name in new_k:
                     new_k = new_k.replace(old_layer_name, new_layer_name)
+            
+            if "alpha" in k:
+                state_dict[k] = state_dict[k].squeeze()
+            
+                
 
             if "in_proj_weight" in new_k:
                 # split qkv into query key and value
@@ -153,9 +158,15 @@ def _convert_model(
                         key_layer, num_key_value_heads, dim1=key_value_head_dim, dim2=hidden_size
                     )
                     state_dict[new_k.replace("in_proj_weight", "v_proj.weight")] = value_layer
+            elif "o_proj" in new_k and "depth_decoder" in new_k:
+                output_layer = state_dict.pop(k)
+                state_dict[new_k] = output_layer.view(config.num_codebooks, -1, output_layer.shape[-1])
             else:
                 state_dict[new_k] = state_dict.pop(k)
 
+    # Do the last one by hand
+    state_dict["depth_decoder.text_embed_tokens.weight"] = state_dict.pop("depth_decoder.decoder.model.embed_tokens.weight")
+ 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
