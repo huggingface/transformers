@@ -510,32 +510,32 @@ class MllamaImageProcessor(BaseImageProcessor):
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
             Only has an effect if the input image is in the PIL format.
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+        do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image.
         size (`Dict[str, int]`, *optional*, defaults to `self.size`):
             Size of the image tile. Should be a dictionary containing 'height' and 'width' keys, both with integer values.
             The height and width values should be equal.
-        resample (`int`, *optional*, defaults to `self.resample`):
+        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
             has an effect if `do_resize` is set to `True`.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+        do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image.
-        rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+        rescale_factor (`float`, *optional*, defaults to 0.0):
             Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
             Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
         image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
             Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
             `True`.
-        do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+        do_pad (`bool`, *optional*, defaults to `True`):
             Whether or not to pad the images to the largest height and width in the batch.
-        max_image_tiles (`int`, *optional*, defaults to `self.max_image_tiles`):
+        max_image_tiles (`int`, *optional*, defaults to 4):
             The maximum number of tiles to split the image into.
     """
 
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios", "aspect_ratio_ids", "aspect_ratio_mask"]
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
 
     def __init__(
         self,

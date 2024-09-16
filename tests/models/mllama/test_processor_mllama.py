@@ -39,8 +39,8 @@ class MllamaProcessorTest(unittest.TestCase):
 
     def test_process_interleaved_images_prompts_image_splitting(self):
         # Test that a single image is processed correctly
-        inputs = self.processor(images=self.image2, max_image_tiles=2, size={"width": 224, "height": 224})
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 2, 3, 224, 224))
+        inputs = self.processor(images=self.image2, size={"width": 224, "height": 224})
+        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 224, 224))
 
         # Test that text is processed correctly
         text = "<|begin_of_text|>This is a test sentence.<|end_of_text|>"
@@ -57,7 +57,6 @@ class MllamaProcessorTest(unittest.TestCase):
         inputs = self.processor(
             text=text,
             images=self.image1,
-            max_image_tiles=4,
             size={"width": 128, "height": 128},
         )
         expected_ids = [self.image_token_id] + [2028, 374, 264, 1296, 11914, 13]
@@ -81,7 +80,7 @@ class MllamaProcessorTest(unittest.TestCase):
         ]
         # fmt: onn
         images = [[self.image1], [self.image1, self.image2]]
-        inputs = self.processor(text=text, images=images, padding=True, max_image_tiles=4, size={"width": 256, "height": 256})
+        inputs = self.processor(text=text, images=images, padding=True, size={"width": 256, "height": 256})
 
         self.assertEqual(inputs["pixel_values"].shape, (2, 2, 4, 3, 256, 256))
         for input_ids_i, attention_mask_i, expected_ids_i in zip(inputs["input_ids"], inputs["attention_mask"], expected_ids):

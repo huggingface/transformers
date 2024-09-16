@@ -1628,17 +1628,18 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
+            text_config = model.config.get_text_config()
             head_dim = (
-                model.config.head_dim
-                if hasattr(model.config, "head_dim")
-                else model.config.hidden_size // model.config.num_attention_heads
+                text_config.head_dim
+                if hasattr(text_config, "head_dim")
+                else text_config.hidden_size // text_config.num_attention_heads
             )
             num_key_value_heads = (
-                model.config.num_attention_heads
-                if getattr(config, "num_key_value_heads", None) is None
-                else model.config.num_key_value_heads
+                text_config.num_attention_heads
+                if getattr(text_config, "num_key_value_heads", None) is None
+                else text_config.num_key_value_heads
             )
-            num_hidden_layers = config.num_hidden_layers
+            num_hidden_layers = text_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs = model.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
@@ -1759,12 +1760,13 @@ class GenerationTesterMixin:
             set_seed(seed)
             legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
+            num_hidden_layers = config.get_text_config().num_hidden_layers
             if config.is_encoder_decoder:
                 cache_cls = EncoderDecoderCache
-                past_key_values = cache_cls(DynamicCache(), DynamicCache())
+                past_key_values = cache_cls(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
             else:
                 cache_cls = DynamicCache
-                past_key_values = cache_cls()
+                past_key_values = cache_cls(num_hidden_layers)
             new_results = model.generate(
                 input_ids, attention_mask=attention_mask, past_key_values=past_key_values, **generation_kwargs
             )
@@ -1870,8 +1872,12 @@ class GenerationTesterMixin:
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
+                num_hidden_layers = config.get_text_config().num_hidden_layers
                 model.generate(
-                    input_ids, attention_mask=attention_mask, past_key_valyes=DynamicCache(), **generation_kwargs
+                    input_ids,
+                    attention_mask=attention_mask,
+                    past_key_valyes=DynamicCache(num_hidden_layers),
+                    **generation_kwargs,
                 )
 
             # setting incorrect cache_config args should raise an Error, i.e. nbits=60 does not make sense

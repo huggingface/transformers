@@ -257,6 +257,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.use_scaled_rope = use_scaled_rope
@@ -310,17 +311,8 @@ class MllamaConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 128256):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-        The index of the layer to select the vision feature.
 
     Example:
 
