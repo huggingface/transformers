@@ -7067,6 +7067,20 @@ class Pix2StructVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PixtralModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PixtralPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PLBartForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
