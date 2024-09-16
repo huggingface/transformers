@@ -5962,14 +5962,14 @@ class MixtralPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MllamaForConditionalGeneration(metaclass=DummyObject):
+class MllamaForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MllamaForCausalLM(metaclass=DummyObject):
+class MllamaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

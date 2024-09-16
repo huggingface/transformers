@@ -950,7 +950,6 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         outputs = (hidden_states,)
-        print(hidden_states.shape, full_text_row_masked_out_mask.shape)
 
         if output_attentions:
             outputs += (attn_weights,)
