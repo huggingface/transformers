@@ -288,7 +288,7 @@ class MllamaProcessor(ProcessorMixin):
             data["cross_attention_mask"] = cross_attention_mask
 
         return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_encoding = BatchFeature(data=data, tensor_type=return_tensors, **common_kwargs)
+        batch_encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
         return batch_encoding
 

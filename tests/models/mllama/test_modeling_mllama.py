@@ -79,6 +79,9 @@ class MllamaVisionText2TextModelTester:
             "num_labels": 3,
             "num_choices": 4,
             "pad_token_id": 0,
+            "rope_scaling": {"rope_type": "default"},
+            # TODO: add generation tests with all model kwargs, not only text-related ones
+            #  "cross_attention_layers": [1],
         },
         is_training=True,
         vision_config={
@@ -89,7 +92,8 @@ class MllamaVisionText2TextModelTester:
             "vision_chunk_size": 30,
             "hidden_size": 32,
             "return_intermediate": [0],
-            "vision_output_dim": 2560,
+            "vision_input_dim": 16,
+            "vision_output_dim": 32,
             "projection_dim": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -119,7 +123,7 @@ class MllamaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 231
+        # self.encoder_seq_length = 7
 
     def get_config(self):
         return MllamaConfig(
@@ -139,7 +143,7 @@ class MllamaVisionText2TextModelTester:
                 self.vision_config["image_size"],
             ]
         )
-        aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device)
+        aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device).transpose(0, 1)
         config = self.get_config()
 
         return config, pixel_values, aspect_ratio_ids
@@ -184,10 +188,54 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -205,6 +253,16 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
         pass
 
 

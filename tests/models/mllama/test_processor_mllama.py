@@ -38,11 +38,8 @@ class MllamaProcessorTest(unittest.TestCase):
 
     def test_process_interleaved_images_prompts_image_splitting(self):
         # Test that a single image is processed correctly
-        inputs = self.processor(images=self.image2, max_image_tiles=2, size={"width": 224, "height": 224})
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 2, 3, 224, 224))
-        self.assertEqual(inputs["aspect_ratios"].shape, (1, 1, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [2, 1])
-        self.assertEqual(inputs["num_tiles"], [[2]])
+        inputs = self.processor(images=self.image2, size={"width": 224, "height": 224})
+        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 224, 224))
 
         # Test that text is processed correctly
         text = "<|begin_of_text|>This is a test sentence.<|end_of_text|>"
@@ -50,7 +47,6 @@ class MllamaProcessorTest(unittest.TestCase):
         expected_ids = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-        self.assertEqual(inputs["cross_attention_token_mask"], None)
 
         # Test a single sample with image and text
         image_str = "<|image|>"
@@ -59,22 +55,14 @@ class MllamaProcessorTest(unittest.TestCase):
         inputs = self.processor(
             text=text,
             images=self.image1,
-            max_image_tiles=4,
             size={"width": 128, "height": 128},
         )
         expected_ids = [self.image_token_id] + [2028, 374, 264, 1296, 11914, 13]
 
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 128, 128))
-        self.assertEqual(inputs["aspect_ratios"].shape, (1, 1, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [2, 2])
-        self.assertEqual(inputs["num_tiles"], [[4]])
 
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-
-        # Note: in original implementation if number of image tokens is 1,
-        # then the last image unmasked in until "-1" token
-        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]]])
 
         # Test batch
         text = [
@@ -88,22 +76,15 @@ class MllamaProcessorTest(unittest.TestCase):
         ]
         # fmt: onn
         images = [[self.image1], [self.image1, self.image2]]
-        inputs = self.processor(text=text, images=images, padding=True, max_image_tiles=4, size={"width": 256, "height": 256})
+        inputs = self.processor(text=text, images=images, padding=True, size={"width": 256, "height": 256})
 
         self.assertEqual(inputs["pixel_values"].shape, (2, 2, 4, 3, 256, 256))
-        self.assertEqual(inputs["aspect_ratios"].shape, (2, 2, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [[[1, 1], [1, 1]], [[1, 1], [2, 1]]])
-        self.assertEqual(inputs["num_tiles"], [[1], [1, 2]])
 
         for input_ids_i, attention_mask_i, expected_ids_i in zip(inputs["input_ids"], inputs["attention_mask"], expected_ids):
             pad_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 0]
             input_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 1]
             self.assertEqual(input_ids, expected_ids_i)
             self.assertEqual(pad_ids, [self.pad_token_id] * len(pad_ids))
-
-        # Note: in the original implementation if the number of image tokens is MORE than 1,
-        # then the last image unmasked until len(tokens) instead of "-1". Probably, it should be also to "-1"?
-        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]], [[6, len(expected_ids[1])], [7, len(expected_ids[1])]]])
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string

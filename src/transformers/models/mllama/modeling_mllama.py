@@ -130,7 +130,11 @@ def prepare_cross_attention_mask(
 
     # In case we got a new image but already have prev cross-atnn key/values in cache
     # we need to extend the attn-mask and add previuos images' lengths
-    if past_key_values is not None and cross_attention_states is not None and past_key_values.get_seq_length(cross_attention_layers[0]) != 0:
+    if (
+        past_key_values is not None
+        and cross_attention_states is not None
+        and past_key_values.get_seq_length(cross_attention_layers[0]) != 0
+    ):
         # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
         # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
         past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
@@ -149,7 +153,6 @@ def prepare_aspect_ratio_attention_mask(
     target_length: int,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-
     # Expand aspect ratio mask to target_length
     batch_size, max_num_tiles = aspect_ratio_mask.shape
     attention_mask = aspect_ratio_mask.view(batch_size, max_num_tiles, 1, 1).to(dtype)
@@ -291,9 +294,7 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         )
         self.tile_embedding = torch.nn.Parameter(precomputed_tile_embeddings)
 
-
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-
         # position embeddings
         gated_position_embedding = (1 - self.gate.tanh()) * self.embedding
         hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
@@ -504,8 +505,10 @@ class MllamaVisionEncoder(nn.Module):
 
 
 class MllamaVisionModel(PreTrainedModel):
+    config_class = MllamaVisionConfig
     base_model_prefix = "vision_encoder"
     _no_split_modules = ["MllamaVisionSdpaAttention"]
+    _supports_sdpa = True
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -598,13 +601,14 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = F.pad(hidden_state, padding, mode="constant", value=0)
         slice_index = -num_padding_patches if num_padding_patches > 0 else None
 
-        attention_mask = attention_mask.reshape(batch_size * num_concurrent_media, -1)
-        attention_mask = prepare_aspect_ratio_attention_mask(
-            aspect_ratio_mask=attention_mask,
-            num_patches=self.num_patches,
-            target_length=hidden_state.shape[2],
-            dtype=self.dtype,
-        )
+        if attention_mask is not None:
+            attention_mask = attention_mask.reshape(batch_size * num_concurrent_media, -1)
+            attention_mask = prepare_aspect_ratio_attention_mask(
+                aspect_ratio_mask=attention_mask,
+                num_patches=self.num_patches,
+                target_length=hidden_state.shape[2],
+                dtype=self.dtype,
+            )
 
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         output = self.transformer(
@@ -730,7 +734,9 @@ class MllamaTextCrossAttention(nn.Module):
                 past_key_value.value_cache[self.layer_idx],
             )
         else:
-            raise ValueError("Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!")
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -870,7 +876,7 @@ class MllamaTextSelfAttention(nn.Module):
             key_states,
             value_states,
             attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
         )
 
@@ -881,8 +887,8 @@ class MllamaTextSelfAttention(nn.Module):
         return attn_output, None, past_key_value
 
 
-MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention}
-MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention}
+MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention, "sdpa": MllamaTextCrossAttention}
+MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention, "sdpa": MllamaTextSelfAttention}
 
 
 # Copied from gemma2
@@ -1001,7 +1007,8 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
+        if full_text_row_masked_out_mask is not None:
+            hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         outputs = (hidden_states,)
@@ -1074,7 +1081,31 @@ class MllamaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class MllamaTextModel(PreTrainedModel):
+class MllamaPreTrainedModel(PreTrainedModel):
+    config_class = MllamaConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["MllamaSdpaCrossAttention"]
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.get_text_config().initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=std)
+
+
+class MllamaTextModel(MllamaPreTrainedModel):
+    config_class = MllamaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
@@ -1167,9 +1198,13 @@ class MllamaTextModel(PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if (idx in self.cross_attention_layers and
-                cross_attention_states is None and
-                (past_key_values is None or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0))
+            if (
+                idx in self.cross_attention_layers
+                and cross_attention_states is None
+                and (
+                    past_key_values is None
+                    or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0)
+                )
             ):
                 continue
 
@@ -1297,14 +1332,15 @@ class MllamaTextModel(PreTrainedModel):
         return causal_mask
 
 
-class MllamaForCausalLM(PreTrainedModel):
+class MllamaForCausalLM(MllamaPreTrainedModel):
+    config_class = MllamaTextConfig
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config, attn_implementation):
         super().__init__(config)
-        self.model = MllamaTextModel(config)
+        self.model = MllamaTextModel._from_config(config, attn_implementation=attn_implementation)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1505,16 +1541,6 @@ class MllamaForCausalLM(PreTrainedModel):
         return model_inputs
 
 
-class MllamaPreTrainedModel(PreTrainedModel):
-    config_class = MllamaConfig
-    base_model_prefix = "model"
-    _no_split_modules = ["MllamaSdpaCrossAttention"]
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-
-
 MLLAMA_START_DOCSTRING = ""  # TODO add docstring to MLLAMA start and other classes
 
 
@@ -1523,11 +1549,13 @@ MLLAMA_START_DOCSTRING = ""  # TODO add docstring to MLLAMA start and other clas
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["language_model.lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.vision_model = MllamaVisionModel(config.vision_config)
+        self.vision_model = MllamaVisionModel._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
@@ -1535,7 +1563,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             bias=True,
         )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = MllamaForCausalLM(config.text_config)
+        self.language_model = MllamaForCausalLM(config.text_config, attn_implementation=config._attn_implementation)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
         self.hidden_size = self.config.text_config.hidden_size
@@ -1545,7 +1573,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
@@ -1622,14 +1650,21 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask[:, :, cache_position] if cross_attention_mask is not None else None,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position] if cross_attention_mask is not None else None,
+            cross_attention_mask=cross_attention_mask[:, :, cache_position]
+            if cross_attention_mask is not None
+            else None,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position]
+            if cross_attention_mask is not None
+            else None,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
             cache_position=cache_position,
+            num_logits_to_keep=num_logits_to_keep,
         )
 
         return outputs

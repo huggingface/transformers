@@ -238,7 +238,13 @@ def write_model(
     n_heads_vision = 16
     n_heads_per_shard_vision = n_heads_vision // num_shards
     dims_per_head_vision = dim_vision // n_heads_vision
-    rope_scaling = {"rope_type": "llama3", "factor": 8.0, "low_freq_factor": 1.0, "high_freq_factor": 4.0, "original_max_position_embeddings": 8192}
+    rope_scaling = {
+        "rope_type": "llama3",
+        "factor": 8.0,
+        "low_freq_factor": 1.0,
+        "high_freq_factor": 4.0,
+        "original_max_position_embeddings": 8192,
+    }
     max_position_embeddings = 16_384
 
     if params.get("n_kv_heads", None) is not None:
@@ -267,7 +273,6 @@ def write_model(
     n_total_layers = n_layers + n_layers_cross_attention
     cross_layer_shift = list(range(cross_attention_frequency - 1, n_total_layers, cross_attention_frequency + 1))
     attn_layer_shift = [k for k in range(n_total_layers) if k not in cross_layer_shift]
-
 
     state_dict = {}
     for key in all_keys:

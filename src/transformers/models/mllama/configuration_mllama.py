@@ -266,6 +266,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.use_scaled_rope = use_scaled_rope

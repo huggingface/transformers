@@ -1147,7 +1147,7 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if not self.config.vocab_size == assistant_model.config.vocab_size:
+        if not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
             raise ValueError("Make sure the main and assistant model use the same tokenizer")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
@@ -1575,12 +1575,11 @@ class GenerationMixin:
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
+            num_hidden_layers = self.config.get_text_config().num_hidden_layers
             model_kwargs[cache_name] = (
-                DynamicCache(self.config.get_text_config())
+                DynamicCache(num_hidden_layers)
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(
-                    DynamicCache(self.config.get_text_config()), DynamicCache(self.config.get_text_config())
-                )
+                else EncoderDecoderCache(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
             )
 
     def _supports_num_logits_to_keep(self) -> bool:
@@ -3070,7 +3069,9 @@ class GenerationMixin:
                     "legacy tuple format or `DynamicCache`"
                 )
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values = DynamicCache.from_legacy_cache(
+                past_key_values,
+            )
         # Standard code path: use the `Cache.reorder_cache`
         else:
             past_key_values.reorder_cache(beam_idx)
@@ -4260,7 +4261,7 @@ def _ranking_fast(
     return selected_idx
 
 
-def _split(data, full_batch_size: int, config: PretrainedConfig, split_size: int = None):
+def _split(data, full_batch_size: int, num_hidden_layers: int, split_size: int = None):
     """
     Takes care of three cases:
     1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
@@ -4278,7 +4279,7 @@ def _split(data, full_batch_size: int, config: PretrainedConfig, split_size: int
     elif isinstance(data, DynamicCache) or (
         isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
     ):
-        return data.batch_split(full_batch_size, config, split_size)
+        return data.batch_split(full_batch_size, split_size, num_hidden_layers)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -4331,9 +4332,11 @@ def _split_model_inputs(
     keys_to_ignore = ["cache_position", "encoder_outputs", "num_logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
+    num_hidden_layers = config.get_text_config().num_hidden_layers
+
     # we split the tensors and tuples of tensors
     data_split_list = [
-        {k: _split(model_input[k], full_batch_size, config, split_size)[i] for k in non_bool_keys}
+        {k: _split(model_input[k], full_batch_size, num_hidden_layers, split_size)[i] for k in non_bool_keys}
         for i in range(full_batch_size // split_size)
     ]
     # bool values are the same and replicated for each split
@@ -4341,7 +4344,7 @@ def _split_model_inputs(
     # encoder_outputs is a ModelOutput object and should be split by its own
     if "encoder_outputs" in model_input:
         encoder_outputs_split = _split_model_inputs(
-            model_input["encoder_outputs"], split_size, full_batch_size, config=config
+            model_input["encoder_outputs"], split_size, full_batch_size, num_hidden_layers=num_hidden_layers
         )
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
@@ -4370,6 +4373,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
 
     # Infer the class from the first object in the list
     model_output_cls = type(model_outputs[0])
+    num_hidden_layers = config.get_text_config().num_hidden_layers
 
     # Ensure all objects are of the same type
     if not all(isinstance(obj, model_output_cls) for obj in model_outputs):
@@ -4386,9 +4390,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
             return torch.cat(data, dim=0)
         # New cache format
         elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_batch_splits(data, config=config)
+            return DynamicCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
         elif isinstance(data[0], EncoderDecoderCache):
-            return EncoderDecoderCache.from_batch_splits(data, config=config)
+            return EncoderDecoderCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
