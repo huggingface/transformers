@@ -3,6 +3,8 @@ name: Slow CI Reminder
 # For security reason, don't use `pull_request` but `pull_request_target`!
 on:
   pull_request_target:
+    paths:
+      - '**.py'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -20,7 +22,7 @@ jobs:
       id: find_comment
       with:
         issue-number: ${{ github.event.number }}
-        body-includes: Please trigger Slow CI and make sure all tests are passing before merging this pull request.
+        body-includes: Before merging this pull request, slow tests CI should be triggered. To enable this
 
     - run: |
         echo ${{ steps.find_comment.outputs.comment-id }}
@@ -41,6 +43,13 @@ jobs:
     - name: Add comment
       uses: thollander/actions-comment-pull-request@v2
       with:
-        message: 'Please trigger Slow CI and make sure all tests are passing before merging this pull request.'
+        message: | 
+          Before merging this pull request, slow tests CI should be triggered. To enable this:
+          - Add the `run-slow` label to the PR
+          - When your PR is ready for merge and all reviewers' comments have been addressed, push an empty commit with the command `[run-slow]` followed by a comma separated list of all the models to be tested, i.e. `[run_slow] model_to_test_1, model_to_test_2`
+          - A `transformers` maintainer will then approve the workflow to start the tests
+          
+          (For maintainers) The documentation for slow tests CI on PRs is [here](https://www.notion.so/huggingface2/CI-for-pull-requests-8335bd9217d24d1e8ed1d3a016f39804).
+
         pr_number: ${{ github.event.number }}
         GITHUB_TOKEN: ${{ secrets.comment_bot_token }}
