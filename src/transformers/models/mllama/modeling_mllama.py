@@ -544,11 +544,11 @@ class MllamaVisionModel(PreTrainedModel):
             attention_mask=attention_mask,
             output_hidden_states=True,
         )
-        hidden_state = output[0]  # last-hidden-state
+        hidden_state, all_intermediate_hidden_states = output[0], output[1]
         intermediate_hidden_states = [
-            hidden_state for idx, hidden_state in enumerate(output[1]) if idx in self.vision_selection_layers
+            hidden_state for idx, hidden_state in enumerate(all_intermediate_hidden_states) if idx in self.vision_selection_layers
         ]
-        intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)  # hidden-states stacked
+        intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
 
         # apply global encoder
         hidden_state = self.ln_post(hidden_state)
