@@ -16,47 +16,12 @@
 Processor class for UDOP.
 """
 
-import sys
 from typing import List, Optional, Union
 
-from transformers import logging
-
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
-
-
-logger = logging.get_logger(__name__)
-
-
-class UdopTextKwargs(TextKwargs, total=False):
-    word_labels: Optional[Union[List[int], List[List[int]]]]
-    boxes: Union[List[List[int]], List[List[List[int]]]]
-
-
-class UdopProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: UdopTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "truncation": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {},
-    }
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class UdopProcessor(ProcessorMixin):
@@ -84,8 +49,6 @@ class UdopProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "LayoutLMv3ImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = ["text_pair"]
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -94,14 +57,28 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # The following is to capture `text_pair` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        *args,
-        audio=None,
-        videos=None,
-        **kwargs: Unpack[UdopProcessorKwargs],
-    ) -> BatchFeature:
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+    ) -> BatchEncoding:
         """
         This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
         [`UdopImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
@@ -116,19 +93,6 @@ class UdopProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         # verify input
-        output_kwargs = self._merge_kwargs(
-            UdopProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
-        )
-
-        boxes = output_kwargs["text_kwargs"].pop("boxes", None)
-        word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
-        text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
-        return_overflowing_tokens = output_kwargs["text_kwargs"].get("return_overflowing_tokens", False)
-        return_offsets_mapping = output_kwargs["text_kwargs"].get("return_offsets_mapping", False)
-
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
                 "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
@@ -142,44 +106,66 @@ class UdopProcessor(ProcessorMixin):
         if return_overflowing_tokens is True and return_offsets_mapping is False:
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
-        if output_kwargs["text_kwargs"].get("text_target", None) is not None:
+        if text_target is not None:
             # use the processor to prepare the targets of UDOP
             return self.tokenizer(
-                **output_kwargs["text_kwargs"],
+                text_target=text_target,
+                text_pair_target=text_pair_target,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
             )
 
         else:
             # use the processor to prepare the inputs of UDOP
             # first, apply the image processor
-            features = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            features_words = features.pop("words", None)
-            features_boxes = features.pop("boxes", None)
-
-            _ = output_kwargs["text_kwargs"].pop("text_target", None)
-            _ = output_kwargs["text_kwargs"].pop("text_pair_target", None)
-            output_kwargs["text_kwargs"]["text_pair"] = text_pair
-            output_kwargs["text_kwargs"]["boxes"] = boxes if boxes is not None else features_boxes
-            output_kwargs["text_kwargs"]["word_labels"] = word_labels
+            features = self.image_processor(images=images, return_tensors=return_tensors)
 
             # second, apply the tokenizer
             if text is not None and self.image_processor.apply_ocr and text_pair is None:
                 if isinstance(text, str):
                     text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
-                output_kwargs["text_kwargs"]["text_pair"] = features_words
+                text_pair = features["words"]
 
             encoded_inputs = self.tokenizer(
-                text=text if text is not None else features_words,
-                **output_kwargs["text_kwargs"],
+                text=text if text is not None else features["words"],
+                text_pair=text_pair if text_pair is not None else None,
+                boxes=boxes if boxes is not None else features["boxes"],
+                word_labels=word_labels,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
             )
 
             # add pixel values
+            pixel_values = features.pop("pixel_values")
             if return_overflowing_tokens is True:
-                features["pixel_values"] = self.get_overflowing_images(
-                    features["pixel_values"], encoded_inputs["overflow_to_sample_mapping"]
-                )
-            features.update(encoded_inputs)
+                pixel_values = self.get_overflowing_images(pixel_values, encoded_inputs["overflow_to_sample_mapping"])
+            encoded_inputs["pixel_values"] = pixel_values
 
-            return features
+            return encoded_inputs
 
     # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.get_overflowing_images
     def get_overflowing_images(self, images, overflow_to_sample_mapping):
@@ -212,20 +198,7 @@ class UdopProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_process_image_text_to_text(self, generated_outputs):
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-
-        Returns:
-            `List[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
-
     @property
+    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
-        return ["pixel_values", "input_ids", "bbox", "attention_mask"]
+        return ["input_ids", "bbox", "attention_mask", "pixel_values"]

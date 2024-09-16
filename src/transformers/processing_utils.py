@@ -38,9 +38,7 @@ if is_vision_available():
 
 from .tokenization_utils_base import (
     PaddingStrategy,
-    PreTokenizedInput,
     PreTrainedTokenizerBase,
-    TextInput,
     TruncationStrategy,
 )
 from .utils import (
@@ -116,9 +114,6 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
     """
 
-    text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-    text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
     add_special_tokens: Optional[bool]
     padding: Union[bool, str, PaddingStrategy]
     truncation: Union[bool, str, TruncationStrategy]
@@ -333,7 +328,6 @@ class ProcessorMixin(PushToHubMixin):
 
     attributes = ["feature_extractor", "tokenizer"]
     optional_attributes = ["chat_template"]
-    optional_call_args: List[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None

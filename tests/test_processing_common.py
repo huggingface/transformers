@@ -20,13 +20,6 @@ import tempfile
 
 import numpy as np
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
-
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -34,6 +27,12 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import is_vision_available
+
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
 
 
 if is_vision_available():
@@ -303,7 +302,6 @@ class ProcessorTesterMixin:
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
