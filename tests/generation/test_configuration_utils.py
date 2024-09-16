@@ -256,6 +256,8 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig()
         self.assertEqual(config.get_generation_mode(assistant_model="foo"), GenerationMode.ASSISTED_GENERATION)
 
+
+class GenerationConfigSerializationTest(unittest.TestCase):
     def test_serialize_generation_sequence_bias(self):
         """Tests that GenerationConfig is serialized and SequenceBiasLogitsProcessor is initialized with sequence_bias parameter"""
         generation_config = GenerationConfig()
@@ -266,8 +268,9 @@ class GenerationConfigTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertSequenceEqual(new_config.sequence_bias, sequence_bias)
 
+        expected_sequence_bias = {(45, 67): -0.6, (89,): 1.2}
         bias_logits_processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
-        self.assertIsNotNone(bias_logits_processor.sequence_bias)
+        self.assertDictEqual(bias_logits_processor.sequence_bias, expected_sequence_bias)
 
     def test_serialize_generation_min_length_eos_token(self):
         """Tests that GenerationConfig is serialized and MinLengthLogitsProcessor is initialized with min_length and eos_token_id"""
@@ -284,8 +287,8 @@ class GenerationConfigTest(unittest.TestCase):
         min_dist_processor = MinLengthLogitsProcessor(
             min_length=new_config.min_length, eos_token_id=new_config.eos_token_id
         )
-        self.assertIsNotNone(min_dist_processor.min_length)
-        self.assertIsNotNone(min_dist_processor.eos_token_id)
+        self.assertEqual(min_dist_processor.min_length, min_length)
+        self.assertEqual(min_dist_processor.eos_token_id, eos_token_id)
 
     def test_serialize_generation_min_new_tokens(self):
         """Tests that GenerationConfig is serialized and MinNewTokensLengthLogitsProcessor is initialized with min_new_tokens"""
@@ -304,7 +307,7 @@ class GenerationConfigTest(unittest.TestCase):
             min_new_tokens=new_config.min_new_tokens,
             eos_token_id=eos_token_id,
         )
-        self.assertIsNotNone(min_new_tokens_processor.min_new_tokens)
+        self.assertEqual(min_new_tokens_processor.min_new_tokens, min_new_tokens)
 
     def test_serialize_generation_temperature(self):
         """Tests that GenerationConfig is serialized and TemperatureLogitsWarper is initialized with temperature"""
@@ -317,7 +320,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.temperature, temperature)
 
         temperature_logits_warper = TemperatureLogitsWarper(temperature=new_config.temperature)
-        self.assertIsNotNone(temperature_logits_warper.temperature)
+        self.assertEqual(temperature_logits_warper.temperature, temperature)
 
     def test_serialize_generation_repetition_penalty(self):
         """Tests that GenerationConfig is serialized and RepetitionPenaltyLogitsProcessor is initialized with repetition_penalty"""
@@ -330,7 +333,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.repetition_penalty, penalty)
 
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=new_config.repetition_penalty)
-        self.assertIsNotNone(rep_penalty_proc.penalty)
+        self.assertEqual(rep_penalty_proc.penalty, penalty)
 
     def test_serialize_generation_encoder_repetition_penalty(self):
         """Tests that GenerationConfig is serialized and EncoderRepetitionPenaltyLogitsProcessor is initialized with penalty and input_ids"""
@@ -346,8 +349,8 @@ class GenerationConfigTest(unittest.TestCase):
         rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
             penalty=new_config.encoder_repetition_penalty, encoder_input_ids=input_ids
         )
-        self.assertIsNotNone(rep_penalty_proc.penalty)
-        self.assertIsNotNone(rep_penalty_proc.encoder_input_ids)
+        self.assertEqual(rep_penalty_proc.penalty, 1 / penalty)
+        torch.testing.assert_close(rep_penalty_proc.encoder_input_ids, input_ids)
 
     def test_serialize_generation_top_p(self):
         """Tests that GenerationConfig is serialized and TopPLogitsWarper is initialized with top_p"""
@@ -360,7 +363,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.top_p, top_p)
 
         rep_penalty_proc = TopPLogitsWarper(top_p=new_config.top_p)
-        self.assertIsNotNone(rep_penalty_proc.top_p)
+        self.assertEqual(rep_penalty_proc.top_p, top_p)
 
     def test_serialize_generation_top_k(self):
         """Tests that GenerationConfig is serialized and TopKLogitsWarper is initialized with top_k"""
@@ -373,7 +376,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.top_k, top_k)
 
         top_k_logits_wrap = TopKLogitsWarper(top_k=new_config.top_k)
-        self.assertIsNotNone(top_k_logits_wrap.top_k)
+        self.assertEqual(top_k_logits_wrap.top_k, top_k)
 
     def test_serialize_generation_min_p(self):
         """Tests that GenerationConfig is serialized and MinPLogitsWarper is initialized with min_p"""
@@ -386,7 +389,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.min_p, min_p)
 
         min_k_logits_wrap = MinPLogitsWarper(min_p=new_config.min_p)
-        self.assertIsNotNone(min_k_logits_wrap.min_p)
+        self.assertEqual(min_k_logits_wrap.min_p, min_p)
 
     def test_serialize_generation_typical_p(self):
         """Tests that GenerationConfig is serialized and TypicalLogitsWarper is initialized with mass"""
@@ -399,7 +402,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.typical_p, mass)
 
         typical_p_logits_wrap = TypicalLogitsWarper(mass=new_config.typical_p)
-        self.assertIsNotNone(typical_p_logits_wrap.mass)
+        self.assertEqual(typical_p_logits_wrap.mass, mass)
 
     def test_serialize_generation_epsilon_cutoff(self):
         """Tests that GenerationConfig is serialized and EpsilonLogitsWarper is initialized with epsilon"""
@@ -412,7 +415,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.epsilon_cutoff, epsilon)
 
         epsilon_logits_wrap = EpsilonLogitsWarper(epsilon=new_config.epsilon_cutoff)
-        self.assertIsNotNone(epsilon_logits_wrap.epsilon)
+        self.assertEqual(epsilon_logits_wrap.epsilon, epsilon)
 
     def test_serialize_generation_eta_cutoff(self):
         """Tests that GenerationConfig is serialized and EtaLogitsWarper is initialized with epsilon"""
@@ -425,7 +428,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.eta_cutoff, epsilon)
 
         eta_logits_wrap = EtaLogitsWarper(epsilon=new_config.eta_cutoff)
-        self.assertIsNotNone(eta_logits_wrap.epsilon)
+        self.assertEqual(eta_logits_wrap.epsilon, epsilon)
 
     def test_serialize_generation_ngram_size(self):
         """Tests that GenerationConfig is serialized and NoRepeatNGramLogitsProcessor is initialized with ngram_size"""
@@ -438,7 +441,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.no_repeat_ngram_size, ngram_size)
 
         no_repeat_ngram_proc = NoRepeatNGramLogitsProcessor(ngram_size=new_config.no_repeat_ngram_size)
-        self.assertIsNotNone(no_repeat_ngram_proc.ngram_size)
+        self.assertEqual(no_repeat_ngram_proc.ngram_size, ngram_size)
 
     def test_serialize_generation_encoder_ngram_size(self):
         """Tests that GenerationConfig is serialized and EncoderNoRepeatNGramLogitsProcessor is initialized with ngram_size"""
@@ -454,7 +457,7 @@ class GenerationConfigTest(unittest.TestCase):
         encoder_no_repeat_ngram_proc = EncoderNoRepeatNGramLogitsProcessor(
             encoder_ngram_size=new_config.encoder_no_repeat_ngram_size, encoder_input_ids=input_ids
         )
-        self.assertIsNotNone(encoder_no_repeat_ngram_proc.ngram_size)
+        self.assertEqual(encoder_no_repeat_ngram_proc.ngram_size, ngram_size)
 
     def test_serialize_generation_bad_words_ids(self):
         """Tests that GenerationConfig is serialized and NoBadWordsLogitsProcessor is initialized with bad_words_ids"""
@@ -467,7 +470,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertSequenceEqual(new_config.bad_words_ids, bad_word_tokens)
 
         no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=new_config.bad_words_ids)
-        self.assertIsNotNone(no_bad_words_dist_proc.bad_word_ids)
+        self.assertSequenceEqual(no_bad_words_dist_proc.bad_word_ids, bad_word_tokens)
 
     def test_serialize_generation_num_beams(self):
         """Tests that GenerationConfig is serialized and PrefixConstrainedLogitsProcessor is initialized with num_beams"""
@@ -485,7 +488,7 @@ class GenerationConfigTest(unittest.TestCase):
         prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(
             prefix_allowed_tokens_fn, num_beams=new_config.num_beams
         )
-        self.assertIsNotNone(prefix_constrained_logits_proc._num_beams)
+        self.assertEqual(prefix_constrained_logits_proc._num_beams, num_beams)
 
     def test_serialize_generation_diversity_penalty_and_num_bean_groups(self):
         """Tests that GenerationConfig is serialized and HammingDiversityLogitsProcessor is initialized with diversity_penalty_and_num_bean_groups"""
@@ -508,9 +511,9 @@ class GenerationConfigTest(unittest.TestCase):
             num_beams=new_config.num_beams,
             num_beam_groups=new_config.num_beam_groups,
         )
-        self.assertIsNotNone(diversity_logits_processor._num_beams)
-        self.assertIsNotNone(diversity_logits_processor._diversity_penalty)
-        self.assertIsNotNone(diversity_logits_processor._num_sub_beams)
+        self.assertEqual(diversity_logits_processor._num_beams, num_beams)
+        self.assertEqual(diversity_logits_processor._diversity_penalty, diversity_penalty)
+        self.assertEqual(diversity_logits_processor._num_sub_beams, num_beams // num_beam_groups)
 
     def test_serialize_generation_bos_token_id(self):
         """Tests that GenerationConfig is serialized and ForcedBOSTokenLogitsProcessor is initialized with bos_token_id"""
@@ -523,7 +526,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.bos_token_id, bos_token_id)
 
         logits_processor = ForcedBOSTokenLogitsProcessor(bos_token_id=new_config.bos_token_id)
-        self.assertIsNotNone(logits_processor.bos_token_id)
+        self.assertEqual(logits_processor.bos_token_id, bos_token_id)
 
     def test_serialize_generation_eos_token_id(self):
         """Tests that GenerationConfig is serialized and ForcedEOSTokenLogitsProcessor is initialized with eos_token_id"""
@@ -539,13 +542,14 @@ class GenerationConfigTest(unittest.TestCase):
         logits_processor = ForcedEOSTokenLogitsProcessor(
             max_length=max_length, eos_token_id=new_config.eos_token_id, device=torch_device
         )
-        self.assertIsNotNone(logits_processor.eos_token_id)
+        self.assertEqual(logits_processor.eos_token_id, eos_token_id)
 
     def test_serialize_generation_exponential_decay_length_penalty(self):
         """Tests that GenerationConfig is serialized and ExponentialDecayLengthPenalty is initialized with regulation_start and regulation_factor"""
         eos_token_id = 0
         penalty_start = 5
         penalty_factor = 1.1
+        input_ids_seq_length = 10
         exponential_decay_length_penalty = (penalty_start, penalty_factor)
 
         generation_config = GenerationConfig(exponential_decay_length_penalty=exponential_decay_length_penalty)
@@ -557,10 +561,12 @@ class GenerationConfigTest(unittest.TestCase):
         exponential_decay_processor = ExponentialDecayLengthPenalty(
             exponential_decay_length_penalty=new_config.exponential_decay_length_penalty,
             eos_token_id=eos_token_id,
-            input_ids_seq_length=10,
+            input_ids_seq_length=input_ids_seq_length,
         )
-        self.assertIsNotNone(exponential_decay_processor.regulation_start)
-        self.assertIsNotNone(exponential_decay_processor.regulation_factor)
+        self.assertEqual(
+            exponential_decay_processor.regulation_start, exponential_decay_length_penalty[0] + input_ids_seq_length
+        )
+        self.assertEqual(exponential_decay_processor.regulation_factor, exponential_decay_length_penalty[1])
 
     def test_serialize_generation_begin_suppress_tokens(self):
         """Tests that GenerationConfig is serialized and SuppressTokensAtBeginLogitsProcessor is initialized with begin_suppress_token and begin_index"""
@@ -576,8 +582,8 @@ class GenerationConfigTest(unittest.TestCase):
         suppress_processor = SuppressTokensAtBeginLogitsProcessor(
             begin_suppress_tokens=new_config.begin_suppress_tokens, begin_index=begin_index
         )
-        self.assertIsNotNone(suppress_processor.begin_suppress_tokens)
-        self.assertIsNotNone(suppress_processor.begin_index)
+        self.assertSequenceEqual(suppress_processor.begin_suppress_tokens, begin_suppress_tokens)
+        self.assertEqual(suppress_processor.begin_index, begin_index)
 
     def test_serialize_generation_suppress_tokens(self):
         """Tests that GenerationConfig is serialized and SuppressTokensLogitsProcessor is initialized with suppress_token"""
@@ -590,7 +596,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertSequenceEqual(new_config.suppress_tokens, suppress_tokens)
 
         suppress_processor = SuppressTokensLogitsProcessor(suppress_tokens=new_config.suppress_tokens)
-        self.assertIsNotNone(suppress_processor.suppress_tokens)
+        self.assertSequenceEqual(suppress_processor.suppress_tokens, suppress_tokens)
 
     def test_serialize_generation_guidance_scale(self):
         """Tests that GenerationConfig is serialized and ClassifierFreeGuidanceLogitsProcessor is initialized with guidance_scale"""
@@ -602,7 +608,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.guidance_scale, guidance_scale)
 
         classifier_processor = ClassifierFreeGuidanceLogitsProcessor(guidance_scale=new_config.guidance_scale)
-        self.assertIsNotNone(classifier_processor.guidance_scale)
+        self.assertEqual(classifier_processor.guidance_scale, guidance_scale)
 
     def test_serialize_generation_guidance_scale_unbatched(self):
         """Tests that GenerationConfig is serialized and UnbatchedClassifierFreeGuidanceLogitsProcessor is initialized with guidance_scale"""
@@ -617,7 +623,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(new_config.guidance_scale, guidance_scale)
 
         cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(new_config.guidance_scale, {}, input_ids)
-        self.assertIsNotNone(cfg.guidance_scale)
+        self.assertEqual(cfg.guidance_scale, guidance_scale)
 
     def test_serialize_generation_watermarking_config(self):
         """Tests that GenerationConfig is serialized and WatermarkLogitsProcessor is initialized with WatermarkingConfig parameters"""
@@ -655,11 +661,11 @@ class GenerationConfigTest(unittest.TestCase):
             seeding_scheme=new_config.watermarking_config.seeding_scheme,
             context_width=new_config.watermarking_config.context_width,
         )
-        self.assertIsNotNone(watermark.bias)
-        self.assertIsNotNone(watermark.greenlist_size)
-        self.assertIsNotNone(watermark.hash_key)
-        self.assertIsNotNone(watermark.seeding_scheme)
-        self.assertIsNotNone(watermark.context_width)
+        self.assertEqual(watermark.bias, bias)
+        self.assertEqual(watermark.greenlist_size, int(vocab_size * greenlist_ratio))
+        self.assertEqual(watermark.hash_key, hashing_key)
+        self.assertEqual(watermark.seeding_scheme, seeding_scheme)
+        self.assertEqual(watermark.context_width, context_width)
 
 
 @is_staging_test

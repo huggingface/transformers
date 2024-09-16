@@ -1065,7 +1065,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
     Args:
         sequence_bias (`List[List[Union[List[int], float]]]`):
-            List of lists that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
+            List of lists that maps a sequence of tokens to its bias term (e.g. `[[[10, 45], -2.0],
+            [[64], -7.5]]`). Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
             will always be applied. Otherwise, the bias will only be applied if the sequence in question is about to be
             completed (in the token selection step after this processor is applied).
@@ -1199,10 +1200,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         def all_token_bias_pairs_are_valid(sequence):
             return (
-                isinstance(token_bias_pair, list)
-                and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in token_bias_pair)
-                or isinstance(token_bias_pair, float)
-                for token_bias_pair in sequence
+                isinstance(sequence[0], list)
+                and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in sequence[0])
+                and isinstance(sequence[1], float)
             )
 
         if isinstance(sequence_bias, list) and any(
@@ -1216,7 +1216,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
             raise ValueError(f"`sequence_bias` has to be a dict with floats as values, but is {sequence_bias}.")
 
     def _convert_list_arguments_into_dict(self):
-        """BC: we used to accept `dict{tuple of tokens: float}`"""
+        """BC: we used to accept `dict{tuple of tokens: float}` directly, now we expect a list"""
         if isinstance(self.sequence_bias, list):
             temp_sequence = self.sequence_bias
             self.sequence_bias = {tuple(sublist[0]): sublist[1] for sublist in temp_sequence}
