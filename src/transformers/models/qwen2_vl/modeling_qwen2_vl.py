@@ -45,6 +45,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
@@ -59,6 +60,11 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
+if is_flash_attn_3_available():
+    from flash_attn_interface import flash_attn_varlen_func as flash_attn_3_varlen_func
+
+else:
+    flash_attn_3_varlen_func = None
 
 logger = logging.get_logger(__name__)
 
@@ -323,8 +329,9 @@ class VisionMlp(nn.Module):
 
 
 class VisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
+    def __init__(self, dim: int, num_heads: int = 16, config: Optional[Qwen2VLVisionConfig] = None) -> None:
         super().__init__()
+        self.config = config
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
@@ -357,12 +364,10 @@ class VisionAttention(nn.Module):
         return attn_output
 
 
-class VisionFlashAttention2(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
+class VisionFlashAttention(VisionAttention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
@@ -373,19 +378,21 @@ class VisionFlashAttention2(nn.Module):
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-            seq_length, -1
-        )
+        if self._flash_attn_3:
+            attn_output = flash_attn_3_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+                seq_length, -1
+            )
+        else:
+            attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+                seq_length, -1
+            )
         attn_output = self.proj(attn_output)
         return attn_output
 
 
-class VisionSdpaAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
+class VisionSdpaAttention(VisionAttention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def forward(
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
@@ -410,7 +417,8 @@ class VisionSdpaAttention(nn.Module):
 
 QWEN2_VL_VISION_ATTENTION_CLASSES = {
     "eager": VisionAttention,
-    "flash_attention_2": VisionFlashAttention2,
+    "flash_attention_2": VisionFlashAttention,
+    "flash_attention_3": VisionFlashAttention,
     "sdpa": VisionSdpaAttention,
 }
 
@@ -423,7 +431,7 @@ class Qwen2VLVisionBlock(nn.Module):
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
         self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[attn_implementation](
-            config.embed_dim, num_heads=config.num_heads
+            config.embed_dim, num_heads=config.num_heads, config=config
         )
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
@@ -608,7 +616,7 @@ class Qwen2VLAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class Qwen2VLFlashAttention2(Qwen2VLAttention):
+class Qwen2VLFlashAttention(Qwen2VLAttention):
     """
     Qwen2VL flash attention module, following Qwen2VL attention module. This module inherits from `Qwen2VLAttention`
     as the weights of the module stays untouched. The only required change would be on the forward pass
@@ -624,6 +632,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -753,6 +762,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             sliding_window=sliding_window,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -868,7 +878,8 @@ class Qwen2VLSdpaAttention(Qwen2VLAttention):
 
 QWEN2_VL_ATTENTION_CLASSES = {
     "eager": Qwen2VLAttention,
-    "flash_attention_2": Qwen2VLFlashAttention2,
+    "flash_attention_2": Qwen2VLFlashAttention,
+    "flash_attention_3": Qwen2VLFlashAttention,
     "sdpa": Qwen2VLSdpaAttention,
 }
 
@@ -878,7 +889,11 @@ class Qwen2VLDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
+        if (
+            config.use_sliding_window
+            and config._attn_implementation != "flash_attention_2"
+            and config._attn_implementation != "flash_attention_3"
+        ):
             logger.warning_once(
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
@@ -985,6 +1000,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -1228,7 +1244,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

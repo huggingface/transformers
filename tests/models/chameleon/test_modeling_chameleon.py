@@ -24,6 +24,7 @@ from transformers import ChameleonConfig, is_torch_available, is_vision_availabl
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -365,6 +366,43 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
+
+    @require_flash_attn_3
+    @require_read_token
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = ChameleonForConditionalGeneration.from_pretrained(
+            "facebook/chameleon-7b",
+            load_in_4bit=True,
+            device_map={"": 0},
+        )
+
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        processor.tokenizer.padding_side = "right"
+
+        inputs = processor(texts, return_tensors="pt", padding=True).to(0)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = processor.tokenizer.batch_decode(output_native)
+
+        model = ChameleonForConditionalGeneration.from_pretrained(
+            "facebook/chameleon-7b",
+            load_in_4bit=True,
+            attn_implementation="flash_attention_3",
+        )
+
+        output_fa_3 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_3 = processor.tokenizer.batch_decode(output_fa_3)
+
+        self.assertListEqual(output_native, output_fa_3)
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):

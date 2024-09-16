@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
+from .utils import is_flash_attn_2_available, is_flash_attn_3_available, is_flash_attn_greater_or_equal
 
 
 if is_flash_attn_2_available():
@@ -28,6 +28,11 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
+if is_flash_attn_3_available():
+    from flash_attn_interface import _flash_attn_forward as _flash_attn_3_forward
+    from flash_attn_interface import flash_attn_func as flash_attn_3_func
+    from flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_3_func
 
 
 def _get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, int]:
@@ -194,6 +199,7 @@ def _flash_attention_forward(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: bool = None,
+    use_flash_attn_3: bool = False,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -219,18 +225,34 @@ def _flash_attention_forward(
             Softcap for the attention logits, used e.g. in gemma2.
         deterministic (`bool`, *optional*):
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
+        use_flash_attn_3 (`bool`, *optional*):
+            Determines if Flash Attention v3 should be used.
     """
     if not use_top_left_mask:
         causal = is_causal
     else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__.
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__.
         causal = is_causal and query_length != 1
 
+    # FAv3 FP8 path uses `_flash_attn_3_forward` which doesn't set the default value.
+    softmax_scale = softmax_scale or query_states.shape[-1] ** (-0.5)
+
+    use_fp8 = use_flash_attn_3 and os.environ.get("FLASH_ATTENTION_3_FP8", "0") == "1"
+
+    flash_kwargs = {}
     # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
-    use_sliding_windows = (
-        _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
-    )
-    flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
+    use_sliding_windows = sliding_window is not None and key_states.shape[1] > sliding_window
+    if not _flash_supports_window_size:
+        flash_kwargs = {}
+    elif use_sliding_windows:
+        flash_kwargs["window_size"] = (sliding_window, sliding_window)
+    else:
+        # Needs default values for FP8 `_flash_attn_forward` path.
+        # Can be removed when FP8 bwd is supported and FP8 path uses `flash_attn_func`.
+        flash_kwargs["window_size"] = (-1, -1)
+
+    if not use_flash_attn_3:
+        flash_kwargs["dropout_p"] = dropout
 
     if is_flash_attn_greater_or_equal("2.4.1"):
         if deterministic is None:
@@ -249,7 +271,9 @@ def _flash_attention_forward(
         cu_seqlens_q, cu_seqlens_k = cu_seq_lens
         max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-        attn_output_unpad = flash_attn_varlen_func(
+        func = flash_attn_varlen_3_func if use_flash_attn_3 else flash_attn_varlen_func
+
+        attn_output_unpad = func(
             query_states,
             key_states,
             value_states,
@@ -257,11 +281,12 @@ def _flash_attention_forward(
             cu_seqlens_k=cu_seqlens_k,
             max_seqlen_q=max_seqlen_in_batch_q,
             max_seqlen_k=max_seqlen_in_batch_k,
-            dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
             **flash_kwargs,
         )
+        if use_flash_attn_3:
+            attn_output_unpad = attn_output_unpad[0]
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
@@ -276,7 +301,9 @@ def _flash_attention_forward(
         cu_seqlens_q, cu_seqlens_k = cu_seq_lens
         max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-        attn_output = flash_attn_varlen_func(
+        func = flash_attn_varlen_3_func if use_flash_attn_3 else flash_attn_varlen_func
+
+        attn_output = func(
             query_states,
             key_states,
             value_states,
@@ -284,17 +311,33 @@ def _flash_attention_forward(
             cu_seqlens_k=cu_seqlens_k,
             max_seqlen_q=max_seqlen_in_batch_q,
             max_seqlen_k=max_seqlen_in_batch_k,
-            dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
             **flash_kwargs,
         )
+        if use_flash_attn_3:
+            attn_output = attn_output[0]
 
         attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
 
     else:
-        attn_output = flash_attn_func(
-            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
-        )
+        if use_fp8:
+            # NOTE: uses `_flash_attn_forward` instead of `flash_attn_func` because no bwd for FP8 yet.
+            # `deterministic` is part of `flash_attn_func`/`FlashAttnFunc`, used in bwd, so not present here.
+            attn_output = _flash_attn_3_forward(
+                query_states.to(torch.float8_e4m3fn),
+                key_states.to(torch.float8_e4m3fn),
+                value_states.to(torch.float8_e4m3fn),
+                softmax_scale=softmax_scale,
+                causal=causal,
+                window_size=flash_kwargs["window_size"],
+            )[0]
+        else:
+            func = flash_attn_3_func if use_flash_attn_3 else flash_attn_func
+            attn_output = func(
+                query_states, key_states, value_states, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
+            )
+            if use_flash_attn_3:
+                attn_output = attn_output[0]
 
     return attn_output

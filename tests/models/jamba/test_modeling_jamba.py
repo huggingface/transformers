@@ -25,6 +25,7 @@ from transformers import AutoTokenizer, JambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     slow,
@@ -539,6 +540,45 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_fp32_ln(self):
+        r"""
+        Overriding the test_flash_attn_3_fp32_ln test as the Jamba model, like Mixtral, doesn't support
+        right padding + use cache with FA3
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # NOTE: Jamba does not support right padding + use_cache with FA3.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                    load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(dummy_input)
+                # with attention mask
+                _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -569,6 +609,44 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                with self.assertRaises(ValueError):
+                    _ = model.generate(
+                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                    )
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_padding_right(self):
+        r"""
+        Overriding the test_flash_attn_3_generate_padding_right test as the Jamba model, like Mixtral, doesn't support
+        right padding + use cache with FA3
+        """
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -626,6 +704,55 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     use_cache=True,
                 )
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_use_cache(self):
+        r"""
+        Overriding the test_flash_attn_3_generate_use_cache test as the Jamba model, like Mixtral, doesn't support
+        right padding + use cache with FA3
+        """
+        import torch
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # NOTE: Jamba does not support right padding + use_cache with FA3.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -634,6 +761,17 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         r"""
         Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
+        """
+        self.skipTest(reason="Jamba flash attention does not support right padding")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        r"""
+        Overriding the test_flash_attn_3_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
+        right padding + use cache with FA3
         """
         self.skipTest(reason="Jamba flash attention does not support right padding")
 

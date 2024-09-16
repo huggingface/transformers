@@ -56,6 +56,7 @@ from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyD
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 if TYPE_CHECKING:
     from ...generation.streamers import BaseStreamer
 
@@ -332,15 +333,15 @@ class MusicgenMelodyAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->MusicgenMelody
-class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention with Bart->MusicgenMelody
+class MusicgenMelodyFlashAttention(MusicgenMelodyAttention):
     """
     MusicgenMelody flash attention module. This module inherits from `MusicgenMelodyAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -348,6 +349,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -449,6 +451,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
             dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -570,7 +573,8 @@ class MusicgenMelodySdpaAttention(MusicgenMelodyAttention):
 MUSICGEN_MELODY_ATTENTION_CLASSES = {
     "eager": MusicgenMelodyAttention,
     "sdpa": MusicgenMelodySdpaAttention,
-    "flash_attention_2": MusicgenMelodyFlashAttention2,
+    "flash_attention_2": MusicgenMelodyFlashAttention,
+    "flash_attention_3": MusicgenMelodyFlashAttention,
 }
 
 
@@ -667,6 +671,7 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenMelodyDecoderLayer", "MusicgenMelodyAttention"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -950,7 +955,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        if self.attn_implementation == "flash_attention_2":
+        if self.attn_implementation == "flash_attention_2" or self.attn_implementation == "flash_attention_3":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.attn_implementation == "sdpa" and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
@@ -1595,6 +1600,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(

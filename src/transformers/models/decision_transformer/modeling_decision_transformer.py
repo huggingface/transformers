@@ -100,9 +100,9 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->DecisionTransformerGPT2
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2Config->DecisionTransformerConfig,GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2Attention(nn.Module):
-    def __init__(self, config, is_cross_attention=False, layer_idx=None):
+    def __init__(self, config: DecisionTransformerConfig, is_cross_attention=False, layer_idx=None):
         super().__init__()
         self.config = config
         max_positions = config.max_position_embeddings

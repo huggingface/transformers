@@ -355,8 +355,8 @@ class SiglipTextEmbeddings(nn.Module):
 class SiglipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
-    def __init__(self, config):
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__ with CLIP->Siglip
+    def __init__(self, config: SiglipConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -428,7 +428,7 @@ class SiglipAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SiglipFlashAttention2(SiglipAttention):
+class SiglipFlashAttention(SiglipAttention):
     """
     SiglipAttention flash attention module. This module inherits from `SiglipAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -437,7 +437,7 @@ class SiglipFlashAttention2(SiglipAttention):
 
     is_causal = False
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -445,8 +445,9 @@ class SiglipFlashAttention2(SiglipAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
-    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
+    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -511,6 +512,7 @@ class SiglipFlashAttention2(SiglipAttention):
             dropout=dropout_rate,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
@@ -590,7 +592,8 @@ class SiglipSdpaAttention(SiglipAttention):
 
 SIGLIP_ATTENTION_CLASSES = {
     "eager": SiglipAttention,
-    "flash_attention_2": SiglipFlashAttention2,
+    "flash_attention_2": SiglipFlashAttention,
+    "flash_attention_3": SiglipFlashAttention,
     "sdpa": SiglipSdpaAttention,
 }
 
@@ -677,6 +680,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -930,6 +934,7 @@ class SiglipTextTransformer(nn.Module):
 
         self.head = nn.Linear(embed_dim, embed_dim)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
@@ -962,7 +967,7 @@ class SiglipTextTransformer(nn.Module):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and not self._use_flash_attention_2 and not self._use_flash_attention_3:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 

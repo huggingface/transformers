@@ -347,14 +347,14 @@ class WhisperAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class WhisperFlashAttention2(WhisperAttention):
+class WhisperFlashAttention(WhisperAttention):
     """
     Whisper flash attention module. This module inherits from `WhisperAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -362,6 +362,7 @@ class WhisperFlashAttention2(WhisperAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -459,6 +460,7 @@ class WhisperFlashAttention2(WhisperAttention):
             dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, tgt_len, -1)
@@ -570,7 +572,8 @@ class WhisperSdpaAttention(WhisperAttention):
 
 WHISPER_ATTENTION_CLASSES = {
     "eager": WhisperAttention,
-    "flash_attention_2": WhisperFlashAttention2,
+    "flash_attention_2": WhisperFlashAttention,
+    "flash_attention_3": WhisperFlashAttention,
     "sdpa": WhisperSdpaAttention,
 }
 
@@ -770,6 +773,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -1113,6 +1117,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
         )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -1375,7 +1380,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
+    require_flash_attn_3,
     require_non_xpu,
     require_torch,
     require_torch_accelerator,
@@ -956,6 +957,52 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model.train()
                 _ = model_fa(dummy_input, decoder_input_ids=decoder_input_ids)
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_inference_equivalence(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(reason="Model does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+
+                logits = outputs.decoder_hidden_states[-1]
+                logits_fa = outputs_fa.decoder_hidden_states[-1]
+
+                # whisper FA3 needs very high tolerance
+                assert torch.allclose(logits_fa, logits, atol=4e-1)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(dummy_input, decoder_input_ids=decoder_input_ids)
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -1010,6 +1057,62 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
+                assert torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=4e-1)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(reason="Model does not support flash_attention_3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                dummy_input = dummy_input.to(torch.float16)
+
+                decoder_input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=dummy_input.device, dtype=torch.long)
+                decoder_attention_mask = torch.tensor(
+                    [[0, 0, 0, 1, 1, 1]], device=dummy_input.device, dtype=torch.long
+                )
+
+                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+
+                logits = outputs.decoder_hidden_states[-1]
+                logits_fa = outputs_fa.decoder_hidden_states[-1]
+
+                # whisper FA3 needs very high tolerance
+                assert torch.allclose(logits_fa, logits, atol=4e-1)
+
+                other_inputs = {
+                    "decoder_input_ids": decoder_input_ids,
+                    "decoder_attention_mask": decoder_attention_mask,
+                    "output_hidden_states": True,
+                }
+
+                outputs = model(dummy_input, **other_inputs)
+                outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = outputs.decoder_hidden_states[-1]
+                logits_fa = outputs_fa.decoder_hidden_states[-1]
+
+                # whisper FA3 needs very high tolerance
                 assert torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=4e-1)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
@@ -1640,6 +1743,59 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                _ = model.generate(
+                    dummy_input,
+                    decoder_input_ids=output.sequences,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_reuse_cache(self):
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name][..., :10]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 

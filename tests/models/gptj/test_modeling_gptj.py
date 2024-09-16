@@ -23,6 +23,7 @@ from transformers import BitsAndBytesConfig, GPTJConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     slow,
@@ -535,6 +536,44 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(expected_outputs, output_fa_2)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+        expected_outputs = [
+            "hi<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>Q: I have a question about the new version of the game. I have a question about the",
+            "Hello this is a very long sentence.\n\nA:\n\nI think the best way to understand this is to think of it",
+        ]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6b",
+            device_map={"": 0},
+            attn_implementation="flash_attention_3",
+            revision="float16",
+            torch_dtype=torch.float16,
+            quantization_config=quantization_config,
+        )
+
+        output_fa_3 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_3 = tokenizer.batch_decode(output_fa_3)
+
+        self.assertListEqual(expected_outputs, output_fa_3)
 
 
 @require_torch

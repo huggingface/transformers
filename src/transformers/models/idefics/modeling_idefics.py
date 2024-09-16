@@ -1425,7 +1425,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

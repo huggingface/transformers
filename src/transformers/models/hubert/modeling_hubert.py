@@ -550,15 +550,15 @@ class HubertAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Hubert
-class HubertFlashAttention2(HubertAttention):
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention with Bart->Hubert
+class HubertFlashAttention(HubertAttention):
     """
     Hubert flash attention module. This module inherits from `HubertAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -566,6 +566,7 @@ class HubertFlashAttention2(HubertAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -667,6 +668,7 @@ class HubertFlashAttention2(HubertAttention):
             dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -788,7 +790,8 @@ class HubertSdpaAttention(HubertAttention):
 HUBERT_ATTENTION_CLASSES = {
     "eager": HubertAttention,
     "sdpa": HubertSdpaAttention,
-    "flash_attention_2": HubertFlashAttention2,
+    "flash_attention_2": HubertFlashAttention,
+    "flash_attention_3": HubertFlashAttention,
 }
 
 
@@ -936,6 +939,7 @@ class HubertEncoder(nn.Module):
         self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -952,7 +956,7 @@ class HubertEncoder(nn.Module):
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
@@ -1024,6 +1028,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
         )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -1040,7 +1045,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
@@ -1112,6 +1117,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):

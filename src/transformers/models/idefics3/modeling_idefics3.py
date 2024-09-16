@@ -264,15 +264,15 @@ class Idefics3VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionFlashAttention2 with Idefics2->Idefics3
-class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionFlashAttention with Idefics2->Idefics3
+class Idefics3VisionFlashAttention(Idefics3VisionAttention):
     """
     Idefics3Vision flash attention module. This module inherits from `Idefics3VisionAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -280,6 +280,7 @@ class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -352,6 +353,7 @@ class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
             dropout=dropout_rate,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
@@ -365,7 +367,8 @@ class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
 
 IDEFICS_VISION_ATTENTION_CLASSES = {
     "eager": Idefics3VisionAttention,
-    "flash_attention_2": Idefics3VisionFlashAttention2,
+    "flash_attention_2": Idefics3VisionFlashAttention,
+    "flash_attention_3": Idefics3VisionFlashAttention,
 }
 
 
@@ -620,6 +623,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_cache_class = True
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
@@ -676,6 +680,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer.get_input_embeddings
     def get_input_embeddings(self):
@@ -719,7 +724,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        elif not self._use_flash_attention_2 and not self._use_flash_attention_3:
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -835,6 +840,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         self.post_init()
 

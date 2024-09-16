@@ -23,6 +23,7 @@ from transformers import Starcoder2Config, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     slow,
@@ -431,6 +432,40 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                         dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                     )
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_padding_right(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                with self.assertRaises(ValueError):
+                    _ = model.generate(
+                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                    )
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -476,11 +511,63 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     use_cache=True,
                 )
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_use_cache(self):
+        import torch
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # NOTE: Starcoder2 apparently does not support right padding + use_cache with FA3.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="Starcoder2 flash attention does not support right padding")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
         self.skipTest(reason="Starcoder2 flash attention does not support right padding")
 
 
@@ -538,6 +625,28 @@ class Starcoder2IntegrationTest(unittest.TestCase):
 
         model = Starcoder2ForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        text = ["Hello my name is Younes and", "def hello_world():"]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, output_text)
+
+    @require_flash_attn_3
+    @pytest.mark.flash_attn_3_test
+    def test_starcoder2_batched_generation_fa3(self):
+        EXPECTED_TEXT = [
+            "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
+            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+        ]
+        model_id = "bigcode/starcoder2-7b"
+
+        model = Starcoder2ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_3"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token

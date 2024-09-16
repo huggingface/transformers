@@ -121,7 +121,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
 
 class GPT2Attention(nn.Module):
-    def __init__(self, config, is_cross_attention=False, layer_idx=None):
+    def __init__(self, config: GPT2Config, is_cross_attention=False, layer_idx=None):
         super().__init__()
         self.config = config
         max_positions = config.max_position_embeddings
@@ -342,14 +342,14 @@ class GPT2Attention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
-class GPT2FlashAttention2(GPT2Attention):
+class GPT2FlashAttention(GPT2Attention):
     """
     GPT2 flash attention module. This module inherits from `GPT2Attention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -357,6 +357,7 @@ class GPT2FlashAttention2(GPT2Attention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -442,6 +443,7 @@ class GPT2FlashAttention2(GPT2Attention):
             dropout=attn_dropout,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
@@ -579,7 +581,12 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
-GPT2_ATTENTION_CLASSES = {"eager": GPT2Attention, "flash_attention_2": GPT2FlashAttention2, "sdpa": GPT2SdpaAttention}
+GPT2_ATTENTION_CLASSES = {
+    "eager": GPT2Attention,
+    "flash_attention_2": GPT2FlashAttention,
+    "flash_attention_3": GPT2FlashAttention,
+    "sdpa": GPT2SdpaAttention,
+}
 
 
 class GPT2Block(nn.Module):
@@ -675,6 +682,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(self, *inputs, **kwargs):
@@ -1032,7 +1040,7 @@ class GPT2Model(GPT2PreTrainedModel):
         # Attention mask.
         _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
         attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
-        if self._attn_implementation == "flash_attention_2":
+        if self._attn_implementation == "flash_attention_2" or self._attn_implementation == "flash_attention_3":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif _use_sdpa:
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
@@ -1069,7 +1077,10 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=input_shape[-1]
                 )
-            elif not self._attn_implementation == "flash_attention_2":
+            elif (
+                not self._attn_implementation == "flash_attention_2"
+                and not self._attn_implementation == "flash_attention_3"
+            ):
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None

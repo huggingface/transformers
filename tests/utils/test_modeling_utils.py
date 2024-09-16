@@ -67,6 +67,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_tf_available,
     is_torch_sdpa_available,
@@ -550,10 +551,14 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
+
         mistral_attention_classes = {
             "eager": "MistralAttention",
             "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
+            "flash_attention_2": "MistralFlashAttention",
+            "flash_attention_3": "MistralFlashAttention",
         }
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
@@ -589,10 +594,14 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
+
         mistral_attention_classes = {
             "eager": "MistralAttention",
             "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
+            "flash_attention_2": "MistralFlashAttention",
+            "flash_attention_3": "MistralFlashAttention",
         }
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -2520,6 +2529,14 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    def test_error_no_flash_3_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="flash_attention_3"
+            )
+
+        self.assertTrue("does not support Flash Attention 3.0" in str(cm.exception))
+
     def test_error_no_flash_available_with_config(self):
         with self.assertRaises(ValueError) as cm:
             config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
@@ -2529,6 +2546,16 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_no_flash_3_available_with_config(self):
+        with self.assertRaises(ValueError) as cm:
+            config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", config=config, attn_implementation="flash_attention_3"
+            )
+
+        self.assertTrue("does not support Flash Attention 3.0" in str(cm.exception))
 
     def test_error_wrong_attn_implementation(self):
         with self.assertRaises(ValueError) as cm:
@@ -2546,6 +2573,16 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
+    def test_not_available_flash_3(self):
+        if is_flash_attn_3_available():
+            self.skipTest(reason="Please uninstall flash_attn_interface package to run test_not_available_flash_3")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_3"
+            )
+        self.assertTrue("the package flash_attn_interface seems to be not installed" in str(cm.exception))
+
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
@@ -2560,6 +2597,23 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_flash_3_with_config(self):
+        if is_flash_attn_3_available():
+            self.skipTest(
+                reason="Please uninstall flash_attn_interface package to run test_not_available_flash_3_with_config"
+            )
+
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel",
+                config=config,
+                attn_implementation="flash_attention_3",
+            )
+
+        self.assertTrue("the package flash_attn_interface seems to be not installed" in str(cm.exception))
 
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():

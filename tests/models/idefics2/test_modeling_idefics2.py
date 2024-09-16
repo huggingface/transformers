@@ -32,6 +32,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -608,3 +609,37 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         self.assertEqual(generated_texts_eager[0], generated_texts_flash_attention_2[0])
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_flash_attn_3_eager_equivalence(self):
+        # Create inputs
+        text = "<image>In this image, we see"
+        images = self.image1
+        inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
+        inputs.to(torch_device)
+
+        # Eager model
+        model_eager = Idefics2ForConditionalGeneration.from_pretrained(
+            "HuggingFaceM4/idefics2-8b-base",
+            attn_implementation="eager",
+            load_in_4bit=True,
+        )
+        generated_ids_eager = model_eager.generate(**inputs, max_new_tokens=10)
+        generated_texts_eager = self.processor.batch_decode(generated_ids_eager, skip_special_tokens=True)
+
+        del model_eager
+
+        # Flash Attention 3 model
+        model_flash_attention_3 = Idefics2ForConditionalGeneration.from_pretrained(
+            "HuggingFaceM4/idefics2-8b-base",
+            attn_implementation="flash_attention_3",
+            load_in_4bit=True,
+        )
+        generated_ids_flash_attention_3 = model_flash_attention_3.generate(**inputs, max_new_tokens=10)
+        generated_texts_flash_attention_3 = self.processor.batch_decode(
+            generated_ids_flash_attention_3, skip_special_tokens=True
+        )
+
+        self.assertEqual(generated_texts_eager[0], generated_texts_flash_attention_3[0])

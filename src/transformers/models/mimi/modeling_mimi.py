@@ -42,6 +42,7 @@ from .configuration_mimi import MimiConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -559,8 +560,8 @@ class MimiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Mimi
-class MimiFlashAttention2(MimiAttention):
+# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention with Gemma->Mimi
+class MimiFlashAttention(MimiAttention):
     """
     Mimi flash attention module. This module inherits from `MimiAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -574,6 +575,7 @@ class MimiFlashAttention2(MimiAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -659,6 +661,7 @@ class MimiFlashAttention2(MimiAttention):
             sliding_window=getattr(self, "sliding_window", None),
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -761,7 +764,8 @@ class MimiSdpaAttention(MimiAttention):
 
 MIMI_ATTENTION_CLASSES = {
     "eager": MimiAttention,
-    "flash_attention_2": MimiFlashAttention2,
+    "flash_attention_2": MimiFlashAttention,
+    "flash_attention_3": MimiFlashAttention,
     "sdpa": MimiSdpaAttention,
 }
 
@@ -1036,7 +1040,10 @@ class MimiTransformerModel(nn.Module):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -1371,6 +1378,7 @@ class MimiPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MimiDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True

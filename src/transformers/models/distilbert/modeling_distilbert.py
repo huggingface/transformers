@@ -238,14 +238,14 @@ class MultiHeadSelfAttention(nn.Module):
             return (context,)
 
 
-class DistilBertFlashAttention2(MultiHeadSelfAttention):
+class DistilBertFlashAttention(MultiHeadSelfAttention):
     """
     DistilBert flash attention module. This module inherits from `MultiHeadSelfAttention` as the weights of the module
     stays untouched. The only required change would be on the forward pass where it needs to correctly call the public
     API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -253,6 +253,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -324,6 +325,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             dropout=attn_dropout,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_weights_reshaped = attn_weights.reshape(batch_size, q_length, self.n_heads * dim_per_head)
@@ -438,8 +440,9 @@ class FFN(nn.Module):
 
 DISTILBERT_ATTENTION_CLASSES = {
     "eager": MultiHeadSelfAttention,
-    "flash_attention_2": DistilBertFlashAttention2,
     "sdpa": DistilBertSdpaAttention,
+    "flash_attention_2": DistilBertFlashAttention,
+    "flash_attention_3": DistilBertFlashAttention,
 }
 
 
@@ -590,6 +593,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
@@ -677,6 +681,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
@@ -784,7 +789,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:

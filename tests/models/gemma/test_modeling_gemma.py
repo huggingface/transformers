@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -453,12 +454,64 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     use_cache=True,
                 )
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_use_cache(self):
+        import torch
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # NOTE: Gemma apparently does not support right padding + use_cache with FA3.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Gemma flash attention does not support right padding")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        self.skipTest(reason="Gemma flash attention 3 does not support right padding")
 
     @require_torch_sdpa
     @require_torch_accelerator
@@ -524,6 +577,40 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 # gemma flash attention 2 needs a high tolerance
+                assert torch.allclose(logits_fa, logits, atol=3e-3)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_3_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(reason="Model does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # gemma flash attention 3 needs a high tolerance
                 assert torch.allclose(logits_fa, logits, atol=3e-3)
 
 
@@ -641,6 +728,29 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+        )
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_flash_attn_3
+    @require_read_token
+    @pytest.mark.flash_attn_3_test
+    def test_model_2b_flash_attn_fa3(self):
+        model_id = "google/gemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
         )
         model.to(torch_device)
 

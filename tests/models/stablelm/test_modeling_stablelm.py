@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -554,6 +555,24 @@ class StableLmModelIntegrationTest(unittest.TestCase):
             torch_dtype="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-3:].tolist())
+
+    @require_bitsandbytes
+    @slow
+    @require_flash_attn_3
+    @pytest.mark.flash_attn_3_test
+    def test_model_3b_long_prompt_fav3(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [3, 3, 3]
+        input_ids = [306, 338] * 2047
+        model = StableLmForCausalLM.from_pretrained(
+            "stabilityai/stablelm-3b-4e1t",
+            device_map="auto",
+            torch_dtype="auto",
+            load_in_4bit=True,
+            attn_implementation="flash_attention_3",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)

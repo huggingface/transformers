@@ -220,7 +220,7 @@ class XCLIPTextEmbeddings(nn.Module):
 class XCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size

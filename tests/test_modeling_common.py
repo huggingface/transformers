@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_non_xpu,
     require_read_token,
     require_safetensors,
@@ -3488,6 +3489,34 @@ class ModelTesterMixin:
 
                 self.assertTrue(False, "FlashAttention2 modules not found in model")
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_conversion(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_3"
+                ).to(torch_device)
+
+                for _, module in model.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        return
+
+                self.assertTrue(False, "FlashAttention3 modules not found in model")
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -3508,6 +3537,103 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
                     tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, 1:] = 1
+                    dummy_attention_mask[:, :1] = 0
+
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(dummy_input, **other_inputs)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_inference_equivalence(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
                 )
                 model_fa.to(torch_device)
 
@@ -3678,6 +3804,99 @@ class ModelTesterMixin:
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, :-1] = 1
+                    dummy_attention_mask[:, -1:] = 0
+
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -3726,6 +3945,54 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(out, out_fa))
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_generate_left_padding(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
+
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # make sure we do left padding
+                dummy_attention_mask[:, :-1] = 0
+                dummy_attention_mask[:, -1:] = 1
+
+                out = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                out_fa = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(out, out_fa))
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -3765,6 +4032,54 @@ class ModelTesterMixin:
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                out_fa = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(out, out_fa))
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_3_generate_padding_right(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
+
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # make sure we do right padding
+                dummy_attention_mask[:, :-1] = 1
+                dummy_attention_mask[:, -1:] = 0
+
+                out = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -4355,6 +4670,65 @@ class ModelTesterMixin:
                     use_cache=True,
                 )
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_use_cache(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
+                # Generate with one batch only to test generation when attention mask will be None
+                # when real inputs are used, because there is no padding. See issue #32237 for more
+                dummy_input = dummy_input[:1, ...]
+                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -4387,6 +4761,62 @@ class ModelTesterMixin:
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                dummy_input_updated = torch.cat([dummy_input, output.sequences], dim=-1)
+                _ = model.generate(
+                    dummy_input_updated,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_generate_reuse_cache(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -4468,6 +4898,63 @@ class ModelTesterMixin:
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_fp32_ln(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                batch_size = dummy_attention_mask.shape[0]
+
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+
+                # To avoid errors with padding_side=="right"
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(dummy_input)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_3",
+                    low_cpu_mem_usage=True,
+                    load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                if model.config.is_encoder_decoder:
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+
+                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
+                    # with attention mask
+                    _ = model(
+                        dummy_input,
+                        attention_mask=dummy_attention_mask,
+                        decoder_input_ids=dummy_decoder_input_ids,
+                        decoder_attention_mask=dummy_decoder_attention_mask,
+                    )
+                else:
+                    _ = model(dummy_input)
+                    # with attention mask
+                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -4510,6 +4997,79 @@ class ModelTesterMixin:
                         tmpdirname,
                         torch_dtype=torch.float16,
                         attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
+                }
+                # add position_ids
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**padfree_inputs_dict)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), atol=0, rtol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_3",
                         low_cpu_mem_usage=True,
                     )
                     .to(torch_device)
@@ -4635,6 +5195,54 @@ class ModelTesterMixin:
                         break
 
                 self.assertFalse(fa2_correctly_converted)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_from_config(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 3")
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO: to change it in the future with other relevant auto classes
+            fa3_model = AutoModelForCausalLM.from_config(
+                config, attn_implementation="flash_attention_3", torch_dtype=torch.bfloat16
+            ).to(torch_device)
+
+            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+            fa3_correctly_converted = False
+
+            for _, module in fa3_model.named_modules():
+                if "FlashAttention" in module.__class__.__name__:
+                    fa3_correctly_converted = True
+                    break
+
+            self.assertTrue(fa3_correctly_converted)
+
+            _ = fa3_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa3_model.save_pretrained(tmpdirname)
+
+                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+
+                self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_3")
+
+                fa3_correctly_converted = False
+
+                for _, module in model_from_pretrained.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        fa3_correctly_converted = True
+                        break
+
+                self.assertFalse(fa3_correctly_converted)
 
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same

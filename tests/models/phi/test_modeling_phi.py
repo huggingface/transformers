@@ -24,6 +24,7 @@ from transformers import PhiConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     slow,
@@ -497,6 +498,43 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_3_test
+    @slow
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_3_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1
+    def test_flash_attn_3_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = PhiForCausalLM.from_pretrained(
+            "microsoft/phi-1",
+            load_in_4bit=True,
+            device_map={"": 0},
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = tokenizer.batch_decode(output_native)
+
+        model = PhiForCausalLM.from_pretrained(
+            "microsoft/phi-1", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_3"
+        )
+
+        output_fa_3 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_3 = tokenizer.batch_decode(output_fa_3)
+
+        self.assertListEqual(output_native, output_fa_3)
 
 
 @slow

@@ -48,6 +48,7 @@ from .configuration_jetmoe import JetMoeConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "jetmoe"
@@ -641,8 +642,8 @@ class JetMoeSdpaAttention(JetMoeAttention):
         return attn_output, None, past_key_value, router_logits
 
 
-class JetMoeFlashAttention2(JetMoeAttention):
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+class JetMoeFlashAttention(JetMoeAttention):
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -650,6 +651,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -744,6 +746,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
             dropout=dropout_rate,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            use_flash_attn_3=self._flash_attn_3,
         ).to(input_dtype)
 
         # output projection
@@ -759,7 +762,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
 
 JETMOE_ATTENTION_CLASSES = {
     "eager": JetMoeAttention,
-    "flash_attention_2": JetMoeFlashAttention2,
+    "flash_attention_2": JetMoeFlashAttention,
+    "flash_attention_3": JetMoeFlashAttention,
     "sdpa": JetMoeSdpaAttention,
 }
 
@@ -832,6 +836,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["JetMoeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -1008,7 +1013,11 @@ class JetMoeModel(JetMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
+        if (
+            attention_mask is not None
+            and (self._attn_implementation == "flash_attention_2" or self._attn_implementation == "flash_attention_3")
+            and use_cache
+        ):
             batch_size = inputs_embeds.shape[0]
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
@@ -1096,7 +1105,10 @@ class JetMoeModel(JetMoePreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

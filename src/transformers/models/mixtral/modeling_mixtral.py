@@ -55,6 +55,7 @@ from .configuration_mixtral import MixtralConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
 if is_torch_fx_available():
@@ -383,9 +384,9 @@ class MixtralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class MixtralFlashAttention2(MixtralAttention):
+class MixtralFlashAttention(MixtralAttention):
     """
     Mixtral flash attention module. This module inherits from `MixtralAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -503,6 +504,7 @@ class MixtralFlashAttention2(MixtralAttention):
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
             is_causal=self.is_causal,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -608,7 +610,8 @@ class MixtralSdpaAttention(MixtralAttention):
 
 MIXTRAL_ATTENTION_CLASSES = {
     "eager": MixtralAttention,
-    "flash_attention_2": MixtralFlashAttention2,
+    "flash_attention_2": MixtralFlashAttention,
+    "flash_attention_3": MixtralFlashAttention,
     "sdpa": MixtralSdpaAttention,
 }
 
@@ -810,6 +813,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MixtralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -1080,7 +1084,10 @@ class MixtralModel(MixtralPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

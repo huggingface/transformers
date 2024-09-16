@@ -30,7 +30,7 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import is_torchdynamo_compiling, logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
-    LlamaFlashAttention2,
+    LlamaFlashAttention,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -456,7 +456,7 @@ class GemmaSdpaAttention(GemmaAttention):
         return attn_output, None, past_key_value
 
 
-class GemmaFlashAttention2(LlamaFlashAttention2, GemmaAttention):
+class GemmaFlashAttention(LlamaFlashAttention, GemmaAttention):
     """
     Gemma flash attention module. This module inherits from `GemmaAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -547,6 +547,7 @@ class GemmaFlashAttention2(LlamaFlashAttention2, GemmaAttention):
             sliding_window=getattr(self, "sliding_window", None),
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -559,7 +560,8 @@ class GemmaFlashAttention2(LlamaFlashAttention2, GemmaAttention):
 
 GEMMA_ATTENTION_CLASSES = {
     "eager": GemmaAttention,
-    "flash_attention_2": GemmaFlashAttention2,
+    "flash_attention_2": GemmaFlashAttention,
+    "flash_attention_3": GemmaFlashAttention,
     "sdpa": GemmaSdpaAttention,
 }
 

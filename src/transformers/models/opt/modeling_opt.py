@@ -241,14 +241,14 @@ class OPTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class OptFlashAttention2(OPTAttention):
+class OptFlashAttention(OPTAttention):
     """
     OPT flash attention module. This module inherits from `OPTAttention` as the weights of the module stays untouched.
     The only required change would be on the forward pass where it needs to correctly call the public API of flash
     attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -256,6 +256,7 @@ class OptFlashAttention2(OPTAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -349,6 +350,7 @@ class OptFlashAttention2(OPTAttention):
             dropout=attn_dropout,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
@@ -362,7 +364,8 @@ class OptFlashAttention2(OPTAttention):
 
 OPT_ATTENTION_CLASSES = {
     "eager": OPTAttention,
-    "flash_attention_2": OptFlashAttention2,
+    "flash_attention_2": OptFlashAttention,
+    "flash_attention_3": OptFlashAttention,
 }
 
 
@@ -489,6 +492,7 @@ class OPTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -605,6 +609,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -703,7 +708,7 @@ class OPTDecoder(OPTPreTrainedModel):
         mask_seq_length = past_key_values_length + seq_length
 
         # embed positions
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             # 2d mask is passed through the layers
             causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             attention_mask = (

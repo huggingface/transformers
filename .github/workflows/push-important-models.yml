@@ -87,6 +87,11 @@ jobs:
         run:
           pytest -rsfE -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
       
+      - name: Run FA3 tests
+        id: run_fa3_tests
+        run:
+          pytest -rsfE -m "flash_attn_3_test" --make-reports=${{ matrix.model-name }}_fa3_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+      
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

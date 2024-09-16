@@ -55,6 +55,7 @@ from .configuration_qwen2_moe import Qwen2MoeConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
@@ -429,8 +430,8 @@ class Qwen2MoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2FlashAttention2 with Qwen2->Qwen2Moe
-class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2FlashAttention with Qwen2->Qwen2Moe
+class Qwen2MoeFlashAttention(Qwen2MoeAttention):
     """
     Qwen2Moe flash attention module, following Qwen2Moe attention module. This module inherits from `Qwen2MoeAttention`
     as the weights of the module stays untouched. The only required change would be on the forward pass
@@ -439,7 +440,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
     config.max_window_layers layers.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -447,6 +448,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -564,6 +566,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
             sliding_window=sliding_window,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -674,7 +677,8 @@ class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
 
 QWEN2MOE_ATTENTION_CLASSES = {
     "eager": Qwen2MoeAttention,
-    "flash_attention_2": Qwen2MoeFlashAttention2,
+    "flash_attention_2": Qwen2MoeFlashAttention,
+    "flash_attention_3": Qwen2MoeFlashAttention,
     "sdpa": Qwen2MoeSdpaAttention,
 }
 
@@ -867,6 +871,7 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen2MoeDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -1147,7 +1152,10 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

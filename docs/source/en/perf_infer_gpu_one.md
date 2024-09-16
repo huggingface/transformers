@@ -201,6 +201,142 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-large-seqlen-padding.png">
 </div>
 
+
+## FlashAttention-3
+
+<Tip>
+
+FlashAttention-3 is experimental and may change considerably in future versions.
+
+</Tip>
+
+[FlashAttention-3](https://huggingface.co/papers/2407.08608) improves on FlashAttention-2 algorithm by taking advantage of new features on Hopper GPUs to maximize performance:
+
+1. overlap overall computation and data movement via warp-specialization
+2. interleave block-wise matmul and softmax operations
+3. block quantization and incoherent processing that leverages hardware support for FP8 low-precision
+
+FlashAttention-3 is currently supported for the following architectures:
+* [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
+* [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
+* [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
+* [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
+* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
+* [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
+* [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
+* [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
+* [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
+* [GraniteMoe](https://huggingface.co/docs/transformers/model_doc/granitemoe#transformers.GraniteMoeModel)
+* [Idefics2](https://huggingface.co/docs/transformers/model_doc/idefics2#transformers.Idefics2Model)
+* [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
+* [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
+* [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
+* [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
+* [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
+* [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
+* [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
+* [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
+* [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
+* [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
+* [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
+* [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
+* [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
+* [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
+* [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
+* [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
+* [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
+* [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
+* [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
+* [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
+* [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
+* [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
+* [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
+* [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
+* [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
+* [Qwen2VL](https://huggingface.co/docs/transformers/model_doc/qwen2_vl#transformers.Qwen2VLModel)
+* [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
+* [Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
+* [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
+* [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
+* [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
+* [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
+* [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
+* [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+
+You can request to add FlashAttention-3 support for another model by opening a GitHub Issue or Pull Request.
+
+Before you begin, make sure you have FlashAttention-3 installed.
+
+<hfoptions id="install">
+<hfoption id="NVIDIA">
+
+```bash
+git clone https://github.com/Dao-AILab/flash-attention
+cd flash-attention/hopper
+python setup.py install
+```
+
+</hfoption>
+</hfoptions>
+
+To enable FlashAttention-3, pass the argument `attn_implementation="flash_attention_3"` to [`~AutoModelForCausalLM.from_pretrained`]:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    torch_dtype=torch.bfloat16,
+    attn_implementation="flash_attention_3",
+)
+```
+
+<Tip>
+
+FlashAttention-3 can only be used when the model's dtype is `fp16` or `bf16`. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-3.
+
+<br>
+
+</Tip>
+
+FlashAttention-3 can be combined with other optimization techniques like quantization to further speedup inference. For example, you can combine FlashAttention-3 with 8-bit or 4-bit quantization:
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# load in 8bit
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    load_in_8bit=True,
+    attn_implementation="flash_attention_3",
+)
+
+# load in 4bit
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    load_in_4bit=True,
+    attn_implementation="flash_attention_3",
+)
+```
+
 ## PyTorch scaled dot product attention
 
 PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.

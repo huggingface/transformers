@@ -271,7 +271,7 @@ class Gemma2Attention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class Gemma2FlashAttention2(Gemma2Attention):
+class Gemma2FlashAttention(Gemma2Attention):
     """
     Gemma2 flash attention module. This module inherits from `Gemma2Attention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -285,6 +285,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -375,6 +376,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             sliding_window=self.sliding_window,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             softcap=self.config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -481,7 +483,8 @@ class Gemma2SdpaAttention(Gemma2Attention):
 
 GEMMA2_ATTENTION_CLASSES = {
     "eager": Gemma2Attention,
-    "flash_attention_2": Gemma2FlashAttention2,
+    "flash_attention_2": Gemma2FlashAttention,
+    "flash_attention_3": Gemma2FlashAttention,
     "sdpa": Gemma2SdpaAttention,
 }
 
@@ -531,7 +534,10 @@ class Gemma2DecoderLayer(nn.Module):
         """
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # Flash-attn is a 2D tensor
-            if self.config._attn_implementation == "flash_attention_2":
+            if (
+                self.config._attn_implementation == "flash_attention_2"
+                or self.config._attn_implementation == "flash_attention_3"
+            ):
                 if past_key_value is not None:  # when decoding
                     attention_mask = attention_mask[:, -self.sliding_window :]
             else:
@@ -605,6 +611,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Gemma2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = False
@@ -877,7 +884,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
         # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
         # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
         # as it doesn't cause dynamic control issues.
-        if self.config._attn_implementation == "flash_attention_2":
+        if (
+            self.config._attn_implementation == "flash_attention_2"
+            or self.config._attn_implementation == "flash_attention_3"
+        ):
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -1143,6 +1153,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
             isinstance(past_key_values, HybridCache)
             and attention_mask.ndim == 2
             and not self.config._attn_implementation == "flash_attention_2"
+            and not self.config._attn_implementation == "flash_attention_3"
         ):
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape

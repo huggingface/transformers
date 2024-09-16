@@ -53,6 +53,7 @@ from .configuration_mistral import MistralConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MistralConfig"
@@ -268,14 +269,14 @@ class MistralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class MistralFlashAttention2(MistralAttention):
+class MistralFlashAttention(MistralAttention):
     """
     Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -283,6 +284,7 @@ class MistralFlashAttention2(MistralAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -392,6 +394,7 @@ class MistralFlashAttention2(MistralAttention):
             sliding_window=getattr(self.config, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
@@ -495,7 +498,8 @@ class MistralSdpaAttention(MistralAttention):
 
 MISTRAL_ATTENTION_CLASSES = {
     "eager": MistralAttention,
-    "flash_attention_2": MistralFlashAttention2,
+    "flash_attention_2": MistralFlashAttention,
+    "flash_attention_3": MistralFlashAttention,
     "sdpa": MistralSdpaAttention,
 }
 
@@ -605,6 +609,7 @@ class MistralPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MistralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -859,7 +864,7 @@ class MistralModel(MistralPreTrainedModel):
         use_cache: bool,
         output_attentions: bool,
     ):
-        if self._attn_implementation == "flash_attention_2":
+        if self._attn_implementation == "flash_attention_2" or self._attn_implementation == "flash_attention_3":
             if attention_mask is not None and use_cache:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
                 if is_padding_right:

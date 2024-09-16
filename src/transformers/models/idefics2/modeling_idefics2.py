@@ -191,7 +191,7 @@ class Idefics2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
-    def __init__(self, config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -266,14 +266,14 @@ class Idefics2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
+class Idefics2VisionFlashAttention(Idefics2VisionAttention):
     """
     Idefics2Vision flash attention module. This module inherits from `Idefics2VisionAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -281,6 +281,7 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -353,6 +354,7 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
             dropout=dropout_rate,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
@@ -366,7 +368,8 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
 
 IDEFICS_VISION_ATTENTION_CLASSES = {
     "eager": Idefics2VisionAttention,
-    "flash_attention_2": Idefics2VisionFlashAttention2,
+    "flash_attention_2": Idefics2VisionFlashAttention,
+    "flash_attention_3": Idefics2VisionFlashAttention,
 }
 
 
@@ -583,6 +586,7 @@ class Idefics2VisionTransformer(nn.Module):
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -624,7 +628,7 @@ class Idefics2VisionTransformer(nn.Module):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        elif not self._use_flash_attention_2 and not self._use_flash_attention_3:
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -683,7 +687,7 @@ class Idefics2RMSNorm(nn.Module):
 
 
 class Idefics2PerceiverAttention(nn.Module):
-    def __init__(self, config, layer_idx: Optional[int] = None) -> None:
+    def __init__(self, config: Idefics2Config, layer_idx: Optional[int] = None) -> None:
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
 
@@ -783,15 +787,15 @@ class Idefics2PerceiverAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
-class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
+# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
+class Idefics2PerceiverFlashAttention(Idefics2PerceiverAttention):
     """
     Idefics2 flash attention module. This module inherits from `Idefics2PerceiverAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -799,6 +803,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_3 = self.config._attn_implementation == "flash_attention_3"
 
     # Ignore copy
     def forward(
@@ -899,6 +904,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             sliding_window=None,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            use_flash_attn_3=self._flash_attn_3,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
@@ -912,7 +918,8 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
 
 IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
     "eager": Idefics2PerceiverAttention,
-    "flash_attention_2": Idefics2PerceiverFlashAttention2,
+    "flash_attention_2": Idefics2PerceiverFlashAttention,
+    "flash_attention_3": Idefics2PerceiverFlashAttention,
 }
 
 
@@ -1011,6 +1018,7 @@ class Idefics2PerceiverResampler(nn.Module):
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -1026,7 +1034,7 @@ class Idefics2PerceiverResampler(nn.Module):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = (
             _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if not self._use_flash_attention_2
+            if not self._use_flash_attention_2 and not self._use_flash_attention_3
             else attention_mask
         )
 
@@ -1094,6 +1102,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -1228,6 +1237,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         self.post_init()
 

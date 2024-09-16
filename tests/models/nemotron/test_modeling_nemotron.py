@@ -25,6 +25,7 @@ from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
+    require_flash_attn_3,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -176,6 +177,40 @@ class NemotronModelTest(GemmaModelTest):
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 # nemotron flash attention 2 needs a high tolerance
+                assert torch.allclose(logits_fa, logits, atol=1e-2)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_3_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_3:
+                self.skipTest(reason="Model does not support Flash Attention 3")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # nemotron flash attention 3 needs a high tolerance
                 assert torch.allclose(logits_fa, logits, atol=1e-2)
 
 

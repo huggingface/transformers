@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     slow,
@@ -479,6 +480,38 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_flash_attn_3
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_flashatt3(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_3",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets",
+        ]
+
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True)[0],
+            self.processor.batch_decode(output, skip_special_tokens=True)[1],
+        )
+
+    @slow
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
@@ -486,6 +519,39 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             "Qwen/Qwen2-VL-7B-Instruct",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        messages2 = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Who are you?"},
+        ]
+        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets",
+            "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
+        ]
+
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_flash_attn_3
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_wo_image_flashatt3(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_3",
             device_map="auto",
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)

@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
     require_flash_attn,
+    require_flash_attn_3,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -738,8 +739,44 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_inference_equivalence(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                outputs = model(dummy_input)
+                outputs_fa = model_fa(dummy_input)
+
+                logits = outputs[1]
+                logits_fa = outputs_fa[1]
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
     @unittest.skip(reason="The MimiModel does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="The MimiModel does not support right padding")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
