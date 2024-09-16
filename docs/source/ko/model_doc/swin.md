@@ -34,7 +34,7 @@ alt="drawing" width="600"/>
 ## 사용 팁 [[usage-tips]]
 
 - Swin은 입력의 높이와 너비가 `32`로 나누어질 수 있으면 어떤 크기든 지원할 수 있도록 패딩을 추가합니다.
-- Swin은 *백본(backbone)*으로 사용할 수 있습니다. `output_hidden_states = True`로 설정하면, `hidden_states`와 `reshaped_hidden_states`를 모두 출력합니다. `reshaped_hidden_states`는 `(batch, num_channels, height, width)` 형식을 가지며, 이는 `(batch_size, sequence_length, num_channels)` 형식과 다릅니다.
+- Swin은 *백본*으로 사용할 수 있습니다. `output_hidden_states = True`로 설정하면, `hidden_states`와 `reshaped_hidden_states`를 모두 출력합니다. `reshaped_hidden_states`는 `(batch, num_channels, height, width)` 형식을 가지며, 이는 `(batch_size, sequence_length, num_channels)` 형식과 다릅니다.
 
 ## 리소스 [[resources]]
 
