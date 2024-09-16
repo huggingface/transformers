@@ -120,7 +120,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
@@ -132,7 +133,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
