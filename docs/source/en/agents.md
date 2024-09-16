@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ### What is an agent?
 
-Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
+Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
 
 One approach to overcome this weakness is to create an *agent*.
 
@@ -114,7 +114,7 @@ To start with, please install the `agents` extras in order to install all defaul
 pip install transformers[agents]
 ```
 
-Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating.) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
+Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
 
 ```python
 from huggingface_hub import login, InferenceClient
@@ -130,7 +130,7 @@ def llm_engine(messages, stop_sequences=["Task"]) -> str:
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.md) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
+1. it follows the [messages format](./chat_templating) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
 2. it stops generating outputs at the sequences passed in the argument `stop_sequences`
 
 Additionally, `llm_engine` can also take a `grammar` argument. In the case where you specify a `grammar` upon agent initialization, this argument will be passed to the calls to llm_engine, with the `grammar` that you defined upon initialization, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs.

@@ -613,6 +613,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
