@@ -734,20 +734,16 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         images, num_tiles = pack_images(batch_images, max_image_tiles)
 
-        # TODO: aspect ratios not be needed when ids are supported in modeling code
-        aspect_ratios = pack_aspect_ratios(batch_aspect_ratios, pad_value=1)
         aspect_ratio_ids = convert_aspect_ratios_to_ids(batch_aspect_ratios, max_image_tiles=max_image_tiles)
         aspect_ratio_mask = build_aspect_ratio_mask(batch_aspect_ratios, max_image_tiles=max_image_tiles)
 
         # images (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width)
-        # aspect_ratios (np.ndarray) with shape (batch_size, max_num_images, 2) - aspect ratios for each image, padded to max_num_images with 1
         # aspect_ratio_ids (np.ndarray) with shape (batch_size, max_num_images) - aspect ratio ids for each image, padded to max_num_images with 0
         # num_tiles (List[List[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
         # aspect_ratio_mask (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles) - number of tiles for each image, padded to max_num_images with 0
         encoded_inputs = BatchFeature(
             data={
                 "pixel_values": images,
-                "aspect_ratios": aspect_ratios,
                 "aspect_ratio_ids": aspect_ratio_ids,
                 "aspect_ratio_mask": aspect_ratio_mask,
             },

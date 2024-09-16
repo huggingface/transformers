@@ -267,8 +267,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values = inputs.pixel_values
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, False, False])
-        aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [2, 2])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
         self.assertEqual(aspect_ratio_ids, 6)
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
@@ -280,8 +278,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values = inputs.pixel_values
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, False, True])
-        aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [1, 3])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
         self.assertEqual(aspect_ratio_ids, 3)
         num_tiles = inputs.aspect_ratio_mask[0, 0].sum()
@@ -290,14 +286,11 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(aspect_ratio_mask, [1, 1, 1, 0])
 
         # image fits 1x1 grid (width x height)
-        # image fits 1x1 grid (width x height)
         image = Image.new("RGB", (20, 39))
         inputs = image_processor(image, return_tensors="np")
         pixel_values = inputs.pixel_values
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, True, True, True])
-        aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [1, 1])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
         self.assertEqual(aspect_ratio_ids, 1)
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
@@ -309,8 +302,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values = inputs.pixel_values
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, True, True])
-        aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [1, 2])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
         self.assertEqual(aspect_ratio_ids, 2)
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
@@ -322,8 +313,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values = inputs.pixel_values
         empty_tiles = get_empty_tiles(pixel_values)[0, 0].tolist()
         self.assertEqual(empty_tiles, [False, False, False, False])
-        aspect_ratios = inputs.aspect_ratios[0, 0].tolist()
-        self.assertEqual(aspect_ratios, [2, 2])
         aspect_ratio_ids = inputs.aspect_ratio_ids[0, 0]
         self.assertEqual(aspect_ratio_ids, 6)  # (2 - 1) * 4 + 2 = 6
         aspect_ratio_mask = inputs.aspect_ratio_mask[0, 0].tolist()
@@ -349,18 +338,6 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ],
         ]
         self.assertEqual(empty_tiles, expected_empty_tiles)
-        expected_aspect_ratios = [
-            [
-                [2, 2],
-                [1, 1],  # padding
-            ],
-            [
-                [1, 3],
-                [1, 1],
-            ],
-        ]
-        aspect_ratios = inputs.aspect_ratios.tolist()
-        self.assertEqual(aspect_ratios, expected_aspect_ratios)
         aspect_ratio_ids = inputs.aspect_ratio_ids.tolist()
         expected_aspect_ratio_ids = [[6, 0], [3, 1]]
         self.assertEqual(aspect_ratio_ids, expected_aspect_ratio_ids)

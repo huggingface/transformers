@@ -247,9 +247,6 @@ class MllamaProcessor(ProcessorMixin):
         images_kwargs = output_kwargs["images_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
 
-        # remove the return_tensors key modality kwargs
-        images_kwargs.pop("return_tensors", None)
-
         data = {}
         if text is not None:
             if isinstance(text, str):

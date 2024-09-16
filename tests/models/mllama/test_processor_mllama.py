@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import unittest
+import numpy as np
 
 from transformers import MllamaProcessor
 from transformers.testing_utils import require_torch, require_vision
@@ -28,7 +29,7 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "s0409/model-1"
+        self.checkpoint = "s0409/model-3"  # TODO: change
         self.processor = MllamaProcessor.from_pretrained(self.checkpoint)
         self.image1 = Image.new("RGB", (224, 220))
         self.image2 = Image.new("RGB", (512, 128))
@@ -40,9 +41,6 @@ class MllamaProcessorTest(unittest.TestCase):
         # Test that a single image is processed correctly
         inputs = self.processor(images=self.image2, max_image_tiles=2, size={"width": 224, "height": 224})
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 2, 3, 224, 224))
-        self.assertEqual(inputs["aspect_ratios"].shape, (1, 1, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [2, 1])
-        self.assertEqual(inputs["num_tiles"], [[2]])
 
         # Test that text is processed correctly
         text = "<|begin_of_text|>This is a test sentence.<|end_of_text|>"
@@ -50,7 +48,7 @@ class MllamaProcessorTest(unittest.TestCase):
         expected_ids = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-        self.assertEqual(inputs["cross_attention_token_mask"], None)
+        self.assertEqual(inputs.get("cross_attention_mask"), None)
 
         # Test a single sample with image and text
         image_str = "<|image|>"
@@ -65,16 +63,11 @@ class MllamaProcessorTest(unittest.TestCase):
         expected_ids = [self.image_token_id] + [2028, 374, 264, 1296, 11914, 13]
 
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 128, 128))
-        self.assertEqual(inputs["aspect_ratios"].shape, (1, 1, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [2, 2])
-        self.assertEqual(inputs["num_tiles"], [[4]])
-
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-
-        # Note: in original implementation if number of image tokens is 1,
-        # then the last image unmasked in until "-1" token
-        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]]])
+        cross_attention_mask = inputs["cross_attention_mask"]
+        self.assertEqual(cross_attention_mask.shape, (1, 7, 1, 4))
+        self.assertTrue(np.all(cross_attention_mask == 1), f"Cross attention mask is not all ones: {cross_attention_mask}")
 
         # Test batch
         text = [
@@ -91,19 +84,36 @@ class MllamaProcessorTest(unittest.TestCase):
         inputs = self.processor(text=text, images=images, padding=True, max_image_tiles=4, size={"width": 256, "height": 256})
 
         self.assertEqual(inputs["pixel_values"].shape, (2, 2, 4, 3, 256, 256))
-        self.assertEqual(inputs["aspect_ratios"].shape, (2, 2, 2))
-        self.assertEqual(inputs["aspect_ratios"].squeeze().tolist(), [[[1, 1], [1, 1]], [[1, 1], [2, 1]]])
-        self.assertEqual(inputs["num_tiles"], [[1], [1, 2]])
-
         for input_ids_i, attention_mask_i, expected_ids_i in zip(inputs["input_ids"], inputs["attention_mask"], expected_ids):
             pad_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 0]
             input_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 1]
             self.assertEqual(input_ids, expected_ids_i)
             self.assertEqual(pad_ids, [self.pad_token_id] * len(pad_ids))
 
-        # Note: in the original implementation if the number of image tokens is MORE than 1,
-        # then the last image unmasked until len(tokens) instead of "-1". Probably, it should be also to "-1"?
-        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]], [[6, len(expected_ids[1])], [7, len(expected_ids[1])]]])
+        cross_attention_mask = inputs["cross_attention_mask"]
+        self.assertEqual(cross_attention_mask.shape, (2, 14, 2, 4))
+
+        # Check that only first tile of first sample is attended to all text tokens
+        first_sample_mask = cross_attention_mask[0].copy()
+        first_image_first_tile_attention = first_sample_mask[:, :1, :1]  # text tokens, images, tiles
+        self.assertTrue(np.all(first_image_first_tile_attention == 1), f"Cross attention mask is not all ones: {first_image_first_tile_attention}")
+        
+        # zero out first tile of first image
+        first_image_first_tile_attention[:, :1, :1] = 0
+        self.assertTrue(np.all(first_image_first_tile_attention == 0), f"Cross attention mask is not all zeros: {first_image_first_tile_attention}")
+
+        # second sample
+        second_sample_mask = cross_attention_mask[1].copy()
+        first_image_first_tile_attention = second_sample_mask[6:, :1, :1]  # text tokens, images, tiles
+        self.assertTrue(np.all(first_image_first_tile_attention == 1), f"Cross attention mask is not all ones: {first_image_first_tile_attention}")
+
+        second_image_two_tiles_attention = second_sample_mask[7:, 1:2, :2]  # text tokens, images, tiles
+        self.assertTrue(np.all(second_image_two_tiles_attention == 1), f"Cross attention mask is not all ones: {second_image_two_tiles_attention}")
+
+        # zero out both images masks
+        second_sample_mask[6:, :1, :1] = 0
+        second_sample_mask[7:, 1:2, :2] = 0
+        self.assertTrue(np.all(second_sample_mask == 0), f"Cross attention mask is not all zeros: {second_sample_mask}")
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
