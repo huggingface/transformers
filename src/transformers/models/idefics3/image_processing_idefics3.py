@@ -610,7 +610,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
 
         Args:
-            images (`np.ndarray`):
+            images (`List[np.ndarray]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
