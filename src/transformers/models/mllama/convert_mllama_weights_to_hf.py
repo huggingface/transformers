@@ -400,7 +400,7 @@ def write_model(
     del model.config._name_or_path
 
     print("Saving the model.")
-    # model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
     # Safety check: reload the converted model
