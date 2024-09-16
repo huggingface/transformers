@@ -459,7 +459,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         image,
         max_image_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
