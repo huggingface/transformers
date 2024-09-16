@@ -347,7 +347,7 @@ class WhisperGenerationMixin:
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             return_timestamps (`bool`, *optional*):
-                Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+                Whether to return the timestamps with the text. This enables the `WhisperTimeStampLogitsProcessor`.
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
