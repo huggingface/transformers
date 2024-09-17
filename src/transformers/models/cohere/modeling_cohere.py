@@ -924,7 +924,6 @@ class CohereModel(CoherePreTrainedModel):
                     "(https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
                 )
 
-        past_seen_tokens = 0
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
