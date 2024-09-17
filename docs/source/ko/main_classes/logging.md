@@ -14,14 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Logging
+# 로깅 [[logging]]
 
-🤗 Transformers has a centralized logging system, so that you can setup the verbosity of the library easily.
+🤗 트랜스포머는 중앙 집중식 로깅 시스템을 제공하여 라이브러리의 출력 레벨을 쉽게 설정할 수 있습니다.
 
-Currently the default verbosity of the library is `WARNING`.
+현재 라이브러리의 기본 출력 레벨은 `WARNING`으로 설정되어 있습니다.
 
-To change the level of verbosity, just use one of the direct setters. For instance, here is how to change the verbosity
-to the INFO level.
+출력 레벨을 변경하려면 직접적인 설정 메서드를 사용할 수 있습니다. 예를 들어, 출력 레벨을 INFO 수준으로 변경하는 방법은 다음과 같습니다.
 
 ```python
 import transformers
@@ -29,22 +28,19 @@ import transformers
 transformers.logging.set_verbosity_info()
 ```
 
-You can also use the environment variable `TRANSFORMERS_VERBOSITY` to override the default verbosity. You can set it
-to one of the following: `debug`, `info`, `warning`, `error`, `critical`, `fatal`. For example:
+환경 변수 `TRANSFORMERS_VERBOSITY`를 사용하여 기본 출력 레벨을 재정의할 수도 있습니다. 이를 `debug`, `info`, `warning`, `error`, `critical`, `fatal` 중 하나로 설정할 수 있습니다. 예를 들어 다음과 같습니다.
 
 ```bash
 TRANSFORMERS_VERBOSITY=error ./myprogram.py
 ```
 
-Additionally, some `warnings` can be disabled by setting the environment variable
-`TRANSFORMERS_NO_ADVISORY_WARNINGS` to a true value, like *1*. This will disable any warning that is logged using
-[`logger.warning_advice`]. For example:
+또한, 일부 `warnings`는 환경 변수 `TRANSFORMERS_NO_ADVISORY_WARNINGS`를 1과 같은 true 값으로 설정하여 비활성화할 수 있습니다. 이렇게 하면 [`logger.warning_advice`]를 사용하여 기록된 경고가 비활성화됩니다. 예를 들어 다음과 같습니다.
 
 ```bash
 TRANSFORMERS_NO_ADVISORY_WARNINGS=1 ./myprogram.py
 ```
 
-Here is an example of how to use the same logger as the library in your own module or script:
+다음은 라이브러리와 동일한 로거를 자신의 모듈이나 스크립트에서 사용하는 방법에 대한 예시입니다.
 
 ```python
 from transformers.utils import logging
@@ -56,39 +52,32 @@ logger.warning("WARN")
 ```
 
 
-All the methods of this logging module are documented below, the main ones are
-[`logging.get_verbosity`] to get the current level of verbosity in the logger and
-[`logging.set_verbosity`] to set the verbosity to the level of your choice. In order (from the least
-verbose to the most verbose), those levels (with their corresponding int values in parenthesis) are:
+이 로깅 모듈의 모든 메서드는 아래에 문서화되어 있으며, 주요 메서드는 현재 로거의 출력 수준을 가져오는 [logging.get_verbosity]와 원하는 출력 수준으로 설정하는 [logging.set_verbosity]입니다. 출력 수준은 (가장 적은 출력에서 가장 많은 출력 순으로) 다음과 같으며, 해당 수준에 대응하는 정수 값은 괄호 안에 표시됩니다.
 
-- `transformers.logging.CRITICAL` or `transformers.logging.FATAL` (int value, 50): only report the most
-  critical errors.
-- `transformers.logging.ERROR` (int value, 40): only report errors.
-- `transformers.logging.WARNING` or `transformers.logging.WARN` (int value, 30): only reports error and
-  warnings. This is the default level used by the library.
-- `transformers.logging.INFO` (int value, 20): reports error, warnings and basic information.
-- `transformers.logging.DEBUG` (int value, 10): report all information.
+- `transformers.logging.CRITICAL` 또는 `transformers.logging.FATAL` (정수 값, 50): 가장 심각한 오류만 보고합니다.
+- `transformers.logging.ERROR` (정수 값, 40): 오류만 보고합니다.
+- `transformers.logging.WARNING` 또는 `transformers.logging.WARN` (정수 값, 30): 오류와 경고만 보고합니다. 이는 라이브러리에서 기본으로 사용되는 수준입니다.
+- `transformers.logging.INFO` (정수 값, 20): 오류, 경고, 그리고 기본적인 정보를 보고합니다.
+- `transformers.logging.DEBUG` (정수 값, 10): 모든 정보를 보고합니다.
 
-By default, `tqdm` progress bars will be displayed during model download. [`logging.disable_progress_bar`] and [`logging.enable_progress_bar`] can be used to suppress or unsuppress this behavior.
+기본적으로 모델 다운로드 중에는 `tqdm` 진행 표시줄이 표시됩니다. [`logging.disable_progress_bar`]와 [`logging.enable_progress_bar`]를 사용하여 이 동작을 숨기거나 다시 표시할 수 있습니다.
 
-## `logging` vs `warnings`
+## `logging` vs `warnings` [[logging-vs-warnings]]
 
-Python has two logging systems that are often used in conjunction: `logging`, which is explained above, and `warnings`,
-which allows further classification of warnings in specific buckets, e.g., `FutureWarning` for a feature or path
-that has already been deprecated and `DeprecationWarning` to indicate an upcoming deprecation.
+Python에는 종종 함께 사용되는 두 가지 로깅 시스템이 있습니다. 위에서 설명한 `logging`과 `warnings`입니다. `warnings`는 특정 범주로 경고를 세분화할 수 있습니다. 예를 들어, 이미 더 이상 사용되지 않는 기능이나 경로에 대해 `FutureWarning`이 사용되고, 곧 사용 중단될 기능을 알리기 위해 `DeprecationWarning`이 사용됩니다.
 
-We use both in the `transformers` library. We leverage and adapt `logging`'s `captureWarnings` method to allow
-management of these warning messages by the verbosity setters above.
+트랜스포머 라이브러리에서는 두 시스템 모두를 사용합니다. `logging`의 `captureWarnings` 메서드를 활용하고 이를 조정하여 위에서 설명한 출력 수준 설정자들을 통해 이러한 경고 메시지들을 관리할 수 있도록 합니다.
 
-What does that mean for developers of the library? We should respect the following heuristics:
-- `warnings` should be favored for developers of the library and libraries dependent on `transformers`
-- `logging` should be used for end-users of the library using it in every-day projects
+라이브러리 개발자에게는 다음과 같은 지침을 따르는 것이 좋습니다.
 
-See reference of the `captureWarnings` method below.
+- `warnings`는 라이브러리 개발자 및 `transformers`에 의존하는 라이브러리에서 우선적으로 사용해야 합니다.
+- `logging`은 라이브러리를 매일 사용하는 최종 사용자에게 사용해야 합니다.
+
+아래에서 `captureWarnings` 메서드에 대한 참고 사항을 확인할 수 있습니다.
 
 [[autodoc]] logging.captureWarnings
 
-## Base setters
+## 기본 설정자 [[base-setters]]
 
 [[autodoc]] logging.set_verbosity_error
 
@@ -98,7 +87,7 @@ See reference of the `captureWarnings` method below.
 
 [[autodoc]] logging.set_verbosity_debug
 
-## Other functions
+## 기타 함수 [[other-functions]]
 
 [[autodoc]] logging.get_verbosity
 
