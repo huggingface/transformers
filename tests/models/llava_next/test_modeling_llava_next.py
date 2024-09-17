@@ -86,12 +86,12 @@ class LlavaNextVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
             "image_size": 16,
-            "patch_size": 2,
+            "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -123,8 +123,9 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 342
+        self.encoder_seq_length = 95
         self.image_grid_pinpoints = [[32, 32]]
+        self.num_image_tokens = 88
 
     def get_config(self):
         return LlavaNextConfig(
@@ -136,6 +137,7 @@ class LlavaNextVisionText2TextModelTester:
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
             image_grid_pinpoints=self.image_grid_pinpoints,
+            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -155,13 +157,16 @@ class LlavaNextVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        input_ids = (
+            ids_tensor([self.batch_size, self.seq_length + self.num_image_tokens], config.text_config.vocab_size - 2)
+            + 2
+        )
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
-        input_ids[:, 1] = config.image_token_index
-        labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
-        # maskout where the image token is
-        labels[:, 1] == self.ignore_index
+        input_ids[input_ids == config.image_token_index] = 1
+
+        # we are giving 3 images let's make sure we pass in image tokens in each batch
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_sizes": torch.tensor(
@@ -169,7 +174,6 @@ class LlavaNextVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -214,6 +218,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     """
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -604,13 +609,13 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
+        processor.num_image_tokens = 577
         inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2356)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.patch_size = None
+        processor.num_image_tokens = None
         inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 17)
 

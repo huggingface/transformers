@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -82,7 +83,7 @@ class PaliGemmaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -157,10 +158,10 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = torch.ones_like(input_ids)
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        input_ids = torch.where(input_ids == config.image_token_index, 2, input_ids)
+        input_ids[input_ids == config.image_token_index] = 2
         input_ids[:, :16] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -173,12 +174,13 @@ class PaliGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -303,6 +305,12 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 
     @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
+    @unittest.skip(
+        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
 

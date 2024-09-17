@@ -237,11 +237,16 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+            ]:
+                if "labels" not in inputs_dict.keys():  # some models have labels already :)
+                    bs, seq_len = inputs_dict["input_ids"].shape
+                    inputs_dict["labels"] = torch.zeros((bs, seq_len), dtype=torch.long, device=torch_device)
             elif model_class.__name__ in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
