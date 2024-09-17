@@ -5983,6 +5983,13 @@ class MllamaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MllamaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MobileBertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 

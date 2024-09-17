@@ -408,6 +408,13 @@ class MaskFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MllamaImageProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MobileNetV1FeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
