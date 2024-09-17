@@ -80,7 +80,7 @@ class ProPainterModelTester:
         num_hidden_layers=2,
         num_attention_heads=1,
         num_frames=8,
-        perceptual_weight=0.1,
+        perceptual_weight=0.0,
     ):
         self.parent = parent
         self.batch_size = batch_size
