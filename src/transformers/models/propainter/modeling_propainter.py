@@ -4450,7 +4450,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         ...    outputs = model(**inputs)
 
         >>> # To visualize the reconstructed frames with object removal video inpainting:
-        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
         >>> reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
         >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 
@@ -4472,7 +4472,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         ...    outputs = model(**inputs)
 
         >>> # To visualize the reconstructed frames with object removal video inpainting:
-        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
         >>> reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
         >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 
@@ -4487,7 +4487,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         ...     outputs = model(**inputs)
 
         >>> # To visualize the reconstructed frames with object removal video inpainting:
-        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
         >>> reconstructed_frames = [cv2.resize(frame, (240,512)) for frame in reconstructed_frames]
         >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'outpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
         ```"""

@@ -45,6 +45,15 @@ python src/transformers/models/propainter/convert_propainter_to_hf.py \
     --pytorch-dump-folder-path /output/path --verify-logits
 ```
 
+- You must remember this while providing the inputs as a single batch (one video), i.e., if the size of a single frame goes lower than 128 (height or width) then you may possibly encounter the error below. The solution is to keep the frame size to a minimum of **128**.
+```
+RuntimeError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1.
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+```
+
+
 ## Usage example
 
 The model can accept videos frames and their corresponding masks frame(s) as input. Here's an example code for inference:
@@ -136,7 +145,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # To visualize the reconstructed frames with object removal video inpainting:
-reconstructed_frames = outputs["reconstruction"]
+reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
 reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
 imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 
@@ -158,7 +167,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # To visualize the reconstructed frames with object removal video inpainting:
-reconstructed_frames = outputs["reconstruction"]
+reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
 reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
 imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 
@@ -173,7 +182,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # To visualize the reconstructed frames with object removal video inpainting:
-reconstructed_frames = outputs["reconstruction"]
+reconstructed_frames = outputs["reconstruction"][0] # As there is only a single video in batch for inferece
 reconstructed_frames = [cv2.resize(frame, (240,512)) for frame in reconstructed_frames]
 imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'outpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 ```
