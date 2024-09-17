@@ -50,8 +50,9 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -102,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -119,8 +120,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -169,8 +171,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-tensorflow-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -220,8 +223,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -271,8 +275,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -352,8 +357,9 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on: 
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
