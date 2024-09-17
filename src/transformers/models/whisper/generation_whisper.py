@@ -1000,13 +1000,15 @@ class WhisperGenerationMixin:
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key == "sequences":
+            if key in ["sequences", "beam_indices"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
-            if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
+            elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
                     torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
                 )
-            if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
+            elif key == "sequences_scores":
+                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+            elif key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 outputs[key] = tuple(
                     tuple(
                         torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
@@ -1014,7 +1016,7 @@ class WhisperGenerationMixin:
                     )
                     for i in range(len(seek_outputs[0][key]))
                 )
-            if key == "past_key_values":
+            elif key == "past_key_values":
                 past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
