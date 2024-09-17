@@ -1459,7 +1459,6 @@ class GenerationTesterMixin:
                 continue
 
             for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-                curr_inputs_dict = inputs_dict.clone().pop("name")
                 out = model.generate(
                     input_ids,
                     attention_mask=attention_mask,
@@ -1468,7 +1467,7 @@ class GenerationTesterMixin:
                     return_dict_in_generate=True,
                     remove_invalid_values=True,
                     **{name: mask},
-                    **curr_inputs_dict,
+                    **inputs_dict,
                 )
                 # We check the state of decoder_attentions and cross_attentions just from the last step
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
@@ -1512,27 +1511,19 @@ class GenerationTesterMixin:
             )
 
         # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, inputs_dict, signature):
-            _ = inputs_dict.pop("labels", None)  # pop labels because we don't need them
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, **inputs_dict}
+        def _prepare_model_kwargs(input_ids, attention_mask, signature):
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
             if "position_ids" in signature:
                 position_ids = torch.cumsum(attention_mask, dim=-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
                 model_kwargs["position_ids"] = position_ids
-            if "token_type_ids" in signature and inputs_dict.get("token_type_ids") is not None:
-                token_type_ids = inputs_dict.pop("token_type_ids")
-                pad_size = (token_type_ids.shape[0], input_ids.shape[1] - token_type_ids.shape[1])
-                token_type_ids = torch.cat(
-                    [token_type_ids, torch.zeros(pad_size, device=torch_device, dtype=token_type_ids.dtype)], dim=-1
-                )
-                model_kwargs["token_type_ids"] = token_type_ids
             if "cache_position" in signature:
                 cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
                 model_kwargs["cache_position"] = cache_position
             return model_kwargs
 
         for model_class in decoder_only_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
@@ -1540,7 +1531,7 @@ class GenerationTesterMixin:
             model.generation_config.use_cache = False
 
             # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, inputs_dict, signature)
+            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
             next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
             # With left-padding (length 32)
@@ -1552,7 +1543,7 @@ class GenerationTesterMixin:
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
             padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, inputs_dict, signature)
+            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
