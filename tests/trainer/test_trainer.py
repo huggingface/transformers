@@ -3931,7 +3931,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         # Checks if `trainer.push_to_hub()` works correctly by adding revision
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-tags"),
+                output_dir=os.path.join(tmp_dir, "test-trainer-revision"),
                 push_to_hub=True,
                 hub_token=self._token,
             )
