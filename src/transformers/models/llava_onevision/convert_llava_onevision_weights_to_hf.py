@@ -22,6 +22,7 @@ import argparse
 import gc
 import glob
 import json
+from pathlib import Path
 
 import requests
 import torch
@@ -186,9 +187,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     )
 
     print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # model.save_pretrained(pytorch_dump_folder_path)
-    # processor.save_pretrained(pytorch_dump_folder_path)
+    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    model.save_pretrained(pytorch_dump_folder_path)
+    processor.save_pretrained(pytorch_dump_folder_path)
 
     # Make space so we can load the model properly now.
     del state_dict
