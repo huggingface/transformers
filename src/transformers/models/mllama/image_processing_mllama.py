@@ -579,7 +579,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
         max_image_tiles: Optional[int] = None,
-        input_data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
@@ -660,20 +660,11 @@ class MllamaImageProcessor(BaseImageProcessor):
         _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
         images_list = make_list_of_images(images)
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
-        # convert all images to (num_channels, height, width) format, it's much faster for preprocessing
-        data_format = ChannelDimension.FIRST
-        images_list = [
-            [
-                to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-                for image in images
-            ]
-            for images in images_list
-        ]
 
         if self.do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+
+        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
         batch_images = []
         batch_aspect_ratios = []
@@ -685,6 +676,11 @@ class MllamaImageProcessor(BaseImageProcessor):
 
             # iterate over images in a batch sample
             for image in images:
+                # convert images to channels first format for faster processing
+                # LAST is slower for `pad` and not supported by `split_to_tiles`
+                data_format = ChannelDimension.FIRST
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+
                 # do_resize=False is not supported, validated
                 image, aspect_ratio = self.resize(
                     image=image,
