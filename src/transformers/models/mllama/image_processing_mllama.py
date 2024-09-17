@@ -483,21 +483,21 @@ def is_valid_list_of_images(images: List):
     return images and all(is_valid_image(image) for image in images)
 
 
-def validate_size(size: Dict[str, int]) -> None:
+def _validate_size(size: Dict[str, int]) -> None:
     if not ("height" in size and "width" in size):
         raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
     if size["height"] != size["width"]:
         raise ValueError(f"Argument `size` must have the same height and width, got {size}")
 
 
-def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
+def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
     if not do_pad:
         raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
     if not do_resize:
         raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
     if max_image_tiles is None or max_image_tiles <= 0:
         raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
-    validate_size(size)
+    _validate_size(size)
 
 
 class MllamaImageProcessor(BaseImageProcessor):
@@ -563,7 +563,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.max_image_tiles = max_image_tiles
 
-        validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
 
     def preprocess(
         self,
@@ -657,7 +657,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         )
 
         # extra validation
-        validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
+        _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
         images_list = make_list_of_images(images)
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
@@ -779,7 +779,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             `np.ndarray`: The padded image.
         """
 
-        validate_size(size)
+        _validate_size(size)
 
         image_height, image_width = get_image_size(image, channel_dim=input_data_format)
         num_tiles_height, num_tiles_width = aspect_ratio
@@ -834,7 +834,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             along the height and width dimensions.
         """
 
-        validate_size(size)
+        _validate_size(size)
 
         image_height, image_width = get_image_size(image, channel_dim=input_data_format)
         tile_size = size["height"]
