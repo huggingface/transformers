@@ -1034,10 +1034,10 @@ def _validate_images_text_input_order(images, text):
         return validator(input) or input is None
 
     images_is_valid = _is_valid(images, _is_valid_images_input_for_processor)
-    images_is_text = _is_valid_text_input_for_processor(images) if not images_is_valid else False
+    images_is_text = _is_valid_text_input_for_processor(images)
 
     text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
-    text_is_images = _is_valid_images_input_for_processor(text) if not text_is_valid else False
+    text_is_images = _is_valid_images_input_for_processor(text)
     # Handle cases where both inputs are valid
     if images_is_valid and text_is_valid:
         return images, text
