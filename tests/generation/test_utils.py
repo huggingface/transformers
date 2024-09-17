@@ -100,7 +100,6 @@ class GenerationTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.pop(self.input_name)[:batch_size, :]
         _ = inputs_dict.pop("attention_mask", None)
-        inputs_dict = {k: v[:batch_size, ...] if "head_mask" not in k else v for k, v in inputs_dict.items()}
 
         # we don't want encoder-decoder models to start from filled decoder ids
         _ = inputs_dict.pop("decoder_input_ids", None)
@@ -108,6 +107,8 @@ class GenerationTesterMixin:
 
         # we'll set cache use in each test differently
         _ = inputs_dict.pop("use_cache", None)
+
+        inputs_dict = {k: v[:batch_size, ...] if "head_mask" not in k else v for k, v in inputs_dict.items()}
 
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
