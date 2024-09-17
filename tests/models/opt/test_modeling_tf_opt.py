@@ -42,7 +42,7 @@ def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=No
 @require_tf
 class TFOPTModelTester:
     config_cls = OPTConfig
-    config_updates = {}
+    config_updates = {"attn_implementation": "eager"}
     hidden_act = "gelu"
 
     def __init__(
