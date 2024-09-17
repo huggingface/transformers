@@ -2597,11 +2597,14 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        cosine_matrix_mask = None
-        if not self.config.is_encoder_decoder:
-            # Create cosine_matrix_mask based on the attention_mask
+        # Create cosine_matrix_mask based on the attention_mask
+        cosine_matrix_mask = torch.ones_like(input_ids, dtype=torch.long)
+        if self.config.is_encoder_decoder:
+            if "decoder_attention_mask" in model_kwargs:
+                cosine_matrix_mask = model_kwargs["decoder_attention_mask"]
+        else:
             cosine_matrix_mask = model_kwargs["attention_mask"]
-            cosine_matrix_mask = cosine_matrix_mask.repeat_interleave(top_k, dim=0)
+        cosine_matrix_mask = cosine_matrix_mask.repeat_interleave(top_k, dim=0)
 
         this_peer_finished = False
 
@@ -2773,8 +2776,9 @@ class GenerationMixin:
             selected_idx = _ranking_fast(
                 context_hidden, next_hidden, top_k_probs, cosine_matrix_mask, penalty_alpha, top_k
             )
-            if not self.config.is_encoder_decoder:
-                cosine_matrix_mask = F.pad(cosine_matrix_mask, (0, 1), "constant", 1)
+            cosine_matrix_mask = torch.cat(
+                [cosine_matrix_mask, cosine_matrix_mask.new_ones((cosine_matrix_mask.shape[0], 1))], dim=-1
+            )
             selected_idx = selected_idx.to("cpu")
 
             # This will be used instead of the previous inneficient torch.stack(torch.split())
@@ -4299,12 +4303,11 @@ def _ranking_fast(
     norm_next_hidden = next_hidden / next_hidden.norm(dim=2, keepdim=True)
     cosine_matrix = torch.matmul(norm_context_hidden, norm_next_hidden.transpose(1, 2)).squeeze(-1)  # [B*K, S]
 
-    if cosine_matrix_mask is not None:
-        # Penalize cosine_matrix based on the cosine_matrix_mask (ignore padding positions)
-        # Using a large negative value for masked positions
-        cosine_matrix_mask = cosine_matrix_mask.to(dtype=cosine_matrix.dtype)
-        cosine_matrix_mask = (1 - cosine_matrix_mask) * torch.finfo(cosine_matrix.dtype).min
-        cosine_matrix = cosine_matrix + cosine_matrix_mask
+    # Penalize cosine_matrix based on the cosine_matrix_mask (ignore padding positions)
+    # Using a large negative value for masked positions
+    cosine_matrix_mask = cosine_matrix_mask.to(dtype=cosine_matrix.dtype)
+    cosine_matrix_mask = (1.0 - cosine_matrix_mask) * torch.finfo(cosine_matrix.dtype).min
+    cosine_matrix = cosine_matrix + cosine_matrix_mask
 
     degeneration_penalty, _ = torch.max(cosine_matrix, dim=-1)  # [B*K]
     next_top_k_probs = next_top_k_probs.view(-1)  # [B*K]
