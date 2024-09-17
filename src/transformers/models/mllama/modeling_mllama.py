@@ -130,8 +130,8 @@ def _prepare_cross_attention_mask(
     )
     cross_attention_mask *= full_text_row_masked_out_mask
 
-    # In case we got a new image but already have prev cross-atnn key/values in cache
-    # we need to extend the attn-mask and add previuos images' lengths
+    # In case we receive a new image but already have previous cross-attention key/values in cache,
+    # then we need to extend the attention-mask and add previous images' lengths
     if (
         past_key_values is not None
         and cross_attention_states is not None
