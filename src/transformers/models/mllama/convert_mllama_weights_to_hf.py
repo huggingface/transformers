@@ -411,19 +411,8 @@ def write_model(
 
 
 class MllamaConverter(TikTokenConverter):
-    def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
+    def __init__(self, vocab_file, num_reserved_special_tokens=256, chat_template=None, **kwargs):
         super().__init__(vocab_file, **kwargs)
-        chat_template = (
-            "{% set loop_messages = messages %}"
-            "{% for message in loop_messages %}"
-            "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
-            "{% if loop.index0 == 0 %}"
-            "{% set content = bos_token + content %}"
-            "{% endif %}"
-            "{{ content }}"
-            "{% endfor %}"
-            "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-        )
         num_reserved_special_tokens = 256
         special_tokens = [
             "<|begin_of_text|>",
@@ -456,12 +445,29 @@ class MllamaConverter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str):
+    chat_template = (
+        "{% set loop_messages = messages %}"
+        "{% for message in loop_messages %}"
+        "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
+        "{% if loop.index0 == 0 %}"
+        "{% set content = bos_token + content %}"
+        "{% endif %}"
+        "{{ content }}"
+        "{% endfor %}"
+        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+    )
+
     converter = MllamaConverter(
         tokenizer_path,
+        chat_template=chat_template,
         pattern=r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",  # noqa: W605
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)
+
+    chat_template_path = os.path.join(save_dir, "chat_template.json")
+    with open(chat_template_path, "w") as f:
+        json.dump({"chat_template": chat_template}, f, indent=2)
 
 
 def write_image_processor(config_path: str, save_dir: str):
