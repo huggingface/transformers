@@ -398,7 +398,7 @@ class Idefics3SimpleMLP(nn.Module):
 
 # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2EncoderLayer with Idefics2->Idefics3
 class Idefics3EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics3Config):
+    def __init__(self, config: Idefics3VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -1228,7 +1228,13 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        num_logits_to_keep=None,
+        **kwargs,
     ):
         past_length = 0
         # Omit tokens covered by past_key_values
@@ -1270,6 +1276,9 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
 
         image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:
