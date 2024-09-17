@@ -2,7 +2,7 @@ from typing import List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
-
+import warnings
 
 if is_vision_available():
     from PIL import Image
@@ -63,6 +63,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         if truncation is not None:
             preprocess_params["truncation"] = truncation
         if timeout is not None:
+            warnings.warn(
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
+            )
             preprocess_params["timeout"] = timeout
         if top_k is not None:
             postprocess_params["top_k"] = top_k
@@ -110,9 +113,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
         Return:
             A dictionary or a list of dictionaries containing the result. The dictionaries contain the following keys:
 
