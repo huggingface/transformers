@@ -2055,6 +2055,7 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         t_dilation=2,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        is_training: bool = False,
     ):
         """
         Args:
@@ -2084,10 +2085,17 @@ class ProPainterTemporalSparseTransformer(nn.Module):
                 token_indices[i],
                 output_attentions=output_attentions,
             )
+            if is_training:
+                if output_attentions:
+                    all_self_attentions = all_self_attentions + (_all_self_attentions,)
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (image_tokens,)
+        if not is_training:
             if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (image_tokens,)
+
         return image_tokens, all_hidden_states, all_self_attentions
 
 
@@ -2177,6 +2185,7 @@ class ProPainterInpaintGenerator(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
+        is_training: bool = False,
     ):
         """
         Args:
@@ -2271,6 +2280,7 @@ class ProPainterInpaintGenerator(nn.Module):
             t_dilation=t_dilation,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            is_training=is_training,
         )
 
         trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
@@ -4241,6 +4251,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
+                    is_training=self.training,
                 )
 
             pred_imgs = (
@@ -4302,6 +4313,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
+                    is_training=self.training,
                 )
 
                 pred_img = (
