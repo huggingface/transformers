@@ -43,7 +43,8 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pixtral import PixtralProcessor, PixtralVisionConfig
+    from .configuration_pixtral import PixtralVisionConfig
+    from .processing_pixtral import PixtralProcessor
 
     try:
         if not is_torch_available():

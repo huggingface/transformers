@@ -64,6 +64,8 @@ class ProcessorTesterMixin:
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
         if attribute == "tokenizer" and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
+            if component.pad_token_id is None:
+                component.pad_token_id = 0
 
         return component
 
