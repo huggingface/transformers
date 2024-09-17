@@ -663,13 +663,15 @@ gen_text = tokenizer.decode(gen_tokens[0])
 print(gen_text)
 ```
 
-**Note on `documents` input:**
+<Tip>
 
-The `documents` input is not widely supported by many models, and chat templates often discard this input. Users should be cautious about relying on `documents` unless the model explicitly supports it.
+The `documents` input for retrieval-augmented generation is not widely supported, and many models have chat templates which simply ignore this input.
 
-To verify if a model supports the `documents` input, check if it is included in the `chat_template` key within the `tokenizer_config.json` file in the model's card.
+To verify if a model supports the `documents` input, you can read its model card, or `print(tokenizer.chat_template)` to see if the `documents` key is used anywhere.
 
-As an example, Cohere's [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024) support the `documents` input through their `rag` chat template. You can see additional examples of grounded generation using this feature in their model cards.
+One model class that does support it, though, is Cohere's [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024), through their `rag` chat template. You can see additional examples of grounded generation using this feature in their model cards.
+
+</Tip>
 
 
 
