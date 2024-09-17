@@ -82,6 +82,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
+        ("pixtral", "PixtralProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),

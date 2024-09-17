@@ -954,7 +954,9 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
-        def split_by_batch_index(values, key, batch_idx, is_shortform):
+        def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
+            if beam_indices is not None and key == "scores":
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -985,7 +987,10 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
+            {
+                k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
+                for k, v in seek_outputs.items()
+            }
             for i in range(sequence_tokens.shape[0])
         ]
 
@@ -1693,8 +1698,8 @@ class WhisperGenerationMixin:
         max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
         if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
             raise ValueError(
-                f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-                f"is {max_new_tokens}. Thus, the combined length of "
+                f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+                f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
                 f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
                 f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
                 "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "

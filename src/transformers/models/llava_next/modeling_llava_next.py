@@ -144,7 +144,6 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaNext
 class LlavaNextCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaNext causal language model (or autoregressive) outputs.
@@ -171,11 +170,9 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -183,7 +180,7 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaNext
@@ -648,7 +645,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         return final_embedding, final_attention_mask, position_ids, final_labels, final_input_ids
 
-    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -657,6 +654,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
+            vision_feature_select_strategy (`str`)
+                The feature selection strategy used to select the vision feature from the vision backbone.
             image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
         Returns:
@@ -671,8 +670,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-                if height * width != base_image_feature.shape[0]:
+
+                if vision_feature_select_strategy == "default":
+                    expected_num_patches = height * width
+                elif vision_feature_select_strategy == "full":
+                    expected_num_patches = height * width + 1
+                if expected_num_patches != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
+
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
@@ -828,6 +833,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             image_features, feature_lens = self.pack_image_features(
                 image_features,
                 image_sizes,
+                vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
             if legacy_processing:
@@ -931,6 +937,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def prepare_inputs_for_generation(
