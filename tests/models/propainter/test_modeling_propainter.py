@@ -16,6 +16,8 @@
 
 import copy
 import unittest
+import tempfile
+from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -33,6 +35,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_safetensors,
     require_vision,
     slow,
     torch_device,
@@ -491,27 +494,39 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
+            del tuple_inputs, dict_inputs
+            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs)
+            del tuple_inputs, dict_inputs
+            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            del tuple_inputs, dict_inputs
+            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            del tuple_inputs, dict_inputs
+            torch.cuda.empty_cache()
 
             if self.has_attentions:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                del tuple_inputs, dict_inputs
+                torch.cuda.empty_cache()
 
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                del tuple_inputs, dict_inputs
+                torch.cuda.empty_cache()
 
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -521,6 +536,85 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     dict_inputs,
                     {"output_hidden_states": True, "output_attentions": True},
                 )
+                del tuple_inputs, dict_inputs
+                torch.cuda.empty_cache()
+
+    @require_safetensors
+    def test_can_use_safetensors(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                try:
+                    model_tied.save_pretrained(d, safe_serialization=True)
+                except Exception as e:
+                    raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model_tied.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_close(
+                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                    )
+                
+                # Checking there was no complain of missing weights
+                
+                # Expected missing keys related to `discriminator`
+                expected_missing_keys = [
+                    'discriminator.conv.0.weight_v',
+                    'discriminator.conv.2.weight_v',
+                    'discriminator.conv.4.weight_v',
+                    'discriminator.conv.6.weight_v',
+                    'discriminator.conv.8.weight_v',
+                ]
+
+                self.assertEqual(infos["missing_keys"], expected_missing_keys)
+
+                # Checking the tensor sharing are correct
+                ptrs = defaultdict(list)
+                for k, v in model_tied.state_dict().items():
+                    ptrs[v.data_ptr()].append(k)
+
+                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+
+                for _, shared_names in shared_ptrs.items():
+                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                    self.assertEqual(
+                        len(reloaded_ptrs),
+                        1,
+                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                    )
+    
+    def test_load_save_without_tied_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = False
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model.save_pretrained(d)
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_close(
+                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                    )
+                # Checking there was no complain of missing weights
+                
+                # Expected missing keys related to `discriminator`
+                expected_missing_keys = [
+                    'discriminator.conv.0.weight_v',
+                    'discriminator.conv.2.weight_v',
+                    'discriminator.conv.4.weight_v',
+                    'discriminator.conv.6.weight_v',
+                    'discriminator.conv.8.weight_v',
+                ]
+
+                self.assertEqual(infos["missing_keys"], expected_missing_keys)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

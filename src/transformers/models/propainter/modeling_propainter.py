@@ -4308,15 +4308,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
                 )
 
-                if output_hidden_states:
-                    all_hidden_states = (
-                        inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
-                    )
-                if output_attentions:
-                    all_self_attentions = (
-                        inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
-                    )
-
                 pred_img = [pred_img[batch_idx].view(-1, 3, height, width) for batch_idx in batch_idxs]
                 pred_img = [(pred_img[batch_idx] + 1) / 2 for batch_idx in batch_idxs]
                 pred_img = [
@@ -4353,6 +4344,15 @@ class ProPainterModel(ProPainterPreTrainedModel):
                         comp_frames[batch_idx][idx] = comp_frames[batch_idx][idx].astype(np.uint8)
 
                         pred_imgs_loss[batch_idx][idx] = pred_img[batch_idx][i]
+
+            if output_hidden_states:
+                all_hidden_states = (
+                    inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+                )
+            if output_attentions:
+                all_self_attentions = (
+                    inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
+                )
 
             device = pixel_values_videos.device
 
