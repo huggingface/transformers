@@ -113,7 +113,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
-        image1_expected_size = (970, 1456)
+        image1_expected_size = (364, 364)
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 1, 3, *image1_expected_size))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 1, *image1_expected_size))
         # fmt: on
@@ -163,8 +163,8 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 2, 3, 1140, 1456))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 2, 1140, 1456))
+        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 2, 3, 364, 364))
+        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 2, 364, 364))
         # fmt: on
 
     def test_process_interleaved_images_prompts_image_splitting(self):

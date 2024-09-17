@@ -862,6 +862,14 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             images_list = images_list_split_arrays
             palettes_list = palettes_list_split_arrays
         else:
+            # We square the images to max_image_size
+            images_list = [
+                [
+                    self.resize(image=image, size={'height': max_image_size["longest_edge"], "width": max_image_size["longest_edge"]}, resample=resample, input_data_format=data_format)
+                    for image in images
+                ]
+                for images in images_list
+            ]
             images_list_rows = [[0] * len(images) for images in images_list]
             images_list_cols = [[0] * len(images) for images in images_list]
 
