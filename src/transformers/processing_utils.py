@@ -1012,7 +1012,7 @@ def _validate_images_text_input_order(images, text):
             for img in imgs:
                 if not _is_valid_images_input_for_processor(img):
                     return False
-        # If not a list of tuple, we have been given a single image or batched tensor of images
+        # If not a list or tuple, we have been given a single image or batched tensor of images
         elif not (is_valid_image(imgs) or is_url(imgs)):
             return False
         return True
