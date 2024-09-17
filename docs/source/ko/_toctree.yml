@@ -283,7 +283,7 @@
     - local: in_translation
       title: (번역중) Keras callbacks
     - local: main_classes/logging
-      title: (번역중) Logging
+      title: 로깅
     - local: in_translation
       title: (번역중) Models
     - local: in_translation
