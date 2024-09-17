@@ -107,7 +107,6 @@ class LlavaVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -119,8 +118,9 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 231
+        self.encoder_seq_length = 455
         self.num_image_tokens = 224
+        self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return LlavaConfig(
@@ -150,8 +150,7 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        seq_length_with_image = self.num_image_tokens + self.seq_length
-        input_ids = ids_tensor([self.batch_size, seq_length_with_image], config.text_config.vocab_size - 1) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index

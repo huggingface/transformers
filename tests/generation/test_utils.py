@@ -1522,7 +1522,9 @@ class GenerationTesterMixin:
             if "token_type_ids" in signature and inputs_dict.get("token_type_ids") is not None:
                 token_type_ids = inputs_dict.pop("token_type_ids")
                 pad_size = (token_type_ids.shape[0], input_ids.shape[1] - token_type_ids.shape[1])
-                token_type_ids = torch.cat([token_type_ids, torch.zeros(pad_size, device=torch_device)], dim=-1)
+                token_type_ids = torch.cat(
+                    [token_type_ids, torch.zeros(pad_size, device=torch_device, dtype=token_type_ids.dtype)], dim=-1
+                )
                 model_kwargs["token_type_ids"] = token_type_ids
             if "cache_position" in signature:
                 cache_position = torch.arange(input_ids.shape[-1], device=torch_device)

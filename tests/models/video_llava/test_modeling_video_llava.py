@@ -104,7 +104,6 @@ class VideoLlavaVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.num_frames = num_frames
         self.pad_token_id = text_config["pad_token_id"]
 
@@ -120,6 +119,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.encoder_seq_length = 64
         self.num_image_tokens = 25
         self.num_video_tokens = 26
+        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -161,11 +161,9 @@ class VideoLlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values_images, pixel_values_videos = config_and_inputs
-        seq_length = self.seq_length + self.num_image_tokens + self.num_video_tokens
-        input_ids = ids_tensor([self.batch_size, seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
 
-        # we are passing 3 videos and 3 images and have to add special tokens
         input_ids[(input_ids == config.image_token_index) | (input_ids == config.video_token_index)] = (
             self.pad_token_id
         )

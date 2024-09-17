@@ -100,7 +100,6 @@ class VipLlavaVisionText2TextModelTester:
         self.vision_feature_layers = vision_feature_layers
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -114,6 +113,7 @@ class VipLlavaVisionText2TextModelTester:
         self.image_size = 336
         self.encoder_seq_length = 231
         self.num_image_tokens = 224
+        self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return VipLlavaConfig(
@@ -142,13 +142,9 @@ class VipLlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = (
-            ids_tensor([self.batch_size, self.seq_length + self.num_image_tokens], config.text_config.vocab_size - 1)
-            + 1
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
 
-        # we are giving 3 images let's make sure we pass in 3 image tokens, one for batch
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {

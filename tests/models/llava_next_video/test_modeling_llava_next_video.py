@@ -114,7 +114,6 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -130,6 +129,7 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.image_grid_pinpoints = [[32, 32]]
         self.num_image_tokens = 88
         self.num_video_tokens = 32
+        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):
         return LlavaNextVideoConfig(
@@ -171,11 +171,9 @@ class LlavaNextVideoVisionText2TextModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
-        seq_length = self.seq_length + self.num_image_tokens + self.num_video_tokens
-        input_ids = ids_tensor([self.batch_size, seq_length], config.text_config.vocab_size - 2) + 2
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
-        # we are giving 3 images and videos let's make sure we pass in placeholders 3 images
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[input_ids == config.video_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
