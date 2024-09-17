@@ -34,7 +34,7 @@ You can easily build hierarchical multi-agent systems with `transformers.agents`
 
 To do so, encapsulate the agent in a [`ManagedAgent`] object. This object needs arguments `agent`, `name`, and a `description`, which will then be embedded in the manager agent's system prompt to let it know how to call this managed agent, as we also do for tools.
 
-Here's an example of making an agent that managed a specitif web search agent using our [`DuckDuckGoSearchTool`]:
+Here's an example of making an agent that managed a specific web search agent using our [`DuckDuckGoSearchTool`]:
 
 ```py
 from transformers.agents import ReactCodeAgent, HfApiEngine, DuckDuckGoSearchTool, ManagedAgent

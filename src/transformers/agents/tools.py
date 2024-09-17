@@ -848,7 +848,7 @@ class ToolCollection:
 
 def tool(tool_function: Callable) -> Tool:
     """
-    Decorator that turns a function into an instance of a specific Tool subclass
+    Converts a function into an instance of a Tool subclass.
 
     Args:
         tool_function: Your function. Should have type hints for each input and a type hint for the output.
