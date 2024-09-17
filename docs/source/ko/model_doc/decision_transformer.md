@@ -18,17 +18,17 @@ rendered properly in your Markdown viewer.
 
 ## 개요
 
-결정 변환기(Decision Transformer) 모델은 Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch가 작성한 논문 [결정 트랜스포머 : 시퀀스 모델링을 통한 강화 학습(Decision Transformer: Reinforcement Learning via Sequence Modeling)](https://arxiv.org/abs/2106.01345)에서 제안되었습니다.
+결정 트랜스포머(Decision Transformer) 모델은 Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch가 작성한 논문 [결정 트랜스포머 : 시퀀스 모델링을 통한 강화 학습(Decision Transformer: Reinforcement Learning via Sequence Modeling)](https://arxiv.org/abs/2106.01345)에서 제안되었습니다.
 
-논문의 초록은 다음과 같습니다 :
+논문의 개요:
 
 *우리는 강화 학습(RL)을 시퀀스 모델링 문제로 추상화하는 프레임워크를 소개합니다. 
-이를 통해 우리는 Transformer 아키텍처의 단순성과 확장성을 활용하고, GPT-x 및 BERT와 같은 언어 모델링에서의 발전을 적용할 수 있습니다. 
-특히, 우리는 강화 학습 문제를 조건부 시퀀스 모델링으로 해석하는 결정 변환기(Decision Transformer)를 제안합니다. 
+이를 통해 트랜스포머 아키텍처의 단순성과 확장성, 그리고 이와 관련된 발전 사항을 GPT-x 및 BERT와 같은 언어 모델링에서 활용할 수 있습니다.
+그 중에서도, 강화 학습 문제를 조건부 시퀀스 모델링으로 해석하는 결정 트랜스포머(Decision Transformer)를 소개합니다. 
 가치 함수를 맞추거나 정책 그래디언트를 계산하는 기존의 RL 접근 방식과 달리,
-결정 변환기는 인과적으로 마스킹된 Transformer를 활용하여 최적의 행동을 단순히 출력합니다. 
-자가회귀 모델을 원하는 보상(리턴), 과거 상태, 행동에 조건화하여 결정 변환기 모델은 원하는 보상을 달성할 수 있는 미래 행동을 생성할 수 있습니다. 
-이 모델은 단순함에도 불구하고, Atari, OpenAI Gym, Key-to-Door 작업에서 최첨단 무모델 오프라인 강화 학습(RL) 기준 성능과 동등하거나 이를 초과합니다.*
+결정 트랜스포머는 인과적으로 마스킹된 트랜스포머를 활용해 간단히 최적의 동작을 출력합니다. 
+자가회귀 모델을 원하는 보상(리턴), 과거 상태, 행동에 조건화하여 결정 트랜스포머 모델은 원하는 보상을 달성할 수 있는 미래 행동을 생성할 수 있습니다. 
+이 모델은 단순함에도 불구하고, Atari, OpenAI Gym, Key-to-Door 작업에서 최첨단 모델이 필요없는 오프라인 강화 학습(RL) 기준 성능과 동등하거나 뛰어납니다.*
 
 이 버전의 모델은 상태가 벡터인 작업에 사용됩니다.
 
