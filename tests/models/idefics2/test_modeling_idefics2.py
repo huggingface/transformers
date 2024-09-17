@@ -540,6 +540,41 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
+    @slow
+    @require_bitsandbytes
+    def test_integration_test_4bit_batch2(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+
+        model = Idefics2ForConditionalGeneration.from_pretrained(
+            "HuggingFaceM4/idefics2-8b-base",
+            load_in_4bit=True,
+        )
+
+        from datasets import load_dataset
+
+        dataset = load_dataset("nielsr/docvqa_1200_examples", split="test")
+
+        text = [f"<image>{dataset[40]['query']['en']}", f"<image>{dataset[41]['query']['en']}"]
+        images = [[dataset[40]["image"]], [dataset[41]["image"]]]
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_new_tokens=64)
+        batched_generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        text = f"<image>{dataset[40]['query']['en']}"
+        images = dataset[40]["image"]
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_new_tokens=64)
+        generated_text_0 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        text = f"<image>{dataset[41]['query']['en']}"
+        images = dataset[41]["image"]
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_new_tokens=64)
+        generated_text_1 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        self.assertEqual(batched_generated_texts[0], generated_text_0[0])
+        self.assertEqual(batched_generated_texts[1], generated_text_1[0])
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
