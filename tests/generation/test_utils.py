@@ -108,8 +108,11 @@ class GenerationTesterMixin:
         # we'll set cache use in each test differently
         _ = inputs_dict.pop("use_cache", None)
 
-        inputs_dict = {k: v[:batch_size, ...] if "head_mask" not in k else v for k, v in inputs_dict.items()}
-
+        inputs_dict = {
+            k: v[:batch_size, ...]
+            for k, v in inputs_dict.items()
+            if "head_mask" not in k and isinstance(v, torch.Tensor)
+        }
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             if isinstance(config.eos_token_id, int):
@@ -719,11 +722,11 @@ class GenerationTesterMixin:
                 )
 
             prepare_inputs_for_generation_args = set(inspect.signature(model.prepare_inputs_for_generation).parameters)
-            # `inputs_embeds` input is well supported when `cache_position` is used, because it means the modeling
+            # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
             # code is up to date with our most recent standards
             if (
                 "inputs_embeds" in prepare_inputs_for_generation_args
-                and "cache_position" in prepare_inputs_for_generation_args
+                and "cache_positions" in prepare_inputs_for_generation_args
             ):
                 input_embeds = model.get_input_embeddings()(input_ids)
                 beam_kwargs.update({"inputs_embeds": input_embeds})
