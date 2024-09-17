@@ -1187,7 +1187,7 @@ def is_liger_kernel_available():
     if not _liger_kernel_available:
         return False
 
-    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
 # docstyle-ignore
