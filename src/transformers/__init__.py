@@ -6029,6 +6029,7 @@ if TYPE_CHECKING:
             MaskFormerFeatureExtractor,
             MaskFormerImageProcessor,
         )
+        from .models.mllama import MllamaImageProcessor
         from .models.mobilenet_v1 import (
             MobileNetV1FeatureExtractor,
             MobileNetV1ImageProcessor,
@@ -7262,6 +7263,7 @@ if TYPE_CHECKING:
             MllamaForCausalLM,
             MllamaForConditionalGeneration,
             MllamaPreTrainedModel,
+            MllamaProcessor,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
