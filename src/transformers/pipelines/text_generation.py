@@ -173,17 +173,17 @@ class TextGenerationPipeline(Pipeline):
         forward_params = generate_kwargs
 
         postprocess_params = {}
-        if return_full_text is not None and return_type is None:
-            if return_tensors is not None:
-                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.FULL_TEXT
-        elif return_text is not None and return_type is None:
-            if return_tensors is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.NEW_TEXT
-        if return_tensors is not None and return_type is None:
-            # No incompatibility error needed here because it should already be caught above
+        if return_type is not None and (return_text is not None or return_full_text is not None or return_tensors is not None):
+            raise ValueError("`return_type` is mutually exclusive with `return_text`, `return_full_text`, and `return_tensors`")
+        if return_tensors is not None:
+            if return_text or return_full_text:
+                raise ValueError("`return_text` and `return_full_text` are mutually exclusive with `return_tensors`")
             return_type = ReturnType.TENSORS
+        elif return_full_text and return_type is None:
+            return_type = ReturnType.FULL_TEXT
+        elif (return_text or return_full_text == False) and return_type is None:
+            return_type = ReturnType.NEW_TEXT
+
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
