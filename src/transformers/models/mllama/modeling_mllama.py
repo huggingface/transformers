@@ -562,11 +562,11 @@ class MllamaVisionModel(PreTrainedModel):
         return hidden_state
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mllama
-class MllamaRMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MllamaText
+class MllamaTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        MllamaRMSNorm is equivalent to T5LayerNorm
+        MllamaTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -606,8 +606,8 @@ class MllamaTextCrossAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.q_norm = MllamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = MllamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -822,15 +822,20 @@ class MllamaTextMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
-class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
-    def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LlamaDecoder->MllamaSelfAttentionDecoder, Llama->MllamaText, LLAMA->MLLAMA_TEXT
+class MllamaSelfAttentionDecoderLayer(nn.Module):
+    def __init__(self, config: MllamaTextConfig, layer_idx: int):
         super().__init__()
-        self.layer_idx = layer_idx
-        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+
         self.mlp = MllamaTextMLP(config)
-        self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # Ignore copy
+        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -841,9 +846,9 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -882,13 +887,13 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = residual + hidden_states.to(residual.device)
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states.to(residual.device)
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
@@ -909,11 +914,11 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         self.layer_idx = layer_idx
         self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
-        self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
 
         self.mlp = MllamaTextMLP(config)
-        self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(1))
 
     def forward(
@@ -1079,7 +1084,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
                 layers.append(MllamaSelfAttentionDecoderLayer(config, layer_idx))
 
         self.layers = nn.ModuleList(layers)
-        self.norm = MllamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MllamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
