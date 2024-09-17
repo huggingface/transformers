@@ -397,7 +397,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = 11 # of tokens
+            seq_length = 11  # of tokens
             self.assertIn(
                 list(hidden_states[0].shape[-2:]),
                 [
@@ -432,6 +432,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @slow
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
