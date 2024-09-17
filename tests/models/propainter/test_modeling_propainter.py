@@ -47,6 +47,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
     from transformers import ProPainterModel
 
 
@@ -76,7 +77,7 @@ class ProPainterModelTester:
         num_hidden_layers=2,
         num_attention_heads=1,
         num_frames=8,
-        perceptual_weight = 0.1,
+        perceptual_weight=0.1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -393,7 +394,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = 11  #of tokens
+            seq_length = 11  # of tokens
             self.assertIn(
                 list(hidden_states[0].shape[-2:]),
                 [
@@ -680,6 +681,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
 
 # We will verify our results on a video of a boy riding a bicycle
 def prepare_video():
