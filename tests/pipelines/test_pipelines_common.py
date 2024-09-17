@@ -241,17 +241,24 @@ class CommonPipelineTest(unittest.TestCase):
         Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
         side-effects
         """
+        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
         model = T5ForConditionalGeneration.from_pretrained("t5-small")
         self.assertTrue(model.config.num_beams == 1)
 
-        # The `task` parameter used to cause side-effects on `model.config` -- not anymore
+        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
         pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
         self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(pipe.model.config.num_beams == 4)
+        self.assertTrue(model.generation_config.num_beams == 1)
 
-        # Under the hood: we hold a shallow copy of the model with a deep copy of the configs
-        self.assertTrue(id(model._parameters) == id(pipe.model._parameters))  # same model reference
-        self.assertTrue(id(model.config) != id(pipe.model.config))  # different config reference
+        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
+        # task-specific paremeters.
+        self.assertTrue(pipe.generation_config.num_beams == 4)
+
+        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
+        # which would crash when `num_return_sequences=4` is passed.)
+        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
+        with self.assertRaises(ValueError):
+            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
 
 
 @is_pipeline_test
