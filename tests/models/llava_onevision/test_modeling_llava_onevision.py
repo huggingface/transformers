@@ -62,12 +62,12 @@ class LlavaOnevisionVisionText2TextModelTester:
         ignore_index=-100,
         image_token_index=1,
         projector_hidden_act="gelu",
-        seq_length=17,
+        seq_length=7,
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
         text_config={
             "model_type": "qwen2",
-            "seq_length": 17,
+            "seq_length": 7,
             "is_training": True,
             "use_input_mask": True,
             "use_token_type_ids": False,
@@ -113,9 +113,9 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.pad_token_id = text_config["pad_token_id"]
         self.num_image_tokens = 10
+        self.seq_length = seq_length + self.num_image_tokens
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -126,7 +126,6 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 7
         self.image_grid_pinpoints = [[16, 16]]
 
     def get_config(self):
