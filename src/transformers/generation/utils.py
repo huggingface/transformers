@@ -2600,7 +2600,7 @@ class GenerationMixin:
         # Create cosine_matrix_mask based on the attention_mask
         cosine_matrix_mask = torch.ones_like(input_ids, dtype=torch.long)
         if self.config.is_encoder_decoder:
-            if "decoder_attention_mask" in model_kwargs:
+            if "decoder_attention_mask" in model_kwargs and model_kwargs["decoder_attention_mask"] is not None:
                 cosine_matrix_mask = model_kwargs["decoder_attention_mask"]
         else:
             cosine_matrix_mask = model_kwargs["attention_mask"]
