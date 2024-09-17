@@ -3946,6 +3946,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             branch_name = re_search.groups()[0]
             self.assertEqual(branch_name, branch)
 
+
 @require_torch
 @require_optuna
 class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
