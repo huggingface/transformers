@@ -253,17 +253,16 @@ class MllamaVisionMLP(nn.Module):
 
 
 class MllamaVisionSdpaAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MllamaVisionConfig):
         super().__init__()
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.attention_heads
-        self.num_kv_heads = getattr(config, "num_kv_heads", config.attention_heads)
         self.head_dim = config.hidden_size // config.attention_heads
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
 
     def forward(
@@ -280,8 +279,8 @@ class MllamaVisionSdpaAttention(nn.Module):
         _, kv_seq_len, _ = key.shape
 
         query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim)
-        key = key.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
-        value = value.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
+        key = key.view(batch_size, kv_seq_len, self.num_heads, self.head_dim)
+        value = value.view(batch_size, kv_seq_len, self.num_heads, self.head_dim)
 
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
