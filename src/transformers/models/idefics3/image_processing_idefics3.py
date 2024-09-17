@@ -865,7 +865,12 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             # We square the images to max_image_size
             images_list = [
                 [
-                    self.resize(image=image, size={'height': max_image_size["longest_edge"], "width": max_image_size["longest_edge"]}, resample=resample, input_data_format=data_format)
+                    self.resize(
+                        image=image,
+                        size={"height": max_image_size["longest_edge"], "width": max_image_size["longest_edge"]},
+                        resample=resample,
+                        input_data_format=data_format,
+                    )
                     for image in images
                 ]
                 for images in images_list
