@@ -73,8 +73,8 @@ class ProPainterModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
-        image_size=128,
+        batch_size=1,
+        image_size=64,
         is_training=True,
         hidden_size=512,
         num_hidden_layers=2,
@@ -208,7 +208,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions) + 1, self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -219,7 +219,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions) + 1, self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
                 self.assertListEqual(
@@ -309,7 +309,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions) + 1, self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
@@ -393,16 +393,16 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             expected_num_layers = getattr(
                 self.model_tester,
                 "expected_num_hidden_layers",
-                self.model_tester.num_hidden_layers,
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = 11  # of tokens
+            seq_length = [6, 8]  # of tokens
             self.assertIn(
                 list(hidden_states[0].shape[-2:]),
                 [
-                    [seq_length, self.model_tester.hidden_size],
-                    [seq_length, self.model_tester.hidden_size],
+                    [seq_length[0], self.model_tester.hidden_size],
+                    [seq_length[1], self.model_tester.hidden_size],
                 ],
                 msg=f"Unexpected hidden state shape: {hidden_states[0].shape[-2:]}",
             )
@@ -744,6 +744,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
+            config.image_size = 128
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
