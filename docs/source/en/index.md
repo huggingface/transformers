@@ -158,6 +158,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [GPT-Sw3](model_doc/gpt-sw3)                       |       ✅        |         ✅         |      ✅      |
 |                   [GPTBigCode](model_doc/gpt_bigcode)                    |       ✅        |         ❌         |      ❌      |
 |               [GPTSAN-japanese](model_doc/gptsan-japanese)               |       ✅        |         ❌         |      ❌      |
+|                       [Granite](model_doc/granite)                       |       ✅        |         ❌         |      ❌      |
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
 |                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
@@ -188,6 +189,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [LLaVA-NeXT](model_doc/llava_next)                    |       ✅        |         ❌         |      ❌      |
 |              [LLaVa-NeXT-Video](model_doc/llava_next_video)              |       ✅        |         ❌         |      ❌      |
+|               [LLaVA-Onevision](model_doc/llava_onevision)               |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
 |                        [LongT5](model_doc/longt5)                        |       ✅        |         ❌         |      ✅      |
 |                          [LUKE](model_doc/luke)                          |       ✅        |         ❌         |      ❌      |
@@ -232,6 +234,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [Nougat](model_doc/nougat)                        |       ✅        |         ✅         |      ✅      |
 |                 [Nyströmformer](model_doc/nystromformer)                 |       ✅        |         ❌         |      ❌      |
 |                          [OLMo](model_doc/olmo)                          |       ✅        |         ❌         |      ❌      |
+|                         [OLMoE](model_doc/olmoe)                         |       ✅        |         ❌         |      ❌      |
 |                     [OneFormer](model_doc/oneformer)                     |       ✅        |         ❌         |      ❌      |
 |                    [OpenAI GPT](model_doc/openai-gpt)                    |       ✅        |         ✅         |      ❌      |
 |                      [OpenAI GPT-2](model_doc/gpt2)                      |       ✅        |         ✅         |      ✅      |
@@ -250,6 +253,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [Phi3](model_doc/phi3)                          |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
+|                       [Pixtral](model_doc/pixtral)                       |       ❌        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |
 |                    [PoolFormer](model_doc/poolformer)                    |       ✅        |         ❌         |      ❌      |
 |                     [Pop2Piano](model_doc/pop2piano)                     |       ✅        |         ❌         |      ❌      |
@@ -260,6 +264,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
 |                   [Qwen2Audio](model_doc/qwen2_audio)                    |       ✅        |         ❌         |      ❌      |
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
+|                      [Qwen2VL](model_doc/qwen2_vl)                       |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
 |               [RecurrentGemma](model_doc/recurrent_gemma)                |       ✅        |         ❌         |      ❌      |

@@ -41,6 +41,7 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -656,6 +657,20 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
+        """
+        Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
+        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
+        """
+        config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
+
+        # if using the default path -> swap sdpa by eager
+        if not hard_check_only and config._attn_implementation == "sdpa":
+            config._attn_implementation = "eager"
+
+        return config
+
 
 _CONFIG_FOR_DOC = "Gemma2Config"
 
@@ -701,7 +716,8 @@ GEMMA2_INPUTS_DOCSTRING = r"""
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
             Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
             - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
             shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
@@ -973,6 +989,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -980,6 +997,11 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
         Returns:
 
@@ -1024,15 +1046,23 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        if labels is None and not is_torchdynamo_compiling():
+            logger.warning_once(
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
             logits = logits * self.config.final_logit_softcapping
 
+        # TODO: remove the float() operation in v4.46
         logits = logits.float()
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1065,6 +1095,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1118,6 +1149,10 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
