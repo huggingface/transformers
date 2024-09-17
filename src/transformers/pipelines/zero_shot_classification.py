@@ -1,8 +1,8 @@
 import inspect
+import warnings
 from typing import List, Union
 
 import numpy as np
-import warnings
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, logging

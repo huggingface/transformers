@@ -1,8 +1,9 @@
+import warnings
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
-import warnings
+
 
 if is_vision_available():
     from ..image_utils import load_image
@@ -101,7 +102,7 @@ class ObjectDetectionPipeline(Pipeline):
             - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
-        if "images" in kwargs and not "inputs" in kwargs:
+        if "images" in kwargs and "inputs" not in kwargs:
             warnings.warn(
                 "The `images` argument has been renamed to `inputs`. In version 5 of Transformers, `images` will no longer be accepted",
                 FutureWarning,
