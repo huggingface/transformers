@@ -34,7 +34,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor()
+        image_processor = CLIPImageProcessor(do_center_crop=False)
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
         processor_kwargs = self.prepare_processor_dict()
         processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
