@@ -73,8 +73,8 @@ class ProPainterModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
-        image_size=64,
+        batch_size=1,
+        image_size=128,
         is_training=True,
         hidden_size=512,
         num_hidden_layers=2,
@@ -397,12 +397,12 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = [6, 8]  # of tokens
+            seq_length = 11 # of tokens
             self.assertIn(
                 list(hidden_states[0].shape[-2:]),
                 [
-                    [seq_length[0], self.model_tester.hidden_size],
-                    [seq_length[1], self.model_tester.hidden_size],
+                    [seq_length, self.model_tester.hidden_size],
+                    [seq_length, self.model_tester.hidden_size],
                 ],
                 msg=f"Unexpected hidden state shape: {hidden_states[0].shape[-2:]}",
             )
@@ -744,7 +744,6 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            config.image_size = 128
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
