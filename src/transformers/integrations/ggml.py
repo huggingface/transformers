@@ -108,16 +108,17 @@ GGUF_TENSOR_MAPPING = {
         "output_norm": "model.norm",
     },
     "bloom": {
-        "token_embd": "model.word_embeddings",
-        "blk": "model.layers",
+        "token_embd.weight": "word_embeddings.weight",
+        "token_embd_norm": "word_embeddings_layernorm",
+        "blk": "h",
         "ffn_up": "mlp.dense_h_to_4h",
         "ffn_down": "mlp.dense_4h_to_h",
         "ffn_norm": "post_attention_layernorm",
         "attn_norm": "input_layernorm",
         "attn_qkv": "self_attention.query_key_value",
         "attn_output": "self_attention.dense",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.ln_f",
+        "output.weight": "output.weight",
+        "output_norm": "ln_f",
     },
 }
 
@@ -196,7 +197,9 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
     },
     "bloom": {
+        "context_length": "context_length",
         "block_count": "n_layer",
+        "feed_forward_length": "feed_forward_length",
         "embedding_length": "hidden_size",
         "attention.head_count": "n_head",
         "vocab_size": "vocab_size",
