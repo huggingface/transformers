@@ -15,8 +15,8 @@
 """Testing suite for the PyTorch ProPainter model."""
 
 import copy
-import unittest
 import tempfile
+import unittest
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
@@ -32,10 +32,10 @@ from transformers.models.auto.modeling_auto import (
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
+    require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_safetensors,
     require_vision,
     slow,
     torch_device,
@@ -558,16 +558,16 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     torch.testing.assert_close(
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
-                
+
                 # Checking there was no complain of missing weights
-                
+
                 # Expected missing keys related to `discriminator`
                 expected_missing_keys = [
-                    'discriminator.conv.0.weight_v',
-                    'discriminator.conv.2.weight_v',
-                    'discriminator.conv.4.weight_v',
-                    'discriminator.conv.6.weight_v',
-                    'discriminator.conv.8.weight_v',
+                    "discriminator.conv.0.weight_v",
+                    "discriminator.conv.2.weight_v",
+                    "discriminator.conv.4.weight_v",
+                    "discriminator.conv.6.weight_v",
+                    "discriminator.conv.8.weight_v",
                 ]
 
                 self.assertEqual(infos["missing_keys"], expected_missing_keys)
@@ -586,7 +586,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                         1,
                         f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
                     )
-    
+
     def test_load_save_without_tied_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = False
@@ -604,14 +604,14 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
                 # Checking there was no complain of missing weights
-                
+
                 # Expected missing keys related to `discriminator`
                 expected_missing_keys = [
-                    'discriminator.conv.0.weight_v',
-                    'discriminator.conv.2.weight_v',
-                    'discriminator.conv.4.weight_v',
-                    'discriminator.conv.6.weight_v',
-                    'discriminator.conv.8.weight_v',
+                    "discriminator.conv.0.weight_v",
+                    "discriminator.conv.2.weight_v",
+                    "discriminator.conv.4.weight_v",
+                    "discriminator.conv.6.weight_v",
+                    "discriminator.conv.8.weight_v",
                 ]
 
                 self.assertEqual(infos["missing_keys"], expected_missing_keys)
