@@ -56,7 +56,6 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
-from .quantizers.quantizer_torchao import TorchAoHfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -2568,7 +2567,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
+            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable(safe_serialization)
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -4485,12 +4484,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     continue
                 map_location = None
                 if (
-                    device_map is not None
-                    and "" in device_map
-                    and is_quantized
-                    and isinstance(hf_quantizer, TorchAoHfQuantizer)
+                    device_map is not None and
+                    hf_quantizer is not None and
+                    hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO and
+                    hf_quantizer.quantization_config.quant_type == "int4_weight_only"
                 ):
-                    map_location = torch.device(device_map[""])
+                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
                 state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not

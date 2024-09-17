@@ -1206,23 +1206,6 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         return loading_attibutes_dict
 
 
-def _get_torchao_quant_type_to_method():
-    if is_torchao_available():
-        from torchao.quantization import (
-            int4_weight_only,
-            int8_dynamic_activation_int8_weight,
-            int8_weight_only,
-        )
-
-        return {
-            "int4_weight_only": int4_weight_only,
-            "int8_weight_only": int8_weight_only,
-            "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-        }
-    else:
-        raise ValueError("TorchAoConfig requires torchao to be installed, please install with `pip install torchao`")
-
-
 @dataclass
 class TorchAoConfig(QuantizationConfigMixin):
     """This is a config class for torchao quantization/sparsity techniques.
@@ -1266,7 +1249,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
             raise ValueError("Requires torchao 0.4.0 version and above")
 
-        _STR_TO_METHOD = _get_torchao_quant_type_to_method()
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
         if self.quant_type not in _STR_TO_METHOD.keys():
             raise ValueError(
                 f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
@@ -1285,8 +1268,24 @@ class TorchAoConfig(QuantizationConfigMixin):
                     f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
                 )
 
+    def _get_torchao_quant_type_to_method(self):
+        if is_torchao_available():
+            from torchao.quantization import (
+                int4_weight_only,
+                int8_dynamic_activation_int8_weight,
+                int8_weight_only,
+            )
+
+            return {
+                "int4_weight_only": int4_weight_only,
+                "int8_weight_only": int8_weight_only,
+                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            }
+        else:
+            raise ValueError("TorchAoConfig requires torchao to be installed, please install with `pip install torchao`")
+
     def get_apply_tensor_subclass(self):
-        _STR_TO_METHOD = _get_torchao_quant_type_to_method()
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
