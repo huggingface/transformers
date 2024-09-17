@@ -352,7 +352,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",
         ).to(torch_device)
-        print(model_sdpa.config.eos_token_id)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
