@@ -291,7 +291,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
         # attention mask of the same shape as `input_ids`.
         if len(attention_mask.shape) > 2:
-            batch_size, sequence_length, _ = input_ids.shape
+            sequence_length = input_ids.shape[1]
             attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
 
         return config, input_ids, attention_mask, inputs_dict

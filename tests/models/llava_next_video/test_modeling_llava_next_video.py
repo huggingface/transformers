@@ -115,6 +115,7 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -174,9 +175,9 @@ class LlavaNextVideoVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
-        # we are giving 3 images and videos let's make sure we pass in 3 special tokens
-        input_ids[input_ids == config.image_token_index] = 2
-        input_ids[input_ids == config.video_token_index] = 2
+        # we are giving 3 images and videos let's make sure we pass in placeholders 3 images
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[input_ids == config.video_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_index
 
@@ -510,13 +511,13 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 577
+        processor.patch_size = 14
         inputs_expanded = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 1170)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 

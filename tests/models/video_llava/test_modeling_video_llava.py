@@ -106,6 +106,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.vision_config = vision_config
         self.seq_length = seq_length
         self.num_frames = num_frames
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -165,7 +166,9 @@ class VideoLlavaVisionText2TextModelTester:
         attention_mask = input_ids.ne(1).to(torch_device)
 
         # we are passing 3 videos and 3 images and have to add special tokens
-        input_ids[(input_ids == config.image_token_index) | (input_ids == config.video_token_index)] = 3
+        input_ids[(input_ids == config.image_token_index) | (input_ids == config.video_token_index)] = (
+            self.pad_token_id
+        )
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_index
         inputs_dict = {
@@ -601,13 +604,13 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 257
+        processor.patch_size = 14
         inputs_expanded = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2074)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 

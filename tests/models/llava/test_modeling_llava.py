@@ -108,6 +108,7 @@ class LlavaVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -152,7 +153,7 @@ class LlavaVisionText2TextModelTester:
         seq_length_with_image = self.num_image_tokens + self.seq_length
         input_ids = ids_tensor([self.batch_size, seq_length_with_image], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens (one for batch)
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -309,7 +310,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
 
-        print(processor.decode(output[0], skip_special_tokens=True))
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

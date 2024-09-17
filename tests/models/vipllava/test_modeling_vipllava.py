@@ -101,6 +101,7 @@ class VipLlavaVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -148,7 +149,7 @@ class VipLlavaVisionText2TextModelTester:
         attention_mask = input_ids.ne(1).to(torch_device)
 
         # we are giving 3 images let's make sure we pass in 3 image tokens, one for batch
-        input_ids[input_ids == config.image_token_index] = 1
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -323,13 +324,13 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 577
+        processor.patch_size = 14
         inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 18)
 
