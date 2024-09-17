@@ -337,15 +337,22 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         Overwritting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
-        _, input_dict = self.model_tester.prepare_config_and_inputs()
+
+        tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-125M")
+
+        texts = [
+            "hi here's a longer context, getting longer and",
+            "Hello this is a very long sentence my friend, very long for real",
+            "Today I am in Paris and",
+        ]
+
         model_sdpa = OPTForCausalLM.from_pretrained(
             "facebook/opt-125M",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",
         ).to(torch_device)
-
-        input_dict["attention_mask"] = torch.ones_like(input_dict["input_ids"])
+        print(model_sdpa.config.eos_token_id)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
@@ -370,14 +377,21 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if not has_sdpa:
             raise ValueError("The SDPA model should have SDPA attention layers")
 
-        res_eager = model_eager.generate(**input_dict, max_new_tokens=max_new_tokens, do_sample=False)
-        res_sdpa = model_sdpa.generate(**input_dict, max_new_tokens=max_new_tokens, do_sample=False)
+        for padding_side in ["left", "right"]:
+            tokenizer.padding_side = padding_side
+            tokenizer.pad_token = tokenizer.eos_token
 
-        torch.testing.assert_close(
-            res_eager,
-            res_sdpa,
-            msg=f"\n{res_eager} \nvs\n{res_sdpa}",
-        )
+            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+
+            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
+            with self.subTest(f"{padding_side}"):
+                torch.testing.assert_close(
+                    res_eager,
+                    res_sdpa,
+                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                )
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
