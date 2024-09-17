@@ -73,7 +73,7 @@ class ProPainterModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=2,
         image_size=64,
         is_training=True,
         hidden_size=512,
