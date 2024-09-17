@@ -282,7 +282,7 @@
       title: (번역중) Data Collator
     - local: in_translation
       title: (번역중) Keras callbacks
-    - local: in_translation
+    - local: main_classes/logging
       title: (번역중) Logging
     - local: in_translation
       title: (번역중) Models
