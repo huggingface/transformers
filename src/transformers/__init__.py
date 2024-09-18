@@ -70,6 +70,7 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
+        "tool",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -4819,6 +4820,7 @@ if TYPE_CHECKING:
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
+        tool,
     )
     from .configuration_utils import PretrainedConfig
 
