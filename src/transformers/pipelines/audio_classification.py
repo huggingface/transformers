@@ -150,7 +150,7 @@ class AudioClassificationPipeline(Pipeline):
         if function_to_apply is not None:
             if function_to_apply not in ["softmax", "sigmoid", "none"]:
                 raise ValueError(
-                    f"Invalid value for `function_to_apply`: {kwargs['function_to_apply']}. "
+                    f"Invalid value for `function_to_apply`: {function_to_apply}. "
                     "Valid options are ['softmax', 'sigmoid', 'none']"
                 )
             postprocess_params["function_to_apply"] = function_to_apply
