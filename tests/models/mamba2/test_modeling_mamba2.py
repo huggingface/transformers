@@ -291,6 +291,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
+    @require_read_token
     @parameterized.expand(
         [
             (torch_device,),
@@ -319,6 +320,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_batched_equivalence_with_cache(self):
@@ -349,6 +351,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_batched_equivalence_without_cache(self):
