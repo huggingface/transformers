@@ -30,7 +30,7 @@ class MimiConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [kmhf/mimi](https://huggingface.co/kmhf/mimi) architecture.
+    [kyutai/mimi](https://huggingface.co/kyutai/mimi) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -126,10 +126,10 @@ class MimiConfig(PretrainedConfig):
     ```python
     >>> from transformers import MimiModel, MimiConfig
 
-    >>> # Initializing a "kmhf/mimi" style configuration
+    >>> # Initializing a "kyutai/mimi" style configuration
     >>> configuration = MimiConfig()
 
-    >>> # Initializing a model (with random weights) from the "kmhf/mimi" style configuration
+    >>> # Initializing a model (with random weights) from the "kyutai/mimi" style configuration
     >>> model = MimiModel(configuration)
 
     >>> # Accessing the model configuration
