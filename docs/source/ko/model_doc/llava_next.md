@@ -18,21 +18,21 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-LLaVA-NeXT 모델은 Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, Yong Jae Lee에 의해 제안된 [LLaVA-NeXT: Improved reasoning, OCR, and world knowledge](https://llava-vl.github.io/blog/2024-01-30-llava-next/)에서 소개되었습니다. LLaVA-1.6 이라고도 불리는 LLaVA-NeXT는 입력 이미지 해상도를 높이고 개선된 시각적 지시 튜닝 데이터셋으로 훈련하여 [LLaVa](llava)의 OCR 및 상식 추론 능력을 향상시켰습니다.
+LLaVA-NeXT 모델은 Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, Yong Jae Lee에 의해 제안된 [LLaVA-NeXT: Improved reasoning, OCR, and world knowledge](https://llava-vl.github.io/blog/2024-01-30-llava-next/)에서 소개되었습니다. LLaVA-1.6 이라고도 불리는 LLaVA-NeXT는 입력 이미지 해상도를 높이고 개선된 시각적 지시 튜닝 데이터 세트로 훈련하여 [LLaVa](llava)의 OCR 및 상식 추론 능력을 향상시켰습니다.
 
 블로그의 소개는 다음과 같습니다:
 
-*2023년 10월, 우리는 간단하고 효율적인 디자인과 함께 12개의 데이터셋으로 구성된 벤치마크에서 뛰어난 성능을 보이는 LLaVA-1.5를 공개했습니다. 이는 공개 이후 대형 멀티모달 모델(LMM)의 데이터, 모델 및 기능에 대한 종합적인 연구의 기반이 되었으며, 다양한 새로운 응용 프로그램을 가능하게 했습니다.
+*2023년 10월, 우리는 간단하고 효율적인 디자인과 함께 12개의 데이터 세트로 구성된 벤치마크에서 뛰어난 성능을 보이는 LLaVA-1.5를 공개했습니다. 공개 이후 대형 멀티모달 모델(LMM)의 데이터, 모델 및 기능에 대한 종합적인 연구의 기반이 되었으며, 다양한 새로운 응용 프로그램을 가능하게 했습니다.
 
 오늘, 우리는 추론, OCR 및 세계 지식이 향상된 LLaVA-NeXT를 발표하게 되어 기쁩니다. LLaVA-NeXT는 여러 벤치마크에서 Gemini Pro를 능가합니다.
 
 LLaVA-1.5와 비교하여, LLaVA-NeXT는 몇 가지 개선 사항이 있습니다:
 
-입력 이미지 해상도를 4배 늘렸습니다. 이로 인해 더 많은 시각적 세부 사항을 파악할 수 있게 되었습니다. 최대 672x672, 336x1344, 1344x336 해상도의 세 가지 해상도를 지원합니다. 
-개선된 시각적 지시 튜닝 데이터 혼합으로 더 나은 시각적 추론 및 OCR 기능을 제공합니다. 
-다양한 응용 프로그램을 포괄하는 더 많은 시나리오에 대한 향상된 시각적 대화를 제공합니다. 더 나은 세계 지식과 논리적 추론. 
-SGLang을 통한 효율적인 배포 및 추론. 
-성능 향상과 함께, LLaVA-NeXT는 LLaVA-1.5의 미니멀리스트 디자인과 데이터 효율성을 유지합니다. LLaVA-1.5의 사전 학습된 커넥터를 재사용하며, 여전히 100만 개 미만의 시각적 지시 튜닝 샘플을 사용합니다. 가장 큰 34B 변형은 32개의 A100으로 약 1일 만에 훈련을 완료합니다.*
+입력 이미지 해상도를 4배 늘렸습니다. 이를 통해 더 많은 시각적 세부 사항을 파악할 수 있습니다. 최대 672x672, 336x1344, 1344x336 해상도를 지원하며, 세 가지 종횡비를 제공합니다. 
+개선된 시각적 지시 튜닝 데이터 조합으로 더 나은 시각적 추론 및 OCR 기능을 제공합니다. 
+다양한 응용 프로그램을 다루는 더 많은 시나리오에서 더 나은 시각적 대화를 제공합니다. 더 향상된 세계 지식과 논리적 추론 능력도 갖추고 있습니다. 
+SGLang을 통한 효율적인 배포와 추론이 가능합니다. 
+성능 향상과 더불어, LLaVA-NeXT는 LLaVA-1.5의 간결한 디자인과 데이터 효율성을 유지합니다. LLaVA-1.5의 사전 학습된 커넥터를 재사용하며, 여전히 100만 개 미만의 시각적 지시 튜닝 샘플을 사용합니다. 가장 큰 34B 모델은 32개의 A100 GPU로 약 1일 만에 학습을 완료합니다.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_overview.png"
 alt="drawing" width="600"/>
@@ -85,13 +85,13 @@ conversation = [
 
 text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
-# 템플릿은 단순히 당신의 프롬프트를 형식화할 뿐이며, 당신은 여전히 이를 토큰화하고 당신의 이미지의 픽셀 값을 얻어야 합니다
+# 템플릿은 단순히 프롬프트의 형식을 맞춰줄 뿐입니다. 여전히 프롬프트를 토큰화하고 이미지의 픽셀 값을 직접 얻어야 합니다.
 
 print(text_prompt)
 >>> "[INST] <image>\nWhat's shown in this image? [/INST] This image shows a red stop sign. [INST] Describe the image in more details. [/INST]"
 ```
 
-- 만약 직접 채팅 프롬프트를 구성하고 싶다면, 아래는 가능한 형식의 목록입니다.
+- 만약 직접 대화 프롬프트를 구성하고 싶다면, 아래는 가능한 형식의 목록입니다.
 [llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) 에는 다음 형식이 필요합니다:
 ```bash
 "[INST] <image>\nWhat is shown in this image? [/INST]"
@@ -158,9 +158,9 @@ output = model.generate(**inputs, max_new_tokens=100)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### 여러 이미지 추론 [[multi-image-inference]]
+### 다중 이미지 추론 [[multi-image-inference]]
 
-LLaVa-Next는 입력으로 여러 이미지를 사용하여 추론을 수행할 수 있으며, 이미지들은 같은 프롬프트에 속하거나 다른 프롬프트에 속할 수 있습니다(배치 추론 시에). 다음은 이를 수행하는 방법입니다:
+LLaVa-Next는 입력으로 여러 이미지를 사용하여 추론을 수행할 수 있습니다. 이미지들은 동일한 프롬프트에 속하거나 (배치 추론 시) 서로 다른 프롬프트에 속할 수 있습니다. 다음은 그 방법입니다:
 
 ```python
 import requests
@@ -220,8 +220,8 @@ prompt_1 = processor.apply_chat_template(conversation_1, add_generation_prompt=T
 prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=True)
 prompts = [prompt_1, prompt_2]
 
-# 우리는 단순히 이미지들을 텍스트 프롬프트에서 사용되어야 하는 순서대로  입력할 수 있습니다
-# 각 "<image>" 토큰은 하나의 이미지를 사용하며, 다음 "<image>" 토큰들을 위해 다음 이미지를 남겨둡니다
+# 우리는 텍스트 프롬프트에서 사용해야 할 순서대로 이미지를 간단히 입력할 수 있습니다
+# 각 "<image>" 토큰은 하나의 이미지를 사용하며, 다음 "<image>" 토큰에는 그다음 이미지가 할당됩니다
 inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
 
 # 생성합니다
@@ -233,7 +233,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Bitsandbytes를 사용한 양자화[[quantization-using-bitsandbytes]]
 
-모델은 8비트 또는 4비트로 로드할 수 있으며, 이는 원래 모델의 성능을 유지하면서도 메모리 요구 사항을 크게 줄여줍니다. 먼저 bitsandbytes를 설치하고 `pip install bitsandbytes`, CUDA 호환 GPU 장치에 접근할 수 있는지 확인하세요. 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
+모델은 8비트 또는 4비트로 로드할 수 있어, 원래 모델의 성능을 유지하면서도 메모리 요구 사항을 크게 줄일 수 있습니다. 먼저 `pip install bitsandbytes`를 사용하여 bitsandbytes를 설치하고, CUDA 호환 GPU 장치에 접근할 수 있는지 확인하세요. 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
 
 ```python
 from transformers import LlavaNextForConditionalGeneration, BitsAndBytesConfig
