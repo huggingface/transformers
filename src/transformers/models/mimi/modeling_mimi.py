@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Meta Platforms, Inc. and affiliates, and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Kyutai, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -215,6 +215,10 @@ class MimiConv1d(nn.Module):
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
         self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
+        
+        # Asymmetric padding required for odd strides
+        self.padding_right = self.padding_total // 2
+        self.padding_left = self.padding_total - self.padding_right
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -266,11 +270,8 @@ class MimiConv1d(nn.Module):
             # Left padding for causal
             hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
         else:
-            # Asymmetric padding required for odd strides
-            padding_right = self.padding_total // 2
-            padding_left = self.padding_total - padding_right
             hidden_states = self._pad1d(
-                hidden_states, (padding_left, padding_right + extra_padding), mode=self.pad_mode
+                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
             )
 
         hidden_states = self.conv(hidden_states)
@@ -294,9 +295,27 @@ class MimiConvTranspose1d(nn.Module):
         self.causal = config.use_causal_conv
         self.trim_right_ratio = config.trim_right_ratio
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
-
+        
         if not (self.causal or self.trim_right_ratio == 1.0):
             raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
+        
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
+        padding_total = kernel_size - stride
+
+        # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
+        # removed at the very end, when keeping only the right length for the output,
+        # as removing it here would require also passing the length at the matching layer
+        # in the encoder.
+        if self.causal:
+            # Trim the padding on the right according to the specified ratio
+            # if trim_right_ratio = 1.0, trim everything from right
+            self.padding_right = math.ceil(padding_total * self.trim_right_ratio)
+        else:
+            # Asymmetric padding required for odd strides
+            self.padding_right = padding_total // 2
+
+        self.padding_left = padding_total - padding_right
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -309,29 +328,11 @@ class MimiConvTranspose1d(nn.Module):
         nn.utils.remove_weight_norm(self.conv)
 
     def forward(self, hidden_states):
-        kernel_size = self.conv.kernel_size[0]
-        stride = self.conv.stride[0]
-        padding_total = kernel_size - stride
-
         hidden_states = self.conv(hidden_states)
 
-        # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
-        # removed at the very end, when keeping only the right length for the output,
-        # as removing it here would require also passing the length at the matching layer
-        # in the encoder.
-        if self.causal:
-            # Trim the padding on the right according to the specified ratio
-            # if trim_right_ratio = 1.0, trim everything from right
-            padding_right = math.ceil(padding_total * self.trim_right_ratio)
-        else:
-            # Asymmetric padding required for odd strides
-            padding_right = padding_total // 2
-
-        padding_left = padding_total - padding_right
-
         # unpad
-        end = hidden_states.shape[-1] - padding_right
-        hidden_states = hidden_states[..., padding_left:end]
+        end = hidden_states.shape[-1] - self.padding_right
+        hidden_states = hidden_states[..., self.padding_left:end]
         return hidden_states
 
 
@@ -510,7 +511,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# copied from transformers.models.gemma.modeling_gemma.GemmaAttention with Gemma->Mimi
+# Copied from transformers.models.gemma.modeling_gemma.GemmaAttention with Gemma->Mimi
 class MimiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -612,7 +613,7 @@ class MimiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Mimi
+# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Mimi
 class MimiFlashAttention2(MimiAttention):
     """
     Mimi flash attention module. This module inherits from `MimiAttention` as the weights of the module stays
@@ -723,7 +724,7 @@ class MimiFlashAttention2(MimiAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Mimi
+# Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Mimi
 class MimiSdpaAttention(MimiAttention):
     """
     Mimi attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -1452,32 +1453,30 @@ class MimiModel(MimiPreTrainedModel):
 
         self.encoder = MimiEncoder(config)
         self.encoder_transformer = MimiTransformerModel(config)
-        self.downsample = (
-            MimiConv1d(
-                config,
-                config.hidden_size,
-                config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
-                bias=False,
-                pad_mode="replicate",
-            )
-            if config.frame_rate != config.encodec_frame_rate
-            else None
-        )
-        self.upsample = (
-            MimiConvTranspose1d(
-                config,
-                config.hidden_size,
-                config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
-                bias=False,
-                groups=config.upsample_groups,
-            )
-            if config.frame_rate != config.encodec_frame_rate
-            else None
-        )
+        
+        self.downsample = None
+        self.upsample = None
+        if config.frame_rate != config.encodec_frame_rate: 
+            self.downsample = MimiConv1d(
+                    config,
+                    config.hidden_size,
+                    config.hidden_size,
+                    kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                    stride=2,
+                    bias=False,
+                    pad_mode="replicate",
+                )
+
+            self.upsample = MimiConvTranspose1d(
+                    config,
+                    config.hidden_size,
+                    config.hidden_size,
+                    kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                    stride=2,
+                    bias=False,
+                    groups=config.upsample_groups,
+                )
+
         self.decoder_transformer = MimiTransformerModel(config)
         self.decoder = MimiDecoder(config)
 
@@ -1675,16 +1674,16 @@ class MimiModel(MimiPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import AutoProcessor, MimiModel
+        >>> from transformers import AutoFeatureExtractor, MimiModel
 
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "facebook/mimi_24khz"
+        >>> model_id = "kmhf/mimi"
         >>> model = MimiModel.from_pretrained(model_id)
-        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        >>> inputs = processor(raw_audio=audio_sample, return_tensors="pt")
+        >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> audio_codes = outputs.audio_codes

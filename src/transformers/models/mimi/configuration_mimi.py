@@ -30,7 +30,7 @@ class MimiConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [facebook/mimi_24khz](https://huggingface.co/facebook/mimi_24khz) architecture.
+    [kmhf/mimi](https://huggingface.co/kmhf/mimi) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -65,7 +65,7 @@ class MimiConfig(PretrainedConfig):
         pad_mode (`str`, *optional*, defaults to `"constant"`):
             Padding mode for the convolutions.
         compress (`int`, *optional*, defaults to 2):
-            Reduced dimensionality in residual branches (from Demucs v3).
+            Reduced dimensionality in residual branches.
         trim_right_ratio (`float`, *optional*, defaults to 1.0):
             Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
             equal to 1.0, it means that all the trimming is done at the right.
@@ -126,10 +126,10 @@ class MimiConfig(PretrainedConfig):
     ```python
     >>> from transformers import MimiModel, MimiConfig
 
-    >>> # Initializing a "facebook/mimi_24khz" style configuration
+    >>> # Initializing a "kmhf/mimi" style configuration
     >>> configuration = MimiConfig()
 
-    >>> # Initializing a model (with random weights) from the "facebook/mimi_24khz" style configuration
+    >>> # Initializing a model (with random weights) from the "kmhf/mimi" style configuration
     >>> model = MimiModel(configuration)
 
     >>> # Accessing the model configuration

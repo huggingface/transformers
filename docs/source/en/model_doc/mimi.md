@@ -44,8 +44,8 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 >>> # load model and feature extractor
->>> model = MimiModel.from_pretrained("kmhf/mimi-test")  # TODO(YL): modify once official
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("kmhf/mimi-test")
+>>> model = MimiModel.from_pretrained("kmhf/mimi")  # TODO(YL): modify once official
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("kmhf/mimi")
 
 >>> # load audio sample
 >>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
