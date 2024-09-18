@@ -54,8 +54,8 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        text_multiimages = "<image><image><bos>Dummy text!"
-        text_singlimage = "<image><bos>Dummy text!"
+        text_multi_images = "<image><image><bos>Dummy text!"
+        text_single_image = "<image><bos>Dummy text!"
         text_noimage = "Dummy text!"
 
         image = self.prepare_image_inputs()[0]
