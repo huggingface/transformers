@@ -157,8 +157,8 @@
     title: (번역중) HQQ
   - local: in_translation
     title: (번역중) Optimum
-  - local: in_translation
-    title: (번역중) Contribute new quantization method
+  - local: quantization/contribute
+    title: (번역중) 새로운 양자화 방법에 기여하기
   title: (번역중) 경량화 메소드
 - sections:
   - local: in_translation
