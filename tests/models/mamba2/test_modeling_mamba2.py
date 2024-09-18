@@ -199,21 +199,25 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_tied_weights_keys(self):
         pass
 
-    """
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_sample_generate(self):
-        pass
-
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
         pass
 
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
+
+    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    """
+    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
+    def test_beam_sample_generate(self):
         pass
 
     @unittest.skip(reason="Initialization of mamba2 fails this")
@@ -224,9 +228,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        pass
+
     """
 
     def test_model_outputs_equivalence(self):
