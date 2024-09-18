@@ -1256,6 +1256,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             make_inputs_require_grads
         )
 
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
+
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
 
@@ -1384,7 +1388,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
             patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1465,6 +1469,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
             make_inputs_require_grads
         )
+
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
 
     def get_input_embeddings(self):
         return self.model.text_model.get_input_embeddings()
