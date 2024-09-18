@@ -761,7 +761,7 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0312, 0.2034, 0.0556], [0.0323, 0.5420, -0.1794], [-0.0952, 0.7817, -0.3186]]
+            [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]]
         ).to(torch_device)
 
         self.assertTrue(

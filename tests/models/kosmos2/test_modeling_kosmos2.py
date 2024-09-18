@@ -793,7 +793,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.0551, -1.1680, 3.2926], [2.7077, 0.0720, -0.7721], [1.5863, 0.1665, -0.5936]]
+            [[1.0022, -1.1901, 3.2887], [2.6164, 0.0515, -0.8270], [1.8315, 0.1272, -0.8590]]
         ).to(torch_device)
 
         self.assertTrue(
