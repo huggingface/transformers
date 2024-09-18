@@ -18,7 +18,7 @@ import os
 import re
 import sys
 import types
-
+import importlib.util
 import torch
 
 from transformers import AutoTokenizer, GPT2Config
@@ -606,7 +606,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     if args.megatron_path is not None:
         sys.path.insert(0, args.megatron_path)
 
-    try:
+    megatron_exists = importlib.util.find_spec("megatron") is not None
+    if megatron_exists:
         from megatron.core import package_info
 
         version = package_info.__version__
@@ -615,7 +616,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             from megatron.tokenizer.tokenizer import _vocab_size_with_padding
         else:
             from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
-    except ModuleNotFoundError:
+    else:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
 
