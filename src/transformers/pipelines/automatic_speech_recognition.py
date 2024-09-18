@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 import requests
+import warnings
 
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
@@ -269,8 +270,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
                 guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
-            max_new_tokens (`int`, *optional*):
-                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
 
         Return:
             `Dict`: A dictionary with the following keys:
@@ -310,6 +309,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
+            warnings.warn("`max_new_tokens` is deprecated and will be removed in version 5 of Transformers. To remove this warning, pass `max_new_tokens` a keyword argument inside `generate_kwargs` instead.", FutureWarning)
             forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
