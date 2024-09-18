@@ -502,9 +502,12 @@ class ProcessorMixin(PushToHubMixin):
         output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
 
         processor_dict = self.to_dict()
-        chat_template = processor_dict.pop("chat_template", None)
-        if chat_template is not None:
-            chat_template_json_string = json.dumps({"chat_template": chat_template}, indent=2, sort_keys=True) + "\n"
+        # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
+        # to avoid serializing chat template in json config file. So let's get it from `self` directly
+        if self.chat_template is not None:
+            chat_template_json_string = (
+                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+            )
             with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file}")

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import shutil
 import tempfile
 import unittest
@@ -32,11 +33,11 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
+
         image_processor = CLIPImageProcessor(do_center_crop=False)
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-
-        processor = LlavaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
+        processor_kwargs = self.prepare_processor_dict()
+        processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -47,6 +48,28 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    def prepare_processor_dict(self):
+        return {"chat_template": "dummy_template"}
+
+    @unittest.skip(
+        "Skip because the model has no processor kwargs except for chat template and"
+        "chat template is saved as a separate file. Stop skipping this test when the processor"
+        "has new kwargs saved in config file."
+    )
+    def test_processor_to_json_string(self):
+        pass
+
+    def test_chat_template_is_saved(self):
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        # chat templates aren't serialized to json in processors
+        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+
+        # they have to be saved as separate file and loaded back from that file
+        # so we check if the same template is loaded
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
