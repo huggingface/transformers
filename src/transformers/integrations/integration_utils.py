@@ -767,7 +767,6 @@ class WandbCallback(TrainerCallback):
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
-            from wandb.sdk.lib.config_util import ConfigError
 
             self._wandb = wandb
         self._initialized = False
@@ -804,6 +803,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         self._initialized = True
+
+        # prepare to handle potential configuration issues during setup
+        from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
+        
         if state.is_world_process_zero:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
@@ -853,8 +856,10 @@ class WandbCallback(TrainerCallback):
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                logger.info("Could not log the number of model parameters in Weights & Biases due to an AttributeError.")
-            except ConfigError:
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+            except WandbConfigError:
                 logger.warning(
                     "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
                 )
