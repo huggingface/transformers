@@ -885,10 +885,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             ]
 
         if do_rescale:
-            rescaled_images_array = []
-            for image in images_list:
-                rescaled_images_array.append([rescale(img, rescale_factor, data_format=data_format) for img in image])
-            images_list = rescaled_images_array
+            images_list = [[self.rescale(img, rescale_factor, data_format=data_format) for image in images] for images in images_list]
 
         if do_normalize:
             images_list = [
