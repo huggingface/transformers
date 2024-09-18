@@ -27,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    require_bitsandbytes,
     require_torch,
     require_torch_gpu,
     slow,
@@ -299,6 +300,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
+    @require_bitsandbytes
     def test_11b_model_integration_generate(self):
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
@@ -306,25 +308,17 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
-        for k, v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(torch_device)
-
+        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(torch_device)
         # Check inputs ids
         expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], expected_input_ids))
 
-        # Prepare model
-        torch_dtype = torch.bfloat16
-        model = MllamaForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
-        )
+        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure."  # fmt: skip
+        expected_output = "If I had to write a haiku for this one, it would be:.\nA dock on a lake.\nIn the middle of a forest.\nWith a mountain"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -334,6 +328,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
+    @require_bitsandbytes
     def test_11b_model_integration_forward(self):
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
@@ -341,29 +336,106 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
-        for k, v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(torch_device)
+        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(torch_device)
 
-        # Check inputs ids
-        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], expected_input_ids))
-
-        # Prepare model
-        torch_dtype = torch.bfloat16
-        model = MllamaForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
-        )
+        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
 
         with torch.inference_mode():
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([8.4375, 7.9062, 4.2188, 0.4727, 3.0312])
+        expected_logits = torch.tensor([8.8438, 7.2305, 4.2031, -0.1223, 2.6270])
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
             f"\nExpected logits: {expected_logits}"
             f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
+        )
+
+    @slow
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_11b_model_integration_batched_generate(self):
+        # Prepare inputs
+        prompt = [
+            "<|image|><|begin_of_text|>If I had to write a haiku for this one",
+            "<|image|><|begin_of_text|>This image shows",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+
+        inputs = self.processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "If I had to write a haiku for this one, it would be:.\nA dock on a lake.\nIn the middle of a forest.\nWith a mountain"  # fmt: skip
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_11b_model_integration_multi_image_generate(self):
+        # Prepare inputs
+        prompt = ["<|image|><|image|><|begin_of_text|>"]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What’s shown in this image?"},
+                ],
+            },
+            {"role": "assistant", "content": [{"type": "text", "text": "This image shows a red stop sign."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What about this one, what do you see here? Can you describe in detail?"},
+                ],
+            },
+        ]
+
+        template = (
+            "{% for message in messages %}"
+            "{% if loop.index0 == 0 %}"
+            "{{bos_token}}"
+            "{% endif %}"
+            "{{'<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
+            "{# Render all images first #}"
+            "{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+            "{{ '<|image|>' }}"
+            "{% endfor %}"
+            "{# Render all text next #}"
+            "{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+            "{{content['text'] | trim + '<|eot_id|>' }}"
+            "{% endfor %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"
+        )
+        prompt = self.processor.apply_chat_template(conversation, chat_template=template, add_generation_prompt=True)
+        inputs = self.processor(text=prompt, images=[[image1, image2]], return_tensors="pt").to(torch_device)
+
+        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
+
+        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
+        expected_output = '<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n<|image|>What’s shown in this image?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThis image shows a red stop sign.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n<|image|>What about this one, what do you see here? Can you describe in detail?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThis image shows a stop sign. It is a red octagon with white letters that spell out "STOP". The sign is attached to a brown pole. There are two white lions on either side of'  # fmt: skip
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )

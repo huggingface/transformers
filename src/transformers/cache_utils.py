@@ -384,6 +384,8 @@ class DynamicCache(Cache):
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
+        # content on layer cache can be a tensor and checking not tensor causes errors
+        # so we explicitly check for the empty list
         elif self.key_cache[layer_idx] == []:
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
