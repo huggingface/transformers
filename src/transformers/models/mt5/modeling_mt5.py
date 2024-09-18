@@ -1435,7 +1435,7 @@ class MT5Model(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1462,8 +1462,8 @@ class MT5Model(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5Model.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5Model.from_pretrained("google/mt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1665,7 +1665,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1698,8 +1698,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5ForConditionalGeneration.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1990,7 +1990,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2009,8 +2009,8 @@ class MT5EncoderModel(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5EncoderModel.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

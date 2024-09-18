@@ -24,7 +24,7 @@ This guide will show you how to use the optimization techniques available in Tra
 
 During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time because the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
 
-To optimize this, you can use a kv-cache to store the past keys and values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [`torch.compile`](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
+To optimize this, you can use a kv-cache to store the past keys and values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [`torch.compile`](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels. We have an entire guide dedicated to kv-caches [here](./kv_cache).
 
 The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with `torch.compile` for up to a 4x speed up. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware.
 
@@ -99,7 +99,7 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    max_batch_size=1,
+    batch_size=1,
     # If you plan to reuse the cache, make sure the cache length is large enough for all cases
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
     device=model.device,
@@ -161,7 +161,7 @@ There are a few important things you must do to enable static kv-cache and `torc
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
-        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+        config=model.config, batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
     )
     cache_position = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(

@@ -45,6 +45,7 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         do_pad=False,
         return_tensors="pt",
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
