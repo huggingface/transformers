@@ -329,6 +329,8 @@ This code can quickly be converted into a tool, just by wrapping it in a functio
 
 
 ```py
+from transformers import tool
+
 @tool
 def model_download_counter(task: str) -> str:
     """
