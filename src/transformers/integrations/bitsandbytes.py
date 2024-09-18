@@ -437,6 +437,7 @@ def _dequantize_and_replace(
 
                 new_module.to(device)
                 model._modules[name] = new_module
+                has_been_replaced = True
         if len(list(module.children())) > 0:
             _, has_been_replaced = _dequantize_and_replace(
                 module,
