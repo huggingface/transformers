@@ -115,7 +115,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return True
 
     def _parse_and_tokenize(self, *args, truncation):
-        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+        prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
             if self.tokenizer.pad_token_id is None:
                 raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
@@ -185,9 +185,14 @@ class Text2TextGenerationPipeline(Pipeline):
 
         self.check_inputs(
             input_length,
-            generate_kwargs.get("min_length", self.model.config.min_length),
-            generate_kwargs.get("max_length", self.model.config.max_length),
+            generate_kwargs.get("min_length", self.generation_config.min_length),
+            generate_kwargs.get("max_length", self.generation_config.max_length),
         )
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
