@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import argparse
+import importlib.util
 import json
 import os
 import re
 import sys
 import types
-import importlib.util
+
 import torch
 
 from transformers import AutoTokenizer, GPT2Config
