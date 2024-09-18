@@ -108,17 +108,17 @@ GGUF_TENSOR_MAPPING = {
         "output_norm": "model.norm",
     },
     "bloom": {
-        "token_embd.weight": "word_embeddings.weight",
-        "token_embd_norm": "word_embeddings_layernorm",
-        "blk": "h",
+        "token_embd.weight": "transformer.word_embeddings.weight",
+        "token_embd_norm": "transformer.word_embeddings_layernorm",
+        "blk": "transformer.h",
         "ffn_up": "mlp.dense_h_to_4h",
         "ffn_down": "mlp.dense_4h_to_h",
         "ffn_norm": "post_attention_layernorm",
         "attn_norm": "input_layernorm",
         "attn_qkv": "self_attention.query_key_value",
         "attn_output": "self_attention.dense",
-        "output.weight": "output.weight",
-        "output_norm": "ln_f",
+        "output.weight": "lm_head.weight",
+        "output_norm": "transformer.ln_f",
     },
 }
 
