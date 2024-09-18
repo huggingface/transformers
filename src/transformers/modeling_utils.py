@@ -105,7 +105,6 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
-PARAM_RENAME_WARNING = "A parameter name that contains `{}` will be renamed internally to `{}`. Please use a different name to suppress this warning."
 
 
 if is_accelerate_available():
@@ -693,17 +692,30 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
+    renamed_keys = {}
+    renamed_gamma = {}
+    renamed_beta = {}
+    warning_msg = f"A pretrained model of type `{model_to_load.__class__.__name__}` "
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            # We add only the first key as an example
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            # We add only the first key as an example
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
+    if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
@@ -806,7 +818,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
-    loaded_state_dict_keys,  # left for now but could be removed, see below
     start_prefix,
     expected_keys,
     device_map=None,
@@ -819,6 +830,7 @@ def _load_state_dict_into_meta_model(
     is_safetensors=False,
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
+    pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -834,33 +846,54 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
-    #   they won't get loaded.
 
     error_msgs = []
 
     old_keys = []
     new_keys = []
+    renamed_gamma = {}
+    renamed_beta = {}
     is_quantized = hf_quantizer is not None
+    warning_msg = f"This model {type(model)}"
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            # We add only the first key as an example
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            # We add only the first key as an example
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
+
+        # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            if "weight_g" in key:
+                new_key = key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                new_key = key.replace("weight_v", "parametrizations.weight.original1")
+        else:
+            if "parametrizations.weight.original0" in key:
+                new_key = key.replace("parametrizations.weight.original0", "weight_g")
+            if "parametrizations.weight.original1" in key:
+                new_key = key.replace("parametrizations.weight.original1", "weight_v")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
+    if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
     for param_name, param in state_dict.items():
-        # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+        if param_name not in expected_keys:
             continue
 
         if param_name.startswith(start_prefix):
@@ -933,6 +966,9 @@ def _load_state_dict_into_meta_model(
                 )
             )
         ):
+            if is_fsdp_enabled():
+                param_device = "cpu" if is_local_dist_rank_0() else "meta"
+
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -943,7 +979,10 @@ def _load_state_dict_into_meta_model(
             if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, tensor_name = get_module_from_name(model, param_name)
                 value = getattr(module, tensor_name)
-                value = type(value)(value.data.to("cpu"), **value.__dict__)
+                param_to = "cpu"
+                if is_fsdp_enabled() and not is_local_dist_rank_0():
+                    param_to = "meta"
+                value = type(value)(value.data.to(param_to), **value.__dict__)
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
@@ -1478,9 +1517,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model = cls(config, **kwargs)
 
-        # Flag for if we init with `zero3`, add an attr to the model so we can check downstream for issues
-        model._transformers_zero3_init_used = is_deepspeed_zero3_enabled()
-
         # restore default dtype if it was modified
         if dtype_orig is not None:
             torch.set_default_dtype(dtype_orig)
@@ -2003,11 +2039,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             vocab_size = model_embeds.weight.shape[0]
 
-        # Update base model and current model config
-        if hasattr(self.config, "text_config"):
-            self.config.text_config.vocab_size = vocab_size
-        else:
-            self.config.vocab_size = vocab_size
+        # Update base model and current model config.
+        self.config.get_text_config().vocab_size = vocab_size
         self.vocab_size = vocab_size
 
         # Tie weights again if needed
@@ -2549,26 +2582,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
+                # If the model config has set attributes that should be in the generation config, move them there.
+                misplaced_generation_parameters = model_to_save.config._get_non_default_generation_parameters()
+                if self.can_generate() and len(misplaced_generation_parameters) > 0:
+                    warnings.warn(
+                        "Moving the following attributes in the config to the generation config: "
+                        f"{misplaced_generation_parameters}. You are seeing this warning because you've set "
+                        "generation parameters in the model config, as opposed to in the generation config.",
+                        UserWarning,
+                    )
+                    for param_name, param_value in misplaced_generation_parameters.items():
+                        setattr(model_to_save.generation_config, param_name, param_value)
+                        setattr(model_to_save.config, param_name, None)
+
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
-                # generation config built from the model config + the model config holds generation kwargs -> generate
-                # may revert to legacy behavior if the two don't match
-                if (
-                    model_to_save.generation_config._from_model_config
-                    and model_to_save.config._has_non_default_generation_parameters()
-                ):
-                    new_generation_config = GenerationConfig.from_model_config(model_to_save.config)
-                    if new_generation_config != model_to_save.generation_config:
-                        logger.warning(
-                            "Your generation config was originally created from the model config, but the model "
-                            "config has changed since then. Unless you pass the `generation_config` argument to this "
-                            "model's `generate` calls, they will revert to the legacy behavior where the base "
-                            "`generate` parameterization is loaded from the model config instead. "
-                            "To avoid this behavior and this warning, we recommend you to overwrite the generation "
-                            "config model attribute before calling the model's `save_pretrained`, preferably also "
-                            "removing any generation kwargs from the model config. This warning will be raised to an "
-                            "exception in v4.41."
-                        )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
             if _hf_peft_config_loaded:
@@ -2746,7 +2774,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -2844,38 +2872,54 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def cuda(self, *args, **kwargs):
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.cuda` is not supported for HQQ-quantized models.")
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            raise ValueError(
-                "Calling `cuda()` is not supported for `4-bit` or `8-bit` quantized models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
-            )
+            if getattr(self, "is_loaded_in_8bit", False):
+                raise ValueError(
+                    "Calling `cuda()` is not supported for `8-bit` quantized models. "
+                    " Please use the model as it is, since the model has already been set to the correct devices."
+                )
+            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+                raise ValueError(
+                    "Calling `cuda()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
+                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
+                )
         else:
             return super().cuda(*args, **kwargs)
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
+        # For BNB/GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
+        # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
+        dtype_present_in_args = "dtype" in kwargs
+
+        if not dtype_present_in_args:
+            for arg in args:
+                if isinstance(arg, torch.dtype):
+                    dtype_present_in_args = True
+                    break
+
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            raise ValueError(
-                "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
-            )
+            if dtype_present_in_args:
+                raise ValueError(
+                    "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
+                    " desired `dtype` by passing the correct `torch_dtype` argument."
+                )
+
+            if getattr(self, "is_loaded_in_8bit", False):
+                raise ValueError(
+                    "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
+                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                )
+            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+                raise ValueError(
+                    "Calling `to()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
+                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
+                )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
-            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
-            # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
-            dtype_present_in_args = False
-
-            if "dtype" not in kwargs:
-                for arg in args:
-                    if isinstance(arg, torch.dtype):
-                        dtype_present_in_args = True
-                        break
-            else:
-                dtype_present_in_args = True
-
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
@@ -3034,7 +3078,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             > Parameters for big model inference
 
             low_cpu_mem_usage(`bool`, *optional*):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Tries not to use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
                 </Tip>
@@ -3187,6 +3231,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_kwargs = kwargs.pop("adapter_kwargs", {})
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
+        generation_config = kwargs.pop("generation_config", None)
 
         gguf_file = kwargs.pop("gguf_file", None)
         # Cache path to the GGUF file
@@ -3810,9 +3855,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-        # If we init with `zero3`, add an attr to the model so we can check downstream for issues
-        model._transformers_zero3_init_used = is_deepspeed_zero3_enabled() and not is_quantized
-
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -3965,7 +4007,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.eval()
 
         # If it is a model with generation capabilities, attempt to load the generation config
-        if model.can_generate() and pretrained_model_name_or_path is not None:
+        if model.can_generate() and generation_config is not None:
+            logger.info("The user-defined `generation_config` will be used to override the default generation config.")
+            model.generation_config = model.generation_config.from_dict(generation_config.to_dict())
+        elif model.can_generate() and pretrained_model_name_or_path is not None:
             try:
                 model.generation_config = GenerationConfig.from_pretrained(
                     pretrained_model_name_or_path,
@@ -4095,6 +4140,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("beta", "bias")
             if "gamma" in key:
                 return key.replace("gamma", "weight")
+
+            # to avoid logging parametrized weight norm renaming
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                if "weight_g" in key:
+                    return key.replace("weight_g", "parametrizations.weight.original0")
+                if "weight_v" in key:
+                    return key.replace("weight_v", "parametrizations.weight.original1")
+            else:
+                if "parametrizations.weight.original0" in key:
+                    return key.replace("parametrizations.weight.original0", "weight_g")
+                if "parametrizations.weight.original1" in key:
+                    return key.replace("parametrizations.weight.original1", "weight_v")
             return key
 
         original_loaded_keys = loaded_keys
@@ -4339,7 +4396,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
-                    loaded_keys,
                     start_prefix,
                     expected_keys,
                     device_map=device_map,
@@ -4416,7 +4472,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             state_dict,
-                            loaded_keys,
                             start_prefix,
                             expected_keys,
                             device_map=device_map,
@@ -4541,7 +4596,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _load_pretrained_model_low_mem(
-        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", hf_quantizer=None
+        model,
+        loaded_state_dict_keys,
+        resolved_archive_file,
+        start_prefix="",
+        hf_quantizer=None,
+        pretrained_model_name_or_path=None,
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
@@ -4567,7 +4627,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         error_msgs = _load_state_dict_into_meta_model(
             model,
             state_dict,
-            loaded_state_dict_keys,
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,
