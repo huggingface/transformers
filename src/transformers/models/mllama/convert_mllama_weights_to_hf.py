@@ -446,15 +446,23 @@ class MllamaConverter(TikTokenConverter):
 
 def write_tokenizer(tokenizer_path: str, save_dir: str):
     chat_template = (
-        "{% set loop_messages = messages %}"
-        "{% for message in loop_messages %}"
-        "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
+        "{% for message in messages %}"
         "{% if loop.index0 == 0 %}"
-        "{% set content = bos_token + content %}"
+        "{{bos_token}}"
         "{% endif %}"
-        "{{ content }}"
+        "{{'<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
+        "{% for content in message['content'] %}"
+        "{% if content['type'] == 'image' %}"
+        "{{ '<|image|>' }}"
+        "{% elif content['type'] == 'text' %}"
+        "{{ content['text'] }}"
+        "{% endif %}"
         "{% endfor %}"
+        "{{ '<|eot_id|>' }}"
+        "{% endfor %}"
+        "{% if add_generation_prompt %}"
         "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+        "{% endif %}"
     )
 
     converter = MllamaConverter(

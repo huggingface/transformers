@@ -120,16 +120,29 @@ class MllamaProcessorTest(unittest.TestCase):
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
-            {"role": "user", "content": "<|image|><|image|>What do these images show?"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "image"},
+                    {"type": "text", "text": "What do these images show?"},
+                ],
+            },
             {
                 "role": "assistant",
-                "content": "The first image shows the statue of Liberty in New York.",
+                "content": [
+                    {"type": "text", "text": "The first image shows the statue of Liberty in New York."},
+                ],
             },
-            {"role": "user", "content": "And who is that?"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "And who is that?"},
+                ],
+            },
         ]
 
-        # TODO: make sure processor also work with this chat template, not only tokenizer
-        rendered = self.processor.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        rendered = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
         expected_rendered = (
             "<|begin_of_text|>"
@@ -147,10 +160,20 @@ class MllamaProcessorTest(unittest.TestCase):
         self.assertEqual(rendered, expected_rendered)
 
         messages = [
-            {"role": "system", "content": "This is a test sentence."},
-            {"role": "user", "content": "This is a response."},
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": "This is a test sentence."},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "This is a response."},
+                ],
+            },
         ]
-        input_ids = self.processor.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        input_ids = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
         expected_ids = [
             128000,  # <|begin_of_text|>
             128006,  # <|start_header_id|>
@@ -180,4 +203,35 @@ class MllamaProcessorTest(unittest.TestCase):
             271,  # "\n\n"
         ]
 
+        self.assertEqual(input_ids, expected_ids)
+
+        # test image in multiple locations
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image in two sentences"},
+                    {"type": "image"},
+                    {"type": "text", "text": " Test sentence   "},
+                    {"type": "image"},
+                    {"type": "text", "text": "ok\n"},
+                ],
+            }
+        ]
+
+        rendered = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        expected_rendered = (
+            "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
+            "Describe this image in two sentences<|image|> Test sentence   <|image|>ok\n<|eot_id|>"
+            "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        )
+        self.assertEqual(rendered, expected_rendered)
+
+        input_ids = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        # fmt: off
+        expected_ids = [
+            128000, 128006, 882, 128007, 271, 75885, 420, 2217, 304, 1403, 23719, 128256,
+            3475, 11914, 262, 128256, 564, 198, 128009, 128006, 78191, 128007, 271,
+        ]
+        # fmt: on
         self.assertEqual(input_ids, expected_ids)
