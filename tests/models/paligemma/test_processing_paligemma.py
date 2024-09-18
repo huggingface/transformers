@@ -56,21 +56,21 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         text_multi_images = "<image><image><bos>Dummy text!"
         text_single_image = "<image><bos>Dummy text!"
-        text_noimage = "Dummy text!"
+        text_no_image = "Dummy text!"
 
         image = self.prepare_image_inputs()[0]
 
-        out_noimage = processor(text=text_noimage, images=image, return_tensors="np")
-        out_singlimage = processor(text=text_singlimage, images=image, return_tensors="np")
+        out_noimage = processor(text=text_no_image, images=image, return_tensors="np")
+        out_singlimage = processor(text=text_single_image, images=image, return_tensors="np")
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_singlimage[k].tolist())
 
-        out_multiimages = processor(text=text_multiimages, images=[image, image], return_tensors="np")
-        out_noimage = processor(text=text_noimage, images=[[image, image]], return_tensors="np")
+        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
+        out_noimage = processor(text=text_no_image, images=[[image, image]], return_tensors="np")
 
         # We can't be sure what is users intention, whether user want "one text + two images" or user forgot to add the second text
         with self.assertRaises(ValueError):
-            out_noimage = processor(text=text_noimage, images=[image, image], return_tensors="np")
+            out_noimage = processor(text=text_no_image, images=[image, image], return_tensors="np")
 
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_multiimages[k].tolist())
