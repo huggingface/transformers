@@ -546,6 +546,10 @@ def validate_bnb_backend_availability(raise_exception=False):
     Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
     """
     if not is_bitsandbytes_available():
+        if importlib.util.find_spec("bitsandbytes") and version.parse(
+            importlib.metadata.version("bitsandbytes")
+        ) < version.parse("0.43.1"):
+            return _validate_bnb_cuda_backend_availability(raise_exception)
         return False
 
     if is_bitsandbytes_multi_backend_available():
