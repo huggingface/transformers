@@ -22,6 +22,7 @@ from transformers import set_seed
 from transformers.testing_utils import (
     is_torch_available,
     require_auto_gptq,
+    require_non_xpu,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -316,6 +317,7 @@ class CacheIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(decoded, expected_text)
 
+    @require_non_xpu
     @require_auto_gptq
     def test_sink_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/LLaMa-7B-GPTQ")
