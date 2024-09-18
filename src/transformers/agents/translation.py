@@ -249,17 +249,17 @@ class TranslationTool(PipelineTool):
     model_class = AutoModelForSeq2SeqLM
 
     inputs = {
-        "text": {"type": "text", "description": "The text to translate"},
+        "text": {"type": "string", "description": "The text to translate"},
         "src_lang": {
-            "type": "text",
+            "type": "string",
             "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'",
         },
         "tgt_lang": {
-            "type": "text",
+            "type": "string",
             "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'",
         },
     }
-    output_type = "text"
+    output_type = "string"
 
     def encode(self, text, src_lang, tgt_lang):
         if src_lang not in self.lang_to_code:
