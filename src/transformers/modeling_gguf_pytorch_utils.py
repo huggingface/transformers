@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from typing import Optional
 
 import numpy as np
-import re
 from tqdm import tqdm
 
 from .integrations import (
@@ -105,7 +105,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         gguf_file_name = gguf_checkpoint_path.split("/")[-1].lower()
         m = re.search(r"-\d+b-", gguf_file_name)
         if m is None:
-            raise ValueError(f"From file name, cannot determine the number of parameters for {architecture} architecture")
+            raise ValueError(
+                f"From file name, cannot determine the number of parameters for {architecture} architecture"
+            )
         model_size = m.group().strip("-")
 
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:

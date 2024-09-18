@@ -79,7 +79,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
     q2_k_falcon7b_model_id = "tiiuae-falcon-7b-Q2_K.gguf"
     q2_k_falcon40b_model_id = "falcon-40b-Q2_K.gguf"
-    
+
     example_text = "Hello"
 
     def test_q2_k(self):
