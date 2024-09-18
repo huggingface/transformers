@@ -252,41 +252,54 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
             text = ""
 
-        if isinstance(text, List) and isinstance(images, List):
-            if len(images) < len(text):
-                raise ValueError(
-                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
-                )
         if _is_str_or_image(text):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
 
-        # make a nested list of lists to be able to iterate over the images and text below
-        if is_valid_image(images):
-            images = [[images]]
-        elif isinstance(images, list) and is_valid_image(images[0]):
-            images = [[image] for image in images]
-        elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
-            raise ValueError("images must be an image, list of images or list of list of images")
+        if text is not None and images is not None:
+            if not any(IMAGE_TOKEN in sample for sample in text):
+                logger.warning(
+                    "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
+                    "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
+                    "add `<image>` tokens in the very beginning of your text and `<bos>` token after that. For this call, we will infer how many images "
+                    "each text has and add special tokens."
+                )
 
-        if suffix is not None and _is_str_or_image(suffix):
-            suffix = [suffix]
-        if suffix is not None:
-            suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
+                if isinstance(text, List) and isinstance(images, List):
+                    if len(images) != len(text):
+                        raise ValueError(
+                            f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
+                        )
 
-        input_strings = [
-            build_string_from_input(
-                prompt=prompt,
-                bos_token=self.tokenizer.bos_token,
-                image_seq_len=self.image_seq_length,
-                image_token=IMAGE_TOKEN,
-                num_images=len(image_list) if isinstance(image_list, list) else 1,
-            )
-            for prompt, image_list in zip(text, images)
-        ]
+                # make a nested list of lists to be able to iterate over the images and text below
+                if is_valid_image(images):
+                    images = [[images]]
+                elif isinstance(images, list) and is_valid_image(images[0]):
+                    images = [[image] for image in images]
+                elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+                    raise ValueError("images must be an image, list of images or list of list of images")
 
-        images = make_batched_images(images)
+                if suffix is not None and _is_str_or_image(suffix):
+                    suffix = [suffix]
+                if suffix is not None:
+                    suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
+
+                input_strings = [
+                    build_string_from_input(
+                        prompt=prompt,
+                        bos_token=self.tokenizer.bos_token,
+                        image_seq_len=self.image_seq_length,
+                        image_token=IMAGE_TOKEN,
+                        num_images=len(image_list) if isinstance(image_list, list) else 1,
+                    )
+                    for prompt, image_list in zip(text, images)
+                ]
+                images = make_batched_images(images)
+            else:
+                text = [sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length) for sample in text]
+                input_strings = [f"{sample}\n" for sample in text]
+
         pixel_values = self.image_processor(
             images,
             do_resize=do_resize,
