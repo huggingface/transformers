@@ -319,6 +319,5 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 "`video_processor`. It is strongly recommended to load and save the processor again so the video processor is saved "
                 "in a separate config."
             )
-            pass
 
         return processor
