@@ -4,12 +4,8 @@ from typing import List, Union
 import numpy as np
 
 from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_torch_available, logging
+from ..utils import add_end_docstrings, logging
 from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
-
-
-if is_torch_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
