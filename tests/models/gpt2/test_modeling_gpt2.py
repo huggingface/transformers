@@ -1058,17 +1058,19 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
                 error.append("")
             raise ValueError("\n".join(error))
 
-    def get_arg_names_from_hub_spec(self, hub_spec):
+    def get_arg_names_from_hub_spec(self, hub_spec, first_level=True):
         arg_names = []
         for field in fields(hub_spec):
             # First, recurse into nested fields
-            if isclass(field.type) and issubclass(field.type, inference_specs.BaseInferenceType):
-                arg_names.extend(self.get_arg_names_from_hub_spec(field.type))
+            if first_level and isclass(field.type) and issubclass(field.type, inference_specs.BaseInferenceType):
+                arg_names.extend(self.get_arg_names_from_hub_spec(field.type, first_level=False))
                 continue
             # Next, catch nested fields that are part of a Union[], which is usually caused by Optional[]
             for param_type in get_args(field.type):
-                if isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
-                    arg_names.extend(self.get_arg_names_from_hub_spec(param_type))  # Recurse into nested fields
+                if first_level and isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
+                    arg_names.extend(
+                        self.get_arg_names_from_hub_spec(param_type, first_level=False)
+                    )  # Recurse into nested fields
                     break
             else:
                 # Finally, this line triggers if it's not a nested field
