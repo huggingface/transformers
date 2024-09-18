@@ -806,7 +806,7 @@ class WandbCallback(TrainerCallback):
 
         # prepare to handle potential configuration issues during setup
         from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
-        
+
         if state.is_world_process_zero:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
