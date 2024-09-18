@@ -80,11 +80,11 @@ class TorchAoHfQuantizer(HfQuantizer):
                 logger.warning_once(
                     f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Please set the torch_dtype to bfloat16."
                 )
-        if torch_dtype is None:
-            logger.warning_once(
-                "Setting torch_dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set torch_dtype=torch.bfloat16 to remove this warning."
-            )
-            torch_dtype = torch.bfloat16
+            if torch_dtype is None:
+                logger.warning_once(
+                    "Setting torch_dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set torch_dtype=torch.bfloat16 to remove this warning."
+                )
+                torch_dtype = torch.bfloat16
         return torch_dtype
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
@@ -167,7 +167,11 @@ class TorchAoHfQuantizer(HfQuantizer):
                 "please set `safe_serialization` to False"
             )
             return False
-        _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse("0.25.0.dev0")
+        _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(
+            "0.25.0"
+        )
+        if not _is_torchao_serializable:
+            logger.warning("torchao quantized model is only serializable after huggingface_hub >= 0.25.0 ")
         return _is_torchao_serializable
 
     @property

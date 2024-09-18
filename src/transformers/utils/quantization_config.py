@@ -1282,7 +1282,9 @@ class TorchAoConfig(QuantizationConfigMixin):
                 "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
             }
         else:
-            raise ValueError("TorchAoConfig requires torchao to be installed, please install with `pip install torchao`")
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
 
     def get_apply_tensor_subclass(self):
         _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
