@@ -186,6 +186,8 @@ from . import (
     owlv2,
     owlvit,
     paligemma,
+    colpali,
+    colpali,
     patchtsmixer,
     patchtst,
     pegasus,

@@ -363,6 +363,8 @@ else:
             ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("colpali", ("ColPaliTokenizer", "ColPaliTokenizerFast" if is_tokenizers_available() else None)),
+            ("colpali", ("ColPaliTokenizer", "ColPaliTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "pegasus",
                 (
