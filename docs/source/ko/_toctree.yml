@@ -274,8 +274,8 @@
       title: (번역중) Auto Classes
     - local: in_translation
       title: (번역중) Backbones
-    - local: in_translation
-      title: (번역중) Callbacks
+    - local: callback
+      title: 콜백
     - local: in_translation
       title: (번역중) Configuration
     - local: in_translation
