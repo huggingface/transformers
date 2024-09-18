@@ -106,18 +106,12 @@ def _prepare_cross_attention_mask(
     device: str,
     dtype: str,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if cross_attention_mask is None:
-        logger.warning(
-            "You didn't pass any `cross_attention_mask` which means no masking will be applied in CrossAttention layers"
-            "Ignore this warning if it is intended and you do not want to mask attention weights"
-        )
-        return None, None
-    else:
-        # reshape so it can be used by attn module
-        batch_size, text_total_length, *_ = cross_attention_mask.shape
-        cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=3)
-        cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
-        cross_attention_mask = cross_attention_mask.unsqueeze(1)
+
+    # reshape so it can be used by attn module
+    batch_size, text_total_length, *_ = cross_attention_mask.shape
+    cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=3)
+    cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
+    cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
     # invert the mask
     inverted_cross_attn_mask = (1.0 - cross_attention_mask).to(dtype)
@@ -1716,19 +1710,20 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 -1, cross_attention_states.shape[-2], self.hidden_size
             )
 
-        cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
-            cross_attention_mask,
-            past_key_values=past_key_values,
-            num_vision_tokens=self.vision_model.num_patches,
-            cross_attention_layers=self.language_model.model.cross_attention_layers,
-            cross_attention_states=cross_attention_states,
-            device=self.device,
-            dtype=self.dtype,
-        )
-
         if cross_attention_mask is not None and cache_position is not None:
+            cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
+                cross_attention_mask,
+                past_key_values=past_key_values,
+                num_vision_tokens=self.vision_model.num_patches,
+                cross_attention_layers=self.language_model.model.cross_attention_layers,
+                cross_attention_states=cross_attention_states,
+                device=self.device,
+                dtype=self.dtype,
+            )
             cross_attention_mask = cross_attention_mask[:, :, cache_position]
             full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+        else:
+            full_text_row_masked_out_mask = None
 
         outputs = self.language_model(
             input_ids=input_ids,
