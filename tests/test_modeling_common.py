@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
+    require_non_xpu,
     require_read_token,
     require_safetensors,
     require_torch,
@@ -4118,6 +4119,7 @@ class ModelTesterMixin:
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
+    @require_non_xpu
     @require_torch_sdpa
     @require_torch_accelerator
     @slow
