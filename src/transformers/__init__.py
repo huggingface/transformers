@@ -644,6 +644,8 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.paligemma": ["PaliGemmaConfig"],
+    "models.colpali": ["ColPaliConfig"],
+    "models.colpali": ["ColPaliConfig"],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -2964,6 +2966,20 @@ else:
             "PaliGemmaForConditionalGeneration",
             "PaliGemmaPreTrainedModel",
             "PaliGemmaProcessor",
+        ]
+    )
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForConditionalGeneration",
+            "ColPaliPreTrainedModel",
+            "ColPaliProcessor",
+        ]
+    )
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForConditionalGeneration",
+            "ColPaliPreTrainedModel",
+            "ColPaliProcessor",
         ]
     )
     _import_structure["models.patchtsmixer"].extend(
@@ -5517,6 +5533,12 @@ if TYPE_CHECKING:
     from .models.paligemma import (
         PaliGemmaConfig,
     )
+    from .models.colpali import (
+        ColPaliConfig,
+    )
+    from .models.colpali import (
+        ColPaliConfig,
+    )
     from .models.patchtsmixer import (
         PatchTSMixerConfig,
     )
@@ -7540,6 +7562,16 @@ if TYPE_CHECKING:
             PaliGemmaForConditionalGeneration,
             PaliGemmaPreTrainedModel,
             PaliGemmaProcessor,
+        )
+        from .models.colpali import (
+            ColPaliForConditionalGeneration,
+            ColPaliPreTrainedModel,
+            ColPaliProcessor,
+        )
+        from .models.colpali import (
+            ColPaliForConditionalGeneration,
+            ColPaliPreTrainedModel,
+            ColPaliProcessor,
         )
         from .models.patchtsmixer import (
             PatchTSMixerForPrediction,
