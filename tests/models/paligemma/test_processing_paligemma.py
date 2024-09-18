@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, GemmaTokenizerFast, PaliGemmaProcessor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_read_token, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -27,6 +27,7 @@ if is_vision_available():
 
 
 @require_vision
+@require_read_token
 class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PaliGemmaProcessor
 
