@@ -1,7 +1,6 @@
 import inspect
 from typing import List, Union
 
-import torch
 import numpy as np
 
 from ..tokenization_utils import TruncationStrategy
