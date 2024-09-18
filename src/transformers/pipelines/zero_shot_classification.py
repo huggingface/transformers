@@ -1,6 +1,7 @@
 import inspect
 from typing import List, Union
 
+import torch
 import numpy as np
 
 from ..tokenization_utils import TruncationStrategy
@@ -239,7 +240,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
+        logits = np.concatenate([output["logits"].astype(torch.float32).numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n
