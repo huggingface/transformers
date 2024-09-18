@@ -221,7 +221,7 @@ python run_clm_flax.py \
 Training should converge at a loss and perplexity
 of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
-Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
+Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
 For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a
 look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb) google colab.

@@ -34,7 +34,7 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==42.0.0
+cryptography==43.0.1
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
@@ -115,7 +115,7 @@ mujoco-py==2.1.2.14
 multidict==6.0.2
 multiprocess==0.70.12.2
 mypy-extensions==0.4.3
-nltk==3.7
+nltk==3.9
 numba==0.55.1
 numpy==1.22.3
 oauthlib==3.2.2
@@ -217,7 +217,7 @@ timm==0.5.4
 tokenizers==0.11.6
 tomli==2.0.1
 toolz==0.11.2
-torch==1.13.1
+torch==2.2.0
 torchaudio==0.11.0
 torchvision==0.12.0
 tqdm==4.66.3

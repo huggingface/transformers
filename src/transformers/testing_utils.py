@@ -53,6 +53,7 @@ from .integrations import (
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
+    GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
@@ -84,6 +85,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_liger_kernel_available,
     is_lomo_available,
     is_natten_available,
     is_nltk_available,
@@ -101,6 +103,7 @@ from .utils import (
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
+    is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
@@ -112,6 +115,7 @@ from .utils import (
     is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
+    is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
@@ -127,6 +131,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     is_torchaudio_available,
     is_torchdynamo_available,
     is_torchvision_available,
@@ -366,6 +371,14 @@ def require_grokadamw(test_case):
     return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
 
 
+def require_schedulefree(test_case):
+    """
+    Decorator marking a test that requires schedulefree. These tests are skipped when schedulefree isn't installed.
+    https://github.com/facebookresearch/schedule_free
+    """
+    return unittest.skipUnless(is_schedulefree_available(), "test requires schedulefree")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -405,11 +418,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     )(test_case)
 
 
-def require_gguf(test_case):
+def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
     Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
     """
-    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
+    return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
+        test_case
+    )
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
@@ -910,6 +925,11 @@ def require_torchdynamo(test_case):
     return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
+def require_torchao(test_case):
+    """Decorator marking a test that requires torchao"""
+    return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
 def require_torch_tensorrt_fx(test_case):
     """Decorator marking a test that requires Torch-TensorRT FX"""
     return unittest.skipUnless(is_torch_tensorrt_fx_available(), "test requires Torch-TensorRT FX")(test_case)
@@ -1156,6 +1176,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_liger_kernel(test_case):
+    """
+    Decorator marking a test that requires liger_kernel
+    """
+    return unittest.skipUnless(is_liger_kernel_available(), "test requires liger_kernel")(test_case)
+
+
 def require_essentia(test_case):
     """
     Decorator marking a test that requires essentia
@@ -1209,6 +1236,13 @@ def require_cython(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
+
+
+def require_tiktoken(test_case):
+    """
+    Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
+    """
+    return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
 
 
 def get_gpu_count():
