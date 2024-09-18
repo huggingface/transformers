@@ -516,7 +516,15 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_dola_decoding_sample(self):
         pass
 
 
