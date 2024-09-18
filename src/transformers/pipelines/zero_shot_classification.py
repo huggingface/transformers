@@ -243,13 +243,10 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        logits = []
-        for output in model_outputs:
-            if self.framework == "pt" and output["logits"].dtype in (torch.bfloat16, torch.float16):
-                logits.append(output["logits"].to(torch.float32).numpy())
-            else:
-                logits.append(output["logits"].numpy())
-        logits = np.concatenate(logits)
+        if self.framework == "pt":
+            logits = np.concatenate([output["logits"].float().numpy() for output in model_outputs])
+        else:
+            logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n
