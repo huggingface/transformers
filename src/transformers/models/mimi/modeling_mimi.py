@@ -215,7 +215,7 @@ class MimiConv1d(nn.Module):
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
         self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
-        
+
         # Asymmetric padding required for odd strides
         self.padding_right = self.padding_total // 2
         self.padding_left = self.padding_total - self.padding_right
@@ -295,10 +295,10 @@ class MimiConvTranspose1d(nn.Module):
         self.causal = config.use_causal_conv
         self.trim_right_ratio = config.trim_right_ratio
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
-        
+
         if not (self.causal or self.trim_right_ratio == 1.0):
             raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
-        
+
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
         padding_total = kernel_size - stride
@@ -315,7 +315,7 @@ class MimiConvTranspose1d(nn.Module):
             # Asymmetric padding required for odd strides
             self.padding_right = padding_total // 2
 
-        self.padding_left = padding_total - padding_right
+        self.padding_left = padding_total - self.padding_right
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -332,7 +332,7 @@ class MimiConvTranspose1d(nn.Module):
 
         # unpad
         end = hidden_states.shape[-1] - self.padding_right
-        hidden_states = hidden_states[..., self.padding_left:end]
+        hidden_states = hidden_states[..., self.padding_left : end]
         return hidden_states
 
 
@@ -1453,29 +1453,29 @@ class MimiModel(MimiPreTrainedModel):
 
         self.encoder = MimiEncoder(config)
         self.encoder_transformer = MimiTransformerModel(config)
-        
+
         self.downsample = None
         self.upsample = None
-        if config.frame_rate != config.encodec_frame_rate: 
+        if config.frame_rate != config.encodec_frame_rate:
             self.downsample = MimiConv1d(
-                    config,
-                    config.hidden_size,
-                    config.hidden_size,
-                    kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                    stride=2,
-                    bias=False,
-                    pad_mode="replicate",
-                )
+                config,
+                config.hidden_size,
+                config.hidden_size,
+                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                stride=2,
+                bias=False,
+                pad_mode="replicate",
+            )
 
             self.upsample = MimiConvTranspose1d(
-                    config,
-                    config.hidden_size,
-                    config.hidden_size,
-                    kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                    stride=2,
-                    bias=False,
-                    groups=config.upsample_groups,
-                )
+                config,
+                config.hidden_size,
+                config.hidden_size,
+                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                stride=2,
+                bias=False,
+                groups=config.upsample_groups,
+            )
 
         self.decoder_transformer = MimiTransformerModel(config)
         self.decoder = MimiDecoder(config)
