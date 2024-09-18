@@ -66,7 +66,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
         candidate_labels: Union[str, List[str]] = None,
-        **kwargs,
+        **parameters,
     ):
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
@@ -104,16 +104,8 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
             candidate_labels (`str` or `List[str]` or `List[List[str]]`):
                 What the model should recognize in the image.
 
-            threshold (`float`, *optional*, defaults to 0.1):
-                The probability necessary to make a prediction.
-
-            top_k (`int`, *optional*, defaults to None):
-                The number of top predictions that will be returned by the pipeline. If the provided number is `None`
-                or higher than the number of predictions available, it will default to the number of predictions.
-
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
+            parameters (`Dict[str, Any]`, *optional*): Additional inference parameters. Valid parameters include
+            `threshold`, top_k`, and `timeout`.
 
 
         Return:
@@ -125,14 +117,14 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
             - **box** (`Dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
               dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
-        if "text_queries" in kwargs:
-            candidate_labels = kwargs.pop("text_queries")
+        if "text_queries" in parameters:
+            candidate_labels = parameters.pop("text_queries")
 
         if isinstance(image, (str, Image.Image)):
             inputs = {"image": image, "candidate_labels": candidate_labels}
         else:
             inputs = image
-        results = super().__call__(inputs, **kwargs)
+        results = super().__call__(inputs, **parameters)
         return results
 
     def _sanitize_parameters(self, **kwargs):
