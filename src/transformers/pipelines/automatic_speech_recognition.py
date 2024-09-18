@@ -501,6 +501,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     else:
                         generate_kwargs["num_frames"] = num_frames
 
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             tokens = self.model.generate(
                 inputs=inputs,
                 attention_mask=attention_mask,
