@@ -345,7 +345,6 @@ class Llama3Converter(TikTokenConverter):
             "{% endfor %}"
             "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
         )
-        tokenizer.add_special_tokens(special_tokens)
 
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
