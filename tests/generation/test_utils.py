@@ -99,7 +99,7 @@ class GenerationTesterMixin:
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.pop(self.input_name)[:batch_size, :]
-        _ = inputs_dict.pop("attention_mask", None)
+        inputs_dict.pop("attention_mask", None)
 
         # we don't want encoder-decoder models to start from filled decoder ids
         _ = inputs_dict.pop("decoder_input_ids", None)
