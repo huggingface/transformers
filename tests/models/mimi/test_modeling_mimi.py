@@ -784,6 +784,9 @@ def compute_rmse(arr1, arr2):
 @slow
 @require_torch
 class MimiIntegrationTest(unittest.TestCase):
+
+    q = 1
+
     def test_integration_using_cache_decode(self):
         expected_rmse = {
             "8": 0.0018785292,
