@@ -5840,6 +5840,20 @@ class MgpstrPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MimiModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MimiPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MistralForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
