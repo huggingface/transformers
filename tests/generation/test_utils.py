@@ -98,15 +98,16 @@ class GenerationTesterMixin:
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # TODO: @raushan or @gante, use `model.main_input_name` as the main input instead of relyinn on `input_ids`
         input_ids = inputs_dict.pop(self.input_name)[:batch_size, :]
         inputs_dict.pop("attention_mask", None)
 
         # we don't want encoder-decoder models to start from filled decoder ids
-        _ = inputs_dict.pop("decoder_input_ids", None)
-        _ = inputs_dict.pop("decoder_attention_mask", None)
+        inputs_dict.pop("decoder_input_ids", None)
+        inputs_dict.pop("decoder_attention_mask", None)
 
         # we'll set cache use in each test differently
-        _ = inputs_dict.pop("use_cache", None)
+        inputs_dict.pop("use_cache", None)
 
         inputs_dict = {
             k: v[:batch_size, ...]
@@ -716,29 +717,29 @@ class GenerationTesterMixin:
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
 
+            # for VLMs inputs embeds won't match input ids unless images are encoded and merged with ids properly
+            # no quick fix available, since obtaining image embeddings step is very model-specific
             if any(name in model.__class__.__name__.lower() for name in ("blip", "llava", "paligemma")):
-                self.skipTest(
-                    "For VLMs inputs embeds won't match input ids unless images are encoded and merged with ids properly"
+                prepare_inputs_for_generation_args = set(
+                    inspect.signature(model.prepare_inputs_for_generation).parameters
                 )
+                # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
+                # code is up to date with our most recent standards
+                if (
+                    "inputs_embeds" in prepare_inputs_for_generation_args
+                    and "cache_positions" in prepare_inputs_for_generation_args
+                ):
+                    input_embeds = model.get_input_embeddings()(input_ids)
+                    beam_kwargs.update({"inputs_embeds": input_embeds})
+                    output_generate2 = self._beam_sample_generate(
+                        model=model,
+                        input_ids=None,
+                        attention_mask=attention_mask,
+                        inputs_dict={},
+                        beam_kwargs=beam_kwargs,
+                    )
 
-            prepare_inputs_for_generation_args = set(inspect.signature(model.prepare_inputs_for_generation).parameters)
-            # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
-            # code is up to date with our most recent standards
-            if (
-                "inputs_embeds" in prepare_inputs_for_generation_args
-                and "cache_positions" in prepare_inputs_for_generation_args
-            ):
-                input_embeds = model.get_input_embeddings()(input_ids)
-                beam_kwargs.update({"inputs_embeds": input_embeds})
-                output_generate2 = self._beam_sample_generate(
-                    model=model,
-                    input_ids=None,
-                    attention_mask=attention_mask,
-                    inputs_dict={},
-                    beam_kwargs=beam_kwargs,
-                )
-
-                torch.testing.assert_close(output_generate[:, input_embeds.shape[1] :], output_generate2)
+                    torch.testing.assert_close(output_generate[:, input_embeds.shape[1] :], output_generate2)
 
     @pytest.mark.generate
     def test_beam_sample_generate_dict_output(self):
