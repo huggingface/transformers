@@ -200,6 +200,7 @@ class ChineseCLIPVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
+        self.position_embeddings = self.position_embedding.weight.unsqueeze(0)
         num_positions = self.position_embeddings.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
