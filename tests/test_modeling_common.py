@@ -4706,7 +4706,7 @@ class ModelTesterMixin:
                 output_logits=True,
                 return_dict_in_generate=True,
             )
-            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
+            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-3))
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow

@@ -118,7 +118,7 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 455
+        self.encoder_seq_length = 231
         self.num_image_tokens = 224
         self.seq_length = seq_length + self.num_image_tokens
 
