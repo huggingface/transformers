@@ -739,11 +739,13 @@
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
+      - local: model_doc/autoformer
+        title: Autoformer
       - local: in_translation
         title: (번역중) Informer
       - local: in_translation
         title: (번역중) Time Series Transformer
-      title: (번역중) 시계열 모델
+      title: 시계열 모델
     - isExpanded: false
       sections:
       - local: in_translation
