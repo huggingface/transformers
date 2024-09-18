@@ -547,7 +547,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ],
             )
 
-    # overwrite since encoder_hidden_states are not typical.
+    # overwrite since encoder_hidden_states are 3-dim and not 2-dim
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)

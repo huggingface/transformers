@@ -199,7 +199,7 @@ class OmDetTurboConfig(PretrainedConfig):
         **kwargs,
     ):
         if use_timm_backbone:
-            if backbone_kwargs is None:
+            if backbone_config is None:
                 backbone_kwargs = {
                     "out_indices": [1, 2, 3],
                     "img_size": image_size,
@@ -216,7 +216,7 @@ class OmDetTurboConfig(PretrainedConfig):
                 out_indices=[2, 3, 4],
             )
         elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
+            backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
@@ -234,7 +234,7 @@ class OmDetTurboConfig(PretrainedConfig):
             )
             text_config = CONFIG_MAPPING["clip_text_model"]()
         elif isinstance(text_config, dict):
-            text_model_type = text_config.pop("model_type")
+            text_model_type = text_config.get("model_type")
             text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         if class_distance_type not in ["cosine", "dot"]:

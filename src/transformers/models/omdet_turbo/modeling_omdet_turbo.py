@@ -752,7 +752,7 @@ class OmDetTurboEncoderLayer(nn.Module):
                 values.
             position_embeddings (`torch.FloatTensor`, *optional*):
                 Object queries (also called content embeddings), to be added to the hidden states.
-            output_attentions (`bool`, *optional*):
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
