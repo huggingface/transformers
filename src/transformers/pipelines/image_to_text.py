@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Union
 import warnings
+from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
@@ -82,8 +82,7 @@ class ImageToTextPipeline(Pipeline):
             preprocess_params["prompt"] = prompt
         if timeout is not None:
             warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers",
-                FutureWarning
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
             )
             preprocess_params["timeout"] = timeout
 
@@ -99,7 +98,7 @@ class ImageToTextPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 

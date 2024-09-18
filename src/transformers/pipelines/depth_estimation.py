@@ -1,7 +1,7 @@
+import warnings
 from typing import List, Union
 
 import numpy as np
-import warnings
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
@@ -51,7 +51,7 @@ class DepthEstimationPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Predict the depth(s) of the image(s) passed as inputs.
 
@@ -93,8 +93,7 @@ class DepthEstimationPipeline(Pipeline):
         preprocess_params = {}
         if timeout is not None:
             warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers",
-                FutureWarning
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
             )
             preprocess_params["timeout"] = timeout
         return preprocess_params, {}, {}
