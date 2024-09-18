@@ -107,7 +107,10 @@ def _prepare_cross_attention_mask(
     dtype: str,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     if cross_attention_mask is None:
-        # should we raise error or prepare a full attn mask with all ones?
+        logger.warning(
+            "You didn't pass any `cross_attention_mask` which means no masking will be applied in CrossAttention layers"
+            "Ignore this warning if it is intended and you do not want to mask attention weights"
+        )
         return None, None
     else:
         # reshape so it can be used by attn module
@@ -129,22 +132,6 @@ def _prepare_cross_attention_mask(
         (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
     )
     cross_attention_mask *= full_text_row_masked_out_mask
-
-    # In case we receive a new image but already have previous cross-attention key/values in cache,
-    # then we need to extend the attention-mask and add previous images' lengths
-    if (
-        past_key_values is not None
-        and cross_attention_states is not None
-        and past_key_values.get_seq_length(cross_attention_layers[0]) != 0
-    ):
-        # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
-        # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
-        past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attention_layers[0])
-        past_cross_attn_mask = torch.zeros(
-            (*cross_attention_mask.shape[:-1], past_cross_attn_kv_length), dtype=dtype, device=device
-        )
-        # concatenate both on image-seq-length dimension
-        cross_attention_mask = torch.cat([past_cross_attn_mask, cross_attention_mask], dim=-1)
 
     return cross_attention_mask, full_text_row_masked_out_mask
 
@@ -253,16 +240,17 @@ class MllamaVisionMLP(nn.Module):
 
 
 class MllamaVisionSdpaAttention(nn.Module):
-    def __init__(self, config: MllamaVisionConfig):
+    def __init__(self, config):
         super().__init__()
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.attention_heads
+        self.num_kv_heads = getattr(config, "num_kv_heads", config.attention_heads)
         self.head_dim = config.hidden_size // config.attention_heads
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
 
     def forward(
@@ -271,6 +259,8 @@ class MllamaVisionSdpaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = None,
     ) -> torch.Tensor:
+        output_attentions = False
+
         query = self.q_proj(hidden_state)
         key = self.k_proj(hidden_state)
         value = self.v_proj(hidden_state)
@@ -279,8 +269,8 @@ class MllamaVisionSdpaAttention(nn.Module):
         _, kv_seq_len, _ = key.shape
 
         query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim)
-        key = key.view(batch_size, kv_seq_len, self.num_heads, self.head_dim)
-        value = value.view(batch_size, kv_seq_len, self.num_heads, self.head_dim)
+        key = key.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
+        value = value.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
 
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
@@ -293,7 +283,13 @@ class MllamaVisionSdpaAttention(nn.Module):
 
         output = self.o_proj(attn_output)
 
-        return output
+        if not output_attentions:
+            attn_weights = None
+
+        return output, attn_weights
+
+
+MLLAMA_VISION_ATTENTION_CLASSES = {"eager": MllamaVisionSdpaAttention, "sdpa": MllamaVisionSdpaAttention}
 
 
 class MllamaVisionEncoderLayer(nn.Module):
@@ -305,7 +301,7 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.is_gated = is_gated
         self.intermediate_size = config.intermediate_size
 
-        self.self_attn = MllamaVisionSdpaAttention(config)
+        self.self_attn = MLLAMA_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = MllamaVisionMLP(config)
 
         self.input_layernorm = nn.LayerNorm(self.hidden_size)
@@ -325,7 +321,7 @@ class MllamaVisionEncoderLayer(nn.Module):
         # Self Attention
         residual = hidden_state
         hidden_state = self.input_layernorm(hidden_state)
-        hidden_state = self.self_attn(hidden_state, attention_mask=attention_mask)
+        hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
         gate_attn = 1 if not self.is_gated else self.gate_attn.tanh()
         hidden_state = residual + gate_attn * hidden_state
 
@@ -336,7 +332,12 @@ class MllamaVisionEncoderLayer(nn.Module):
         gate_ffn = 1 if not self.is_gated else self.gate_ffn.tanh()
         hidden_state = residual + gate_ffn * hidden_state
 
-        return hidden_state
+        outputs = (hidden_state,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class MllamaVisionEncoder(nn.Module):
@@ -398,23 +399,23 @@ class MllamaVisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     output_attentions,
                 )
             else:
-                hidden_states = encoder_layer(
+                layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
                 )
 
-            # SDPA never returns attn weights, so the kwarg isn't used at all
-            # TODO: fix this
-            # if output_attentions:
-            #     all_attentions = all_attentions + (layer_outputs[1],)
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+            hidden_states = layer_outputs[0]
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -426,11 +427,50 @@ class MllamaVisionEncoder(nn.Module):
         )
 
 
-class MllamaVisionModel(PreTrainedModel):
+MLLAMA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MllamaConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+class MllamaPreTrainedModel(PreTrainedModel):
+    config_class = MllamaConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["MllamaSdpaCrossAttention"]
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.get_text_config().initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=std)
+
+
+class MllamaVisionModel(MllamaPreTrainedModel):
     config_class = MllamaVisionConfig
     base_model_prefix = "vision_encoder"
     _no_split_modules = ["MllamaVisionSdpaAttention"]
-    _supports_sdpa = True
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -639,7 +679,7 @@ class MllamaTextCrossAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
-        elif past_key_value.get_seq_length(self.layer_idx) != 0:
+        elif cache_position[0] != 0:
             key_states, value_states = (
                 past_key_value.key_cache[self.layer_idx],
                 past_key_value.value_cache[self.layer_idx],
@@ -1021,46 +1061,6 @@ class MllamaRotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-MLLAMA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MllamaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-class MllamaPreTrainedModel(PreTrainedModel):
-    config_class = MllamaConfig
-    base_model_prefix = "model"
-    _no_split_modules = ["MllamaSdpaCrossAttention"]
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
 
 
 class MllamaTextModel(MllamaPreTrainedModel):
