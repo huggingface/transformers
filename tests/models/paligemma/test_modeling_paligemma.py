@@ -337,7 +337,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(text=prompt, images=raw_image, return_tensors="pt")
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
         EXPECTED_INPUT_IDS = torch.tensor([[257152] * 256 + [2, 108]])
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
@@ -360,7 +360,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(text=prompt, images=raw_image, return_tensors="pt").to(torch.float16)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "answer en Where is the cow standing?\nbeach"  # fmt: skip
@@ -382,7 +382,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(text=prompt, images=raw_image, return_tensors="pt").to(torch.float16)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
@@ -412,7 +412,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         image2 = image1
 
-        inputs = self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -443,7 +443,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = image1
 
         inputs = (
-            self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+            self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
             .to(torch.bfloat16)
             .to(torch_device)
         )
@@ -475,7 +475,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = image1
 
         inputs = (
-            self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+            self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
             .to(torch.float16)
             .to(torch_device)
         )
@@ -504,7 +504,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             ).raw
         )
 
-        inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(torch.bfloat16).to(torch_device)
+        inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(torch.bfloat16).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -528,8 +528,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(
-            text=prompt,
             images=raw_image,
+            text=prompt,
             return_tensors="pt",
         ).to(torch.float16)
 
@@ -561,7 +561,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = image1
 
         inputs = (
-            self.processor(text=prompts, suffix=suffixes, images=[image1, image2], return_tensors="pt", padding=True)
+            self.processor(images=[image1, image2], text=prompts, suffix=suffixes, return_tensors="pt", padding=True)
             .to(torch.bfloat16)
             .to(torch_device)
         )
