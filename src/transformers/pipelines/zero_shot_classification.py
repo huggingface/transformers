@@ -245,8 +245,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         sequences = [outputs["sequence"] for outputs in model_outputs]
         logits = []
         for output in model_outputs:
-            if self.framework == "pt" and output["logits"].dtype == torch.bfloat16:
-                logits.append(output["logits"].float().numpy())
+            if self.framework == "pt" and output["logits"].dtype in (torch.bfloat16, torch.float16):
+                logits.append(output["logits"].to(torch.float32).numpy())
             else:
                 logits.append(output["logits"].numpy())
         logits = np.concatenate(logits)

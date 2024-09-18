@@ -184,9 +184,8 @@ class ImageClassificationPipeline(Pipeline):
             top_k = self.model.config.num_labels
 
         outputs = model_outputs["logits"][0]
-        if self.framework == "pt" and outputs.dtype == torch.bfloat16:
-            # To enable using bf16
-            outputs = outputs.float().numpy()
+        if self.framework == "pt" and outputs.dtype in (torch.bfloat16, torch.float16):
+            outputs = outputs.to(torch.float32).numpy()
         else:
             outputs = outputs.numpy()
 
