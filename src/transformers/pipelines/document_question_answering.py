@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import re
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -43,6 +44,7 @@ TESSERACT_LOADED = False
 if is_pytesseract_available():
     TESSERACT_LOADED = True
     import pytesseract
+
 
 logger = logging.get_logger(__name__)
 
@@ -245,11 +247,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 Whether or not we accept impossible as an answer.
             lang (`str`, *optional*):
                 Language to use while running OCR. Defaults to english.
-            tesseract_config (`str`, *optional*):
-                Additional flags to pass to tesseract while running OCR.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
@@ -291,6 +288,15 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
         image = None
         image_features = {}
+        if timeout is not None:
+            warnings.warn(
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
+            )
+        if tesseract_config:
+            warnings.warn(
+                "The `tesseract_config` argument is deprecated and will be removed in version 5 of Transformers",
+                FutureWarning,
+            )
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:

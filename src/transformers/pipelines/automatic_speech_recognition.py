@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 import requests
-import warnings
 
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
@@ -309,7 +309,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
-            warnings.warn("`max_new_tokens` is deprecated and will be removed in version 5 of Transformers. To remove this warning, pass `max_new_tokens` a keyword argument inside `generate_kwargs` instead.", FutureWarning)
+            warnings.warn(
+                "`max_new_tokens` is deprecated and will be removed in version 5 of Transformers. To remove this warning, pass `max_new_tokens` a keyword argument inside `generate_kwargs` instead.",
+                FutureWarning,
+            )
             forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
