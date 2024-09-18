@@ -375,8 +375,8 @@ def write_model(
         num_global_layers=n_layers_vision_global,
         intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
         image_size=params["vision_chunk_size"],
-        max_num_tiles=4,
-        supported_aspect_ratios=get_all_supported_aspect_ratios(4),
+        max_num_tiles=params["vision_max_num_chunks"],
+        supported_aspect_ratios=get_all_supported_aspect_ratios(params["vision_max_num_chunks"]),
     )
     text_config = MllamaTextConfig(
         **config_parameters,
@@ -504,12 +504,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/home/ubuntu/projects/meta_mllama/weights-11b-as-final",
+        default="/home/ubuntu/.llama/checkpoints/Llama-3.2-11B-Vision-Instruct/",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="converted-mllama-11b-as-final",
+        default="Llama-3.2-11B-Vision-Instruct",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
