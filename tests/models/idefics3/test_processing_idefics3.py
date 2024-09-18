@@ -92,9 +92,8 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 )
             text_split_images += processor.tokenizer("\n", add_special_tokens=False)["input_ids"]
         text_split_images = text_split_images[:-1]  # remove last newline
-        text_split_images += processor.tokenizer("\n\n", add_special_tokens=False)[
-            "input_ids"
-        ]  # add double newline, as it gets its own token
+        # add double newline, as it gets its own token
+        text_split_images += processor.tokenizer("\n\n", add_special_tokens=False)["input_ids"]
         text_split_images += (
             [self.fake_image_token_id]
             + self.global_img_tokens_id
