@@ -291,6 +291,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "jinho8345/bros-base-uncased"
 
     # BROS requires `bbox` in the inputs which doesn't fit into the above 2 pipelines' input formats.
     # see https://github.com/huggingface/transformers/pull/26294
@@ -365,12 +366,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_spade_el_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_spade_el_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "jinho8345/bros-base-uncased"
-        model = BrosModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 def prepare_bros_batch_inputs():

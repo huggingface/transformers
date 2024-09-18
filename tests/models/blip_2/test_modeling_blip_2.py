@@ -157,6 +157,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     def setUp(self):
         self.model_tester = Blip2VisionModelTester(self)
@@ -223,12 +224,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2VisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Blip2QFormerModelTester:
@@ -456,6 +451,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
@@ -514,12 +510,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             config.save_pretrained(tmp_dir_name)
             qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
@@ -715,6 +705,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -787,12 +778,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             config.save_pretrained(tmp_dir_name)
             qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_get_text_features(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

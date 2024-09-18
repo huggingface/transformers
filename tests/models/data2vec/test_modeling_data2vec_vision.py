@@ -186,6 +186,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/data2vec-vision-base-ft1k"
 
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
@@ -293,12 +294,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/data2vec-vision-base-ft1k"
-        model = Data2VecVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

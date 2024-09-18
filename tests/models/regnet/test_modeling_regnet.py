@@ -133,6 +133,7 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "facebook/regnet-y-040"
 
     def setUp(self):
         self.model_tester = RegNetModelTester(self)
@@ -211,12 +212,6 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/regnet-y-040"
-        model = RegNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -309,6 +309,7 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "BAAI/AltCLIP"
 
     # TODO (@SunMarc): Fix me
     @unittest.skip(reason="It's broken.")
@@ -364,12 +365,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "BAAI/AltCLIP"
-        model = AltCLIPTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class AltCLIPModelTester:
@@ -433,6 +428,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "BAAI/AltCLIP"
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -559,12 +555,6 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     models_equal = False
 
             self.assertTrue(models_equal)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "BAAI/AltCLIP"
-        model = AltCLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_vision

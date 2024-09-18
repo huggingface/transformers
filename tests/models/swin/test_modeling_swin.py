@@ -240,6 +240,7 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "microsoft/swin-tiny-patch4-window7-224"
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
@@ -439,12 +440,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/swin-tiny-patch4-window7-224"
-        model = SwinModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

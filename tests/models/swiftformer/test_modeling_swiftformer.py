@@ -147,6 +147,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "MBZUAI/swiftformer-xs"
 
     def setUp(self):
         self.model_tester = SwiftFormerModelTester(self)
@@ -181,12 +182,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "MBZUAI/swiftformer-xs"
-        model = SwiftFormerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="SwiftFormer does not output attentions")
     def test_attention_outputs(self):

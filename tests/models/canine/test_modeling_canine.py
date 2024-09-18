@@ -237,6 +237,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
     test_resize_embeddings = False
     test_pruning = False
+    pretrained_checkpoint = "google/canine-s"
 
     def setUp(self):
         self.model_tester = CanineModelTester(self)
@@ -526,12 +527,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/canine-s"
-        model = CanineModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

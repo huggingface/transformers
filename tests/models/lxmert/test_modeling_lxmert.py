@@ -541,6 +541,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     test_torchscript = False
+    pretrained_checkpoint = "unc-nlp/lxmert-base-uncased"
 
     # overwrite function because qa models takes different input label shape
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -580,13 +581,6 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_lxmert_question_answering_labels_resize(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.resize_lxmert_num_qa_labels(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "unc-nlp/lxmert-base-uncased"
-        model = LxmertModel.from_pretrained(model_name)
-        model.to(torch_device)
-        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -139,6 +139,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/efficientnet-b7"
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
@@ -203,12 +204,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/efficientnet-b7"
-        model = EfficientNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_pipeline_test
     @require_vision

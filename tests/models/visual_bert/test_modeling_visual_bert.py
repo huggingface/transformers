@@ -315,6 +315,7 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     pipeline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
     test_torchscript = False
     test_pruning = False
+    pretrained_checkpoint = "uclanlp/visualbert-vqa"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -547,12 +548,6 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_for_flickr(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_flickr()
         self.model_tester.create_and_check_for_flickr(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "uclanlp/visualbert-vqa"
-        model = VisualBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

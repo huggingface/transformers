@@ -208,6 +208,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "openai-community/openai-gpt"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -266,12 +267,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_openai_gpt_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_openai_gpt_for_sequence_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai-community/openai-gpt"
-        model = OpenAIGPTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

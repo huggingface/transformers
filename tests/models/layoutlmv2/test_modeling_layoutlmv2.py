@@ -281,6 +281,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "microsoft/layoutlmv2-base-uncased"
 
     def setUp(self):
         self.model_tester = LayoutLMv2ModelTester(self)
@@ -425,12 +426,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
     def test_model_is_small(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/layoutlmv2-base-uncased"
-        model = LayoutLMv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

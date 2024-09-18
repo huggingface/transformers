@@ -193,6 +193,7 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "apple/mobilevit-small"
 
     test_pruning = False
     test_resize_embeddings = False
@@ -267,12 +268,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "apple/mobilevit-small"
-        model = MobileViTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
     def test_batching_equivalence(self):

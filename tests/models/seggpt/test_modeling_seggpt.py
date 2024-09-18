@@ -175,6 +175,7 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
     )
+    pretrained_checkpoint = "BAAI/seggpt-vit-large"
 
     def setUp(self):
         self.model_tester = SegGptModelTester(self)
@@ -314,12 +315,6 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         expected_loss_value = torch.tensor(0.3340)
 
         self.assertTrue(torch.allclose(loss_value, expected_loss_value, atol=1e-4))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "BAAI/seggpt-vit-large"
-        model = SegGptModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 def prepare_img():

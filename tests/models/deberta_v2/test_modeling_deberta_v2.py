@@ -257,6 +257,7 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_head_masking = False
     is_encoder_decoder = False
+    pretrained_checkpoint = "microsoft/deberta-v2-xlarge"
 
     def setUp(self):
         self.model_tester = DebertaV2ModelTester(self)
@@ -288,12 +289,6 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_multiple_choice(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/deberta-v2-xlarge"
-        model = DebertaV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -169,6 +169,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/vivit-b-16x2-kinetics400"
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
@@ -220,12 +221,6 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_video_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_video_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/vivit-b-16x2-kinetics400"
-        model = VivitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

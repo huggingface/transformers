@@ -310,6 +310,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "uw-madison/mra-base-512-4"
 
     def setUp(self):
         self.model_tester = MraModelTester(self)
@@ -347,12 +348,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "uw-madison/mra-base-512-4"
-        model = MraModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="MRA does not output attentions")
     def test_attention_outputs(self):

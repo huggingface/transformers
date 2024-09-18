@@ -457,6 +457,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
     fx_compatible = False
+    pretrained_checkpoint = "nghuyong/ernie-1.0-base-zh"
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -565,12 +566,6 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nghuyong/ernie-1.0-base-zh"
-        model = ErnieModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

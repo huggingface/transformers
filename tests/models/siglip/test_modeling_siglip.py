@@ -316,6 +316,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
@@ -382,12 +383,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -495,6 +490,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
@@ -544,12 +540,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -629,6 +619,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
@@ -750,12 +741,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             config.save_pretrained(tmp_dir_name)
             text_config = SiglipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @require_flash_attn
     @require_torch_gpu

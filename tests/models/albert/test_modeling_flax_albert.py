@@ -132,16 +132,10 @@ class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
         if is_flax_available()
         else ()
     )
+    pretrained_checkpoint = "albert/albert-base-v2"
 
     def setUp(self):
         self.model_tester = FlaxAlbertModelTester(self)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("albert/albert-base-v2")
-            outputs = model(np.ones((1, 1)))
-            self.assertIsNotNone(outputs)
 
 
 @require_flax

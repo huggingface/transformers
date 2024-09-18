@@ -130,6 +130,7 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "microsoft/git-base"
 
     def setUp(self):
         self.model_tester = GitVisionModelTester(self)
@@ -194,12 +195,6 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/git-base"
-        model = GitVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class GitModelTester:
@@ -407,6 +402,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     fx_compatible = False
     test_torchscript = False
+    pretrained_checkpoint = "microsoft/git-base"
 
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -496,12 +492,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/git-base"
-        model = GitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_beam_search_generate_dict_outputs_use_cache(self):

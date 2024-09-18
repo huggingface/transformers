@@ -368,6 +368,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPVisionModelTester(self)
@@ -436,12 +437,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -567,6 +562,7 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)
@@ -614,12 +610,6 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -704,6 +694,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPModelTester(self)
@@ -957,12 +948,6 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa

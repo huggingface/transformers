@@ -172,6 +172,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    pretrained_checkpoint = "caidas/swin2SR-classical-sr-x2-64"
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -231,12 +232,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "caidas/swin2SR-classical-sr-x2-64"
-        model = Swin2SRModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     # overwriting because of `logit_scale` parameter
     def test_initialization(self):

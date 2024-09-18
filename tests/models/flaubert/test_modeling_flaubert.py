@@ -389,6 +389,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available() and is_sacremoses_available()
         else {}
     )
+    pretrained_checkpoint = "flaubert/flaubert_small_cased"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -463,12 +464,6 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_flaubert_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_multiple_choice(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "flaubert/flaubert_small_cased"
-        model = FlaubertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

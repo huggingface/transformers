@@ -187,6 +187,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "facebook/levit-128S"
 
     def setUp(self):
         self.model_tester = LevitModelTester(self)
@@ -370,12 +371,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             )
 
                     loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/levit-128S"
-        model = LevitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -518,6 +518,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_resize_embeddings = True
     test_model_parallel = False
     is_encoder_decoder = True
+    pretrained_checkpoint = "google/long-t5-local-base"
 
     def setUp(self):
         self.model_tester = LongT5ModelTester(self)
@@ -585,12 +586,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/long-t5-local-base"
-        model = LongT5Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_export_to_onnx(self):

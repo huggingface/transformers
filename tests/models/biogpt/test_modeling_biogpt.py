@@ -297,6 +297,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     test_pruning = False
+    pretrained_checkpoint = "microsoft/biogpt"
 
     def setUp(self):
         self.model_tester = BioGptModelTester(self)
@@ -378,12 +379,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/biogpt"
-        model = BioGptModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
     def test_biogpt_sequence_classification_model(self):

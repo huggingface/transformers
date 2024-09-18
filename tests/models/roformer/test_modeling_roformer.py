@@ -406,6 +406,7 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "junnyu/roformer_chinese_small"
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)
@@ -477,12 +478,6 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             encoder_hidden_states,
             encoder_attention_mask,
         )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "junnyu/roformer_chinese_small"
-        model = RoFormerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

@@ -146,6 +146,7 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/owlvit-base-patch32"
 
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
@@ -212,12 +213,6 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="OwlViTVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlvit-base-patch32"
-        model = OwlViTVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class OwlViTTextModelTester:
@@ -315,6 +310,7 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "google/owlvit-base-patch32"
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
@@ -358,12 +354,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="OwlViTTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlvit-base-patch32"
-        model = OwlViTTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class OwlViTModelTester:
@@ -439,6 +429,7 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "google/owlvit-base-patch32"
 
     def setUp(self):
         self.model_tester = OwlViTModelTester(self)
@@ -569,12 +560,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             text_config = OwlViTTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlvit-base-patch32"
-        model = OwlViTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class OwlViTForObjectDetectionTester:
     def __init__(self, parent, is_training=True):
@@ -643,6 +628,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "google/owlvit-base-patch32"
 
     def setUp(self):
         self.model_tester = OwlViTForObjectDetectionTester(self)
@@ -765,12 +751,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
                     models_equal = False
 
             self.assertTrue(models_equal)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlvit-base-patch32"
-        model = OwlViTForObjectDetection.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

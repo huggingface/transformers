@@ -154,6 +154,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/mobilenet_v1_1.0_224"
 
     def setUp(self):
         self.model_tester = MobileNetV1ModelTester(self)
@@ -207,12 +208,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/mobilenet_v1_1.0_224"
-        model = MobileNetV1Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/pull/31258")
     def test_batching_equivalence(self):

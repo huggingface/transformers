@@ -158,6 +158,7 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_head_masking = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "openmmlab/upernet-convnext-tiny"
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
@@ -274,12 +275,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @unittest.skip(reason="UperNet does not have tied weights")
     def test_tied_model_weights_key_ignore(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openmmlab/upernet-convnext-tiny"
-        model = UperNetForSemanticSegmentation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of ADE20k

@@ -164,6 +164,7 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "MIT/ast-finetuned-audioset-10-10-0.4593"
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -209,12 +210,6 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "MIT/ast-finetuned-audioset-10-10-0.4593"
-        model = ASTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on some audio from AudioSet

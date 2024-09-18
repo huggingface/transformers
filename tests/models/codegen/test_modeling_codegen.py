@@ -332,6 +332,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/codegen-350M-nl"
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -424,12 +425,6 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/codegen-350M-nl"
-        model = CodeGenModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

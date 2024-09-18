@@ -165,6 +165,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapAudioModelTester(self)
@@ -270,12 +271,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapAudioModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -392,6 +387,7 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapTextModelTester(self)
@@ -439,12 +435,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -512,6 +502,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapModelTester(self)
@@ -645,12 +636,6 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = ClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @slow

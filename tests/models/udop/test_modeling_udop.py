@@ -285,6 +285,7 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
+    pretrained_checkpoint = "microsoft/udop-large"
 
     def setUp(self):
         self.model_tester = UdopModelTester(self)
@@ -370,12 +371,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     def test_save_load_low_cpu_mem_usage(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/udop-large"
-        model = UdopForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class UdopEncoderOnlyModelTester:

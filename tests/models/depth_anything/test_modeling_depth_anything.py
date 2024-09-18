@@ -145,6 +145,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "LiheYoung/depth-anything-small-hf"
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -198,12 +199,6 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "LiheYoung/depth-anything-small-hf"
-        model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_backbone_selection(self):
         def _validate_backbone_init():

@@ -168,6 +168,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
@@ -330,12 +331,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaImageModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class FlavaTextModelTester:
     def __init__(
@@ -449,6 +444,7 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
@@ -493,12 +489,6 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaMultimodalModelTester:
@@ -596,6 +586,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_resize_embeddings = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
@@ -658,12 +649,6 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaMultimodalModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class FlavaImageCodebookTester:
     def __init__(
@@ -720,6 +705,7 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaImageCodebookTester(self)
@@ -792,12 +778,6 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaImageCodebook.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaModelTester:
@@ -928,6 +908,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
@@ -1077,13 +1058,6 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             multimodal_config = FlavaMultimodalConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.multimodal_config.to_dict(), multimodal_config.to_dict())
-
-    # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaForPreTrainingTester(FlavaModelTester):

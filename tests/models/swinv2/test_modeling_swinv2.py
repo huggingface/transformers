@@ -431,12 +431,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/swinv2-tiny-patch4-window8-256"
-        model = Swinv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
     @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass

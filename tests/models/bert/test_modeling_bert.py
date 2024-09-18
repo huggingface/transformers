@@ -466,6 +466,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = True
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "google-bert/bert-base-uncased"
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -643,12 +644,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model.eval()
             model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
         self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google-bert/bert-base-uncased"
-        model = BertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

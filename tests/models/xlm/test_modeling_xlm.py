@@ -390,6 +390,7 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "FacebookAI/xlm-mlm-en-2048"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -510,12 +511,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 [expected_shape] * len(iter_hidden_states),
             )
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "FacebookAI/xlm-mlm-en-2048"
-        model = XLMModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

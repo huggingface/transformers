@@ -148,6 +148,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/owlv2-base-patch16-ensemble"
 
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
@@ -214,12 +215,6 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlv2-base-patch16-ensemble"
-        model = Owlv2VisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTester with OwlViT->Owlv2
@@ -319,6 +314,7 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "google/owlv2-base-patch16-ensemble"
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
@@ -362,12 +358,6 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Owlv2TextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlv2-base-patch16-ensemble"
-        model = Owlv2TextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Owlv2ModelTester:
@@ -444,6 +434,7 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "google/owlv2-base-patch16-ensemble"
 
     def setUp(self):
         self.model_tester = Owlv2ModelTester(self)
@@ -574,12 +565,6 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             text_config = Owlv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlv2-base-patch16-ensemble"
-        model = Owlv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTester with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2ForObjectDetectionTester:
@@ -650,6 +635,7 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "google/owlv2-base-patch16-ensemble"
 
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)
@@ -772,12 +758,6 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
                     models_equal = False
 
             self.assertTrue(models_equal)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/owlv2-base-patch16-ensemble"
-        model = Owlv2ForObjectDetection.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

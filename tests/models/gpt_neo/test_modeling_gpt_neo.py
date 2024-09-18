@@ -393,6 +393,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_missing_keys = False
     test_pruning = False
     test_model_parallel = False
+    pretrained_checkpoint = "EleutherAI/gpt-neo-1.3B"
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -567,9 +568,3 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "EleutherAI/gpt-neo-1.3B"
-        model = GPTNeoModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)

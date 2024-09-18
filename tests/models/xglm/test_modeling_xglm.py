@@ -291,6 +291,7 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
+    pretrained_checkpoint = "facebook/xglm-564M"
 
     def setUp(self):
         self.model_tester = XGLMModelTester(self)
@@ -326,12 +327,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_xglm_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xglm_weight_initialization(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/xglm-564M"
-        model = XGLMModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):

@@ -326,6 +326,7 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
     test_headmasking = False
     test_pruning = False
+    pretrained_checkpoint = "eitanturok/dbrx-tiny"
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)
@@ -343,12 +344,6 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "eitanturok/dbrx-tiny"
-        model = DbrxModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Dbrx models have weight tying disabled.")
     def test_tied_weights_keys(self):

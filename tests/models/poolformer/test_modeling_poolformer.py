@@ -132,6 +132,7 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "sail/poolformer_s12"
 
     def setUp(self):
         self.model_tester = PoolFormerModelTester(self)
@@ -204,12 +205,6 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "sail/poolformer_s12"
-        model = PoolFormerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

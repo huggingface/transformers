@@ -387,6 +387,7 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "google/rembert"
 
     def setUp(self):
         self.model_tester = RemBertModelTester(self)
@@ -460,12 +461,6 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             encoder_hidden_states,
             encoder_attention_mask,
         )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/rembert"
-        model = RemBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

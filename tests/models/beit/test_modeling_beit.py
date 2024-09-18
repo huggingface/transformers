@@ -245,6 +245,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "microsoft/beit-base-patch16-224"
 
     test_pruning = False
     test_resize_embeddings = False
@@ -380,12 +381,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/beit-base-patch16-224"
-        model = BeitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

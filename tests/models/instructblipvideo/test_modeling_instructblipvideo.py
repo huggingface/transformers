@@ -157,6 +157,7 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/instructblip-vicuna-7b"
 
     def setUp(self):
         self.model_tester = InstructBlipVideoVisionModelTester(self)
@@ -231,12 +232,6 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="InstructBlipVideoVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/instructblip-vicuna-7b"
-        model = InstructBlipVideoVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class InstructBlipVideoQFormerModelTester:
@@ -481,6 +476,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/instructblip-vicuna-7b"
 
     def setUp(self):
         self.model_tester = InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester(self)
@@ -543,12 +539,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             config.save_pretrained(tmp_dir_name)
             qformer_config = InstructBlipVideoQFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/instructblip-vicuna-7b"
-        model = InstructBlipVideoForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

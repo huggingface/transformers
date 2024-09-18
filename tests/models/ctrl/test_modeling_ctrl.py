@@ -208,6 +208,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = True
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/ctrl"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -241,12 +242,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_ctrl_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/ctrl"
-        model = CTRLModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -234,6 +234,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "dandelin/vilt-b32-mlm"
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -531,12 +532,6 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else:
             self.assertIsNotNone(hidden_states.grad)
             self.assertIsNotNone(attentions.grad)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "dandelin/vilt-b32-mlm"
-        model = ViltModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

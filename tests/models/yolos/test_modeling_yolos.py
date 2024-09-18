@@ -178,6 +178,7 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    pretrained_checkpoint = "hustvl/yolos-small"
 
     # special case for head model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -317,12 +318,6 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_object_detection(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "hustvl/yolos-small"
-        model = YolosModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -575,6 +575,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "google/switch-base-8"
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -665,12 +666,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_v1_1_resize_embeddings(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
         self.model_tester.check_resize_embeddings_switch_transformers_v1_1(config)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/switch-base-8"
-        model = SwitchTransformersModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):

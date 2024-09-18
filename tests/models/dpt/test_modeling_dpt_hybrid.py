@@ -186,6 +186,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Intel/dpt-hybrid-midas"
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -290,12 +291,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Intel/dpt-hybrid-midas"
-        model = DPTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_raise_readout_type(self):
         # We do this test only for DPTForDepthEstimation since it is the only model that uses readout_type

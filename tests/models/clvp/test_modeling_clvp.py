@@ -413,6 +413,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "susnato/clvp_dev"
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
@@ -536,12 +537,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
             config.save_pretrained(tmp_dir_name)
             decoder_config = ClvpDecoderConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.decoder_config.to_dict(), decoder_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "susnato/clvp_dev"
-        model = ClvpModelForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # Since Clvp has a lot of different models connected with each other it's better to test each of them individually along

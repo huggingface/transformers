@@ -200,6 +200,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "apple/mobilevitv2-1.0-imagenet1k-256"
 
     def setUp(self):
         self.model_tester = MobileViTV2ModelTester(self)
@@ -274,12 +275,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "apple/mobilevitv2-1.0-imagenet1k-256"
-        model = MobileViTV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

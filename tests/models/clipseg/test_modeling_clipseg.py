@@ -155,6 +155,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
@@ -221,12 +222,6 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class CLIPSegTextModelTester:
@@ -321,6 +316,7 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def setUp(self):
         self.model_tester = CLIPSegTextModelTester(self)
@@ -364,12 +360,6 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class CLIPSegModelTester:
@@ -458,6 +448,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment
@@ -766,12 +757,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

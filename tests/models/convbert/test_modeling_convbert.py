@@ -273,6 +273,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "YituTech/conv-bert-base"
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)
@@ -304,12 +305,6 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "YituTech/conv-bert-base"
-        model = ConvBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

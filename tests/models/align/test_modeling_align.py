@@ -138,6 +138,7 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignVisionModelTester(self)
@@ -229,12 +230,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class AlignTextModelTester:
@@ -340,6 +335,7 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
@@ -387,12 +383,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class AlignModelTester:
@@ -454,6 +444,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
@@ -600,12 +591,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = AlignTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

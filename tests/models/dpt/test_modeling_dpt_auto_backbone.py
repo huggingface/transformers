@@ -140,6 +140,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Intel/dpt-large"
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -239,12 +240,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Intel/dpt-large"
-        model = DPTForDepthEstimation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

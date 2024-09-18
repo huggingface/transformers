@@ -231,6 +231,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/dinov2-base"
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
@@ -289,12 +290,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Dinov2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/dinov2-base"
-        model = Dinov2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

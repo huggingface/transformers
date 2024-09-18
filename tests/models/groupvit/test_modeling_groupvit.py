@@ -148,6 +148,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
@@ -350,12 +351,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             if self.has_attentions:
                 self.assertIsNone(attentions.grad)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class GroupViTTextModelTester:
     def __init__(
@@ -448,6 +443,7 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
@@ -491,12 +487,6 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class GroupViTModelTester:
@@ -556,6 +546,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTModelTester(self)
@@ -705,12 +696,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.save_pretrained(tmp_dir_name)
             text_config = GroupViTTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

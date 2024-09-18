@@ -237,6 +237,8 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     test_missing_keys = False
+    input_name = "pixel_values"
+    pretrained_checkpoint = "openai/imagegpt-small"
 
     # as ImageGPTForImageClassification isn't included in any auto mapping, we add labels here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -293,12 +295,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/imagegpt-small"
-        model = ImageGPTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

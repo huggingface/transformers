@@ -242,6 +242,7 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+    pretrained_checkpoint = "squeezebert/squeezebert-uncased"
 
     def setUp(self):
         self.model_tester = SqueezeBertModelTester(self)
@@ -273,12 +274,6 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_squeezebert_for_multiple_choice(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "squeezebert/squeezebert-uncased"
-        model = SqueezeBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_sentencepiece

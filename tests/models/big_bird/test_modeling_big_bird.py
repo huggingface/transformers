@@ -465,6 +465,7 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "google/bigbird-roberta-base"
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -556,12 +557,6 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         if self.model_tester.attention_type == "original_full":
             super().test_retain_grad_hidden_states_attentions()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/bigbird-roberta-base"
-        model = BigBirdForPreTraining.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_model_various_attn_type(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -540,6 +540,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     fx_compatible = False
     test_pruning = False
+    pretrained_checkpoint = "xlnet/xlnet-base-cased"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -685,12 +686,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     [layer_attention.shape for layer_attention in iter_attentions],
                     [expected_shape] * len(iter_attentions),
                 )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "xlnet/xlnet-base-cased"
-        model = XLNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

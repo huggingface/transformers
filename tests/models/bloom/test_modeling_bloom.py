@@ -345,6 +345,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems not to be supported
+    pretrained_checkpoint = "bigscience/bigscience-small-testing"
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
@@ -388,12 +389,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "bigscience/bigscience-small-testing"
-        model = BloomModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

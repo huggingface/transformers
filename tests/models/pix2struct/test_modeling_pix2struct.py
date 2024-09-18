@@ -148,6 +148,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/pix2struct-textcaps-base"
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
@@ -218,12 +219,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/pix2struct-textcaps-base"
-        model = Pix2StructVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Pix2StructTextModelTester:
@@ -324,6 +319,7 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "google/pix2struct-textcaps-base"
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -367,12 +363,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/pix2struct-textcaps-base"
-        model = Pix2StructTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Pix2StructModelTester:

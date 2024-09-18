@@ -174,6 +174,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/vit-base-patch16-224"
 
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
@@ -277,12 +278,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ViTMAE returns a random mask + ids_restore in each forward pass")
     def test_batching_equivalence(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/vit-base-patch16-224"
-        model = ViTMAEModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

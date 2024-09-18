@@ -246,6 +246,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Rwkv does not support head masking
+    pretrained_checkpoint = "RWKV/rwkv-4-169m-pile"
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
@@ -386,12 +387,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 list(self_attentions[0].shape[-3:]),
                 [batch_size, seq_len, config.hidden_size],
             )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "RWKV/rwkv-4-169m-pile"
-        model = RwkvModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_beam_sample_generate_dict_output(self):
         # This model has a custom attention output shape AND config flags, let's skip those checks

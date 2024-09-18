@@ -254,6 +254,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "kssteven/ibert-roberta-base"
 
     def setUp(self):
         self.model_tester = IBertModelTester(self)
@@ -288,12 +289,6 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kssteven/ibert-roberta-base"
-        model = IBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """This is a regression test for https://github.com/huggingface/transformers/issues/1761
