@@ -1,3 +1,18 @@
+[tool.coverage.run]
+source = ["transformers"]
+omit = [
+    "*/convert_*",
+    "*/__main__.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise",
+    "except",
+    "register_parameter"
+]
+
 [tool.ruff]
 line-length = 119
 
