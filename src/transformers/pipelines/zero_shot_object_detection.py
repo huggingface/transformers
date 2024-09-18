@@ -105,7 +105,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
                 What the model should recognize in the image.
 
             parameters (`Dict[str, Any]`, *optional*): Additional inference parameters. Valid parameters include
-            `threshold`, top_k`, and `timeout`.
+                `threshold`, top_k`, and `timeout`.
 
 
         Return:
