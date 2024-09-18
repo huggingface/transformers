@@ -403,13 +403,13 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 ```
 
 
-## Converting to/from the legacy cache format
+## Legacy cache format
 
 Prior to the introduction of the `Cache` object, the cache of LLMs used to be a tuple of tuples of tensors. The legacy
 format has a dynamic size, growing as we generate text -- very similar to `DynamicCache`. If your project depend on
 this legacy format, you can seamlessly convert it to a `DynamicCache` and back.
 
-```py
+```python
 >>> import torch
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 

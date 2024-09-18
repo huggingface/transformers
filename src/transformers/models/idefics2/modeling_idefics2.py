@@ -1355,8 +1355,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 logger.warning_once(
                     "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
+                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
                 )
             past_seen_tokens = past_key_values.get_seq_length()
 
