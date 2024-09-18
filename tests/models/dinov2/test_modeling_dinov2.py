@@ -113,6 +113,7 @@ class Dinov2ModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            attn_implementation="eager",
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
