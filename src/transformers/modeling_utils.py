@@ -4164,38 +4164,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = sorted(unexpected_keys - model_buffers)
 
-        from collections import defaultdict
-
-        def update_key_name(keys):
-            # Dictionary to store all digit locations and their values
-            key_dict = defaultdict(set)
-            for key in keys:
-                modified_key = r""
-                # Iterate over each character in the key
-                for char in key:
-                    if char.isdigit():
-                        # If the character is a digit, add it to the list and replace with '-'
-                        if modified_key != "":
-                            modified_key += r"(\d+)"
-                            modified_key = modified_key.replace(".", r"\.")
-                            key_dict[modified_key].add(int(char))
-                            modified_key = r""
-                    else:
-                        # Otherwise, keep the character unchanged
-                        modified_key += char
-            # Create the final key with ranges based on the key dictionary
-            final_keys = set()
-
-            # Iterate over the dictionary and build the range-based string
-            for key in keys:
-                text = key
-                for pattern, values in key_dict.items():
-                    text = re.sub(pattern, lambda match: match.group(0)[: -len(match.group(1))] + str(values), text)
-                    # Replace underscores with range notation {0-max}
-                final_keys.add(text)
-
-            return final_keys
-
         model.tie_weights()
         if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
             ptrs = collections.defaultdict(list)
