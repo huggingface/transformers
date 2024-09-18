@@ -465,6 +465,13 @@ class MllamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.Parameter):
             module.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, MllamaVisionModel):
+            nn.init.normal_(module.class_embedding.data, std=std)
+        elif isinstance(module, MllamaPrecomputedPositionEmbedding):
+            nn.init.normal_(module.embedding.data, std=std)
+        elif isinstance(module, MllamaVisionEncoderLayer) and module.is_gated:
+            nn.init.normal_(module.gate_attn.data, std=std)
+            nn.init.normal_(module.gate_ffn.data, std=std)
 
 
 class MllamaVisionModel(MllamaPreTrainedModel):
