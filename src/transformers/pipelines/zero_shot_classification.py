@@ -9,7 +9,7 @@ from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 logger = logging.get_logger(__name__)
