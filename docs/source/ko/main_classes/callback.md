@@ -14,49 +14,49 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Callbacks
+# 콜백 [[callbacks]]
 
-Callbacks are objects that can customize the behavior of the training loop in the PyTorch
-[`Trainer`] (this feature is not yet implemented in TensorFlow) that can inspect the training loop
-state (for progress reporting, logging on TensorBoard or other ML platforms...) and take decisions (like early
-stopping).
+콜백은 PyTorch [`Trainer`]의 훈련 루프 동작을 사용자 정의할 수 있는 객체입니다
+(이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 훈련 루프의 상태를
+검사하여 진행 상황 보고, TensorBoard 또는 기타 머신 러닝 플랫폼에 로그 등의 작업을 할 수 있으며, 
+결정(예: 조기 종료)도 내릴 수 있습니다.
 
-Callbacks are "read only" pieces of code, apart from the [`TrainerControl`] object they return, they
-cannot change anything in the training loop. For customizations that require changes in the training loop, you should
-subclass [`Trainer`] and override the methods you need (see [trainer](trainer) for examples).
+콜백은 [`TrainerControl`] 객체를 반환하는 것 외에는 훈련 루프에서 어떤 것도 변경할 수 없는
+"읽기 전용" 코드 조각입니다. 훈련 루프에 변경이 필요한 사용자 정의 작업이 필요한 경우, 
+[`Trainer`]를 서브클래스로 만들어 필요한 메소드들을 오버라이드해야 합니다 (예시는 [trainer](trainer)를 참조하세요).
 
-By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] will use the following callbacks.
+기본적으로 `TrainingArguments.report_to`는 `"all"`로 설정되어 있으므로, [`Trainer`]는 다음 콜백을 사용합니다.
 
-- [`DefaultFlowCallback`] which handles the default behavior for logging, saving and evaluation.
-- [`PrinterCallback`] or [`ProgressCallback`] to display progress and print the
-  logs (the first one is used if you deactivate tqdm through the [`TrainingArguments`], otherwise
-  it's the second one).
-- [`~integrations.TensorBoardCallback`] if tensorboard is accessible (either through PyTorch >= 1.4
-  or tensorboardX).
-- [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
-- [`~integrations.CometCallback`] if [comet_ml](https://www.comet.com/site/) is installed.
-- [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
-- [`~integrations.NeptuneCallback`] if [neptune](https://neptune.ai/) is installed.
-- [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
-  installed.
-- [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
-  installed.
-- [`~integrations.ClearMLCallback`] if [clearml](https://github.com/allegroai/clearml) is installed.
-- [`~integrations.DagsHubCallback`] if [dagshub](https://dagshub.com/) is installed.
-- [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
-- [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
+- [`DefaultFlowCallback`]는 로그, 저장, 평가에 대한 기본 동작을 처리합니다.
+- [`PrinterCallback`] 또는 [`ProgressCallback`]는 진행 상황을 표시하고 로그를 출력합니다 
+  (첫 번째는 [`TrainingArguments`]를 통해 tqdm을 비활성화하면 사용되고, 그렇지 않으면 두 번째가 사용됩니다).
+- [`~integrations.TensorBoardCallback`]는 TensorBoard가 (PyTorch >= 1.4
+ 또는 tensorboardX를 통해) 접근 가능하면 사용됩니다.
+- [`~integrations.WandbCallback`]는 [wandb](https://www.wandb.com/)가 설치되어 있으면
+ 사용됩니다.
+- [`~integrations.CometCallback`]는 [comet_ml](https://www.comet.com/site/)이 설치되어 있으면 사용됩니다.
+- [`~integrations.MLflowCallback`]는 [mlflow](https://www.mlflow.org/)가 설치되어 있으면 사용됩니다.
+- [`~integrations.NeptuneCallback`]는 [neptune](https://neptune.ai/)이 설치되어 있으면 사용됩니다.
+- [`~integrations.AzureMLCallback`]는 [azureml-sdk](https://pypi.org/project/azureml-sdk/)가 설치되어
+ 있으면 사용됩니다.
+- [`~integrations.CodeCarbonCallback`]는 [codecarbon](https://pypi.org/project/codecarbon/)이 설치되어
+ 있으면 사용됩니다.
+- [`~integrations.ClearMLCallback`]는 [clearml](https://github.com/allegroai/clearml)이 설치되어 있으면 사용됩니다.
+- [`~integrations.DagsHubCallback`]는 [dagshub](https://dagshub.com/)이 설치되어 있으면 사용됩니다.
+- [`~integrations.FlyteCallback`]는 [flyte](https://flyte.org/)가 설치되어 있으면 사용됩니다.
+- [`~integrations.DVCLiveCallback`]는 [dvclive](https://dvc.org/doc/dvclive)가 설치되어 있으면 사용됩니다.
 
-If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
+패키지가 설치되어 있지만 해당 통합을 사용하지 않으려면, `TrainingArguments.report_to`를 사용하고 싶은 통합 목록으로 변경할 수 있습니다 (예: `["azure_ml", "wandb"]`).
 
-The main class that implements callbacks is [`TrainerCallback`]. It gets the
-[`TrainingArguments`] used to instantiate the [`Trainer`], can access that
-Trainer's internal state via [`TrainerState`], and can take some actions on the training loop via
-[`TrainerControl`].
+콜백을 구현하는 주요 클래스는 [`TrainerCallback`]입니다. 이 클래스는 [`Trainer`]를 
+인스턴스화하는 데 사용된 [`TrainingArguments`]를 가져오고, 해당 Trainer의 내부 상태를 
+[`TrainerState`]를 통해 접근할 수 있으며, [`TrainerControl`]을 통해 훈련 루프에서 일부 
+작업을 수행할 수 있습니다.
 
 
-## Available Callbacks
+## 사용 가능한 콜백 [[available-callbacks]]
 
-Here is the list of the available [`TrainerCallback`] in the library:
+라이브러리에서 사용 가능한 [`TrainerCallback`] 목록은 다음과 같습니다:
 
 [[autodoc]] integrations.CometCallback
     - setup
@@ -92,11 +92,11 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.DVCLiveCallback
     - setup
 
-## TrainerCallback
+## TrainerCallback [[trainercallback]]
 
 [[autodoc]] TrainerCallback
 
-Here is an example of how to register a custom callback with the PyTorch [`Trainer`]:
+여기 PyTorch [`Trainer`]와 함께 사용자 정의 콜백을 등록하는 예시가 있습니다:
 
 ```python
 class MyCallback(TrainerCallback):
@@ -115,7 +115,7 @@ trainer = Trainer(
 )
 ```
 
-Another way to register a callback is to call `trainer.add_callback()` as follows:
+또 다른 콜백을 등록하는 방법은 `trainer.add_callback()`을 호출하는 것입니다:
 
 ```python
 trainer = Trainer(...)
@@ -124,10 +124,10 @@ trainer.add_callback(MyCallback)
 trainer.add_callback(MyCallback())
 ```
 
-## TrainerState
+## TrainerState [[trainerstate]]
 
 [[autodoc]] TrainerState
 
-## TrainerControl
+## TrainerControl [[trainercontrol]]
 
 [[autodoc]] TrainerControl
