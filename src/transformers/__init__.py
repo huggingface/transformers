@@ -70,6 +70,7 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
+        "tool",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -650,6 +651,7 @@ _import_structure = {
         "Pix2StructTextConfig",
         "Pix2StructVisionConfig",
     ],
+    "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
@@ -1200,6 +1202,7 @@ else:
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
+    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
@@ -1360,7 +1363,6 @@ else:
             "AlignVisionModel",
         ]
     )
-
     _import_structure["models.altclip"].extend(
         [
             "AltCLIPModel",
@@ -2984,6 +2986,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
+    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -4824,6 +4827,7 @@ if TYPE_CHECKING:
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
+        tool,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -5444,6 +5448,10 @@ if TYPE_CHECKING:
         Pix2StructTextConfig,
         Pix2StructVisionConfig,
     )
+    from .models.pixtral import (
+        PixtralProcessor,
+        PixtralVisionConfig,
+    )
     from .models.plbart import PLBartConfig
     from .models.poolformer import (
         PoolFormerConfig,
@@ -6019,6 +6027,7 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
+        from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
@@ -7461,6 +7470,10 @@ if TYPE_CHECKING:
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
             Pix2StructVisionModel,
+        )
+        from .models.pixtral import (
+            PixtralModel,
+            PixtralPreTrainedModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,

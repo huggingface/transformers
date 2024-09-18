@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 import numpy as np
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_vision_available, valid_images
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available
 
 
 if is_vision_available():
@@ -502,9 +502,12 @@ class ProcessorMixin(PushToHubMixin):
         output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
 
         processor_dict = self.to_dict()
-        chat_template = processor_dict.pop("chat_template", None)
-        if chat_template is not None:
-            chat_template_json_string = json.dumps({"chat_template": chat_template}, indent=2, sort_keys=True) + "\n"
+        # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
+        # to avoid serializing chat template in json config file. So let's get it from `self` directly
+        if self.chat_template is not None:
+            chat_template_json_string = (
+                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+            )
             with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file}")
@@ -1003,6 +1006,20 @@ def _validate_images_text_input_order(images, text):
     in the processor's `__call__` method before calling this method.
     """
 
+    def is_url(val) -> bool:
+        return isinstance(val, str) and val.startswith("http")
+
+    def _is_valid_images_input_for_processor(imgs):
+        # If we have an list of images, make sure every image is valid
+        if isinstance(imgs, (list, tuple)):
+            for img in imgs:
+                if not _is_valid_images_input_for_processor(img):
+                    return False
+        # If not a list or tuple, we have been given a single image or batched tensor of images
+        elif not (is_valid_image(imgs) or is_url(imgs)):
+            return False
+        return True
+
     def _is_valid_text_input_for_processor(t):
         if isinstance(t, str):
             # Strings are fine
@@ -1019,11 +1036,11 @@ def _validate_images_text_input_order(images, text):
     def _is_valid(input, validator):
         return validator(input) or input is None
 
-    images_is_valid = _is_valid(images, valid_images)
-    images_is_text = _is_valid_text_input_for_processor(images) if not images_is_valid else False
+    images_is_valid = _is_valid(images, _is_valid_images_input_for_processor)
+    images_is_text = _is_valid_text_input_for_processor(images)
 
     text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
-    text_is_images = valid_images(text) if not text_is_valid else False
+    text_is_images = _is_valid_images_input_for_processor(text)
     # Handle cases where both inputs are valid
     if images_is_valid and text_is_valid:
         return images, text

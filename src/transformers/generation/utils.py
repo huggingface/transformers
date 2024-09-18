@@ -1334,23 +1334,26 @@ class GenerationMixin:
             # the following conditions must be met
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
             # 2) the generation config must have seen no modification since its creation (the hash is the same);
-            # 3) the user must have set generation parameters in the model config.
+            # 3) there are non-default generation parameters in the model config.
+            # 4) the user must have set new generation parameters in the model config.
             # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
             if (
                 not is_torchdynamo_compiling()
                 and self.generation_config._from_model_config  # 1)
                 and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
+                and len(self.config._get_non_default_generation_parameters()) > 0  # 3)
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:  # 3)
+                if new_generation_config != self.generation_config:  # 4)
                     warnings.warn(
                         "You have modified the pretrained model configuration to control generation. This is a"
-                        " deprecated strategy to control generation and will be removed soon, in a future version."
+                        " deprecated strategy to control generation and will be removed in v5."
                         " Please use and modify the model generation configuration (see"
-                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )"
+                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                        UserWarning,
                     )
                     self.generation_config = new_generation_config
-            using_model_generation_config = True
+
             generation_config = self.generation_config
             using_model_generation_config = True
 
@@ -1446,12 +1449,39 @@ class GenerationMixin:
                     # models. May cause trobles with non-text modalities.
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
+            def get_layer_device_map(execution_device_map: Optional[dict] = None):
+                if execution_device_map is None or len(execution_device_map) <= 1:
+                    return None
+                layer_device_map = {}
+                for layer in execution_device_map:
+                    for idx in range(self.config.num_hidden_layers):
+                        if f".{idx}." in f"{layer}.":
+                            layer_device_map[idx] = execution_device_map[layer]
+                            break
+                for idx in range(self.config.num_hidden_layers):
+                    if idx not in layer_device_map:
+                        raise RuntimeError(f"layer {idx} has not been mapped to a device.")
+                return layer_device_map
+
+            execution_device_map = None
+            # Taken from dispatch_model from accelerate.
+            # This is needed here if we don't want to make changes in accelerate in order to save execution_device
+            # For offloaded case, we need to get the execution device, not just the device where it is offloaded
+            if hasattr(self, "hf_device_map"):
+                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                execution_device_map = {
+                    name: main_device if device in ["cpu", "disk"] else device
+                    for name, device in self.hf_device_map.items()
+                }
+            layer_device_map = get_layer_device_map(execution_device_map)
+
             cache_kwargs = {
                 "config": self.config if hasattr(self.config, "text_config") else self.config,
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
+                "layer_device_map": layer_device_map,
             }
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
