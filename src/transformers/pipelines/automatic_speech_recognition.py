@@ -440,6 +440,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     truncation=False,
                     padding="longest",
                     return_tensors="pt",
+                    return_attention_mask=True,
                 )
             else:
                 if self.type == "seq2seq_whisper" and stride is None:
@@ -448,13 +449,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         sampling_rate=self.feature_extractor.sampling_rate,
                         return_tensors="pt",
                         return_token_timestamps=True,
+                        return_attention_mask=True,
                     )
                     extra["num_frames"] = processed.pop("num_frames")
                 else:
                     processed = self.feature_extractor(
-                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                        inputs,
+                        sampling_rate=self.feature_extractor.sampling_rate,
+                        return_tensors="pt",
+                        return_attention_mask=True,
                     )
-
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
