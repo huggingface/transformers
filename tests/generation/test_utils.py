@@ -3567,10 +3567,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             penalty_alpha=penalty_alpha,
             top_k=top_k,
-            max_length=64,
+            max_new_tokens=64,
         )
-        outputs = outputs[:, :-padding_length]
-        generated_text_no_padding = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        generated_text_no_padding = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
         # Pad the input IDs and attention mask on the left
         padded_input_ids = F.pad(
@@ -3585,22 +3584,17 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             penalty_alpha=penalty_alpha,
             top_k=top_k,
-            max_length=64,
+            max_new_tokens=64,
         )
-        outputs_with_padding = outputs_with_padding[:, padding_length:]
-        generated_text_with_padding = tokenizer.batch_decode(outputs_with_padding, skip_special_tokens=True)
-
-        print(generated_text_with_padding)
+        generated_text_with_padding = tokenizer.decode(outputs_with_padding[0], skip_special_tokens=True)
 
         # Assert that the generated texts are identical for padded and non-padded inputs
-        self.assertListEqual(generated_text_no_padding, generated_text_with_padding)
-        self.assertListEqual(
+        self.assertEqual(generated_text_no_padding, generated_text_with_padding)
+        self.assertEqual(
             generated_text_with_padding,
-            [
-                'The whispered legends of the haunted mansion spoke of the "souls of the dead" who were '
-                '"falling out of the sky" and "falling into the sea."\n\nThe ghostly apparitions were '
-                "said to have been created by the spirits of the dead"
-            ],
+            'The whispered legends of the haunted mansion spoke of the "souls of the dead" who were "falling '
+            'out of the sky" and "falling into the sea."\n\nThe ghostly apparitions were said to have been '
+            'created by the spirits of the dead, who were "falling out of the sky" and "falling into the sea',
         )
 
     @slow
@@ -3637,9 +3631,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             penalty_alpha=penalty_alpha,
             top_k=top_k,
-            max_length=128,
+            max_new_tokens=64,
         )
-        generated_text_no_padding = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        generated_text_no_padding = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
         # Define the padding length to add to the input IDs and attention mask
         padding_length = 10
@@ -3649,7 +3643,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             decoder_input_ids, (padding_length, 0), "constant", value=model.generation_config.pad_token_id
         )
         padded_decoder_attention_mask = F.pad(decoder_attention_mask, (padding_length, 0), "constant", value=0)
-        # Set the attention_mask of the decoder_start_token_id is true
+        # Since the decoder_start_token_id is the same as the pad_token_id,
+        # the last padded token represents the decoder start token.
+        # Set the attention mask for the decoder_start_token_id to True (1).
         padded_decoder_attention_mask[:, padding_length - 1] = 1
         # Generate text with padded inputs
         outputs_with_padding = model.generate(
@@ -3660,13 +3656,13 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             penalty_alpha=penalty_alpha,
             top_k=top_k,
-            max_length=128,
+            max_new_tokens=64,
         )
-        generated_text_with_padding = tokenizer.batch_decode(outputs_with_padding, skip_special_tokens=True)
+        generated_text_with_padding = tokenizer.decode(outputs_with_padding[0], skip_special_tokens=True)
 
         # Assert that the generated texts are identical for padded and non-padded inputs
-        self.assertListEqual(generated_text_no_padding, generated_text_with_padding)
-        self.assertListEqual(generated_text_no_padding, ["Ich muss diese Aufgabe vor Ende des Tages beenden."])
+        self.assertEqual(generated_text_no_padding, generated_text_with_padding)
+        self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
 
 
 @require_torch
