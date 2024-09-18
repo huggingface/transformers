@@ -34,7 +34,7 @@ The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transfor
 Here we show how to fine-tune a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset:
 
 ```bash
-python run_object_detection.py \
+accelerate launch run_object_detection.py \
     --model_name_or_path facebook/detr-resnet-50 \
     --dataset_name cppe-5 \
     --do_train true \
@@ -52,7 +52,7 @@ python run_object_detection.py \
     --remove_unused_columns false \
     --eval_do_concat_batches false \
     --ignore_mismatched_sizes true \
-    --metric_for_best_model eval_map \
+    --metric_for_best_model epoch \
     --greater_is_better true \
     --load_best_model_at_end true \
     --logging_strategy epoch \

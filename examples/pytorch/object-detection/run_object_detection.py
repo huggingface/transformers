@@ -16,6 +16,7 @@
 """Finetuning any 🤗 Transformers model supported by AutoModelForObjectDetection for object detection leveraging the Trainer API."""
 
 import logging
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from typing import Any, List, Mapping, Optional, Tuple, Union
 import albumentations as A
 import numpy as np
 import torch
+from accelerate import Accelerator
 from datasets import load_dataset
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
@@ -36,6 +38,7 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    get_scheduler,
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
@@ -177,6 +180,8 @@ def compute_metrics(
     """
 
     predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
+    print('predictions', predictions, targets)
+    print('evaluation_results', evaluation_results)
 
     # For metric computation we need to provide:
     #  - targets in a form of list of dictionaries with keys "boxes", "labels"
@@ -338,6 +343,17 @@ def main():
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_object_detection", model_args, data_args)
 
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    # If we're using training_args.report_to, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator_log_kwargs = {}
+
+    if training_args.report_to:
+        accelerator_log_kwargs["log_with"] = training_args.report_to
+        accelerator_log_kwargs["project_dir"] = training_args.output_dir
+
+    accelerator = Accelerator(gradient_accumulation_steps=training_args.gradient_accumulation_steps, **accelerator_log_kwargs)
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -474,6 +490,15 @@ def main():
     dataset["train"] = dataset["train"].with_transform(train_transform_batch)
     dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
     dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
+
+    # ------------------------------------------------------------------------------------------------
+    # Prepare everything with the accelerator
+    # ------------------------------------------------------------------------------------------------
+
+    # Prepare everything with our `accelerator`.
+    model, dataset["train"], dataset["validation"] = accelerator.prepare(
+        model, dataset["train"], dataset["validation"]
+    )
 
     # ------------------------------------------------------------------------------------------------
     # Model training and evaluation with Trainer API
