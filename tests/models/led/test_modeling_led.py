@@ -339,7 +339,9 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.check_global_attention(*config_and_inputs)
 
     def _get_input_ids_and_config(self, batch_size=2):
-        config, input_ids, attention_mask, inputs_dict = GenerationTesterMixin._get_input_ids_and_config(self)
+        config, input_ids, attention_mask, inputs_dict = GenerationTesterMixin._get_input_ids_and_config(
+            self, batch_size=batch_size
+        )
         # LED computes attention scores based on mask indices if `is_global`
         inputs_dict.pop("global_attention_mask")
         return config, input_ids, attention_mask, inputs_dict
