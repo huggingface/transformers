@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
+import warnings
 from typing import List, Union
 
 from ..utils import is_torch_available
@@ -161,16 +162,13 @@ class TextToAudioPipeline(Pipeline):
 
         return output
 
-    def __call__(self, text_inputs: Union[str, List[str]], **forward_params):
+    def __call__(self, inputs: Union[str, List[str]] = None, **forward_params):
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `List[str]`):
+            inputs (`str` or `List[str]`):
                 The text(s) to generate.
-            forward_params (`dict`, *optional*):
-                Parameters passed to the model generation/forward method. `forward_params` are always passed to the
-                underlying model.
             generate_kwargs (`dict`, *optional*):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
@@ -183,7 +181,22 @@ class TextToAudioPipeline(Pipeline):
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
-        return super().__call__(text_inputs, **forward_params)
+        # After deprecation of this is completed, remove the default `None` value for `inputs`
+        if "text_inputs" in forward_params:
+            warnings.warn(
+                "The `text_inputs` argument has been renamed to `inputs`. In version 5 of Transformers, `text_inputs` will no longer be accepted",
+                FutureWarning,
+            )
+            inputs = forward_params.pop("text_inputs")
+        elif inputs is None:
+            raise ValueError("Cannot call the text-to-audio pipeline without an inputs argument!")
+        # After deprecation of this is completed, rename the input kwarg to `generate_kwargs`
+        if {key for key in forward_params if key != "generate_kwargs"}:
+            warnings.warn(
+                "Kwargs other than `generate_kwargs` are deprecated. In version 5 of Transformers, only the `generate_kwargs` kwarg will be accepted",
+                FutureWarning,
+            )
+        return super().__call__(inputs, **forward_params)
 
     def _sanitize_parameters(
         self,
