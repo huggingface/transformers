@@ -150,6 +150,7 @@ from . import (
     megatron_bert,
     megatron_gpt2,
     mgp_str,
+    mimi,
     mistral,
     mixtral,
     mluke,
