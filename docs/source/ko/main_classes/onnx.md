@@ -14,22 +14,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Exporting 🤗 Transformers models to ONNX[[exporting--transformers-models-to-onnx]]
+# 🤗 트랜스포머 모델을 ONNX로 내보내기[[exporting--transformers-models-to-onnx]]
 
-🤗 Transformers provides a `transformers.onnx` package that enables you to
-convert model checkpoints to an ONNX graph by leveraging configuration objects.
+🤗 트랜스포머는 `transformers.onnx` 패키지를 제공하며, 패키지를 통해 설정 객체를 활용함으로써 모델 체크포인트를 ONNX 그래프로 변환할 수 있게 합니다.
 
-See the [guide](../serialization) on exporting 🤗 Transformers models for more
-details.
+🤗 트랜스포머에 대한 자세한 내용은 [이 가이드](../serialization)를 참조하세요.
 
-## ONNX Configurations[[onnx-configurations]]
+## ONNX 설정[[onnx-configurations]]
 
-We provide three abstract classes that you should inherit from, depending on the
-type of model architecture you wish to export:
+내보내고자 하는 모델 아키텍처의 유형에 따라 상속받아야 할 세 가지 추상 클래스를 제공합니다:
 
-* Encoder-based models inherit from [`~onnx.config.OnnxConfig`]
-* Decoder-based models inherit from [`~onnx.config.OnnxConfigWithPast`]
-* Encoder-decoder models inherit from [`~onnx.config.OnnxSeq2SeqConfigWithPast`]
+* 인코더 기반 모델은 [`~onnx.config.OnnxConfig`]에서 상속받습니다.
+* 디코더 기반 모델은 [`~onnx.config.OnnxConfigWithPast`]에서 상속받습니다.
+* 인코더-디코더 기반 모델은 [`~onnx.config.OnnxSeq2SeqConfigWithPast`]에서 상속받습니다.
 
 ### OnnxConfig[[transformers.onnx.OnnxConfig]]
 
@@ -43,10 +40,9 @@ type of model architecture you wish to export:
 
 [[autodoc]] onnx.config.OnnxSeq2SeqConfigWithPast
 
-## ONNX Features[[onnx-features]]
+## ONNX 특징[[onnx-features]]
 
-Each ONNX configuration is associated with a set of _features_ that enable you
-to export models for different types of topologies or tasks.
+각 ONNX 설정은 다양한 유형의 토폴로지나 작업에 대해 모델을 내보낼 수 있게 해주는 _features_ 세트와 연관되어 있습니다.
 
 ### FeaturesManager[[transformers.onnx.FeaturesManager]]
 
