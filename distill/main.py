@@ -78,7 +78,7 @@ def train_one_epoch(
         loss_meter.update(loss.item())
         acc1_meter.update(acc1.item())
 
-        if idx % print_freq == 0:
+        if accelerator.is_main_process and (idx % print_freq == 0):
             print(
                 f"[{epoch}:{idx}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}), acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), learning rate = {current_lr:.5f}"
             )
@@ -88,7 +88,7 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(epoch, student_model, val_dataloader):
+def evaluate(epoch, student_model, val_dataloader, accelerator):
 
     acc1_meter = AverageMeter()
     acc5_meter = AverageMeter()
@@ -109,9 +109,12 @@ def evaluate(epoch, student_model, val_dataloader):
             f"[{epoch}:{idx}] acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), acc@5 = {acc5_meter.val:.3f}% ({acc5_meter.avg:.3f}%)"
         )
 
-    print(
-        f"\n[Epoch {epoch} evaluation] acc@1 = {acc1_meter.avg:.3f}%, acc@5 = {acc5_meter.avg:.3f}%\n"
-    )
+    acc1 = accelerator.gather_for_metrics([acc1_meter.avg])
+    acc5 = accelerator.gather_for_metrics([acc5_meter.avg])
+    if accelerator.is_main_process:
+        print(
+            f"\n[Epoch {epoch} evaluation] acc@1 = {np.mean(acc1):.3f}%, acc@5 = {np.mean(acc5):.3f}%\n"
+        )
 
 
 @click.command()
@@ -187,16 +190,19 @@ def main(dataset, batch, epoch, lr, save):
             lr_scheduler,
         )
 
-        # save both hugginface and pytorch checkpoints
-        student_model.save_pretrained(save)
-        torch.save(
-            student_model.state_dict(),
-            os.path.join(save, f"student-vit-base-patch16-224-epoch{e}.pth"),
-        )
-        print(f"\nEpoch {e} checkpoints saved.\n")
+        # save both hugginface and pytorch checkpoints        
+        accelerator.wait_for_everyone()
+        if accelerator.is_main_process:
+            unwrapped_student_model = accelerator.unwrap_model(student_model)
+            unwrapped_student_model.save_pretrained(save)
+            torch.save(
+                unwrapped_student_model.state_dict(),
+                os.path.join(save, f"student-vit-base-patch16-224-epoch{e}.pth"),
+            )
+            print(f"\nEpoch {e} checkpoints saved.\n")
 
         # evaluation
-        evaluate(e, student_model, val_dataloader)
+        evaluate(e, student_model, val_dataloader, accelerator)
 
 
 if __name__ == "__main__":
