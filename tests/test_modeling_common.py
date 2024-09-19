@@ -4751,7 +4751,7 @@ class ModelTesterMixin:
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_read_token
     def test_torch_compile(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
