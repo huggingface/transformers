@@ -1038,15 +1038,20 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
             docstring = inspect.getdoc(pipeline_cls.__call__).strip()
             docstring_args = set(self._parse_google_format_docstring_by_indentation(docstring))
             js_args = set(self.get_arg_names_from_hub_spec(js_spec))
+
+            # Special casing: We allow the name of this arg to differ
+            js_generate_args = [js_arg for js_arg in js_args if js_arg.startswith("generate")]
+            docstring_generate_args = [
+                docstring_arg for docstring_arg in docstring_args if docstring_arg.startswith("generate")
+            ]
             if (
-                "generate" in js_args
-                and "generate" not in docstring_args
-                and "generate_kwargs" in docstring_args
-                and "generate_kwargs" not in js_args
+                len(js_generate_args) == 1
+                and len(docstring_generate_args) == 1
+                and js_generate_args != docstring_generate_args
             ):
-                # Special casing: We allow the name of this arg to differ
-                js_args.remove("generate")
-                docstring_args.remove("generate_kwargs")
+                js_args.remove(js_generate_args[0])
+                docstring_args.remove(docstring_generate_args[0])
+
             if js_args != docstring_args:
                 mismatches.append((task, js_args, docstring_args))
 
