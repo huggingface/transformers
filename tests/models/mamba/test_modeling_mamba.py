@@ -254,6 +254,32 @@ class MambaModelTester:
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
+    def create_and_check_dtype_mismatch(self, config, input_ids, *args):
+        model = MambaModel(config)
+        model.to(torch_device)
+        model.eval()
+        # Set model to float16
+        model.half()
+    
+        # Run model to generate cache
+        outputs = model(input_ids[:, :-1], use_cache=True)
+    
+        # Modify the cache to be in float32
+        cache_params = outputs.cache_params
+        cache_params.conv_states = cache_params.conv_states.to(torch.float32)
+        cache_params.ssm_states = cache_params.ssm_states.to(torch.float32)
+    
+        # Try to run the model with the modified cache
+        outputs = model(
+            input_ids[:, -1:],
+            use_cache=True,
+            cache_params=cache_params,
+        )
+    
+        # Check that the output cache params are in float16 (matching the model's data type)
+        self.parent.assertEqual(outputs.cache_params.conv_states.dtype, torch.float16)
+        self.parent.assertEqual(outputs.cache_params.ssm_states.dtype, torch.float16)
+
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
@@ -432,6 +458,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+    def test_dtype_mismatch_error_catch(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_dtype_mismatch(*config_and_inputs)
 
     @unittest.skip("The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
