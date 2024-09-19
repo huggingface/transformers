@@ -18,6 +18,8 @@ import shutil
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
