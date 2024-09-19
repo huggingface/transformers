@@ -264,7 +264,7 @@ class Idefics3VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionFlashAttention2
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionFlashAttention2 with Idefics2->Idefics3
 class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
     """
     Idefics3Vision flash attention module. This module inherits from `Idefics3VisionAttention` as the weights of the module stays
@@ -865,6 +865,11 @@ class Idefics3Model(Idefics3PreTrainedModel):
             make_inputs_require_grads
         )
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.disable_input_require_grads
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
+
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.get_input_embeddings
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
@@ -1064,6 +1069,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
             make_inputs_require_grads
         )
+
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.disable_input_require_grads
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):

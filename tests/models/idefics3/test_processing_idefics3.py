@@ -81,7 +81,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_splitted_image_expected_tokens(self, processor, image_rows, image_cols):
+    def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):
             for n_w in range(image_cols):
@@ -185,8 +185,8 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        splitted_image1_tokens = self.get_splitted_image_expected_tokens(processor, 3, 4)
-        expected_input_ids_1 = [[self.bos_token_id] + splitted_image1_tokens + tokenized_sentence["input_ids"]]
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        expected_input_ids_1 = [[self.bos_token_id] + split_image1_tokens + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids_1)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids_1[0])])
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 364, 364))
@@ -210,11 +210,11 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        splitted_image1_tokens = self.get_splitted_image_expected_tokens(processor, 3, 4)
-        splitted_image2_tokens = self.get_splitted_image_expected_tokens(processor, 4, 4)
-        splitted_image3_tokens = self.get_splitted_image_expected_tokens(processor, 3, 4)
-        expected_input_ids_1 = [self.bos_token_id] + splitted_image1_tokens + tokenized_sentence_1["input_ids"]
-        expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + splitted_image2_tokens + splitted_image3_tokens
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        split_image2_tokens = self.get_split_image_expected_tokens(processor, 4, 4)
+        split_image3_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        expected_input_ids_1 = [self.bos_token_id] + split_image1_tokens + tokenized_sentence_1["input_ids"]
+        expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + split_image2_tokens + split_image3_tokens
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
         padded_expected_input_ids_1 = [self.padding_token_id] * pad_len + expected_input_ids_1
@@ -240,12 +240,12 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        splitted_image1_tokens = self.get_splitted_image_expected_tokens(processor, 3, 4)
-        expected_input_ids = [tokenized_sentence["input_ids"] + splitted_image1_tokens]
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
         inputs = processor(text=text, images=self.image1)
-        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + splitted_image1_tokens]
+        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + split_image1_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
 

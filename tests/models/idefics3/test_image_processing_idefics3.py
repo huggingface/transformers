@@ -103,7 +103,9 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
-        effective_nb_images = self.num_images * 5 if self.do_image_splitting else 1
+        effective_nb_images = (
+            self.num_images * 5 if self.do_image_splitting else 1
+        )  # 5 is a squared image divided into 4 + global image resized
         return effective_nb_images, self.num_channels, height, width
 
     def prepare_image_inputs(

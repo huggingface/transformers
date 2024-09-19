@@ -18,8 +18,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
 from ...image_utils import (
@@ -38,15 +36,6 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_vision_available, logging
 
-
-if is_torch_available():
-    pass
-
-if is_tf_available():
-    pass
-
-if is_flax_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -235,7 +224,7 @@ def make_pixel_mask(
 
 # Custom to_pil_image function to support image_mode
 def to_pil_image(
-    image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
+    image: Union[np.ndarray, "PIL.Image.Image", TensorType],
     image_mode: Optional[str] = None,
 ) -> "PIL.Image.Image":
     """
@@ -265,6 +254,7 @@ def to_pil_image(
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image, mode=image_mode)
+
 
 def convert_to_rgb(
     image: np.ndarray,
