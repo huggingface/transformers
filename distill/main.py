@@ -1,16 +1,14 @@
-import os
-import click
+import os, click
 import numpy as np
 from pathlib import Path
 from datasets import load_dataset
-import evaluate
-from transformers import ViTImageProcessor, ViTForImageClassification
+from transformers import get_scheduler, ViTImageProcessor, ViTForImageClassification
 from accelerate import Accelerator
 from torch.optim import AdamW
-from transformers import get_scheduler
 import torch
 from torch.utils.data import DataLoader
 from timm.utils import accuracy, AverageMeter
+
 
 def get_dataloaders(dataset, batch_size):
     train_dataset = load_dataset(
@@ -42,6 +40,77 @@ def get_dataloaders(dataset, batch_size):
     return train_dataloader, val_dataloader
 
 
+def train_one_epoch(
+    epoch,
+    teacher_model,
+    student_model,
+    train_dataloader,
+    accelerator,
+    optimizer,
+    lr_scheduler,
+    print_freq=10,
+):
+
+    loss_meter = AverageMeter()
+    acc1_meter = AverageMeter()
+    student_model.train()
+    for idx, batch in enumerate(train_dataloader):
+        teacher_outputs = teacher_model(
+            pixel_values=batch["image"],
+            output_attentions=True,
+            output_hidden_states=True,
+        )
+
+        student_outputs = student_model(
+            pixel_values=batch["image"],
+            labels=batch["label"],
+            output_attentions=True,
+            output_hidden_states=True,
+        )
+
+        # Placeholder
+        loss = student_outputs.loss
+
+        accelerator.backward(loss)
+        optimizer.step()
+
+        current_lr = lr_scheduler.get_last_lr()[0]
+        acc1 = accuracy(student_outputs.logits, batch["label"])
+        loss_meter.update(loss.item())
+        acc1_meter.update(acc1.item())
+
+        if idx % print_freq == 0:
+            print(
+                f"[{epoch}:{idx}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}),\tacc@1 = {acc1_meter.val:.3f} ({acc1_meter.avg:.3f}),\tlearning rate = {current_lr:.5f}"
+            )
+
+        lr_scheduler.step()
+        optimizer.zero_grad()
+
+
+@torch.no_grad()
+def evaluate(epoch, student_model, val_dataloader):
+
+    acc1_meter = AverageMeter()
+    acc5_meter = AverageMeter()
+    student_model.eval()
+    for idx, batch in enumerate(val_dataloader):
+        student_outputs = student_model(
+            pixel_values=batch["image"],
+            labels=batch["label"],
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+
+        acc1, acc5 = accuracy(student_outputs.logits, batch["label"], topk=(1, 5))
+        acc1_meter.update(acc1.item())
+        acc5_meter.update(acc5.item())
+
+        print(
+            f"[{epoch}:{idx}] acc@1 = {acc1_meter.val:.3f} ({acc1_meter.avg:.3f}),\tacc@1 = {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})"
+        )
+
+
 @click.command()
 @click.option(
     "--dataset",
@@ -69,7 +138,7 @@ def get_dataloaders(dataset, batch_size):
 @click.option(
     "--save",
     type=click.Path(path_type=Path),
-    default="outputs", 
+    default="outputs",
     help="Path to save a checkpoint for the student model.",
 )
 def main(dataset, batch, epoch, lr, save):
@@ -102,62 +171,22 @@ def main(dataset, batch, epoch, lr, save):
         num_warmup_steps=0,
         num_training_steps=epoch * len(train_dataloader),
     )
-    metric = evaluate.load("accuracy")
-    loss_meter = AverageMeter()
-    acc1_meter = AverageMeter()
-    acc5_meter = AverageMeter()
-        
+
     for e in range(epoch):
-        # train one epoch
-        student_model.train()
-        for batch in train_dataloader:
-            teacher_outputs = teacher_model(
-                pixel_values=batch["image"],
-                output_attentions=True,
-                output_hidden_states=True,
-            )
-                        
-            student_outputs = student_model(
-                pixel_values=batch["image"],
-                labels=batch["label"],
-                output_attentions=True,
-                output_hidden_states=True,
-            )
-            
-            # Placeholder
-            loss = student_outputs.loss
-            
-            accelerator.backward(loss)
-            optimizer.step()
-
-            current_lr = lr_scheduler.get_last_lr()[0]
-            # predictions = student_outputs.logits.argmax(-1)[0]    
-
-            # metric.add_batch(predictions=predictions, references=batch["label"])
-            # result = metric.compute()
-
-            acc1, acc5 = accuracy(student_outputs.logits, batch["label"], topk=(1, 5))
-
-            loss_meter.update(loss.item())
-            acc1_meter.update(acc1.item())
-            acc5_meter.update(acc5.item())
-        
-            print(f"Current learning rate = {current_lr}, acc1 = {acc1_meter.avg:.3f}")
-                        
-            lr_scheduler.step()            
-            optimizer.zero_grad()
-            
+        train_one_epoch(
+            epoch,
+            teacher_model,
+            student_model,
+            train_dataloader,
+            accelerator,
+            optimizer,
+            lr_scheduler,
+        )
         # save
-        student_model.save_pretrained("save_test")        
-        
-        # evaluate
-        for batch in val_dataloader:
-            student_outputs = student_model(
-                pixel_values=batch["image"],
-                labels=batch["label"],
-                output_attentions=True,
-                output_hidden_states=True,
-            )        
+        student_model.save_pretrained("save_test")
+
+        evaluate(epoch, student_model, val_dataloader)
+
 
 if __name__ == "__main__":
     main()
