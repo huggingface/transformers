@@ -1011,21 +1011,21 @@ class ProcessorMixin(PushToHubMixin):
             Then, if we call the processor as:
             ```python
             images = [...]
-            processor("What is common in these images?", images, "arg_value_1", "arg_value_2")
+            processor("What is common in these images?", images, arg_value_1, arg_value_2)
             ```
 
             Then, this method will return:
             ```python
             {
-                "arg_name_1": "arg_value_1",
-                "arg_name_2": "arg_value_2",
+                "arg_name_1": arg_value_1,
+                "arg_name_2": arg_value_2,
             }
             ```
             which we could then pass as kwargs to `self._merge_kwargs`
         """
         if len(args):
             warnings.warn(
-                "Passing positional arguments to the processor call is now deprecated and will be disallowed in future versions. "
+                "Passing positional arguments to the processor call is now deprecated and will be disallowed in v4.47. "
                 "Please pass all arguments as keyword arguments."
             )
         if len(args) > len(self.optional_call_args):
