@@ -22,11 +22,11 @@ from numpy import load
 
 from transformers import (
     AutoTokenizer,
+    ColPaliConfig,
+    ColPaliModel,
+    ColPaliProcessor,
     GemmaTokenizer,
     GemmaTokenizerFast,
-    ColPaliConfig,
-    ColPaliForConditionalGeneration,
-    ColPaliProcessor,
     SiglipImageProcessor,
 )
 from transformers.tokenization_utils_base import AddedToken
@@ -255,17 +255,13 @@ def convert_colpali_checkpoint(
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
 
-        model = ColPaliForConditionalGeneration(config).to(device).eval()
+        model = ColPaliModel(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
 
     else:
         processor = ColPaliProcessor.from_pretrained(pytorch_dump_folder_path)
-        model = (
-            ColPaliForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa")
-            .to(device)
-            .eval()
-        )
+        model = ColPaliModel.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa").to(device).eval()
     model.config.text_config._attn_implementation = "sdpa"
 
     # model expansion to get random embeds of image tokens
