@@ -358,7 +358,6 @@ class Mamba2Mixer(nn.Module):
                     dim=-1,
                 )
 
-                time_step = nn.functional.softplus(time_step + self.dt_bias)
                 # 1D Convolution
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
@@ -391,6 +390,8 @@ class Mamba2Mixer(nn.Module):
                     z=None,
                     seq_idx=None,
                     return_final_states=True,
+                    dt_bias=self.dt_bias,
+                    dt_softplus=True,
                     **dt_limit_kwargs,
                 )
                 if ssm_state is not None and cache_params is not None:
