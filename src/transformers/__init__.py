@@ -1746,6 +1746,12 @@ else:
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliModel",
+            "ColPaliProcessor",
+        ]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -2966,20 +2972,6 @@ else:
             "PaliGemmaForConditionalGeneration",
             "PaliGemmaPreTrainedModel",
             "PaliGemmaProcessor",
-        ]
-    )
-    _import_structure["models.colpali"].extend(
-        [
-            "ColPaliModel",
-            "ColPaliPreTrainedModel",
-            "ColPaliProcessor",
-        ]
-    )
-    _import_structure["models.colpali"].extend(
-        [
-            "ColPaliModel",
-            "ColPaliPreTrainedModel",
-            "ColPaliProcessor",
         ]
     )
     _import_structure["models.patchtsmixer"].extend(
