@@ -3995,14 +3995,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
         else:
             return 2
 
-    @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedImageModelingOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def compute_flow(self, pixel_values_videos):
         if self.training:
             gt_local_frames = pixel_values_videos[
@@ -4364,6 +4356,14 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         return comp_frames, pred_imgs_loss, comp_frames_loss, all_hidden_states, all_self_attentions
 
+    @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MaskedImageModelingOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         pixel_values_videos: Optional[torch.Tensor] = None,
