@@ -4290,7 +4290,7 @@ def _ranking_fast(
     context_hidden: torch.FloatTensor,
     next_hidden: torch.FloatTensor,
     next_top_k_probs: torch.FloatTensor,
-    cosine_matrix_mask: Optional[torch.Tensor],
+    cosine_matrix_mask: torch.LongTensor,
     alpha: float,
     beam_width: int,
 ) -> torch.FloatTensor:
@@ -4306,7 +4306,7 @@ def _ranking_fast(
     # Penalize cosine_matrix based on the cosine_matrix_mask (ignore padding positions)
     # Using a large negative value for masked positions
     cosine_matrix_mask = cosine_matrix_mask.to(dtype=cosine_matrix.dtype)
-    cosine_matrix_mask = (1.0 - cosine_matrix_mask) * torch.finfo(cosine_matrix.dtype).min
+    cosine_matrix_mask = (1 - cosine_matrix_mask) * torch.finfo(cosine_matrix.dtype).min
     cosine_matrix = cosine_matrix + cosine_matrix_mask
 
     degeneration_penalty, _ = torch.max(cosine_matrix, dim=-1)  # [B*K]
