@@ -88,7 +88,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         "image_token",
         "video_token",
     ]
-    image_processor_class = "LlavaOnevisionImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     video_processor_class = "LlavaOnevisionVideoProcessor"
 
