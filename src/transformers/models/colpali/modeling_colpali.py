@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ColPalimodel."""
+"""PyTorch PaliGemmamodel."""
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -31,7 +31,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_colpali import ColPaliConfig
+from .configuration_colpali import PaliGemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -42,14 +42,14 @@ from ..auto import AutoModel, AutoModelForCausalLM
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ColPaliConfig"
+_CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 
 @dataclass
 # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaCausalLMOutputWithPast with PaliGemma->ColPali
-class ColPaliCausalLMOutputWithPast(ModelOutput):
+class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for ColPalicausal language model (or autoregressive) outputs.
+    Base class for PaliGemmacausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -87,8 +87,8 @@ class ColPaliCausalLMOutputWithPast(ModelOutput):
 
 
 # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaMultiModalProjector with PaliGemma->ColPali
-class ColPaliMultiModalProjector(nn.Module):
-    def __init__(self, config: ColPaliConfig):
+class PaliGemmaMultiModalProjector(nn.Module):
+    def __init__(self, config: PaliGemmaConfig):
         super().__init__()
         self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
 
@@ -98,7 +98,7 @@ class ColPaliMultiModalProjector(nn.Module):
         return hidden_states
 
 
-COLPALI_START_DOCSTRING = r"""
+PALIGEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -108,7 +108,7 @@ COLPALI_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`ColPaliConfig`] or [`ColPaliVisionConfig`]):
+        config ([`PaliGemmaConfig`] or [`PaliGemmaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -117,14 +117,14 @@ COLPALI_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    COLPALI_START_DOCSTRING,
+    PALIGEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaPreTrainedModel with PaliGemma->ColPali
-class ColPaliPreTrainedModel(PreTrainedModel):
-    config_class = ColPaliConfig
+class PaliGemmaPreTrainedModel(PreTrainedModel):
+    config_class = PaliGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ColPaliMultiModalProjector"]
+    _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_cache_class = True
@@ -134,7 +134,7 @@ class ColPaliPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        # important: this ported version of ColPaliisn't meant for training from scratch - only
+        # important: this ported version of PaliGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
         std = (
             self.config.initializer_range
@@ -163,7 +163,7 @@ class ColPaliPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
 
-COLPALI_INPUTS_DOCSTRING = r"""
+PALIGEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -175,7 +175,7 @@ COLPALI_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`ColPaliProcessor`] uses
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
             [`SiglipImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -234,15 +234,15 @@ COLPALI_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The COLPALI model which consists of a vision backbone and a language model.""",
-    COLPALI_START_DOCSTRING,
+    """The PALIGEMMA model which consists of a vision backbone and a language model.""",
+    PALIGEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration with PALIGEMMA->COLPALI,PaliGemma->ColPali
-class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
-    def __init__(self, config: ColPaliConfig):
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
+    def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = ColPaliMultiModalProjector(config)
+        self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self._attn_implementation = config._attn_implementation
 
@@ -257,24 +257,31 @@ class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings with Llava->PaliGemma
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings with Llava->PaliGemma
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings with Llava->PaliGemma
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings with Llava->PaliGemma
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder with Llava->PaliGemma
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder with Llava->PaliGemma
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights with Llava->PaliGemma
     def tie_weights(self):
         return self.language_model.tie_weights()
 
@@ -325,8 +332,8 @@ class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
                 )
         return causal_mask
 
-    @add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ColPaliCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -343,7 +350,7 @@ class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
-    ) -> Union[Tuple, ColPaliCausalLMOutputWithPast]:
+    ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -363,13 +370,13 @@ class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, ColPaliForConditionalGeneration
+        >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
-        >>> model = ColPaliForConditionalGeneration.from_pretrained("google/ColPali-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/ColPali-test-224px-hf")
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
 
         >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/ColPali-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
@@ -477,7 +484,7 @@ class ColPaliForConditionalGeneration(ColPaliPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return ColPaliCausalLMOutputWithPast(
+        return PaliGemmaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
