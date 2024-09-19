@@ -1294,12 +1294,16 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model"
     _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.vocab_size = config.vocab_size
-        self.model = MllamaTextModel._from_config(config, attn_implementation=config._attn_implementation)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.text_config = config.get_text_config()
+        self.vocab_size = self.text_config.vocab_size
+        self.model = MllamaTextModel._from_config(
+            config.get_text_config(), attn_implementation=config._attn_implementation
+        )
+        self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()

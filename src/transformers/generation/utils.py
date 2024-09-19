@@ -3960,7 +3960,7 @@ class GenerationMixin:
             isinstance(past_key_values, EncoderDecoderCache)
             and isinstance(past_key_values.self_attention_cache, DynamicCache)
         ):
-            if len(past_key_values) == 0:
+            if past_key_values.get_seq_length() == 0:
                 start_from_empty_dynamic_cache = True
 
         this_peer_finished = False

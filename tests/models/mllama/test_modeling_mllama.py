@@ -22,10 +22,12 @@ import requests
 from transformers import (
     AutoProcessor,
     MllamaConfig,
+    MllamaForCausalLM,
     MllamaForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
@@ -46,6 +48,151 @@ else:
 
 if is_vision_available():
     from PIL import Image
+
+
+class MllamaText2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        ignore_index=-100,
+        image_token_index=4,
+        projector_hidden_act="gelu",
+        seq_length=7,
+        text_config={
+            "model_type": "llama",
+            "seq_length": 7,
+            "is_training": True,
+            "use_input_mask": True,
+            "use_token_type_ids": False,
+            "use_labels": True,
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 4,
+            "intermediate_size": 37,
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.1,
+            "attention_probs_dropout_prob": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 16,
+            "type_sequence_label_size": 2,
+            "initializer_range": 0.02,
+            "num_labels": 3,
+            "num_choices": 4,
+            "pad_token_id": 0,
+            "rope_scaling": {"rope_type": "default"},
+        },
+        is_training=True,
+    ):
+        self.parent = parent
+        self.ignore_index = ignore_index
+        self.projector_hidden_act = projector_hidden_act
+        self.text_config = text_config
+        self.seq_length = seq_length
+
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.is_training = is_training
+        self.pad_token_id = self.text_config["pad_token_id"]
+        self.batch_size = 3
+
+    def get_config(self):
+        return MllamaTextConfig(
+            **self.text_config,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(1).to(torch_device)
+        return config, input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
+        return config, inputs_dict
+
+    def create_and_check_mllama_model_fp16_forward(self, config, input_ids, attention_mask):
+        model = MllamaForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            logits = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+            )["logits"]
+        self.parent.assertFalse(torch.isnan(logits).any().item())
+
+
+@require_torch
+class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    """
+    Model tester for `MllamaForConditionalGeneration`.
+    """
+
+    all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = MllamaText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        pass
+
+    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
+    def test_generate_compile_fullgraph(self):
+        pass
+
+    @unittest.skip(
+        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
+    )
+    def test_cpu_offload(self):
+        pass
 
 
 class MllamaVisionText2TextModelTester:
@@ -122,7 +269,6 @@ class MllamaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        # self.encoder_seq_length = 7
 
     def get_config(self):
         return MllamaConfig(
