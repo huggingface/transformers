@@ -271,7 +271,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 >>> generator(prompt)  # doctest: +SKIP
 ```
 
-* الأقنعة: هدف النموذج هو التنبؤ برمز مقنع في تسلسل مع الوصول الكامل إلى الرموز في التسلسل
+* المقنّع (Masked): هدف النموذج هو التنبؤ برمز مُخفيّ ضمن التسلسل مع الوصول الكامل إلى الرموز  الأخرى في التسلسل
 
 ```py
 >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
