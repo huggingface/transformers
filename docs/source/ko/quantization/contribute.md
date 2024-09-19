@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 새로운 양자화 기법에 기여하기 [[contribute-new-quantization-method]]
 
-Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법을 지원하고 통합합니다. 그러나 아직 통합되지 않은 다른 양자화 방식들도 있습니다. 이러한 양자화 방법을 Transformers 모델에 쉽게 추가하고 사용하기 위해서는 [`HfQuantizer`] 클래스를 사용해야 합니다. [`HfQuantizer`]는 모든 PyTorch 모듈에 적용하는 것이 아니라, 양자화 방법을 추가하기 위한 내부 헬퍼 클래스로 설계되었습니다.
+Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법을 지원하고 통합합니다. 그러나 아직 통합되지 않은 다른 양자화 방법들도 있습니다. [`HfQuantizer`] 클래스를 사용하면 이러한 양자화 방법을 Transformers 모델에 쉽게 추가하고 사용할 수 있습니다. [`HfQuantizer`]는 모든 PyTorch 모듈에 적용하는 것이 아니라, 양자화 방법을 추가하기 위한 내부 헬퍼 클래스로 설계되었습니다.
 
 이 가이드에서는 [`HfQuantizer`] 클래스를 사용하여 새로운 양자화 방법을 통합하는 방법을 소개합니다.
 
@@ -24,7 +24,7 @@ Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법�
 
 새로운 양자화 방법을 Transformers에 통합하기 전에, 추가하려는 방법이 다음의 조건을 충족하는지 확인하세요. 현재는 PyTorch 모듈로 실행할 수 있는 양자화 방법만 지원됩니다.
 
-- 누구나 pip로 설치할 수 있는 Python 패키지로 제공되어야 하며, 소스에서만 설치할 수 있어도 괜찮습니다. 이상적으로는 pip 패키지에 사전 컴파일된 커널이 포함되는 것이 좋습니다.
+- 누구나 pip로 설치할 수 있는 Python 패키지로 제공되어야 합니다(소스에서만 설치할 수 있어도 괜찮습니다). 이상적으로는 pip 패키지에 사전 컴파일된 커널이 포함되는 것이 바람직합니다. 
 - CPU, GPU 등과 같이 일반적으로 사용되는 하드웨어에서 실행될 수 있어야 합니다.
 - `Linear8bitLt`, `Linear4bit`과 같이 양자회된 선형 레이어는 `nn.Module`로 감싸져야 하고, 이러한 레이어는 다음과 같이 정의되어야 합니다:
 
