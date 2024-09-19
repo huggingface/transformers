@@ -14,55 +14,63 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# PatchTST
+# PatchTST[[patchtst]]
 
-## Overview
+## Overview[[overview]]
 
-The PatchTST model was proposed in [A Time Series is Worth 64 Words: Long-term Forecasting with Transformers](https://arxiv.org/abs/2211.14730) by Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong and Jayant Kalagnanam.
+The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam이 제안한 [시계열 하나가 64개의 단거만큼 가치있다: 트랜스포머를 이용한 장기예측](https://arxiv.org/abs/2211.14730)라는 논문에서 소개되었습니다.
 
-At a high level the model vectorizes time series into patches of a given size and encodes the resulting sequence of vectors via a Transformer that then outputs the prediction length forecast via an appropriate head. The model is illustrated in the following figure:
+이 모델은 고수준에서 시계열을 주어진 크기의 패치로 벡터화하고, 결과로 나온 벡터 시퀀스를 트랜스포머를 통해 인코딩한 다음 적절한 헤드를 통해 예측 길이의 예측을 출력합니다. 모델은 다음 그림과 같이 도식화됩니다:
 
-![model](https://github.com/namctin/transformers/assets/8100/150af169-29de-419a-8d98-eb78251c21fa)
+![모델](https://github.com/namctin/transformers/assets/8100/150af169-29de-419a-8d98-eb78251c21fa)
 
-The abstract from the paper is the following:
+해당 논문의 초록입니다:
 
-*We propose an efficient design of Transformer-based models for multivariate time series forecasting and self-supervised representation learning. It is based on two key components: (i) segmentation of time series into subseries-level patches which are served as input tokens to Transformer; (ii) channel-independence where each channel contains a single univariate time series that shares the same embedding and Transformer weights across all the series. Patching design naturally has three-fold benefit: local semantic information is retained in the embedding; computation and memory usage of the attention maps are quadratically reduced given the same look-back window; and the model can attend longer history. Our channel-independent patch time series Transformer (PatchTST) can improve the long-term forecasting accuracy significantly when compared with that of SOTA Transformer-based models. We also apply our model to self-supervised pre-training tasks and attain excellent fine-tuning performance, which outperforms supervised training on large datasets. Transferring of masked pre-trained representation on one dataset to others also produces SOTA forecasting accuracy.*
+*우리는 다변량 시계열 예측과 자기 감독 표현 학습을 위한 효율적인 트랜스포머 기반 모델 설계를 제안합니다. 이는 두 가지 주요 구성 요소를 기반으로 합니다: 
 
-This model was contributed by [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), and [kashif](https://huggingface.co/kashif). The original code can be found [here](https://github.com/yuqinie98/PatchTST).
+(i) 시계열을 하위 시리즈 수준의 패치로 분할하여 트랜스포머의 입력 토큰으로 사용
+(ii) 각 채널이 모든 시리즈에 걸쳐 동일한 임베딩과 트랜스포머 가중치를 공유하는 단일 단변량 시계열을 포함하는 채널 독립성. 패칭 설계는 자연스럽게 세 가지 이점을 가집니다: 
+    - 지역적 의미 정보가 임베딩에 유지됩니다; 
+    - 동일한 룩백 윈도우에 대해 어텐션 맵의 계산과 메모리 사용량이 제곱으로 감소합니다
+    - 모델이 더 긴 과거를 참조할 수 있습니다. 
+    우리의 채널 독립적 패치 시계열 트랜스포머(PatchTST)는 최신 트랜스포머 기반 모델들과 비교했을 때 장기 예측 정확도를 크게 향상시킬 수 있습니다. 또한 모델을 자기 감독 사전 훈련 작업에 적용하여, 대규모 데이터셋에 대해 감독 학습시키는 것을 능가하는 아주 뛰어난 미세 조정 성능을 달성했습니다. 한 데이터셋에서 마스크된 사전 훈련 표현을 다른 데이터셋으로 전이하는 것도 최고 수준의 예측 정확도(SOTA)를 산출했습니다.*
 
-## Usage tips
+이 모델은 [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif). The original code can be found [here](https://github.com/yuqinie98/PatchTST)에 의해 기여 되었습니다.
 
-The model can also be used for time series classification and time series regression. See the respective [`PatchTSTForClassification`] and [`PatchTSTForRegression`] classes.
+## Usage tips[[usage-tips]]
 
-## Resources
+이 모델은 시계열 분류와 시계열 회기에도 사용될 수 있습니다. 각각 [`PatchTSTForClassification`]와 [`PatchTSTForRegression`] 클래스를 참조하세요.
 
-- A blog post explaining PatchTST in depth can be found [here](https://huggingface.co/blog/patchtst). The blog can also be opened in Google Colab.
+## Resources[[resources]]
 
-## PatchTSTConfig
+- PatchTST를 자세히 설명하는 블로그 포스트는 [이곳](https://huggingface.co/blog/patchtst)에서 찾을 수 있습니다. 
+이 블로그는 Google Colab에서도 열어볼 수 있습니다.
+
+## PatchTSTConfig[[transformers.PatchTSTConfig]]
 
 [[autodoc]] PatchTSTConfig
 
-## PatchTSTModel
+## PatchTSTModel[[transformers.PatchTSTModel]]
 
 [[autodoc]] PatchTSTModel
     - forward
 
-## PatchTSTForPrediction
+## PatchTSTForPrediction[[transformers.PatchTSTForPrediction]]
 
 [[autodoc]] PatchTSTForPrediction
     - forward
 
-## PatchTSTForClassification
+## PatchTSTForClassification[[transformers.PatchTSTForClassification]]
 
 [[autodoc]] PatchTSTForClassification
     - forward
 
-## PatchTSTForPretraining
+## PatchTSTForPretraining[[transformers.PatchTSTForPretraining]]
 
 [[autodoc]] PatchTSTForPretraining
     - forward
 
-## PatchTSTForRegression
+## PatchTSTForRegression[[transformers.PatchTSTForRegression]]
 
 [[autodoc]] PatchTSTForRegression
     - forward
