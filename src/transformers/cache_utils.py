@@ -1663,6 +1663,11 @@ class HybridCache(Cache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
+        if layer_idx != 0:
+            raise ValueError(
+                "`get_seq_length` on `HybridCache` may get inconsistent results depending on the layer index. "
+                "Using the `layer_idx` argument is not supported."
+            )
         return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def reset(self):
