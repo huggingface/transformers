@@ -263,22 +263,22 @@ class MambaModelTester:
         model.eval()
         # Set model to float16
         model.half()
-    
+
         # Run model to generate cache
         outputs = model(input_ids[:, :-1], use_cache=True)
-    
+
         # Modify the cache to be in float32
         cache_params = outputs.cache_params
         cache_params.conv_states = cache_params.conv_states.to(torch.float32)
         cache_params.ssm_states = cache_params.ssm_states.to(torch.float32)
-    
+
         # Try to run the model with the modified cache
         outputs = model(
             input_ids[:, -1:],
             use_cache=True,
             cache_params=cache_params,
         )
-    
+
         # Check that the output cache params are in float16 (matching the model's data type)
         self.parent.assertEqual(outputs.cache_params.conv_states.dtype, torch.float16)
         self.parent.assertEqual(outputs.cache_params.ssm_states.dtype, torch.float16)
