@@ -1,5 +1,6 @@
 import collections
 import types
+import warnings
 
 import numpy as np
 
@@ -34,7 +35,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     Handles arguments for the TableQuestionAnsweringPipeline
     """
 
-    def __call__(self, table=None, query=None, **kwargs):
+    def __call__(self, table=None, question=None, **kwargs):
         # Returns tqa_pipeline_inputs of shape:
         # [
         #   {"table": pd.DataFrame, "query": List[str]},
@@ -46,7 +47,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
 
         if table is None:
             raise ValueError("Keyword argument `table` cannot be None.")
-        elif query is None:
+        elif question is None:
             if isinstance(table, dict) and table.get("query") is not None and table.get("table") is not None:
                 tqa_pipeline_inputs = [table]
             elif isinstance(table, list) and len(table) > 0:
@@ -70,7 +71,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
                     f"is {type(table)})"
                 )
         else:
-            tqa_pipeline_inputs = [{"table": table, "query": query}]
+            tqa_pipeline_inputs = [{"table": table, "query": question}]
 
         for tqa_pipeline_input in tqa_pipeline_inputs:
             if not isinstance(tqa_pipeline_input["table"], pd.DataFrame):
@@ -305,30 +306,11 @@ class TableQuestionAnsweringPipeline(Pipeline):
             table (`pd.DataFrame` or `Dict`):
                 Pandas DataFrame or dictionary that will be converted to a DataFrame containing all the table values.
                 See above for an example of dictionary.
-            query (`str` or `List[str]`):
-                Query or list of queries that will be sent to the model alongside the table.
-            sequential (`bool`, *optional*, defaults to `False`):
-                Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
-                inference to be done sequentially to extract relations within sequences, given their conversational
-                nature.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Activates and controls padding. Accepts the following values:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-
-            truncation (`bool`, `str` or [`TapasTruncationStrategy`], *optional*, defaults to `False`):
-                Activates and controls truncation. Accepts the following values:
-
-                - `True` or `'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument `max_length`
-                  or to the maximum acceptable input length for the model if that argument is not provided. This will
-                  truncate row by row, removing rows from the table.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
-                  greater than the model maximum admissible input size).
+            question (`str`):
+                Query that will be sent to the model alongside the table.
+            parameters (`Dict[str, Any]`, *optional*):
+                Additional parameters passed to the tokenizer and model. Currently supported parameters are
+                `sequential`, `padding` and `truncation`.
 
 
         Return:
@@ -341,6 +323,36 @@ class TableQuestionAnsweringPipeline(Pipeline):
             - **cells** (`List[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (`str`) -- If the model has an aggregator, this returns the aggregator.
         """
+        # This block just for deprecation / input checking
+        if args:
+            table = args[0]
+        elif "table" in kwargs:
+            table = kwargs["table"]
+        if isinstance(table, dict):
+            if "query" in table:
+                warnings.warn(
+                    "Passing the query as a key with the input table is deprecated and will be removed in Transformers v5. Use the `question` keyword argument instead.",
+                    FutureWarning,
+                )
+            elif isinstance(table, list) and isinstance(table[0], dict):
+                if "query" in table[0]:
+                    warnings.warn(
+                        "Passing the query as a key with the input table is deprecated and will be removed in Transformers v5. Use the `question` keyword argument instead.",
+                        FutureWarning,
+                    )
+        if "query" in kwargs:
+            warnings.warn(
+                "The `query` keyword argument is deprecated and will be removed in Transformers v5. Use the `question` keyword argument instead.",
+                FutureWarning,
+            )
+            kwargs["question"] = kwargs.pop("query")
+        if isinstance(kwargs.get("question", None), list):
+            warnings.warn(
+                "Passing a list of queries to TableQuestionAnsweringPipeline is deprecated and will be removed in Transformers v5. Pass queries singly instead.",
+                FutureWarning,
+            )
+
+        # The default input parser does not actually use or modify any kwargs except table and query/question
         pipeline_inputs = self._args_parser(*args, **kwargs)
 
         results = super().__call__(pipeline_inputs, **kwargs)
@@ -348,16 +360,34 @@ class TableQuestionAnsweringPipeline(Pipeline):
             return results[0]
         return results
 
-    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
+    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, parameters=None, **kwargs):
         preprocess_params = {}
         if padding is not None:
+            warnings.warn(
+                "The `padding` argument is deprecated and will be removed in version 5 of Transformers. Please pass it as a key in the `parameters` dict instead.",
+                FutureWarning,
+            )
             preprocess_params["padding"] = padding
+        elif parameters is not None and "padding" in parameters:
+            preprocess_params["padding"] = parameters["padding"]
         if truncation is not None:
+            warnings.warn(
+                "The `truncation` argument is deprecated and will be removed in version 5 of Transformers. Please pass it as a key in the `parameters` dict instead.",
+                FutureWarning,
+            )
             preprocess_params["truncation"] = truncation
+        elif parameters is not None and "truncation" in parameters:
+            preprocess_params["truncation"] = parameters["truncation"]
 
         forward_params = {}
         if sequential is not None:
+            warnings.warn(
+                "The `sequential` argument is deprecated and will be removed in version 5 of Transformers. Please pass it as a key in the `parameters` dict instead.",
+                FutureWarning,
+            )
             forward_params["sequential"] = sequential
+        elif parameters is not None and "sequential" in parameters:
+            forward_params["sequential"] = parameters["sequential"]
         return preprocess_params, forward_params, {}
 
     def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
