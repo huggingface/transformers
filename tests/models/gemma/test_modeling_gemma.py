@@ -528,7 +528,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
