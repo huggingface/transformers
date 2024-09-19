@@ -22,7 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     ColPaliConfig,
-    ColPaliForConditionalGeneration,
+    ColPaliModel,
     ColPaliProcessor,
     is_torch_available,
     is_vision_available,
@@ -175,10 +175,10 @@ class ColPaliVisionText2TextModelTester:
 @require_torch
 class ColPaliForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `ColPaliForConditionalGeneration`.
+    Model tester for `ColPaliModel`.
     """
 
-    all_model_classes = (ColPaliForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (ColPaliModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -322,7 +322,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(model_id)
+        model = ColPaliModel.from_pretrained(model_id)
         prompt = ""
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
@@ -345,7 +345,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_colpali_VQA(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(model_id)
+        model = ColPaliModel.from_pretrained(model_id)
         prompt = "answer en Where is the cow standing?"
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
@@ -366,7 +366,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_colpali_empty_prompt(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(model_id)
+        model = ColPaliModel.from_pretrained(model_id)
 
         prompt = ""
         image_file = (
@@ -389,7 +389,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
 
-        model = ColPaliForConditionalGeneration.from_pretrained(model_id)
+        model = ColPaliModel.from_pretrained(model_id)
 
         prompts = [
             "answer en Where is the cow standing?",
@@ -417,9 +417,9 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_colpali_batched_bf16(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = ColPaliModel.from_pretrained(model_id, revision="bfloat16", torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
             "answer en Where is the cow standing?",
@@ -449,9 +449,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_colpali_batched_f16(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(
-            model_id, revision="float16", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = ColPaliModel.from_pretrained(model_id, revision="float16", torch_dtype=torch.float16).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
             "answer en Where is the cow standing?",
@@ -483,9 +481,9 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
         # this is a reproducer of https://github.com/huggingface/transformers/issues/31425 where not enough context
         # impacted negatively segmentation generations.
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = ColPaliModel.from_pretrained(model_id, revision="bfloat16", torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
         prompt = ("detect shoe",)
 
         image = Image.open(
@@ -509,7 +507,7 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(model_id)
+        model = ColPaliModel.from_pretrained(model_id)
 
         # Simulate a super long prompt
         prompt = "\n" * 200
@@ -533,9 +531,9 @@ class ColPaliForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_colpali_finetuning_with_suffixes_bf16(self):
         # this is a supplementary test to ensure colpali fine-tuning that relies on token_type_ids is robust to future changes
         model_id = "google/colpali-3b-pt-224"
-        model = ColPaliForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = ColPaliModel.from_pretrained(model_id, revision="bfloat16", torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
             "answer en Where is the cow standing?",
