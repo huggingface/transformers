@@ -1112,7 +1112,7 @@ class GenerationTesterMixin:
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
-            config, input_ids, _, inputs_dict = self._get_input_ids_and_config(batch_size=2)
+            config, input_ids, _, _ = self._get_input_ids_and_config(batch_size=2)
             # batch_size=1 is ok, but batch_size>1 will cause non-identical output
 
             config.use_cache = True
@@ -1128,7 +1128,6 @@ class GenerationTesterMixin:
                 early_stopping=True,
                 low_memory=True,
                 use_cache=True,
-                **inputs_dict,
             )
 
             high_output = model.generate(
@@ -1138,7 +1137,6 @@ class GenerationTesterMixin:
                 early_stopping=True,
                 low_memory=False,
                 use_cache=True,
-                **inputs_dict,
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
