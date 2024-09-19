@@ -58,15 +58,16 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template"}
+        return {"chat_template": "dummy_template", "num_image_tokens": 6, "vision_feature_select_strategy": "default"}
 
-    @unittest.skip(
-        "Skip because the model has no processor kwargs except for chat template and"
-        "chat template is saved as a separate file. Stop skipping this test when the processor"
-        "has new kwargs saved in config file."
-    )
     def test_processor_to_json_string(self):
-        pass
+        processor = self.get_processor()
+        obj = json.loads(processor.to_json_string())
+        for key, value in self.prepare_processor_dict().items():
+            # chat_tempalate are tested as a separate test because they are saved in separate files
+            if key != "chat_template":
+                self.assertEqual(obj[key], value)
+                self.assertEqual(getattr(processor, key, None), value)
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
@@ -191,7 +192,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
         self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 5)
+        self.assertEqual(len(inputs["input_ids"][0]), 4)
 
     @require_torch
     @require_vision
@@ -282,7 +283,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
+        self.assertEqual(len(inputs["input_ids"][0]), 2)
 
     @require_vision
     @require_torch
@@ -299,4 +300,4 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
+        self.assertEqual(len(inputs["input_ids"][0]), 2)
