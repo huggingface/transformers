@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -56,7 +56,6 @@ _CHECKPOINT_FOR_DOC = "microsoft/Phi-3-mini-4k-instruct"
 _CONFIG_FOR_DOC = "Phi3Config"
 
 
-# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -66,6 +65,8 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
+    config: Phi3Config,
+    past_key_values: Cache,
 ):
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -88,25 +89,35 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             Indices depicting the position of the input sequence tokens in the sequence.
         batch_size (`torch.Tensor`):
             Batch size.
+        config (`Phi3Config`):
+            The model's configuration class
+        past_key_values (`Cache`):
+            The cache class that is being used currently to generate
     """
     if attention_mask is not None and attention_mask.dim() == 4:
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
         causal_mask = attention_mask
     else:
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        if config.sliding_window is not None:
+            if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > config.sliding_window:
+                exclude_mask.bitwise_or_(
+                    torch.arange(target_length, device=device)
+                    <= (cache_position.reshape(-1, 1) - config.sliding_window)
+                )
+        causal_mask *= exclude_mask
         causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.shape[-1] > target_length:
+                attention_mask = attention_mask[:, :target_length]
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
             padding_mask = padding_mask == 0
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
             )
-
     return causal_mask
 
 
@@ -1086,7 +1097,6 @@ class Phi3Model(Phi3PreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1105,13 +1115,19 @@ class Phi3Model(Phi3PreTrainedModel):
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not (using_static_cache or using_sliding_window_cache)
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
                 past_key_values_length=past_seen_tokens,
+                sliding_window=self.config.sliding_window,
                 is_training=self.training,
             ):
                 return None
@@ -1119,7 +1135,10 @@ class Phi3Model(Phi3PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_sliding_window_cache:
+            sliding_window = self.config.sliding_window if self.config.sliding_window is not None else sequence_length
+            target_length = max(sequence_length, sliding_window)
+        elif using_static_cache:
             target_length = past_key_values.get_max_length()
         else:
             target_length = (
@@ -1138,6 +1157,8 @@ class Phi3Model(Phi3PreTrainedModel):
             min_dtype=min_dtype,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
+            config=self.config,
+            past_key_values=past_key_values,
         )
 
         if (
@@ -1364,15 +1385,25 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
             dtype = self.lm_head.weight.dtype
             min_dtype = torch.finfo(dtype).min
 
+            if isinstance(past_key_values, SlidingWindowCache):
+                sliding_window = (
+                    self.config.sliding_window if self.config.sliding_window is not None else sequence_length
+                )
+                target_length = max(sequence_length, sliding_window)
+            else:
+                target_length = past_key_values.get_max_length()
+
             attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
+                target_length=target_length,
                 dtype=dtype,
                 device=device,
                 min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
+                config=self.config,
+                past_key_values=past_key_values,
             )
 
         if num_logits_to_keep is not None:
