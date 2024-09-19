@@ -741,6 +741,8 @@
       sections:
       - local: in_translation
         title: (번역중) Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
       - local: in_translation
         title: (번역중) Time Series Transformer
       title: (번역중) 시계열 모델
