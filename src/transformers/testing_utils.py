@@ -849,6 +849,13 @@ def require_torch_xpu(test_case):
     return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
 
+def require_non_xpu(test_case):
+    """
+    Decorator marking a test that should be skipped for XPU.
+    """
+    return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
 def require_torch_multi_xpu(test_case):
     """
     Decorator marking a test that requires a multi-XPU setup (in PyTorch). These tests are skipped on a machine without
