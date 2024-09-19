@@ -151,9 +151,6 @@ jobs:
     runs-on: rocm
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-<<<<<<< HEAD
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-=======
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     env:
       # For the meaning of these environment variables, see the job `Setup`
@@ -161,7 +158,6 @@ jobs:
       CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
       CI_SHA_PUSH: ${{ github.event.head_commit.id }}
       CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
->>>>>>> origin/upstream_sync_test_2
     steps:
 
       - name: Remove transformers repository (installed during docker image build)
@@ -308,31 +304,3 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
-<<<<<<< HEAD
-=======
-      - uses: actions/download-artifact@v4
-      - name: Send message to Slack
-        env:
-          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-          CI_SLACK_CHANNEL_ID_AMD: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
-          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
-          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: Push CI (AMD) - ${{ inputs.gpu_flavor }}
-          CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
-          CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
-          CI_SHA: ${{ env.CI_SHA }}
-          RUNNER_STATUS: ${{ needs.check_runner_status.result }}
-          RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
-          SETUP_STATUS: ${{ needs.setup_gpu.result }}
-
-        # We pass `needs.setup_gpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
-        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
-        run: |
-          pip install huggingface_hub
-          pip install slack_sdk
-          pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup_gpu.outputs.matrix }}"
->>>>>>> origin/upstream_sync_test_2

@@ -674,11 +674,8 @@ class GenerationTesterMixin:
 
     @require_accelerate
     @require_torch_multi_accelerator
-<<<<<<< HEAD
-    @skipIfRocm
-=======
     @pytest.mark.generate
->>>>>>> origin/upstream_sync_test_2
+    @skipIfRocm
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
             if "xpu" in torch_device:
