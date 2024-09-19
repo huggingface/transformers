@@ -264,19 +264,25 @@ class MambaModelTester:
         # Set model to float16
         model.half()
 
-        # Run model to generate cache
+        # Run model to generate cache for the initial sequence (excluding the last token)
         outputs = model(input_ids[:, :-1], use_cache=True)
 
-        # Modify the cache to be in float32
+        # Modify the cache to be in float32 to create a dtype mismatch
         cache_params = outputs.cache_params
         cache_params.conv_states = cache_params.conv_states.to(torch.float32)
         cache_params.ssm_states = cache_params.ssm_states.to(torch.float32)
 
-        # Try to run the model with the modified cache
+        # Determine the cache position for the next token
+        # Since we've processed input_ids[:, :-1], which has length seq_length - 1,
+        # the next position is seq_length - 1
+        cache_position = torch.arange(input_ids.shape[1] - 1, input_ids.shape[1], device=input_ids.device)
+
+        # Try to run the model with the modified cache and specify the cache_position
         outputs = model(
-            input_ids[:, -1:],
+            input_ids[:, -1:],  # The last token
             use_cache=True,
             cache_params=cache_params,
+            cache_position=cache_position,
         )
 
         # Check that the output cache params are in float16 (matching the model's data type)
