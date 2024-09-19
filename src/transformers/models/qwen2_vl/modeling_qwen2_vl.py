@@ -1070,7 +1070,9 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.blocks = nn.ModuleList(
             [Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
         )
-        self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
+        self.merger = PatchMerger(
+            dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
+        )
 
     def get_dtype(self) -> torch.dtype:
         return self.blocks[0].mlp.fc2.weight.dtype
