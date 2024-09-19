@@ -28,6 +28,7 @@ from torch.nn import functional as F
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    DynamicSlidingWindowCache,
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
