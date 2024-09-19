@@ -2382,7 +2382,7 @@ class GenerationMixin:
             should_convert_cache = generation_config.return_legacy_cache
             is_user_defined_cache = user_defined_cache is not None
             is_default_cache_type = (
-                type(result.past_key_values) == DynamicCache  # noqa E721
+                type(result.past_key_values) in (DynamicCache, DynamicSlidingWindowCache)  # noqa E721
                 or (
                     isinstance(result.past_key_values, EncoderDecoderCache)
                     and type(result.past_key_values.self_attention_cache) == DynamicCache  # noqa E721

@@ -623,9 +623,21 @@ class DynamicSlidingWindowCache(DynamicCache):
                 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
+    
+    @classmethod
+    def from_legacy_cache(cls, sliding_window: int, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        """Converts a cache in the legacy cache format into an equivalent `DynamicSlidingWindowCache`. Used for
+        backward compatibility."""
+        cache = cls(sliding_window)
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.update(key_states, value_states, layer_idx)
+        return cache
 
     def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicSlidingWindowCache"]:
-        """Needs to be overriden because DynamicSlidingWindowCache takes an __init__() argument."""
+        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
         out = []
         for i in range(0, full_batch_size, split_size):
             current_split = DynamicSlidingWindowCache(self.sliding_window)
@@ -637,17 +649,14 @@ class DynamicSlidingWindowCache(DynamicCache):
     
     @classmethod
     def from_batch_splits(cls, splits: List["DynamicSlidingWindowCache"]) -> "DynamicSlidingWindowCache":
-        """Needs to be overriden because DynamicSlidingWindowCache takes an __init__() argument."""
+        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
         cache = cls(splits[0].sliding_window)
         for idx in range(len(splits[0])):
             layer_keys = torch.cat([current.key_cache[idx] for current in splits], dim=0)
             layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
             cache.update(layer_keys, layer_values, idx)
         return cache
-    
-    # Legacy format does not really make sense here even though it is a DynamicCache -> we set methods to None
-    from_legacy_cache = None
-    to_legacy_cache = None
 
 
 class OffloadedCache(DynamicCache):
