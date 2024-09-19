@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch PaliGemmamodel."""
+"""PyTorch ColPalimodel."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import ClassVar, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -42,7 +42,7 @@ from ..auto import AutoModel, AutoModelForCausalLM
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PaliGemmaConfig"
+_CONFIG_FOR_DOC = "ColPaliConfig"
 
 
 @dataclass
@@ -529,3 +529,120 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
+
+
+@dataclass
+class ColPaliOutput(ModelOutput):
+    """
+    Base class for ColPali embeddings output.
+
+    Args:
+        embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The embeddings of the model.
+    """
+
+
+COLPALI_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
+            [`SiglipImageProcessor`] for processing images). If none, ColPali will only process text (query embeddings).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+"""
+
+
+@add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
+@replace_return_docstrings(output_type=ColPaliOutput, config_class=_CONFIG_FOR_DOC)
+class ColPaliModel(PaliGemmaPreTrainedModel):
+    """
+    ColPali model implementation from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
+
+    Copied from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
+    """
+
+    main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
+
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__(config=config)
+
+        model = PaliGemmaForConditionalGeneration(config=config)
+        if model.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"model.language_model.{k}" for k in model.language_model._tied_weights_keys]
+        self.model = model
+
+        # TODO: Wait for ColPali2 to create a ColPaliConfig to allow specifying the embedding dimension.
+        # We could do it now but it would break all the models trying to load the model from the checkpoint.
+        self.dim = 128
+        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.dim)
+
+        self.post_init()
+
+    def forward(self, *args, **kwargs) -> torch.Tensor:
+        # Delete output_hidden_states from kwargs
+        kwargs.pop("output_hidden_states", None)
+
+        outputs = self.model(*args, output_hidden_states=True, **kwargs)  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
+
+        # L2 normalization
+        proj = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
+
+        proj = proj * kwargs["attention_mask"].unsqueeze(-1)  # (batch_size, sequence_length, dim)
+
+        return proj
+
+    def get_input_embeddings(self):
+        return self.model.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.model.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.language_model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.model.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.language_model.get_decoder()
+
+    def tie_weights(self):
+        return self.model.language_model.tie_weights()
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of=None,
+    ) -> nn.Embedding:
+        model_embeds = self.model.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+
+        # Update vocab size
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.config.vocab_size = model_embeds.num_embeddings
+        self.model.vocab_size = model_embeds.num_embeddings
+
+        return model_embeds
