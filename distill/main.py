@@ -1,7 +1,9 @@
 import os, click
 import numpy as np
 from pathlib import Path
-from datasets import load_dataset
+
+# from datasets import load_dataset
+from torchvision import datasets
 from transformers import get_scheduler, ViTImageProcessor, ViTForImageClassification
 from accelerate import Accelerator
 from torch.optim import AdamW
@@ -11,32 +13,28 @@ from timm.utils import accuracy, AverageMeter
 
 
 def get_dataloaders(dataset, batch_size):
-    train_dataset = load_dataset(
-        "imagefolder", data_dir=os.path.join(dataset, "train"), split="train"
-    )
-    val_dataset = load_dataset(
-        "imagefolder", data_dir=os.path.join(dataset, "val"), split="validation"
-    )
 
     image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
-    def transforms(batch):
+    def collate_fn(batch):
+        images, labels = zip(*batch)
         # Some of images in ImageNet turned out to be of one channel (gray).
-        images = [img.convert("RGB") for img in batch["image"]]
-        batch["image"] = image_processor(images, return_tensors="pt")["pixel_values"]
-        batch["label"] = torch.tensor(batch["label"])
-        return batch
+        images = [img.convert("RGB") for img in images]
+        images = image_processor(images=images, return_tensors="pt")["pixel_values"]
+        labels = torch.tensor(labels)
+        return images, labels
 
-    train_dataset.set_transform(transforms)
-    val_dataset.set_transform(transforms)
+    train_dataset = datasets.ImageFolder(os.path.join(dataset, "train"))
+    val_dataset = datasets.ImageFolder(os.path.join(dataset, "val"))
 
     train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+        train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn
     )
 
     val_dataloader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+        val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
     )
+
     return train_dataloader, val_dataloader
 
 
@@ -48,22 +46,22 @@ def train_one_epoch(
     accelerator,
     optimizer,
     lr_scheduler,
-    print_freq=10,
 ):
 
+    print_freq = max(100, int(len(train_dataloader) / 1000))
     loss_meter = AverageMeter()
     acc1_meter = AverageMeter()
     student_model.train()
-    for idx, batch in enumerate(train_dataloader):
+    for idx, (images, labels) in enumerate(train_dataloader):
         teacher_outputs = teacher_model(
-            pixel_values=batch["image"],
+            pixel_values=images,
             output_attentions=True,
             output_hidden_states=True,
         )
 
         student_outputs = student_model(
-            pixel_values=batch["image"],
-            labels=batch["label"],
+            pixel_values=images,
+            labels=labels,
             output_attentions=True,
             output_hidden_states=True,
         )
@@ -75,13 +73,14 @@ def train_one_epoch(
         optimizer.step()
 
         current_lr = lr_scheduler.get_last_lr()[0]
-        acc1 = accuracy(student_outputs.logits, batch["label"])
+        (acc1,) = accuracy(student_outputs.logits, labels, topk=(1,))
+        
         loss_meter.update(loss.item())
         acc1_meter.update(acc1.item())
 
         if idx % print_freq == 0:
             print(
-                f"[{epoch}:{idx}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}),\tacc@1 = {acc1_meter.val:.3f} ({acc1_meter.avg:.3f}),\tlearning rate = {current_lr:.5f}"
+                f"[{epoch}:{idx}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}), acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), learning rate = {current_lr:.5f}"
             )
 
         lr_scheduler.step()
@@ -94,21 +93,25 @@ def evaluate(epoch, student_model, val_dataloader):
     acc1_meter = AverageMeter()
     acc5_meter = AverageMeter()
     student_model.eval()
-    for idx, batch in enumerate(val_dataloader):
+    for idx, (images, labels) in enumerate(val_dataloader):
         student_outputs = student_model(
-            pixel_values=batch["image"],
-            labels=batch["label"],
+            pixel_values=images,
+            labels=labels,
             output_attentions=False,
             output_hidden_states=False,
         )
 
-        acc1, acc5 = accuracy(student_outputs.logits, batch["label"], topk=(1, 5))
+        acc1, acc5 = accuracy(student_outputs.logits, labels, topk=(1, 5))
         acc1_meter.update(acc1.item())
         acc5_meter.update(acc5.item())
 
         print(
-            f"[{epoch}:{idx}] acc@1 = {acc1_meter.val:.3f} ({acc1_meter.avg:.3f}),\tacc@1 = {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})"
+            f"[{epoch}:{idx}] acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), acc@5 = {acc5_meter.val:.3f}% ({acc5_meter.avg:.3f}%)"
         )
+
+    print(
+        f"\n[Epoch {epoch} evaluation] acc@1 = {acc1_meter.avg:.3f}%, acc@5 = {acc5_meter.avg:.3f}%\n"
+    )
 
 
 @click.command()
@@ -173,8 +176,9 @@ def main(dataset, batch, epoch, lr, save):
     )
 
     for e in range(epoch):
+        # training
         train_one_epoch(
-            epoch,
+            e,
             teacher_model,
             student_model,
             train_dataloader,
@@ -182,10 +186,17 @@ def main(dataset, batch, epoch, lr, save):
             optimizer,
             lr_scheduler,
         )
-        # save
-        student_model.save_pretrained("save_test")
 
-        evaluate(epoch, student_model, val_dataloader)
+        # save both hugginface and pytorch checkpoints
+        student_model.save_pretrained(save)
+        torch.save(
+            student_model.state_dict(),
+            os.path.join(save, f"student-vit-base-patch16-224-epoch{e}.pth"),
+        )
+        print(f"\nEpoch {e} checkpoints saved.\n")
+
+        # evaluation
+        evaluate(e, student_model, val_dataloader)
 
 
 if __name__ == "__main__":
