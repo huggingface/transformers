@@ -66,6 +66,10 @@ class DepthEstimationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
+            parameters (`Dict`, *optional*):
+                A dictionary of argument names to parameter values, to control pipeline behaviour.
+                The only parameter available right now is `timeout`, which is the length of time, in seconds,
+                that the pipeline should wait before giving up on trying to download an image.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -78,7 +82,6 @@ class DepthEstimationPipeline(Pipeline):
             - **depth** (`PIL.Image`) -- The predicted depth by the model as a `PIL.Image`.
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
-        # TODO The JS spec accepts 'parameters' but this pipeline doesn't pass them anywhere - what should we do?
         if "images" in kwargs:
             warnings.warn(
                 "The `images` argument has been renamed to `inputs`. In version 5 of Transformers, `images` will no longer be accepted",
@@ -89,13 +92,15 @@ class DepthEstimationPipeline(Pipeline):
             raise ValueError("Cannot call the depth-estimation pipeline without an inputs argument!")
         return super().__call__(inputs, **kwargs)
 
-    def _sanitize_parameters(self, timeout=None, **kwargs):
+    def _sanitize_parameters(self, timeout=None, parameters=None, **kwargs):
         preprocess_params = {}
         if timeout is not None:
             warnings.warn(
                 "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
             )
             preprocess_params["timeout"] = timeout
+        if isinstance(parameters, dict) and "timeout" in parameters:
+            preprocess_params["timeout"] = parameters["timeout"]
         return preprocess_params, {}, {}
 
     def preprocess(self, image, timeout=None):
