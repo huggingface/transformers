@@ -38,6 +38,7 @@ if is_vision_available():
 
 
 @require_vision
+# Copied from tests.models.instructblip.test_processor_instructblip.InstructBlipProcessorTest with InstructBlip->InstructBlipVideo, BlipImageProcessor->InstructBlipVideoImageProcessor
 class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InstructBlipVideoProcessor
 
