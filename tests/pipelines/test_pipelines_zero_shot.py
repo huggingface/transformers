@@ -97,7 +97,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             classifier("", candidate_labels="politics")
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             classifier(None, candidate_labels="politics")
 
         with self.assertRaises(ValueError):
