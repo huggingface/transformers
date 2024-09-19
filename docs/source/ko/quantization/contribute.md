@@ -24,9 +24,9 @@ Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법�
 
 새로운 양자화 방법을 Transformers에 통합하기 전에, 추가하려는 방법이 다음의 조건을 충족하는지 확인하세요. 현재는 PyTorch 모듈로 실행할 수 있는 양자화 방법만 지원됩니다.
 
-- 누구나 pip로 설치할 수 있는 Python 패키지로 제공되어야 하며, 소스에서만 설치할 수 있어도 괜찮습니다. 이상적으로는 pip 패키지에 사전 컴파일된 커널이 포함되어 있는 것이 좋습니다.
+- 누구나 pip로 설치할 수 있는 Python 패키지로 제공되어야 하며, 소스에서만 설치할 수 있어도 괜찮습니다. 이상적으로는 pip 패키지에 사전 컴파일된 커널이 포함되는 것이 좋습니다.
 - CPU, GPU 등과 같이 일반적으로 사용되는 하드웨어에서 실행될 수 있어야 합니다.
-- `Linear8bitLt`, `Linear4bit`과 같이 `nn.Module`로 감싸져 있어야 하고, 양자화된 선형 레이어는 다음과 같이 정의되어야 합니다:
+- `Linear8bitLt`, `Linear4bit`과 같이 양자회된 선형 레이어는 `nn.Module`로 감싸져야 하고, 이러한 레이어는 다음과 같이 정의되어야 합니다:
 
 ```py
 class Linear4bit(nn.Module):
@@ -39,10 +39,10 @@ class Linear4bit(nn.Module):
 
 이렇게 하면, `nn.Linear`의 일부 인스턴스를 대상 클래스(target class)로 교체하여 Transformers의 모델을 쉽게 양자화할 수 있습니다.
 
-- 양자화 방법은 직렬화 가능해야 합니다. 양자화된 가중치를 로컬에 저장하거나 Hub에 푸시할 수 있어야 합니다.
-- 빈번한 호환성 변경이 발생하지 않도록, 양자화 커널이나 프리미티브를 포함하는 패키지가 안정적인지 확인하세요.
+- 양자화된 가중치를 로컬에 저장하거나 Hub에 푸시할 수 있도록 양자화 방법은 직렬화 가능해야 합니다.
+- 빈번한 호환성 변경을 방지하기 위해, 양자화 커널이나 프리미티브를 포함하는 패키지가 안정적인지 확인하세요.
 
-AWQ와 같은 일부 양자화 방법은 데이터 보정을 통해 모델을 "사전 양자화"해야 할 수도 있습니다. 이런 경우, 추론에는 Transformers를 사용하고, 모델 양자화 자체는 ML 커뮤니티에서 관리하는 Transformers가 아닌 다른 라이브러리를 사용하는 것을 권장합니다.
+AWQ와 같은 일부 양자화 방법은 데이터 보정을 통해 모델을 "사전 양자화"해야 할 수도 있습니다. 이런 경우, 추론에는 Transformers를 사용하고 모델 양자화는 ML 커뮤니티에서 관리하는 다른 라이브러리를 사용하는 것을 권장합니다.
 
 ## 새로운 HFQuantizer 클래스 구축하기 [[build-a-new-hfquantizer-class]]
 
@@ -54,9 +54,9 @@ AWQ와 같은 일부 양자화 방법은 데이터 보정을 통해 모델을 "�
 
 * `requires_calibration`: 양자화 방법이 데이터 보정 과정을 요구하는지 여부를 나타내는 속성입니다. 이 속성이 `True`로 설정되면, 양자화된 가중치를 사용한 추론만 지원할 수 있으며, 추론과 양자화 모두를 지원할 수는 없습니다. 
 * `required_packages`: 양자화된 가중치를 사용하는 데 필요한 패키지들의 문자열 리스트입니다. 필요하다면 [transformers/src/utils/import_utils.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/utils/import_utils.py)의 `is_auto_awq_available`과 같은 새로운 유틸리티 메소드를 정의해야 할 수도 있습니다.
-* `requires_parameters_quantization`: 양자화 방법이 기본 `nn.Parameter` 객체에 특별한 처리가 필요한 경우에만 사용됩니다. 예를 들어, bitsandbytes 방식은 `Params4bit`와 `Int8Param`을 사용하여 양자화된 파라미터들이 특별한 처리를 요구하기 때문에 해당 플래그를 `True`로 설정해야 합니다. 하지만 최근의 대부분의 양자화 방법은 `torch.uint8` 가중치 내에 int2/int4 가중치를 포함시키므로, 해당 플래그는 일반적으로 필요하지 않습니다(기본값은 `False`로 설정). 
+* `requires_parameters_quantization`: 양자화 방법이 기본 `nn.Parameter` 객체에 특별한 처리가 필요한 경우에만 사용됩니다. 예를 들어, bitsandbytes 방식은 `Params4bit`와 `Int8Param`을 사용하여 양자화된 파라미터들에 대한 특별한 처리를 요구하기 때문에 해당 플래그를 `True`로 설정해야 합니다. 하지만 최근의 대부분의 양자화 방법은 `torch.uint8` 내에 int2/int4 가중치를 포함시키므로, 해당 플래그는 일반적으로 필요하지 않습니다(기본값은 `False`로 설정). 
 * `is_serializable`: 해당 방법이 직렬화 가능한지를 결정하는 속성 메소드입니다.
-* `is_trainable`:  PEFT 접근 방식 여부에 상관없이 양자화 방법 위에서 모델을 미세 조정할 수 있는지를 결정하는 속성 메소드입니다.
+* `is_trainable`:  PEFT 사용 여부에 상관없이 양자화 방법 위에서 모델을 미세 조정할 수 있는지를 결정하는 속성 메소드입니다.
 
 4. `validate_environment`와 `update_torch_dtype` 메소드를 작성하세요. 이 메소드들은 양자화된 모델을 생성하기 전에 호출되어 사용자가 올바른 구성을 사용하고 있는지 확인합니다. 다른 양자화 기법에서 이 작업이 어떻게 이루어지는지 참고할 수 있습니다.
 
