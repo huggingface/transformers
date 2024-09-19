@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, The TimesFM Authors and HuggingFace Inc.
+# Copyright 2024 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,54 +36,47 @@ class TimesFMConfig(PretrainedConfig):
 
     Arguments:
         patch_len (`int`, *optional*, defaults to 32):
-            The length of each patch in the sequence.
+            The length of one patch in the input sequence.
         horizon_len (`int`, *optional*, defaults to 128):
             The length of the prediction horizon.
-        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.25, 0.5, 0.75, 0.9]`):
-            The quantiles to predict.
-        pad_val (`float`, *optional*, defaults to 1123581321.0):
-            The value used to pad the predictions.
-        tolerance (`float`, *optional*, defaults to 1e-6):
-            The tolerance for the quantile loss.
+        context_len (`int`, *optional*, defaults to 512):
+            The length of the input context.
         freq_size (`int`, *optional*, defaults to 3):
             The number of frequency embeddings.
-        d_model (`int`, *optional*, defaults to 1280):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 80):
+        model_dim (`int`, *optional*, defaults to 1280):
+            Size of the hidden layers in the feed-forward networks.
+        head_dim (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 1280):
-            Size of the intermediate feed forward layer in each `TimesFMBlock`.
+            be defined as `num_heads * head_dim`.
         num_layers (`int`, *optional*, defaults to 20):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+            Number of Transformer layers.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
+        tolerance (`float`, *optional*, defaults to 1e-6):
+            The tolerance for the quantile loss.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the RMS normalization layers.
+        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.25, 0.5, 0.75, 0.9]`):
+            The quantiles to predict.
+        pad_val (`float`, *optional*, defaults to 1123581321.0):
+            The value used to pad the predictions.
+        use_positional_embedding (`bool`, *optional*, defaults to `True`):
+            Whether to add positional embeddings.
+        per_core_batch_size (`int`, *optional*, defaults to 32):
+            The batch size per core for data parallelism.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. TimesFMv1.1 uses the
-            `"gated-gelu"` feed forward projection. Original TimesFM uses `"relu"`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
     """
 
     model_type = "timesfm"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = []
     attribute_map = {
-        "hidden_size": "d_model",
+        "hidden_size": "hidden_size",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
     }
@@ -91,72 +84,41 @@ class TimesFMConfig(PretrainedConfig):
     def __init__(
         self,
         patch_len: int = 32,
+        context_len: int = 512,
         horizon_len: int = 128,
-        quantiles: List[float] = [0.1, 0.25, 0.5, 0.75, 0.9],
-        pad_val: float = 1123581321.0,
+        freq_size: int = 3,
+        num_layers: int = 20,
+        model_dim: int = 1280,
+        head_dim: int = 80,
+        num_heads: int = 16,
+        dropout_rate: float = 0.1,
         tolerance: float = 1e-6,
-        freq_size=3,
-        d_model=1280,
-        d_kv=80,
-        d_ff=1280,
-        num_layers=20,
-        num_decoder_layers=None,
-        num_heads=16,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        dropout_rate=0.1,
-        layer_norm_epsilon=1e-6,
-        initializer_factor=1.0,
-        feed_forward_proj="relu",
-        is_encoder_decoder=True,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        classifier_dropout=0.0,
+        rms_norm_eps: float = 1e-6,
+        quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        pad_val: float = 1123581321.0,
+        use_positional_embedding: bool = True,
+        per_core_batch_size: int = 32, 
+        initializer_factor: float = 1.0,
         **kwargs,
     ):
         self.patch_len = patch_len
+        self.context_len = context_len
         self.horizon_len = horizon_len
         self.quantiles = quantiles
         self.pad_val = pad_val
-        self.tolerance = tolerance
         self.freq_size = freq_size
-        self.d_model = d_model
-        self.d_kv = d_kv
-        self.d_ff = d_ff
+        self.model_dim = model_dim
+        self.head_dim = head_dim
         self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
         self.num_heads = num_heads
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
-        self.classifier_dropout = classifier_dropout
-        self.layer_norm_epsilon = layer_norm_epsilon
+        self.tolerance = tolerance
+        self.rms_norm_eps = rms_norm_eps
+        self.use_positional_embedding = use_positional_embedding
+        self.per_core_batch_size = per_core_batch_size
         self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
-        self.use_cache = use_cache
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
-
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer. "
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
 
