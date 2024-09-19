@@ -437,6 +437,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+
     pipeline_model_mapping = (
         {
             "audio-classification": Wav2Vec2BertForSequenceClassification,
@@ -449,6 +450,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+
     pretrained_checkpoint = "facebook/w2v-bert-2.0"
 
     def setUp(self):

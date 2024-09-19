@@ -428,6 +428,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         if is_torch_available()
         else ()
     )
+
     pipeline_model_mapping = (
         {
             "audio-classification": Wav2Vec2ConformerForSequenceClassification,
@@ -440,6 +441,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+
     pretrained_checkpoint = "facebook/wav2vec2-conformer-rel-pos-large"
 
     def setUp(self):
@@ -678,11 +680,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Wav2Vec2ConformerModel.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
-        self.assertIsNotNone(model)
 
 
 @require_torch
