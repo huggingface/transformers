@@ -739,8 +739,8 @@
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
-      - local: in_translation
-        title: (번역중) Informer
+      - local: model_doc/informer
+        title: Informer
       - local: in_translation
         title: (번역중) Time Series Transformer
       title: (번역중) 시계열 모델
