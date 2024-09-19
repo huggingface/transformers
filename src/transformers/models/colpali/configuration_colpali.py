@@ -146,3 +146,9 @@ class PaliGemmaConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_ignore_index", None)
         return output
+
+
+class ColPaliConfig(PaliGemmaConfig):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model_type = "colpali"
