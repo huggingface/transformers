@@ -17,19 +17,22 @@ Processor class for PaliGemma.
 """
 
 import logging
+import sys
 from typing import List, Optional, Union
 
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import (
     AddedToken,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType
 
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,31 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         image_token (`str`): The image token.
     """
     return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
+
+
+class PaliGemmaTextKwargs(TextKwargs):
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+
+
+class PaliGemmaImagesKwargs(ImagesKwargs):
+    do_convert_rgb: Optional[bool]
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
+    do_rescale: Optional[bool]
+
+
+class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: PaliGemmaTextKwargs
+    image_kwargs: PaliGemmaImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "tokenize_newline_separately": True,
+            "padding": False,
+        },
+        "image_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
 
 
 class PaliGemmaProcessor(ProcessorMixin):
@@ -124,25 +152,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        tokenize_newline_separately: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: bool = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[
-            Union[str, "ChannelDimension"]  # noqa: F821
-        ] = None,
-        resample: "PILImageResampling" = None,  # noqa: F821
-        do_convert_rgb: bool = None,
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_rescale: bool = None,
-        suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        video=None,
+        **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -216,7 +227,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-
+        output_kwargs = self._merge_kwargs(
+            PaliGemmaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"]["suffix"]
         return_token_type_ids = True if suffix is not None else False
 
         if images is None:
@@ -253,27 +269,14 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         pixel_values = self.image_processor(
             images,
-            do_resize=do_resize,
-            do_normalize=do_normalize,
-            return_tensors=return_tensors,
-            image_mean=image_mean,
-            image_std=image_std,
-            input_data_format=input_data_format,
-            data_format=data_format,
-            resample=resample,
-            do_convert_rgb=do_convert_rgb,
+            **kwargs["image_kwargs"],
         )["pixel_values"]
-
-        if max_length is not None:
-            max_length += self.image_seq_length  # max_length has to account for the image tokens
-
+        if output_kwargs["text_kwargs"].get("max_length", None) is not None:
+            output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
+            **output_kwargs["text_kwargs"],
             return_token_type_ids=return_token_type_ids,
         )
 
