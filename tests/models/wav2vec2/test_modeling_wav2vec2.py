@@ -505,6 +505,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     fx_compatible = True
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/wav2vec2-base-960h"
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -718,11 +719,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-        self.assertIsNotNone(model)
-
     # Wav2Vec2 cannot be torchscripted because of group norm.
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         # TODO: fix it
@@ -850,6 +846,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/wav2vec2-base-960h"
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
@@ -1277,11 +1274,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         logits_2 = get_logits(model, input_features)
 
         self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-        self.assertIsNotNone(model)
 
 
 @require_torch

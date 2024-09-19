@@ -382,6 +382,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/data2vec-audio-base"
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)

@@ -186,10 +186,6 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_get_set_embeddings(self):
         pass
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
     def test_retain_grad_hidden_states_attentions(self):
         pass

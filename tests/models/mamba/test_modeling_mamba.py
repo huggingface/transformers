@@ -256,6 +256,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
+    pretrained_checkpoint = "hf-internal-testing/mamba-130m"
 
     def setUp(self):
         self.model_tester = MambaModelTester(self)
@@ -355,11 +356,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = MambaModel.from_pretrained("hf-internal-testing/mamba-130m")
-        self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

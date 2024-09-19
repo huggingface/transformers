@@ -126,6 +126,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+    pretrained_checkpoint = "espnet/fastspeech2_conformer"
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerModelTester(self)
@@ -549,6 +550,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+    pretrained_checkpoint = "espnet/fastspeech2_conformer"
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)

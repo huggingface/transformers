@@ -334,6 +334,7 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "asapp/sew-d-tiny-100k"
 
     def setUp(self):
         self.model_tester = SEWDModelTester(self)
@@ -468,11 +469,6 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k")
-        self.assertIsNotNone(model)
 
 
 @require_torch

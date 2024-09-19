@@ -440,6 +440,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/wav2vec2-conformer-rel-pos-large"
 
     def setUp(self):
         self.model_tester = Wav2Vec2ConformerModelTester(self)

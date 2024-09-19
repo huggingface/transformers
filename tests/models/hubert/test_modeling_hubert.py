@@ -318,6 +318,7 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/hubert-base-ls960"
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
@@ -565,17 +566,13 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/hubert-large-ls960-ft"
 
     def setUp(self):
         self.model_tester = HubertModelTester(

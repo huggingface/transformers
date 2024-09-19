@@ -250,6 +250,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/hiera-tiny-224-hf"
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)

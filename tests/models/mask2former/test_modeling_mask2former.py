@@ -204,6 +204,7 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    pretrained_checkpoint = "facebook/mask2former-swin-small-coco-instance"
 
     def setUp(self):
         self.model_tester = Mask2FormerModelTester(self)
@@ -242,12 +243,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in ["facebook/mask2former-swin-small-coco-instance"]:
-            model = Mask2FormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
     def test_model_with_labels(self):
         size = (self.model_tester.min_size,) * 2

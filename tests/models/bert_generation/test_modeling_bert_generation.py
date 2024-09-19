@@ -249,6 +249,7 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "google/bert_for_seq_generation_L-24_bbc_encoder"
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)

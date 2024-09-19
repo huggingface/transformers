@@ -423,7 +423,7 @@ class Wav2Vec2BertModelTester:
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
+# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert,input_values->input_features,facebook/wav2vec2-conformer-rel-pos-large->facebook/w2v-bert-2.0
 class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Ignore copy
     all_model_classes = (
@@ -451,6 +451,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/w2v-bert-2.0"
 
     def setUp(self):
         self.model_tester = Wav2Vec2BertModelTester(self)
@@ -682,12 +683,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        # Ignore copy
-        model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0")
-        self.assertIsNotNone(model)
 
 
 @require_torch

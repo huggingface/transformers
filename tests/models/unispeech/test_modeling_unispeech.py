@@ -315,6 +315,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "microsoft/unispeech-large-1500h-cv"
 
     def setUp(self):
         self.model_tester = UniSpeechModelTester(
@@ -537,11 +538,6 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = UniSpeechModel.from_pretrained("microsoft/unispeech-large-1500h-cv")
-        self.assertIsNotNone(model)
 
 
 @require_torch

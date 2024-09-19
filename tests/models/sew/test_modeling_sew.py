@@ -455,11 +455,6 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = SEWModel.from_pretrained("asapp/sew-tiny-100k")
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class SEWUtilsTest(unittest.TestCase):

@@ -335,6 +335,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "microsoft/wavlm-base-plus"
 
     def setUp(self):
         self.model_tester = WavLMModelTester(self)
@@ -479,11 +480,6 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented for WavLM")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus")
-        self.assertIsNotNone(model)
 
 
 @require_torch
