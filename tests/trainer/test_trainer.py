@@ -66,6 +66,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
@@ -884,6 +885,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # will add more specific tests once there are some bugs to fix
 
+    @require_non_xpu
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
@@ -3196,6 +3198,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
+    @require_non_xpu
     @require_torch_non_multi_gpu
     @require_torchdynamo
     @require_torch_tensorrt_fx
