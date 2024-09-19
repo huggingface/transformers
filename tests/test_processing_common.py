@@ -112,6 +112,14 @@ class ProcessorTesterMixin:
 
                 self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
 
+                for attribute in processor_first.attributes:
+                    attribute_first = getattr(processor_first, attribute)
+                    attribute_second = getattr(processor_second, attribute)
+
+                    # tokenizer repr contains model-path from where we loaded
+                    if "tokenizer" not in attribute:
+                        self.assertEqual(repr(attribute_first), repr(attribute_second))
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
