@@ -146,9 +146,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DPTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
         pass

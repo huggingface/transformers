@@ -153,9 +153,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
         pass

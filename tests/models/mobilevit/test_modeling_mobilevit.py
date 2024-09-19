@@ -204,9 +204,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.model_tester = MobileViTModelTester(self)
         self.config_tester = MobileViTConfigTester(self, config_class=MobileViTConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="MobileViT does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -218,10 +215,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip(reason="MobileViT does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

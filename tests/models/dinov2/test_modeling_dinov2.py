@@ -241,9 +241,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         super().test_initialization()
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="Dinov2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -274,10 +271,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

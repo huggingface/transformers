@@ -437,7 +437,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-
     pipeline_model_mapping = (
         {
             "audio-classification": Wav2Vec2BertForSequenceClassification,
@@ -447,7 +446,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -456,13 +454,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def setUp(self):
         self.model_tester = Wav2Vec2BertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2BertConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")

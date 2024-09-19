@@ -180,10 +180,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.encoder_config_tester.run_common_tests()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_training(self):
         pass
@@ -296,10 +292,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         torch.cuda.empty_cache()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         if return_labels and model_class == ClvpForCausalLM:
@@ -424,10 +416,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         torch.cuda.empty_cache()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

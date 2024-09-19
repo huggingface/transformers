@@ -174,9 +174,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = FlavaImageModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip("Flava does not use input_ids")
     def test_inputs_embeds(self):
         pass
@@ -201,10 +198,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -450,13 +443,6 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = FlavaTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip
     def test_training(self):
         pass
@@ -594,13 +580,6 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -711,10 +690,6 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = FlavaImageCodebookTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaImageCodebookConfig, has_text_modality=False)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -818,9 +793,6 @@ class FlavaModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def prepare_config_and_inputs_for_common(self):
         _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
         _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -912,10 +884,6 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):

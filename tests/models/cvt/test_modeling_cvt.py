@@ -171,9 +171,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["hidden_size", "num_channels"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):
         pass
@@ -185,10 +182,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Cvt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

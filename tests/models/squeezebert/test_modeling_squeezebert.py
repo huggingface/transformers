@@ -248,9 +248,6 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.model_tester = SqueezeBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SqueezeBertConfig, dim=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_squeezebert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_squeezebert_model(*config_and_inputs)

@@ -159,9 +159,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self, config_class=InstructBlipVisionConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="InstructBLIP's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -186,10 +183,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training")
     def test_training(self):

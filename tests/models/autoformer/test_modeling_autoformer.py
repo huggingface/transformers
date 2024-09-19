@@ -217,9 +217,6 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = AutoformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AutoformerConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:

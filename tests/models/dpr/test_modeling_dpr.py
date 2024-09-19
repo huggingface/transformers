@@ -195,9 +195,6 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DPRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_context_encoder_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_context_encoder(*config_and_inputs)

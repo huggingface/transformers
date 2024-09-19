@@ -195,9 +195,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self, config_class=LevitConfig, has_text_modality=False, common_properties=["image_size", "num_channels"]
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="Levit does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -270,10 +267,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 del inputs_dict["labels"]
 
         return inputs_dict
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

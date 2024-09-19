@@ -189,9 +189,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         self.model_tester = MusicgenMelodyDecoderTester(self)
         self.config_tester = ConfigTester(self, config_class=MusicgenMelodyDecoderConfig, hidden_size=16)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     # special case for labels
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest._prepare_for_class
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

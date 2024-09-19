@@ -324,9 +324,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
             self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="SIGLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -351,10 +348,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
@@ -497,15 +490,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.model_tester = SiglipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
         pass
@@ -624,11 +608,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipModelTester(self)
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_hidden_states_output

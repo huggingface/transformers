@@ -204,9 +204,6 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = YolosModelTester(self)
         self.config_tester = ConfigTester(self, config_class=YolosConfig, has_text_modality=False, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="YOLOS does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -219,10 +216,6 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -401,15 +401,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         self.model_tester = RobertaPreLayerNormModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=37)
 
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_various_embeddings
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

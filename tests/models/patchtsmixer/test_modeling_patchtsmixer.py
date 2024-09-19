@@ -246,9 +246,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             common_properties=["hidden_size", "expansion_factor", "num_hidden_layers"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 

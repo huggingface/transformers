@@ -297,9 +297,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester = XGLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XGLMConfig, n_embd=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_xglm_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xglm_model(*config_and_inputs)

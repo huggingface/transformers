@@ -112,9 +112,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
             self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_timm_transformer_backbone_equivalence(self):
         timm_checkpoint = "resnet18"
         transformers_checkpoint = "microsoft/resnet-18"

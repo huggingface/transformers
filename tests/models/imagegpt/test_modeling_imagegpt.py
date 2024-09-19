@@ -263,9 +263,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester = ImageGPTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ImageGPTConfig, n_embd=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_imagegpt_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_imagegpt_model(*config_and_inputs)

@@ -546,9 +546,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         gc.collect()
         backend_empty_cache(torch_device)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_gpt2_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_model(*config_and_inputs)

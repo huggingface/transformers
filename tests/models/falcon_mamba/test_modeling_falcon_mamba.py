@@ -295,9 +295,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
             self.fail(self._formatMessage(msg, standardMsg))
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

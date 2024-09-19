@@ -172,13 +172,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = PvtModelTester(self)
         self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="Pvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

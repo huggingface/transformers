@@ -440,9 +440,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -3518,9 +3515,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3958,9 +3952,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     def setUp(self):
         self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

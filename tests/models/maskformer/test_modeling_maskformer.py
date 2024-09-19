@@ -236,9 +236,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         return inputs_dict
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_maskformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=False)

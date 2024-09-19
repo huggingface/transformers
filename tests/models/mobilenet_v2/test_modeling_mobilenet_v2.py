@@ -211,9 +211,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.model_tester = MobileNetV2ModelTester(self)
         self.config_tester = MobileNetV2ConfigTester(self, config_class=MobileNetV2Config, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="MobileNetV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -225,10 +222,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="MobileNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

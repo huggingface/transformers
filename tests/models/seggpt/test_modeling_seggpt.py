@@ -181,9 +181,6 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = SegGptModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SegGptConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="SegGpt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -206,10 +203,6 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values", "prompt_pixel_values", "prompt_masks"]
             self.assertListEqual(arg_names[:3], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

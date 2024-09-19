@@ -319,15 +319,6 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=JetMoeConfig, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_various_embeddings
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

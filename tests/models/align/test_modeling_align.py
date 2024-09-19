@@ -150,9 +150,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
             common_properties=["num_channels", "image_size"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -176,10 +173,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -341,13 +334,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = AlignTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip
     def test_training(self):
         pass
@@ -448,10 +434,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):

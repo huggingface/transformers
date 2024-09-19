@@ -155,9 +155,6 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             common_properties=["hidden_size"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="VitMatte does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

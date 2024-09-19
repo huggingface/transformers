@@ -237,9 +237,6 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_deformable_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deformable_detr_model(*config_and_inputs)

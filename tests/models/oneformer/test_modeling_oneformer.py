@@ -259,9 +259,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.model_tester = OneFormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OneFormerConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_oneformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_oneformer_model(config, **inputs, output_hidden_states=False)

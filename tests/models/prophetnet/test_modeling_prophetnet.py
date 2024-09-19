@@ -920,13 +920,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester = ProphetNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_lm_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
@@ -1130,9 +1123,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
         self.model_tester = ProphetNetStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
@@ -1157,9 +1147,6 @@ class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ProphetNetStandaloneEncoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
 
 @require_torch

@@ -190,9 +190,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     # XXX: override test_model_get_set_embeddings / different Embedding type
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

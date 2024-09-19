@@ -301,13 +301,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return inputs_dict
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
@@ -521,13 +514,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(
         "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"

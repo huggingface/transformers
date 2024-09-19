@@ -426,9 +426,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         gc.collect()
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
         pass

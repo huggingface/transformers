@@ -132,9 +132,6 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             common_properties=["encoder_hidden_sizes", "decoder_hidden_size"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="SuperPointForKeypointDetection does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

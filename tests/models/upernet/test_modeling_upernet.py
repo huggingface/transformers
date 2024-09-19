@@ -170,9 +170,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             common_properties=["hidden_size"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)

@@ -312,17 +312,11 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "asapp/sew-tiny-100k"
 
     def setUp(self):
         self.model_tester = SEWModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SEWConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -186,9 +186,6 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
         return inputs_dict
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="TimeSformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -201,10 +198,6 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_video_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

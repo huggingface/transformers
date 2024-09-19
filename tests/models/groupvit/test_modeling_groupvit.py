@@ -156,9 +156,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -195,10 +192,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -449,13 +442,6 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = GroupViTTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip
     def test_training(self):
         pass
@@ -550,10 +536,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = GroupViTModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):

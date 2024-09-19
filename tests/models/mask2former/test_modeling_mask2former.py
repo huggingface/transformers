@@ -210,9 +210,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.model_tester = Mask2FormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Mask2FormerConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_mask2former_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_mask2former_model(config, **inputs, output_hidden_states=False)

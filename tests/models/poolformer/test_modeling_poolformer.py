@@ -138,13 +138,6 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = PoolFormerModelTester(self)
         self.config_tester = PoolFormerConfigTester(self, config_class=PoolFormerConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="PoolFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

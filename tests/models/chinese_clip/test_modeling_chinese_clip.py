@@ -338,13 +338,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = ChineseCLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
@@ -432,9 +425,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="CHINESE_CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -459,10 +449,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -566,10 +552,6 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         text_kwargs = {"use_labels": False, "batch_size": 12}
         vision_kwargs = {"batch_size": 12}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

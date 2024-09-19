@@ -132,13 +132,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = FastSpeech2ConformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FastSpeech2ConformerConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
@@ -334,11 +327,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
     def test_inputs_embeds(self):
@@ -555,10 +543,6 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
@@ -757,11 +741,6 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
     def test_inputs_embeds(self):

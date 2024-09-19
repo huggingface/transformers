@@ -213,13 +213,6 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         self.model_tester = GPTNeoXJapaneseModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPTNeoXJapaneseConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(config, input_ids, input_mask)
-
     def test_model_as_decoder(self):
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)

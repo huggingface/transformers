@@ -351,9 +351,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester = BloomModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BloomConfig, n_embd=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_bloom_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_model(*config_and_inputs)

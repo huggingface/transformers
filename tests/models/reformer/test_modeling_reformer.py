@@ -503,9 +503,6 @@ class ReformerTesterMixin:
     Reformer Local and Reformer LSH run essentially the same tests
     """
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_reformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model(*config_and_inputs)
