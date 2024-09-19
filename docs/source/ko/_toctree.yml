@@ -741,8 +741,8 @@
       sections:
       - local: in_translation
         title: (번역중) Informer
-      - local: in_translation
-        title: (번역중) Time Series Transformer
+      - local: model_doc/time_series_transformer
+        title: 시계열 트랜스포머
       title: (번역중) 시계열 모델
     - isExpanded: false
       sections:
