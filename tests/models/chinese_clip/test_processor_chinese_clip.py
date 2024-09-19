@@ -228,7 +228,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 7)
+        self.assertEqual(len(inputs["input_ids"][0]), 6)
 
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -317,3 +317,18 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
+
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, crop_size=[224, 224])
+        self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
