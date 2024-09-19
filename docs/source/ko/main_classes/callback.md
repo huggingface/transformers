@@ -111,7 +111,7 @@ trainer = Trainer(
     args,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
-    callbacks=[MyCallback],  # We can either pass the callback class this way or an instance of it (MyCallback())
+    callbacks=[MyCallback],  # 우리는 콜백 클래스를 이 방식으로 전달하거나 그것의 인스턴스(MyCallback())를 전달할 수 있습니다
 )
 ```
 
@@ -120,7 +120,7 @@ trainer = Trainer(
 ```python
 trainer = Trainer(...)
 trainer.add_callback(MyCallback)
-# Alternatively, we can pass an instance of the callback class
+# 다른 방법으로는 콜백 클래스의 인스턴스를 전달할 수 있습니다
 trainer.add_callback(MyCallback())
 ```
 
