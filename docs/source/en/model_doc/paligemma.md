@@ -41,7 +41,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 prompt = "What is on the flower?"
 image_file = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
 raw_image = Image.open(requests.get(image_file, stream=True).raw)
-inputs = processor(prompt, raw_image, return_tensors="pt")
+inputs = processor(raw_image, prompt, return_tensors="pt")
 output = model.generate(**inputs, max_new_tokens=20)
 
 print(processor.decode(output[0], skip_special_tokens=True)[len(prompt):])
@@ -53,7 +53,7 @@ print(processor.decode(output[0], skip_special_tokens=True)[len(prompt):])
 ```python
 prompt = "What is on the flower?"
 answer = "a bee"
-inputs = processor(text=prompt, images=raw_image, suffix=answer, return_tensors="pt")
+inputs = processor(images=raw_image, text=prompt, suffix=answer, return_tensors="pt")
 ```
 
 ## Resources
