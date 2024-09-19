@@ -55,7 +55,6 @@ else:
         "ExponentialDecayLengthPenalty",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
-        "ForceTokensLogitsProcessor",
         "HammingDiversityLogitsProcessor",
         "InfNanRemoveLogitsProcessor",
         "LogitNormalization",
@@ -84,6 +83,7 @@ else:
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
+        "ConfidenceCriteria",
         "EosTokenCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
@@ -201,7 +201,6 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
-            ForceTokensLogitsProcessor,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
             LogitNormalization,
@@ -227,6 +226,7 @@ if TYPE_CHECKING:
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
+            ConfidenceCriteria,
             EosTokenCriteria,
             MaxLengthCriteria,
             MaxNewTokensCriteria,

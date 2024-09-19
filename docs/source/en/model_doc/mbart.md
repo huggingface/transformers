@@ -83,7 +83,7 @@ keyword, and target text format passed with the `text_label` keyword argument.
 ## Overview of MBart-50
 
 MBart-50 was introduced in the [Multilingual Translation with Extensible Multilingual Pretraining and Finetuning](https://arxiv.org/abs/2008.00401) paper by Yuqing Tang, Chau Tran, Xian Li, Peng-Jen Chen, Naman Goyal, Vishrav
-Chaudhary, Jiatao Gu, Angela Fan. MBart-50 is created using the original *mbart-large-cc25* checkpoint by extendeding
+Chaudhary, Jiatao Gu, Angela Fan. MBart-50 is created using the original *mbart-large-cc25* checkpoint by extending
 its embedding layers with randomly initialized vectors for an extra set of 25 language tokens and then pretrained on 50
 languages.
 
