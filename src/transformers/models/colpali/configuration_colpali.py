@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ColPalimodel configuration"""
+"""PaliGemmamodel configuration"""
 
 import warnings
 
@@ -23,19 +23,20 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class ColPaliConfig(PretrainedConfig):
+# Copied from transformers.models.paligemma.configuration_paligemma.PaliGemmaConfig
+class PaliGemmaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ColPaliForConditionalGeneration`]. It is used to instantiate an
-    ColPalimodel according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ColPali-2B.
+    This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
+    PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
 
-    e.g. [colpali-hf/colpali-2b](https://huggingface.co/colpali-hf/colpali-2b)
+    e.g. [paligemma-hf/paligemma-2b](https://huggingface.co/paligemma-hf/paligemma-2b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`ColPaliVisionConfig`,  *optional*):
+        vision_config (`PaliGemmaVisionConfig`,  *optional*):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
@@ -44,8 +45,8 @@ class ColPaliConfig(PretrainedConfig):
         image_token_index (`int`, *optional*, defaults to 256000):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the ColPalimodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~ColPaliForConditionalGeneration`]
+            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
         projection_dim (`int`, *optional*, defaults to 2048):
             Dimension of the multimodal projection space.
         hidden_size (`int`, *optional*, defaults to 2048):
@@ -54,25 +55,25 @@ class ColPaliConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ColPaliForConditionalGeneration, ColPaliConfig, SiglipVisionConfig, GemmaConfig
+    >>> from transformers import PaliGemmaForConditionalGeneration, PaliGemmaConfig, SiglipVisionConfig, GemmaConfig
 
     >>> # Initializing a Siglip-like vision config
     >>> vision_config = SiglipVisionConfig()
 
-    >>> # Initializing a ColPali config
+    >>> # Initializing a PaliGemma config
     >>> text_config = GemmaConfig()
 
-    >>> # Initializing a ColPali colpali-3b-224 style configuration
-    >>> configuration = ColPaliConfig(vision_config, text_config)
+    >>> # Initializing a PaliGemma paligemma-3b-224 style configuration
+    >>> configuration = PaliGemmaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the colpali-3b-224 style configuration
-    >>> model = ColPaliForConditionalGeneration(configuration)
+    >>> # Initializing a model from the paligemma-3b-224 style configuration
+    >>> model = PaliGemmaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "colpali"
+    model_type = "paligemma"
     is_composition = False
 
     def __init__(

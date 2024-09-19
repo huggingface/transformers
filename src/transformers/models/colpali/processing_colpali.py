@@ -38,20 +38,22 @@ IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
+# Copied from transformers.models.paligemma.processing_paligemma.is_url
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
 
 
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
+# Copied from transformers.models.paligemma.processing_paligemma.is_image_or_image_url
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
+# Copied from transformers.models.paligemma.processing_paligemma._is_str_or_image
 def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
+# Copied from transformers.models.paligemma.processing_paligemma.build_string_from_input
 def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     """
     Builds a string from the input prompt and image tokens.
@@ -73,17 +75,18 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
 
 
-class ColPaliProcessor(ProcessorMixin):
+# Copied from transformers.models.paligemma.processing_paligemma.PaliGemmaProcessor
+class PaliGemmaProcessor(ProcessorMixin):
     r"""
-    Constructs a ColPali processor which wraps a ColPali image processor and a ColPali tokenizer into a single processor.
+    Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
 
-    [`ColPaliProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`ColPaliTokenizerFast`]. See the
-    [`~ColPaliProcessor.__call__`] and [`~ColPaliProcessor.decode`] for more information.
+    [`PaliGemmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~PaliGemmaProcessor.__call__`] and [`~PaliGemmaProcessor.decode`] for more information.
 
     Args:
         image_processor ([`SiglipImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`ColPaliTokenizerFast`], *optional*):
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -146,12 +149,12 @@ class ColPaliProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to ColPaliTokenizerFast's [`~ColPaliTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
-        The usage for ColPali fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
+        The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
         the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
         the prefix and the suffix. For instance,
         ```python
@@ -202,7 +205,7 @@ class ColPaliProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             suffix (`str`, `List[str]`, `List[List[str]]`):
-                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/colpali/README.md
+                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
                 for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
 
         Returns:
@@ -220,10 +223,10 @@ class ColPaliProcessor(ProcessorMixin):
         return_token_type_ids = True if suffix is not None else False
 
         if images is None:
-            raise ValueError("`images` are expected as arguments to a `ColPaliProcessor` instance.")
+            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
         if text is None:
             logger.warning_once(
-                "You are using ColPali without a text prefix. It will perform as a picture-captioning model."
+                "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
             )
             text = ""
 
@@ -284,6 +287,7 @@ class ColPaliProcessor(ProcessorMixin):
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -291,6 +295,7 @@ class ColPaliProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
@@ -299,6 +304,7 @@ class ColPaliProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
