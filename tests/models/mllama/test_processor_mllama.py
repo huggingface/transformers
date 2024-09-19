@@ -30,7 +30,7 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "s0409/model-3"  # TODO: change
+        self.checkpoint = "Llama-3.2-11B-Vision-Instruct"  # TODO: change
         self.processor = MllamaProcessor.from_pretrained(self.checkpoint)
         self.image1 = Image.new("RGB", (224, 220))
         self.image2 = Image.new("RGB", (512, 128))
@@ -235,3 +235,24 @@ class MllamaProcessorTest(unittest.TestCase):
         ]
         # fmt: on
         self.assertEqual(input_ids, expected_ids)
+
+        # text format for content
+        messages_list = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe this image in two sentences"},
+                ],
+            }
+        ]
+        messages_str = [
+            {
+                "role": "user",
+                "content": "<|image|>Describe this image in two sentences",
+            }
+        ]
+
+        rendered_list = self.processor.apply_chat_template(messages_list, add_generation_prompt=True, tokenize=False)
+        rendered_str = self.processor.apply_chat_template(messages_str, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(rendered_list, rendered_str)
