@@ -40,7 +40,7 @@ if is_torch_available():
     from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
 
 
-class DistilBertModelTester(object):
+class DistilBertModelTester:
     def __init__(
         self,
         parent,

@@ -50,6 +50,7 @@ class ChameleonImageProcessingTester(unittest.TestCase):
         image_std=[1.0, 1.0, 1.0],
         do_convert_rgb=True,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent

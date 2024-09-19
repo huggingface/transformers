@@ -1325,7 +1325,7 @@ class HubertModel(HubertPreTrainedModel):
         ...     return batch
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1

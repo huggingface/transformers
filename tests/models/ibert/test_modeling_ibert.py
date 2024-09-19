@@ -684,10 +684,10 @@ class IBertModelIntegrationTest(unittest.TestCase):
         # Recursively convert all the `quant_mode` attributes as `True`
         if hasattr(model, "quant_mode"):
             model.quant_mode = True
-        elif type(model) == nn.Sequential:
+        elif isinstance(model, nn.Sequential):
             for n, m in model.named_children():
                 self.quantize(m)
-        elif type(model) == nn.ModuleList:
+        elif isinstance(model, nn.ModuleList):
             for n in model:
                 self.quantize(n)
         else:

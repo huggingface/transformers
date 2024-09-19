@@ -19,8 +19,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from transformers import is_torch_available, load_tool
+from transformers import is_torch_available
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
+from transformers.agents.default_tools import FinalAnswerTool
 from transformers.testing_utils import get_tests_dir, require_torch
 
 from .test_tools_common import ToolTesterMixin
@@ -33,8 +34,7 @@ if is_torch_available():
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.inputs = {"answer": "Final answer"}
-        self.tool = load_tool("final_answer")
-        self.tool.setup()
+        self.tool = FinalAnswerTool()
 
     def test_exact_match_arg(self):
         result = self.tool("Final answer")
@@ -52,7 +52,7 @@ class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
             )
         }
         inputs_audio = {"answer": torch.Tensor(np.ones(3000))}
-        return {"text": inputs_text, "image": inputs_image, "audio": inputs_audio}
+        return {"string": inputs_text, "image": inputs_image, "audio": inputs_audio}
 
     @require_torch
     def test_agent_type_output(self):

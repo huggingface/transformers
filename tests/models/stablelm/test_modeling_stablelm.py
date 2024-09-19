@@ -16,6 +16,7 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import StableLmConfig, is_torch_available, set_seed
@@ -419,6 +420,10 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Inputs
         x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = StableLmRotaryEmbedding(
@@ -426,10 +431,10 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         ).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, short_input_length)
-        original_cos_long, original_sin_long = original_rope(x, long_input_length)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:short_input_length, :])
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -439,14 +444,14 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             base=config.rope_theta,
             scaling_factor=scaling_factor,
         ).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, short_input_length)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, long_input_length)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:short_input_length, :])
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[new_position, :], original_cos_long[original_position, :])
-            torch.testing.assert_close(linear_sin_long[new_position, :], original_sin_long[original_position, :])
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -457,8 +462,8 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             base=config.rope_theta,
             scaling_factor=scaling_factor,
         ).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, short_input_length)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, long_input_length)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
@@ -539,6 +544,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_model_3b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [3, 3, 3]
         input_ids = [306, 338] * 2047

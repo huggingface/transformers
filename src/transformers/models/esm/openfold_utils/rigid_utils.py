@@ -343,7 +343,7 @@ class Rotation:
         Returns:
             The indexed rotation
         """
-        if type(index) != tuple:
+        if type(index) is not tuple:
             index = (index,)
 
         if self._rot_mats is not None:
@@ -827,7 +827,7 @@ class Rigid:
         Returns:
             The indexed tensor
         """
-        if type(index) != tuple:
+        if type(index) is not tuple:
             index = (index,)
 
         return Rigid(

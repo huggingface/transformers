@@ -2361,10 +2361,14 @@ class HifiGanResidualBlock(nn.Module):
         return (kernel_size * dilation - dilation) // 2
 
     def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         for layer in self.convs1:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.convs2:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
 
     def remove_weight_norm(self):
         for layer in self.convs1:
@@ -2633,12 +2637,16 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.hifi_gan.conv_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.hifi_gan.conv_pre)
         for layer in self.hifi_gan.upsampler:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.hifi_gan.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.hifi_gan.conv_post)
+        weight_norm(self.hifi_gan.conv_post)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.hifi_gan.conv_pre)
@@ -3154,6 +3162,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         """
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        input_features = input_features if input_features is not None else kwargs.pop("inputs")
         if tgt_lang is not None:
             inputs = kwargs.get("input_embeds") if input_features is None else input_features
             inputs = (

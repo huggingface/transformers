@@ -101,7 +101,7 @@ for the list of all BCP-47 in the Flores 200 dataset.
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
@@ -126,7 +126,7 @@ See example below for a translation from romanian to german:
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("deu_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 UN-Chef sagt, es gibt keine militärische Lösung in Syrien
@@ -175,7 +175,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 >>> inputs = tokenizer(article, return_tensors="pt").to("cuda")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("deu_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 "UN-Chef sagt, es gibt keine militärische Lösung in Syrien"

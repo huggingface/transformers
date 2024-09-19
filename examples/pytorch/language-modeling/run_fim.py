@@ -47,10 +47,10 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    is_deepspeed_zero3_enabled,
     is_torch_tpu_available,
     set_seed,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
@@ -58,7 +58,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.43.0.dev0")
+check_min_version("4.45.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 

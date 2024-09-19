@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "src/transformers/models/*/modeling_*.py"
-      - "tests/models/*/test_*.py"
+      - "tests/**/test_*.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}

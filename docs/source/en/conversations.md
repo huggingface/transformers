@@ -195,7 +195,7 @@ inputs = {key: tensor.to(model.device) for key, tensor in inputs.items()}
 print("Tokenized inputs:\n", inputs)
 
 # 4: Generate text from the model
-outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.)
+outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.1)
 print("Generated tokens:\n", outputs)
 
 # 5: Decode the output back to a string

@@ -1609,13 +1609,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -1623,11 +1616,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
@@ -2550,7 +2542,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
-        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) == tuple:
+        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) is tuple:
             # wrap the unconditional outputs as a BaseModelOutput for compatibility with the rest of generate
             model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs["encoder_outputs"][0])
 
@@ -2649,13 +2641,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -2664,11 +2649,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
