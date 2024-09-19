@@ -17,7 +17,6 @@ Processor class for PaliGemma.
 """
 
 import logging
-import sys
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -27,6 +26,7 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
+    Unpack,
     _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import (
@@ -34,12 +34,6 @@ from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 
 logger = logging.getLogger(__name__)
