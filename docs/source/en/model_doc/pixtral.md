@@ -37,7 +37,7 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 
 Here is an example of how to run it:
 
-```python 
+```python
 from transformers import LlavaForConditionalGeneration, AutoProcessor
 from PIL import Image
 
@@ -53,7 +53,7 @@ IMG_URLS = [
 ]
 PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
-inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+inputs = processor(images=IMG_URLS, text=PROMPT, return_tensors="pt").to("cuda")
 generate_ids = model.generate(**inputs, max_new_tokens=500)
 ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 

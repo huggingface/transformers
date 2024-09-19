@@ -210,6 +210,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                 [Megatron-BERT](model_doc/megatron-bert)                 |       ✅        |         ❌         |      ❌      |
 |                 [Megatron-GPT2](model_doc/megatron_gpt2)                 |       ✅        |         ✅         |      ✅      |
 |                       [MGP-STR](model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
+|                          [Mimi](model_doc/mimi)                          |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |

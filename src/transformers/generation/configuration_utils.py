@@ -1229,6 +1229,10 @@ class GenerationConfig(PushToHubMixin):
         """
         config_dict = model_config.to_dict()
         config_dict.pop("_from_model_config", None)
+
+        # Removes all `None` from the model config dict -- this lets the generation config defaults to take hold
+        config_dict = {key: value for key, value in config_dict.items() if value is not None}
+
         generation_config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the

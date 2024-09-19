@@ -81,6 +81,8 @@
       title: Image Feature Extraction
     - local: tasks/mask_generation
       title: Mask Generation
+    - local: tasks/keypoint_detection
+      title: Keypoint Detection
     - local: tasks/knowledge_distillation_for_image_classification
       title: Knowledge Distillation for Computer Vision
     title: Computer Vision
@@ -720,6 +722,8 @@
         title: Hubert
       - local: model_doc/mctct
         title: MCTCT
+      - local: model_doc/mimi
+        title: Mimi
       - local: model_doc/mms
         title: MMS
       - local: model_doc/musicgen

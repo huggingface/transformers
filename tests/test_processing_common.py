@@ -64,6 +64,8 @@ class ProcessorTesterMixin:
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
         if attribute == "tokenizer" and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
+            if component.pad_token_id is None:
+                component.pad_token_id = 0
 
         return component
 
@@ -110,6 +112,14 @@ class ProcessorTesterMixin:
 
                 self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
 
+                for attribute in processor_first.attributes:
+                    attribute_first = getattr(processor_first, attribute)
+                    attribute_second = getattr(processor_second, attribute)
+
+                    # tokenizer repr contains model-path from where we loaded
+                    if "tokenizer" not in attribute:
+                        self.assertEqual(repr(attribute_first), repr(attribute_second))
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
@@ -136,7 +146,6 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
@@ -165,7 +174,6 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
@@ -228,7 +236,6 @@ class ProcessorTesterMixin:
             padding="longest",
             max_length=76,
         )
-
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 6)
@@ -301,3 +308,30 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
+    # TODO (molbap) use the same structure of attribute kwargs for other tests to avoid duplication
+    def test_overlapping_text_kwargs_handling(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_kwargs = {}
+        processor_kwargs["image_processor"] = self.get_component("image_processor")
+        processor_kwargs["tokenizer"] = tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        if "video_processor" in self.processor_class.attributes:
+            processor_kwargs["video_processor"] = self.get_component("video_processor")
+        processor = self.processor_class(**processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                padding="max_length",
+                text_kwargs={"padding": "do_not_pad"},
+            )
