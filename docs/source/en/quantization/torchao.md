@@ -81,7 +81,7 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 # quantized_model.push_to_hub(save_to, safe_serialization=False)
 
 # load quantized model
-ckpt_id = "llama3-8b-int4wo-128"  # or huggingface hub id
+ckpt_id = "llama3-8b-int4wo-128"  # or huggingface hub model id
 loaded_quantized_model = AutoModelForCausalLM.from_pretrained(ckpt_id, device_map="cuda")
 
 
