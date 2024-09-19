@@ -70,6 +70,7 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
+        "tool",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -572,6 +573,7 @@ _import_structure = {
         "MgpstrProcessor",
         "MgpstrTokenizer",
     ],
+    "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
@@ -2665,6 +2667,12 @@ else:
             "MgpstrForSceneTextRecognition",
             "MgpstrModel",
             "MgpstrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mimi"].extend(
+        [
+            "MimiModel",
+            "MimiPreTrainedModel",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -4827,6 +4835,7 @@ if TYPE_CHECKING:
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
+        tool,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -5350,6 +5359,9 @@ if TYPE_CHECKING:
         MgpstrConfig,
         MgpstrProcessor,
         MgpstrTokenizer,
+    )
+    from .models.mimi import (
+        MimiConfig,
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
@@ -7219,6 +7231,10 @@ if TYPE_CHECKING:
             MgpstrForSceneTextRecognition,
             MgpstrModel,
             MgpstrPreTrainedModel,
+        )
+        from .models.mimi import (
+            MimiModel,
+            MimiPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,

@@ -497,19 +497,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def _get_input_ids_and_config(self, batch_size=3):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size=batch_size
-        input_ids = input_ids[:batch_size, :, :]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-
-        return config, input_ids, None
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -528,6 +515,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    def test_beam_search_output(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+
+        input_features = input_dict["input_features"]
+
+        # Perform beam search
+        output = model.generate(
+            input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True
+        )
+
+        # Check if beam_indices and sequences_scores are in the output
+        self.assertIn("beam_indices", output, "beam_indices not found in the output")
+        self.assertIn("sequences_scores", output, "sequences_scores not found in the output")
+
+        # Validate the shapes of the beam_indices and sequences_scores
+        self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
+        self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
     # training is not supported yet
     @unittest.skip(reason="Training is not supported yet")
