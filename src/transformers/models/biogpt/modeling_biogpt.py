@@ -262,7 +262,7 @@ class BioGptSdpaAttention(BioGptAttention):
                 "not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual "
                 "attention implementation, but specifying the manual implementation will be required from Transformers "
                 'version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` '
-                'when loading the model.'
+                "when loading the model."
             )
             return super().forward(
                 hidden_states,
@@ -317,7 +317,6 @@ class BioGptSdpaAttention(BioGptAttention):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
-            self.is_causal = True
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
@@ -372,6 +371,7 @@ class BioGptDecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.attention_probs_dropout_prob,
             is_decoder=True,
+            is_causal=True,
         )
         self.dropout = config.hidden_dropout_prob
         self.activation_fn = ACT2FN[config.hidden_act]
