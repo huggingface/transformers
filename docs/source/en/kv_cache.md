@@ -120,7 +120,7 @@ To enable quantization of the key-value cache, one needs to indicate `cache_impl
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`~QuantizedCacheConfig`] class.
 One has to indicate which quantization backend to use in the [`~QuantizedCacheConfig`], the default is `quanto`.
 
-It is recommended to set `axis-key/axis-value` parameters in the cache config to `0` if you're using the `quanto` backend and to `1` if you're using the `HQQ` backend. For other config values, please use the defaults unless you're running out of memory. In that case, you may consider decreasing the residual length. 
+It is recommended to set `axis-key/axis-value` parameters in the cache config to `0` if you're using the `quanto` backend and to `1` if you're using the `HQQ` backend. For other config values, please use the defaults unless you're running out of memory. In that case, you may consider decreasing the residual length.
 
 <Tip warning={true}>
 
@@ -308,7 +308,7 @@ Unlike other cache classes, this one can't be used directly by indicating a `cac
 
 ### Encoder-Decoder Cache
 
-The [`~EncoderDecoderCache`] is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in [Whisper](./model_doc/whisper) models but we will be adding more models soon. 
+The [`~EncoderDecoderCache`] is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in [Whisper](./model_doc/whisper) models but we will be adding more models soon.
 
 In terms of usage, there is nothing special to be done and calling `generate()` or `forward()` will handle everything for you.
 
@@ -379,7 +379,7 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 >>> model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
 >>> tokenizer = AutoTokenizer.from_pretrained(model_id)
 
->>> # Init StaticCache with big enough max-length (1024 tokens for the below example) 
+>>> # Init StaticCache with big enough max-length (1024 tokens for the below example)
 >>> # You can also init a DynamicCache, if that suits you better
 >>> prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
 
@@ -394,10 +394,35 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 >>> for prompt in prompts:
 ...     new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
 ...     past_key_values = copy.deepcopy(prompt_cache)
-...     outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20) 
+...     outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20)
 ...     response = tokenizer.batch_decode(outputs)[0]
 ...     responses.append(response)
 
 >>> print(responses)
 ['<s> You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTitle: The Ultimate Guide to Travelling: Tips, Tricks, and', '<s> You are a helpful assistant. What is the capital of France?\n\nYes, the capital of France is Paris.</s>']
+```
+
+
+## Legacy cache format
+
+Prior to the introduction of the `Cache` object, the cache of LLMs used to be a tuple of tuples of tensors. The legacy
+format has a dynamic size, growing as we generate text -- very similar to `DynamicCache`. If your project depend on
+this legacy format, you can seamlessly convert it to a `DynamicCache` and back.
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+>>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+>>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+>>> inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
+
+>>> # `return_dict_in_generate=True` is required to return the cache. `return_legacy_cache` forces the returned cache
+>>> # to be of the legacy type
+>>> generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
+
+>>> # We can convert a legacy cache to a DynamicCache -- and the other way around. This is helpful if you have custom
+>>> # logic to manipulate a cache in a specific format.
+>>> cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
+>>> legacy_format_cache = cache.to_legacy_cache()
 ```
