@@ -106,7 +106,6 @@ def _prepare_cross_attention_mask(
     device: str,
     dtype: str,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-
     # reshape so it can be used by attn module
     batch_size, text_total_length, *_ = cross_attention_mask.shape
     cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=3)

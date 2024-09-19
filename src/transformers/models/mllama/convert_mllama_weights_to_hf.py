@@ -23,7 +23,13 @@ from typing import List
 import regex as re
 import torch
 
-from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
+from transformers import (
+    GenerationConfig,
+    MllamaConfig,
+    MllamaForConditionalGeneration,
+    MllamaImageProcessor,
+    PreTrainedTokenizerFast,
+)
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
 from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
@@ -216,6 +222,7 @@ def write_model(
     input_base_path,
     num_shards,
     safe_serialization=True,
+    instruct=False,
 ):
     os.makedirs(model_path, exist_ok=True)
 
@@ -366,6 +373,10 @@ def write_model(
     gc.collect()
 
     # Write configs
+    bos_token_id = 128000
+    eos_token_id = [128001, 128008, 128009] if instruct else 128001
+    pad_token_id = 128004
+
     config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
         hidden_size=dim_vision,  # Constant, taken directly from your notes
@@ -387,6 +398,9 @@ def write_model(
         intermediate_size=intermediate_size,
         max_position_embeddings=max_position_embeddings,
         rope_scaling=rope_scaling,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
     )
     config = MllamaConfig(vision_config=vision_config, text_config=text_config)
     config.architectures = ["MllamaForConditionalGeneration"]
@@ -409,9 +423,22 @@ def write_model(
     MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
+    # generation config
+    if instruct:
+        print("Saving generation config...")
+        generation_config = GenerationConfig(
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+        )
+        generation_config.save_pretrained(model_path)
+
 
 class MllamaConverter(TikTokenConverter):
-    def __init__(self, vocab_file, num_reserved_special_tokens=256, chat_template=None, **kwargs):
+    def __init__(self, vocab_file, num_reserved_special_tokens=256, chat_template=None, instruct=False, **kwargs):
         super().__init__(vocab_file, **kwargs)
         num_reserved_special_tokens = 256
         special_tokens = [
@@ -430,6 +457,8 @@ class MllamaConverter(TikTokenConverter):
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
         ]
+        # original tokenizer has <|image|> with 128011 token_id,
+        # however, later in the code it is replaced with 128256 token_id
         special_tokens.append("<|image|>")
         self.additional_special_tokens = special_tokens
         tokenizer = self.converted()
@@ -437,14 +466,14 @@ class MllamaConverter(TikTokenConverter):
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>",
+            eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             pad_token="<|finetune_right_pad_id|>",
-            chat_template=chat_template,
+            chat_template=chat_template if instruct else None,
             model_input_names=["input_ids", "attention_mask"],
         )
 
 
-def write_tokenizer(tokenizer_path: str, save_dir: str):
+def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     chat_template = (
         "{% for message in messages %}"
         "{% if loop.index0 == 0 %}"
@@ -468,14 +497,17 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
     converter = MllamaConverter(
         tokenizer_path,
         chat_template=chat_template,
+        instruct=instruct,
         pattern=r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",  # noqa: W605
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)
 
-    chat_template_path = os.path.join(save_dir, "chat_template.json")
-    with open(chat_template_path, "w") as f:
-        json.dump({"chat_template": chat_template}, f, indent=2)
+    if instruct:
+        print("Saving chat template...")
+        chat_template_path = os.path.join(save_dir, "chat_template.json")
+        with open(chat_template_path, "w") as f:
+            json.dump({"chat_template": chat_template}, f, indent=2)
 
 
 def write_image_processor(config_path: str, save_dir: str):
@@ -504,12 +536,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/home/ubuntu/.llama/checkpoints/Llama-3.2-11B-Vision-Instruct/",
+        default="Llama-3.2-11B-Vision/original",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="Llama-3.2-11B-Vision-Instruct",
+        default="Llama-3.2-11B-Vision",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
@@ -527,17 +559,24 @@ def main():
         type=int,
         help="The number of individual shards used for the model. Does not have to be the same as the number of consolidated_xx.pth",
     )
+    parser.add_argument(
+        "--instruct",
+        action="store_true",
+        help="Whether the model is an instruct model",
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
         num_shards=args.num_shards,
+        instruct=args.instruct,
     )
 
     write_tokenizer(
         tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
         save_dir=args.output_dir,
+        instruct=args.instruct,
     )
 
     write_image_processor(
