@@ -463,13 +463,15 @@ class MllamaConverter(TikTokenConverter):
         self.additional_special_tokens = special_tokens
         tokenizer = self.converted()
 
+        instruct_kwargs = {"chat_template": chat_template} if instruct else {}
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             pad_token="<|finetune_right_pad_id|>",
-            chat_template=chat_template if instruct else None,
             model_input_names=["input_ids", "attention_mask"],
+            model_max_length=131072,
+            **instruct_kwargs,
         )
 
 
