@@ -291,26 +291,27 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"]
 
+        _ = inputs_dict.pop("attention_mask", None)
+        inputs_dict = {
+            k: v[:batch_size, ...]
+            for k, v in inputs_dict.items()
+            if "head_mask" not in k and isinstance(v, torch.Tensor)
+        }
+
         # take max batch_size
         sequence_length = input_ids.shape[-1]
         input_ids = input_ids[: batch_size * config.num_codebooks, :]
 
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
-        return config, input_ids, attention_mask
+        return config, input_ids, attention_mask, inputs_dict
 
-    @staticmethod
-    def _get_logits_processor_and_warper_kwargs(
-        input_length,
-        forced_bos_token_id=None,
-        forced_eos_token_id=None,
-    ):
-        process_kwargs = {}
-        warper_kwargs = {}
-        return process_kwargs, warper_kwargs
+    def _get_logits_processor_kwargs(self, do_sample=False):
+        logits_processor_kwargs = {}
+        return logits_processor_kwargs
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
             config.audio_channels = 2
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
@@ -321,6 +322,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
+                inputs_dict={},
             )
 
             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
@@ -1492,15 +1494,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         return output_generate
 
-    @staticmethod
-    def _get_logits_processor_and_warper_kwargs(
-        input_length,
-        forced_bos_token_id=None,
-        forced_eos_token_id=None,
-    ):
-        process_kwargs = {}
-        warper_kwargs = {}
-        return process_kwargs, warper_kwargs
+    def _get_logits_processor_kwargs(self, do_sample=False):
+        logits_processor_kwargs = {}
+        return logits_processor_kwargs
 
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.greedy_sample_model_classes:

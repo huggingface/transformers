@@ -240,6 +240,12 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_torchscript_simple(self):
         pass
 
+    @unittest.skip(
+        reason="Model returns None for input_embeds, check: https://github.com/huggingface/transformers/issues/33527"
+    )
+    def test_peft_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 @require_torch
 class SpeechT5ForSpeechToTextTester:
@@ -745,9 +751,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -1748,6 +1752,12 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="Model returns None for input_embeds, check: https://github.com/huggingface/transformers/issues/33527"
+    )
+    def test_peft_gradient_checkpointing_enable_disable(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -1774,9 +1784,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 

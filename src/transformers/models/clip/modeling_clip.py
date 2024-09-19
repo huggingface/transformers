@@ -67,6 +67,17 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
+    """
+    This method is equivalent to tensor.norm(p=2, dim=-1, keepdim=True) and used to make
+    model `executorch` exportable. See issue https://github.com/pytorch/executorch/issues/3566
+    """
+    square_tensor = torch.pow(tensor, 2)
+    sum_tensor = torch.sum(square_tensor, dim=-1, keepdim=True)
+    normed_tensor = torch.pow(sum_tensor, 0.5)
+    return normed_tensor
+
+
 @dataclass
 class CLIPVisionModelOutput(ModelOutput):
     """
@@ -131,19 +142,19 @@ class CLIPOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`CLIPTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
+        vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`CLIPVisionModel`].
     """
 
@@ -1313,8 +1324,8 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        image_embeds = image_embeds / _get_vector_norm(image_embeds)
+        text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()

@@ -16,18 +16,30 @@
 Processor class for Grounding DINO.
 """
 
-from typing import List, Optional, Tuple, Union
+import pathlib
+import sys
+from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...image_utils import AnnotationFormat, ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 def get_phrases_from_posmap(posmaps, input_ids):
@@ -54,6 +66,31 @@ def get_phrases_from_posmap(posmaps, input_ids):
         token_ids.append([input_ids[i] for i in non_zero_idx])
 
     return token_ids
+
+
+class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
+    annotations: Optional[Union[AnnotationType, List[AnnotationType]]]
+    return_segmentation_masks: Optional[bool]
+    masks_path: Optional[Union[str, pathlib.Path]]
+    do_convert_annotations: Optional[bool]
+    format: Optional[Union[str, AnnotationFormat]]
+
+
+class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GroundingDinoImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": True,
+            "return_length": False,
+            "verbose": True,
+        }
+    }
 
 
 class GroundingDinoProcessor(ProcessorMixin):
@@ -83,21 +120,9 @@ class GroundingDinoProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = True,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         """
         This method uses [`GroundingDinoImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -106,32 +131,24 @@ class GroundingDinoProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         if images is None and text is None:
-            raise ValueError("You have to specify either images or text.")
+            raise ValueError("You must specify either text or images.")
+
+        output_kwargs = self._merge_kwargs(
+            GroundingDinoProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
         # Get only text
         if images is not None:
-            encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             encoding_image_processor = BatchFeature()
 
         if text is not None:
             text_encoding = self.tokenizer(
                 text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
+                **output_kwargs["text_kwargs"],
             )
         else:
             text_encoding = BatchEncoding()

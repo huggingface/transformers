@@ -37,6 +37,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
@@ -108,6 +109,8 @@ def set_seed(seed: int, deterministic: bool = False):
             torch.use_deterministic_algorithms(True)
     if is_torch_mlu_available():
         torch.mlu.manual_seed_all(seed)
+    if is_torch_musa_available():
+        torch.musa.manual_seed_all(seed)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
     if is_torch_xpu_available():
@@ -408,6 +411,22 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
 
 
 class SchedulerType(ExplicitEnum):
+    """
+    Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
+    By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
+    Scheduler types:
+       - "linear" = get_linear_schedule_with_warmup
+       - "cosine" = get_cosine_schedule_with_warmup
+       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
+       - "polynomial" = get_polynomial_decay_schedule_with_warmup
+       - "constant" =  get_constant_schedule
+       - "constant_with_warmup" = get_constant_schedule_with_warmup
+       - "inverse_sqrt" = get_inverse_sqrt_schedule
+       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
+       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
+       - "warmup_stable_decay" = get_wsd_schedule
+    """
+
     LINEAR = "linear"
     COSINE = "cosine"
     COSINE_WITH_RESTARTS = "cosine_with_restarts"
@@ -464,7 +483,7 @@ class TrainerMemoryTracker:
 
         import psutil  # noqa
 
-        if is_torch_cuda_available() or is_torch_mlu_available():
+        if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
 
             self.torch = torch
@@ -540,6 +559,9 @@ class TrainerMemoryTracker:
             elif is_torch_mlu_available():
                 self.torch.mlu.reset_peak_memory_stats()
                 self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.reset_peak_memory_stats()
+                self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
@@ -555,6 +577,8 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
             elif is_torch_mlu_available():
                 self.gpu_mem_used_at_start = self.torch.mlu.memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_at_start = self.torch.musa.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
             elif is_torch_npu_available():
@@ -588,6 +612,8 @@ class TrainerMemoryTracker:
                 self.torch.cuda.empty_cache()
             elif is_torch_mlu_available():
                 self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
             elif is_torch_npu_available():
@@ -608,6 +634,9 @@ class TrainerMemoryTracker:
             elif is_torch_mlu_available():
                 self.gpu_mem_used_now = self.torch.mlu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.mlu.max_memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_now = self.torch.musa.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.musa.max_memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()

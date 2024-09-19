@@ -39,7 +39,7 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.T
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
 
     Return:
-        indices (`torch.Tensor):
+        indices (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input sequence.
         cu_seqlens (`torch.Tensor`):
             The cumulative sequence lengths, used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
@@ -83,7 +83,7 @@ def _upad_input(
             Target length.
 
     Return:
-        query_layer (`torch.Tensor):
+        query_layer (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key_layer (`torch.Tensor`):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
@@ -130,6 +130,56 @@ def _upad_input(
     )
 
 
+def prepare_fa2_from_position_ids(query, key, value, position_ids):
+    """
+    This function returns necessary arguments to call `flash_attn_varlen_func`.
+    All three query, key, value states will be flattened.
+    Cummulative lengths of each examples in the batch will be extracted from position_ids.
+
+    NOTE: ideally cummulative lengths should be prepared at the data collator stage
+
+    Arguments:
+        query (`torch.Tensor`):
+            Query state with padding. Shape: (batch_size, query_length, num_heads, head_dim).
+        key (`torch.Tensor`):
+            Key state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
+        value (`torch.Tensor`):
+            Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
+        position_ids (`torch.Tensor`):
+            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+
+    Return:
+        query (`torch.Tensor`):
+            Query state without padding. Shape: (total_target_length, num_heads, head_dim).
+        key (`torch.Tensor`):
+            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        value (`torch.Tensor`):
+            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        indices_q (`torch.Tensor`):
+            The indices of non-masked tokens from the flattened input target sequence.
+        (cu_seqlens_q, cu_seqlens_k) (`Tuple[int]`):
+            The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`Tuple[int]`):
+            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
+    """
+    query = query.view(-1, query.size(-2), query.size(-1))
+    key = key.view(-1, key.size(-2), key.size(-1))
+    value = value.view(-1, value.size(-2), value.size(-1))
+    position_ids = position_ids.flatten()
+    indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+
+    cu_seq_lens = torch.cat(
+        (
+            indices_q[position_ids == 0],
+            torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+        )
+    )
+
+    max_length = position_ids.max() + 1
+
+    return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+
+
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -138,11 +188,12 @@ def _flash_attention_forward(
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
+    position_ids: Optional[torch.Tensor] = None,
     softmax_scale: Optional[float] = None,
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1",
+    deterministic: bool = None,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -182,6 +233,8 @@ def _flash_attention_forward(
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
     if is_flash_attn_greater_or_equal("2.4.1"):
+        if deterministic is None:
+            deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
@@ -210,6 +263,35 @@ def _flash_attention_forward(
             **flash_kwargs,
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+
+    # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
+    # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
+    # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
+    elif position_ids is not None and not (torch.diff(position_ids, dim=-1) >= 0).all() and query_length != 1:
+        batch_size = query_states.size(0)
+        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
+            query_states, key_states, value_states, position_ids
+        )
+
+        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+        attn_output = flash_attn_varlen_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_in_batch_q,
+            max_seqlen_k=max_seqlen_in_batch_k,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            **flash_kwargs,
+        )
+
+        attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
+
     else:
         attn_output = flash_attn_func(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs

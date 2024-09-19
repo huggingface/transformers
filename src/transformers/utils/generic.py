@@ -214,7 +214,7 @@ def _is_tf_symbolic_tensor(x):
     # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
     if hasattr(tf, "is_symbolic_tensor"):
         return tf.is_symbolic_tensor(x)
-    return type(x) == tf.Tensor
+    return isinstance(x, tf.Tensor)
 
 
 def is_tf_symbolic_tensor(x):
@@ -815,6 +815,9 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
         # Required for better warning message
         is_instance_method = "self" in function_named_args
         is_class_method = "cls" in function_named_args
+
+        # Mark function as decorated
+        func._filter_out_non_signature_kwargs = True
 
         @wraps(func)
         def wrapper(*args, **kwargs):

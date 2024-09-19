@@ -31,7 +31,7 @@ if is_vision_available():
 
 class DocumentQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "naver-clova-ix/donut-base-finetuned-docvqa"
-    description = "This is a tool that answers a question about an document (pdf). It returns a text that contains the answer to the question."
+    description = "This is a tool that answers a question about an document (pdf). It returns a string that contains the answer to the question."
     name = "document_qa"
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
@@ -41,9 +41,9 @@ class DocumentQuestionAnsweringTool(PipelineTool):
             "type": "image",
             "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
         },
-        "question": {"type": "text", "description": "The question in English"},
+        "question": {"type": "string", "description": "The question in English"},
     }
-    output_type = "text"
+    output_type = "string"
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
@@ -60,7 +60,7 @@ class DocumentQuestionAnsweringTool(PipelineTool):
         if isinstance(document, str):
             img = Image.open(document).convert("RGB")
             img_array = np.array(img).transpose(2, 0, 1)
-            document = torch.tensor(img_array)
+            document = torch.from_numpy(img_array)
         pixel_values = self.pre_processor(document, return_tensors="pt").pixel_values
 
         return {"decoder_input_ids": decoder_input_ids, "pixel_values": pixel_values}

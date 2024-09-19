@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -53,9 +54,9 @@ class PaliGemmaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=98,
+        image_token_index=0,
         projector_hidden_act="gelu",
-        seq_length=7,
+        seq_length=25,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         projection_dim=32,
@@ -82,13 +83,13 @@ class PaliGemmaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
             "use_labels": True,
-            "image_size": 30,
-            "patch_size": 2,
+            "image_size": 20,
+            "patch_size": 5,
             "num_image_tokens": 4,
             "num_channels": 3,
             "is_training": True,
@@ -106,6 +107,7 @@ class PaliGemmaVisionText2TextModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
+        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
@@ -114,6 +116,7 @@ class PaliGemmaVisionText2TextModelTester:
         self.vision_config = vision_config
         self.seq_length = seq_length
         self.projection_dim = projection_dim
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -157,8 +160,10 @@ class PaliGemmaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # setting the 4 first tokens to be image
-        input_ids[:, :4] = config.image_token_index
+        # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
+        # do not change this unless you modified image size or patch size
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, :16] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -170,12 +175,13 @@ class PaliGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -184,6 +190,49 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     def setUp(self):
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -257,6 +306,12 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 
     @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
+    @unittest.skip(
+        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
 

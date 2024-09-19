@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 import numpy as np
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_vision_available
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available
 
 
 if is_vision_available():
@@ -390,6 +390,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["image_processor"]
         if "feature_extractor" in output:
             del output["feature_extractor"]
+        if "chat_template" in output:
+            del output["chat_template"]
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {
@@ -500,9 +502,12 @@ class ProcessorMixin(PushToHubMixin):
         output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
 
         processor_dict = self.to_dict()
-        chat_template = processor_dict.pop("chat_template", None)
-        if chat_template is not None:
-            chat_template_json_string = json.dumps({"chat_template": chat_template}, indent=2, sort_keys=True) + "\n"
+        # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
+        # to avoid serializing chat template in json config file. So let's get it from `self` directly
+        if self.chat_template is not None:
+            chat_template_json_string = (
+                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+            )
             with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file}")
@@ -522,7 +527,7 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        if set(self.to_dict().keys()) == {"processor_class"}:
+        if set(processor_dict.keys()) == {"processor_class"}:
             return []
         return [output_processor_file]
 
@@ -736,12 +741,12 @@ class ProcessorMixin(PushToHubMixin):
         The order of operations is as follows:
             1) kwargs passed as before have highest priority to preserve BC.
                 ```python
-                high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
+                high_priority_kwargs = {"crop_size" = {"height": 222, "width": 222}, "padding" = "max_length"}
                 processor(..., **high_priority_kwargs)
                 ```
             2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
                 ```python
-                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
                 ```
             3) kwargs passed during instantiation of a modality processor have fourth priority.
                 ```python
@@ -971,8 +976,8 @@ class ProcessorMixin(PushToHubMixin):
             conversation (`List[Dict, str, str]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
             tokenize (`bool`, *optional*, defaults to `False`):
                 Whether to tokenize the output or not.
             **kwargs:
@@ -982,15 +987,6 @@ class ProcessorMixin(PushToHubMixin):
         if chat_template is None:
             if self.chat_template is not None:
                 chat_template = self.chat_template
-            elif getattr(self, "default_chat_template", None) is not None:
-                logger.warning_once(
-                    "No chat template is set for this processor, falling back to a default class-level template. This is "
-                    "very error-prone, because models are often trained with templates different from the class default! "
-                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
-                    "then to ensure that this model continues working without issues."
-                )
-                chat_template = self.default_chat_template
             else:
                 raise ValueError(
                     "No chat template is set for this processor. Please either set the `chat_template` attribute, "
@@ -1000,6 +996,64 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
+
+
+def _validate_images_text_input_order(images, text):
+    """
+    For backward compatibility: reverse the order of `images` and `text` inputs if they are swapped.
+    This method should only be called for processors where `images` and `text` have been swapped for uniformization purposes.
+    Note that this method assumes that two `None` inputs are valid inputs. If this is not the case, it should be handled
+    in the processor's `__call__` method before calling this method.
+    """
+
+    def is_url(val) -> bool:
+        return isinstance(val, str) and val.startswith("http")
+
+    def _is_valid_images_input_for_processor(imgs):
+        # If we have an list of images, make sure every image is valid
+        if isinstance(imgs, (list, tuple)):
+            for img in imgs:
+                if not _is_valid_images_input_for_processor(img):
+                    return False
+        # If not a list or tuple, we have been given a single image or batched tensor of images
+        elif not (is_valid_image(imgs) or is_url(imgs)):
+            return False
+        return True
+
+    def _is_valid_text_input_for_processor(t):
+        if isinstance(t, str):
+            # Strings are fine
+            return True
+        elif isinstance(t, (list, tuple)):
+            # List are fine as long as they are...
+            if len(t) == 0:
+                # ... not empty
+                return False
+            for t_s in t:
+                return _is_valid_text_input_for_processor(t_s)
+        return False
+
+    def _is_valid(input, validator):
+        return validator(input) or input is None
+
+    images_is_valid = _is_valid(images, _is_valid_images_input_for_processor)
+    images_is_text = _is_valid_text_input_for_processor(images)
+
+    text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
+    text_is_images = _is_valid_images_input_for_processor(text)
+    # Handle cases where both inputs are valid
+    if images_is_valid and text_is_valid:
+        return images, text
+
+    # Handle cases where inputs need to and can be swapped
+    if (images is None and text_is_images) or (text is None and images_is_text) or (images_is_text and text_is_images):
+        logger.warning_once(
+            "You may have used the wrong order for inputs. `images` should be passed before `text`. "
+            "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
+        )
+        return text, images
+
+    raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

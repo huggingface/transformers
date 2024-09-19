@@ -118,7 +118,7 @@ def select_starts_ends(
         max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
     """
     # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-    undesired_tokens = np.abs(p_mask.numpy() - 1)
+    undesired_tokens = np.abs(np.array(p_mask) - 1)
 
     if attention_mask is not None:
         undesired_tokens = undesired_tokens & attention_mask

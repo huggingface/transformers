@@ -131,6 +131,15 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer.chat_template = (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
+        )
         # This is in English, but it's just here to make sure the chat control tokens are being added properly
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],

@@ -26,10 +26,12 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -66,13 +68,7 @@ if is_torch_available():
         set_seed,
     )
     from transformers.generation import (
-        BeamSampleDecoderOnlyOutput,
-        BeamSampleEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
-        BeamSearchEncoderDecoderOutput,
-        GenerateBeamDecoderOnlyOutput,
-        GenerateBeamEncoderDecoderOutput,
-        PhrasalConstraint,
+        GenerateEncoderDecoderOutput,
     )
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
@@ -222,7 +218,6 @@ class WhisperModelTester:
         decoder_start_token_id=85,
         num_conv_layers=1,
         suppress_tokens=None,
-        begin_suppress_tokens=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -247,7 +242,6 @@ class WhisperModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
-        self.begin_suppress_tokens = begin_suppress_tokens
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -284,7 +278,6 @@ class WhisperModelTester:
             encoder_ffn_dim=self.hidden_size,
             decoder_start_token_id=self.decoder_start_token_id,
             suppress_tokens=self.suppress_tokens,
-            begin_suppress_tokens=self.begin_suppress_tokens,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -416,6 +409,30 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
+    def _get_logits_processor_kwargs(self, do_sample=False):
+        # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs["temperature"] = 0.0
+        return logits_processor_kwargs
+
+    def _get_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
+
+    def _get_diverse_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_diverse_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
+
+    def _get_constrained_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_constrained_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
+
     def setUp(self):
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
@@ -480,19 +497,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def _get_input_ids_and_config(self, batch_size=3):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size=batch_size
-        input_ids = input_ids[:batch_size, :, :]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-
-        return config, input_ids, None
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -511,6 +515,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    def test_beam_search_output(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+
+        input_features = input_dict["input_features"]
+
+        # Perform beam search
+        output = model.generate(
+            input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True
+        )
+
+        # Check if beam_indices and sequences_scores are in the output
+        self.assertIn("beam_indices", output, "beam_indices not found in the output")
+        self.assertIn("sequences_scores", output, "sequences_scores not found in the output")
+
+        # Validate the shapes of the beam_indices and sequences_scores
+        self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
+        self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
     # training is not supported yet
     @unittest.skip(reason="Training is not supported yet")
@@ -1332,8 +1355,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         with self.assertRaisesRegex(
             ValueError,
-            f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-            f"is {max_new_tokens}. Thus, the combined length of "
+            f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+            f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
             f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
@@ -1548,241 +1571,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
-    def test_beam_sample_generate_dict_output(self):
-        # We overwrite test_beam_sample_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-        # disable cache
-        config.use_cache = False
-
-        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
-        _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
-        beam_kwargs = self._get_beam_kwargs()
-
-        # With Whisper, we can only perform a beam search if the temperature is set to 0.
-        logits_warper_kwargs["temperature"] = 0
-        # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-        output_generate = self._beam_sample_generate(
-            model=model,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            beam_kwargs=beam_kwargs,
-            logits_warper_kwargs=logits_warper_kwargs,
-            output_scores=True,
-            output_logits=True,
-            output_hidden_states=True,
-            output_attentions=True,
-            return_dict_in_generate=True,
-        )
-        if model.config.is_encoder_decoder:
-            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-            self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-            # Retrocompatibility check
-            self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
-        else:
-            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-            # Retrocompatibility check
-            self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
-
-        self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
-
-    def test_beam_search_generate_dict_output(self):
-        # We overwrite test_beam_search_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-            beam_kwargs = self._get_beam_kwargs()
-
-            # With Whisper, we can only perform a beam search if the temperature is set to 0.
-            logits_process_kwargs["temperature"] = 0
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            output_generate = self._beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        # We overwrite test_beam_search_generate_dict_outputs_use_cache in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            # enable cache
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            beam_kwargs = self._get_beam_kwargs()
-
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            output_generate = self._beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            self._check_outputs(
-                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_group_beam_search_generate_dict_output(self):
-        # We overwrite test_group_beam_search_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            beam_kwargs = self._get_diverse_beam_kwargs()
-
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            output_generate = self._group_beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_constrained_beam_search_generate_dict_output(self):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            # Sample constraints
-            min_id = 3
-            max_id = model.config.vocab_size
-            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
-            constraints = [
-                PhrasalConstraint(force_tokens),
-            ]
-
-            beam_kwargs = self._get_constrained_beam_kwargs()
-            output_generate = self._constrained_beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                constraints=constraints,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
-            )
-
+    @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
     def test_custom_4d_attention_mask(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
@@ -1820,6 +1609,136 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
+    @parameterized.expand([(True,), (False,)])
+    def test_generate_output_type(self, return_dict_in_generate):
+        expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs()
+            model = model_class(config).to(torch_device).eval()
+
+            # short-form generation without fallback
+            pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
+            assert isinstance(pred_ids, expected_output_type)
+
+            # short-form generation with fallback
+            pred_ids = model.generate(
+                **inputs,
+                logprob_threshold=-1.0,
+                temperature=[0.0, 0.1],
+                return_dict_in_generate=return_dict_in_generate,
+            )
+            assert isinstance(pred_ids, expected_output_type)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_reuse_cache(self):
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name][..., :10]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                _ = model.generate(
+                    dummy_input,
+                    decoder_input_ids=output.sequences,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
+
+    def test_labels_sequence_max_length_correct(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_correct_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            config.max_target_positions += 100
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            new_max_length = config.max_target_positions + 100
+            model.config.max_length = new_max_length
+            model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
+
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
 
 @require_torch
 @require_torchaudio
@@ -1835,9 +1754,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -2252,64 +2169,57 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
 
-        sample = self._load_datasamples(1)
-        input_speech = np.concatenate(sample * 10)
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
 
-        input_features = processor(input_speech, return_tensors="pt", truncation=False, sampling_rate=16_000)
+        input_features = processor(
+            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+        )
         input_features = input_features.to(torch_device)
 
         generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
 
         EXPECTED_TRANSCRIPT = [
             {
-                "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                "offsets": [
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (0.0, 6.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (6.0, 12.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (12.0, 18.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (18.0, 24.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (24.0, 29.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (29.0, 35.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (35.0, 41.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (41.0, 47.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (47.0, 53.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (53.0, 58.20000076293945),
-                    },
-                ],
-            }
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.5600000000000005),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.5600000000000005, 11.24),
+            },
+            {
+                "text": " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+                "timestamp": (11.24, 16.88),
+            },
+            {
+                "text": " before us, similarly drawn from eating and its results occur most readily to the mind.",
+                "timestamp": (16.88, 23.76),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and",
+                "timestamp": (23.76, 29.44),
+            },
+            {"text": " can discover in it but little of rocky ithaka.", "timestamp": (29.44, 33.72)},
+            {
+                "text": " Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite itals",
+                "timestamp": (33.72, 40.32),
+            },
+            {"text": " are as national as a jingo poem.", "timestamp": (40.32, 44.72)},
+            {
+                "text": " Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used",
+                "timestamp": (44.72, 50.4),
+            },
+            {"text": " to flash his teeth.", "timestamp": (50.4, 52.96)},
+            {
+                "text": " And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like",
+                "timestamp": (52.96, 58.68),
+            },
+            {"text": " a shampoo and a Turkish bath next man.", "timestamp": (58.68, 61.96)},
         ]
 
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
 
     @slow
     def test_large_timestamp_generation(self):
@@ -2481,7 +2391,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         inputs = inputs.to(torch_device)
-        generate_outputs = model.generate(**inputs, return_segments=True, return_token_timestamps=True)
+        generate_outputs = model.generate(
+            **inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True
+        )
 
         token_timestamps_shape = [
             [segment["token_timestamps"].shape for segment in segment_list]
@@ -2646,14 +2558,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features.to(torch_device)
 
         # task defaults to transcribe
-        sequences = model.generate(input_features)
+        sequences = model.generate(input_features, return_timestamps=True)
 
         transcription = processor.batch_decode(sequences)[0]
 
         assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
 
         # set task to translate
-        sequences = model.generate(input_features, task="translate")
+        sequences = model.generate(input_features, task="translate", return_timestamps=True)
         transcription = processor.batch_decode(sequences)[0]
 
         assert (
@@ -2718,9 +2630,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2769,9 +2679,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2812,7 +2720,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2848,9 +2756,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2901,7 +2807,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2983,7 +2889,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -3025,7 +2931,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -3079,7 +2985,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -3366,6 +3272,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 5,
             "language": "fr",
             "task": "transcribe",
+            "return_timestamps": True,
         }
 
         torch.manual_seed(0)
@@ -3436,6 +3343,66 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # assert re-ordered generations match those from eager
         assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
 
+    @slow
+    def test_tiny_static_generation_long_form(self):
+        import torch._dynamo.config
+
+        # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
+        torch._dynamo.config.cache_size_limit = 4
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+        input_speech = [audio["array"] for audio in dataset[2:4]["audio"]]
+
+        inputs = processor(
+            input_speech,
+            return_tensors="pt",
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second time step
+            "logprob_threshold": -1.0,
+            "num_beams": 1,
+        }
+
+        set_seed(42)
+        eager_generated_ids = model.generate(**inputs, **gen_kwargs)
+
+        # compile the forward pass and assert equivalence
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        set_seed(42)
+        static_generated_ids = model.generate(**inputs, **gen_kwargs)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        input_features = inputs.input_features
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
+        input_features = input_features[permutation_idx, ...]
+        attention_mask = inputs.attention_mask[permutation_idx, ...]
+
+        set_seed(42)
+        static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
@@ -3464,7 +3431,6 @@ class WhisperEncoderModelTester:
         num_mel_bins=80,
         num_conv_layers=1,
         suppress_tokens=None,
-        begin_suppress_tokens=None,
         classifier_proj_size=4,
         num_labels=2,
         is_encoder_decoder=False,
@@ -3487,7 +3453,6 @@ class WhisperEncoderModelTester:
         self.max_source_positions = max_source_positions
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
-        self.begin_suppress_tokens = begin_suppress_tokens
         self.classifier_proj_size = classifier_proj_size
         self.num_labels = num_labels
         self.is_encoder_decoder = is_encoder_decoder
@@ -3508,7 +3473,6 @@ class WhisperEncoderModelTester:
             decoder_ffn_dim=self.hidden_size,
             encoder_ffn_dim=self.hidden_size,
             suppress_tokens=self.suppress_tokens,
-            begin_suppress_tokens=self.begin_suppress_tokens,
             classifier_proj_size=self.classifier_proj_size,
             num_labels=self.num_labels,
             is_encoder_decoder=self.is_encoder_decoder,
@@ -3840,7 +3804,6 @@ class WhisperStandaloneDecoderModelTester:
         decoder_start_token_id=85,
         num_conv_layers=1,
         suppress_tokens=None,
-        begin_suppress_tokens=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -3864,7 +3827,6 @@ class WhisperStandaloneDecoderModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
-        self.begin_suppress_tokens = begin_suppress_tokens
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -3920,7 +3882,6 @@ class WhisperStandaloneDecoderModelTester:
             encoder_ffn_dim=self.hidden_size,
             decoder_start_token_id=self.decoder_start_token_id,
             suppress_tokens=self.suppress_tokens,
-            begin_suppress_tokens=self.begin_suppress_tokens,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -4048,12 +4009,23 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
         # generate only works with input ids for whisper
         pass
 
+    @unittest.skip(reason="Generate needs input ids")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        # generate only works with input ids for whisper
+        pass
+
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
     @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(
+        reason="FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
+    )
+    def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
     @unittest.skip(

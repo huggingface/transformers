@@ -33,11 +33,16 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_mamba import MambaConfig
 
 
 logger = logging.get_logger(__name__)
+
+if is_mambapy_available():
+    from mambapy.pscan import pscan
+else:
+    pscan = None
 
 if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
@@ -68,6 +73,7 @@ class MambaMixer(nn.Module):
 
     def __init__(self, config: MambaConfig, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
@@ -87,6 +93,8 @@ class MambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
+        self.use_mambapy = config.use_mambapy
+
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
@@ -105,17 +113,30 @@ class MambaMixer(nn.Module):
         self.use_bias = config.use_bias
 
         if not is_fast_path_available:
-            logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
-                " https://github.com/Dao-AILab/causal-conv1d"
-            )
+            if self.use_mambapy:
+                if is_mambapy_available():
+                    logger.warning_once(
+                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
+                        " https://github.com/Dao-AILab/causal-conv1d"
+                    )
+                else:
+                    raise ImportError(
+                        "use_mambapy is set to True but the mambapy package is not installed. To install it follow https://github.com/alxndrTL/mamba.py."
+                    )
+            else:
+                logger.warning_once(
+                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
+                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                )
 
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -140,6 +161,9 @@ class MambaMixer(nn.Module):
         else:
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
+            if attention_mask is not None:
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
             if cache_params is not None and cache_position[0] > 0:
@@ -160,6 +184,9 @@ class MambaMixer(nn.Module):
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
+
+            if attention_mask is not None:
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
             # 3. State Space Model sequence transformation
             # 3.a. input varying initialization of time_step, B and C
@@ -206,12 +233,15 @@ class MambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: Optional[MambaCache]=None, cache_position:Optional[torch.LongTensor]=None):
+    def slow_forward(self, input_states, cache_params: Optional[MambaCache]=None, cache_position:Optional[torch.LongTensor]=None, attention_mask: Optional[torch.LongTensor] = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
+
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
@@ -241,6 +271,9 @@ class MambaMixer(nn.Module):
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
 
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
@@ -257,17 +290,24 @@ class MambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        scan_outputs = []
-        for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
-            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
-            scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = (scan_output * self.act(gate))
+        if self.use_mambapy and self.training and cache_params is None:
+            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, seq_len, intermediate_size, ssm_state_size]
 
-        if cache_params is not None:
-            cache_params.update_ssm_state(self.layer_idx, ssm_state)
+            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2) # [batch, intermediate_size, seq_len]
+            scan_output = scan_output + hidden_states * self.D[None, :, None]
+            scan_output = scan_output * self.act(gate)
+        else:
+            scan_outputs = []
+            for i in range(seq_len):
+                ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
+                scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediade_size, 1]
+                scan_outputs.append(scan_output[:, :, 0])
+            scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, seq_len, intermediade_size]
+            scan_output = scan_output + (hidden_states * self.D[None, :, None])
+            scan_output = (scan_output * self.act(gate))
+
+            if cache_params is not None:
+                cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
@@ -279,10 +319,11 @@ class MambaMixer(nn.Module):
         hidden_states,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position)
-        return self.slow_forward(hidden_states, cache_params, cache_position)
+            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
 class MambaRMSNorm(nn.Module):
@@ -301,6 +342,9 @@ class MambaRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
+
 
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_idx):
@@ -316,13 +360,16 @@ class MambaBlock(nn.Module):
         hidden_states,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, cache_position=cache_position)
+        hidden_states = self.mixer(
+            hidden_states, cache_params=cache_params, cache_position=cache_position, attention_mask=attention_mask
+        )
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -335,7 +382,7 @@ class MambaPreTrainedModel(PreTrainedModel):
 
     config_class = MambaConfig
     base_model_prefix = "backbone"
-    _no_split_modules = ["MambaBlock"]
+    _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
     _is_stateful = True
 
@@ -533,7 +580,7 @@ class MambaModel(MambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,  # `attention_mask` is passed by the tokenizer and we don't want it
+        attention_mask: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -575,10 +622,15 @@ class MambaModel(MambaPreTrainedModel):
         for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position
+                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
                 )
             else:
-                hidden_states = mixer_block(hidden_states, cache_params=cache_params, cache_position=cache_position)
+                hidden_states = mixer_block(
+                    hidden_states,
+                    cache_params=cache_params,
+                    cache_position=cache_position,
+                    attention_mask=attention_mask,
+                )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -638,6 +690,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         ):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
 
+        if "attention_mask" in model_kwargs:
+            attention_mask = model_kwargs["attention_mask"]
+            model_kwargs["attention_mask"] = torch.cat(
+                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+            )
+
         return model_kwargs
 
     def prepare_inputs_for_generation(
@@ -647,6 +705,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         use_cache=None,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
         if use_cache:
@@ -659,6 +718,10 @@ class MambaForCausalLM(MambaPreTrainedModel):
                 )
             if cache_position[0] > 0:
                 input_ids = input_ids[:, -1].unsqueeze(-1)
+
+                if attention_mask is not None:
+                    attention_mask = None
+
             else:
                 # we initialize the `cache_position` to full size of `conv_states` at prefill stage
                 # considering padding will be applied when input length is shorter, and truncation
@@ -676,6 +739,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
                 "cache_params": cache_params,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
+                "attention_mask": attention_mask,
             }
         )
         return model_inputs
@@ -689,6 +753,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_params: Optional[MambaCache] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -714,6 +779,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
             return_dict=return_dict,
             use_cache=use_cache,
             cache_position=cache_position,
+            attention_mask=attention_mask,
         )
         hidden_states = mamba_outputs[0]
 

@@ -558,17 +558,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
         return "".join(outputs)
 
-    def _compute_offsets(self, token_ids, time_precision=0.02, longform_timestamps=None):
+    def _compute_offsets(self, token_ids, time_precision=0.02):
         """
         Compute offsets for a given tokenized input
 
         Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
-            longform_timestamps (List[dict], *optional*):
-                Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -589,36 +587,33 @@ class WhisperTokenizer(PreTrainedTokenizer):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
-        for i, current_slice in enumerate(consecutive):
+        cur_max_timestamp = 0
+        prev_segments_len = 0
+        for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+
+                if start_timestamp_position < cur_max_timestamp:
+                    # next segment has started
+                    prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = end_timestamp_position
+
                 # strip timestamp tokens from the text output
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
                 text = self._filter_timestamp_ids(text)
-
-                if longform_timestamps is not None:
-                    offsets.append(
-                        {
-                            "text": text,
-                            "timestamp": (
-                                longform_timestamps[0][i]["start"].item(),
-                                longform_timestamps[0][i]["end"].item(),
-                            ),
-                        }
-                    )
-                else:
-                    offsets.append(
-                        {
-                            "text": text,
-                            "timestamp": (
-                                start_timestamp_position * time_precision,
-                                end_timestamp_position * time_precision,
-                            ),
-                        }
-                    )
+                offsets.append(
+                    {
+                        "text": text,
+                        "timestamp": (
+                            (start_timestamp_position + prev_segments_len) * time_precision,
+                            (end_timestamp_position + prev_segments_len) * time_precision,
+                        ),
+                    }
+                )
             last_slice = current_slice
 
         return offsets
@@ -629,7 +624,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
 
         Args:
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
         """
         return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
@@ -678,14 +673,16 @@ class WhisperTokenizer(PreTrainedTokenizer):
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
+                if present.
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
-                timestamps.
-            time_precision (`float`, `optional`, defaults to 0.02):
+                timestamps. If there are previous tokens (pre-prompt) to decode, they will only appear in the decoded
+                text if they contain timestamp tokens.
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.
@@ -727,11 +724,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # retrieve offsets
         if output_offsets:
-            longform_timestamps = kwargs.get("longform_timestamps")
-            offsets = self._compute_offsets(
-                token_ids, time_precision=time_precision, longform_timestamps=longform_timestamps
-            )
-
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
             return {"text": text, "offsets": offsets}
         return text
 
@@ -828,14 +821,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
@@ -895,6 +880,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
@@ -1200,7 +1187,22 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                     "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
                 )
 
-            matches = np.sum(left == right)
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                    )
+                )
+
+            else:
+                matches = np.sum(left == right)
+
             matching = matches / i + eps
             if matches > 1 and matching > max_:
                 max_ = matching
