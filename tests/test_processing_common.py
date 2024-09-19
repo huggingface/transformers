@@ -309,17 +309,19 @@ class ProcessorTesterMixin:
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    @require_torch
-    @require_vision
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
+    # TODO (molbap) use the same structure of attribute kwargs for other tests to avoid duplication
     def test_overlapping_text_kwargs_handling(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
+        processor_kwargs = {}
+        processor_kwargs["image_processor"] = self.get_component("image_processor")
+        processor_kwargs["tokenizer"] = tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        if "video_processor" in self.processor_class.attributes:
+            processor_kwargs["video_processor"] = self.get_component("video_processor")
+        processor = self.processor_class(**processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
