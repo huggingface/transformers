@@ -344,6 +344,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         )
         # LED computes attention scores based on mask indices if `is_global`
         inputs_dict.pop("global_attention_mask")
+        # breakpoint()
         return config, input_ids, attention_mask, inputs_dict
 
     # LEDForSequenceClassification does not support inputs_embeds

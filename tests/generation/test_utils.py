@@ -99,21 +99,29 @@ class GenerationTesterMixin:
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # TODO: @raushan or @gante, use `model.main_input_name` as the main input instead of relyinn on `input_ids`
+        # TODO: @raushan or @gante, use `model.main_input_name` as the main input instead of relying on `input_ids`
         input_ids = inputs_dict.pop(self.input_name)[:batch_size, :]
-        inputs_dict.pop("attention_mask", None)
 
-        # we don't want encoder-decoder models to start from filled decoder ids
-        inputs_dict.pop("decoder_input_ids", None)
-        inputs_dict.pop("decoder_attention_mask", None)
-
-        # we'll set cache use in each test differently
-        inputs_dict.pop("use_cache", None)
+        # We don't want a few model inputs in our generalist model input dictionary.
+        input_keys_to_ignore = [
+            # we don't want to mask attention heads
+            "head_mask",
+            "decoder_head_mask",
+            # we don't want encoder-decoder models to start from filled decoder ids
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            # we'll set cache use in each test differently
+            "use_cache",
+            # we manually set attention_mask [TODO @joao: we probably want to reuse it when it exists]
+            "attention_mask",
+            # model-specific inputs to ignore
+            # "global_attention_mask",  # LED computes attention scores based on mask indices if `is_global`
+        ]
 
         inputs_dict = {
             k: v[:batch_size, ...]
             for k, v in inputs_dict.items()
-            if "head_mask" not in k and isinstance(v, torch.Tensor)
+            if k not in input_keys_to_ignore and isinstance(v, torch.Tensor)
         }
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
