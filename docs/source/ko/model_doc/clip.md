@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # CLIP[[clip]]
 
-## Overview[[overview]]
+## 오버뷰[[overview]]
 
 The CLIP model was proposed in [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) by Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh,
 Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever. CLIP
@@ -42,7 +42,7 @@ model weights at this https URL.*
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
 
-## Usage tips and example[[usage-tips-and-example]]
+## 사용팁과 사용예[[usage-tips-and-example]]
 
 CLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
 classification. CLIP uses a ViT like transformer to get visual features and a causal language model to get the text
@@ -80,7 +80,7 @@ encode the text and prepare the images. The following example shows how to get t
 ```
 
 
-### Combining CLIP and Flash Attention 2[[combining-clip-and-flash-attention-2]]
+### CLIP과 플래시 어텐션 2 결합[[combining-clip-and-flash-attention-2]]
 
 First, make sure to install the latest version of Flash Attention 2.
 
@@ -133,7 +133,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 ```
 
 
-### Using Scaled Dot Product Attention (SDPA)[[using-scaled-dot-product-attention-sdpa]]
+### 스케일된 점곱 어텐션(SDPA) 사용하기[[using-scaled-dot-product-attention-sdpa]]
 
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
@@ -152,7 +152,7 @@ model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=to
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
 
-### Expected speedups with Flash Attention and SDPA[[expected-speedups-with-flash-attention-and-sdpa]]
+### 플래시 어텐션과 스케일된 점곱 어텐션(SDPA)으로 기대하는 속도향상[[expected-speedups-with-flash-attention-and-sdpa]]
 
 On a local benchmark (NVIDIA A10G, PyTorch 2.3.1+cu121) with `float16`, we saw the following speedups during inference for `"openai/clip-vit-large-patch14"` checkpoint ([code](https://gist.github.com/qubvel/ac691a54e54f9fae8144275f866a7ff8)):
 
@@ -196,7 +196,7 @@ On a local benchmark (NVIDIA A10G, PyTorch 2.3.1+cu121) with `float16`, we saw t
 |                 32 |                16 |            0.19  |          0.162 |         1.177 |           0.154 |          1.233 |
 |                 32 |                64 |            0.216 |          0.181 |         1.19  |           0.176 |          1.228 |
 
-## Resources[[resources]]
+## 리소스[[resources]]
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIP.
 
