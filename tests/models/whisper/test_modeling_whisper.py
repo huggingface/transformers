@@ -34,10 +34,12 @@ from transformers.testing_utils import (
     is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
+    require_non_xpu,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torchaudio,
     slow,
     torch_device,
@@ -409,9 +411,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
-        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample, config=config)
         logits_processor_kwargs["temperature"] = 0.0
         return logits_processor_kwargs
 
@@ -2612,6 +2614,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(prompt in text)
 
+    @require_non_xpu
     @slow
     @require_torch_gpu
     def test_speculative_decoding_distil(self):
@@ -3239,7 +3242,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_whisper_empty_longform(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3278,7 +3281,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_whisper_empty_longform_multi_gpu(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")

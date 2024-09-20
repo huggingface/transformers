@@ -89,7 +89,6 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 
-@pytest.mark.generate
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
@@ -132,7 +131,7 @@ class GenerationTesterMixin:
 
         return config, input_ids, attention_mask, inputs_dict
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {
             "bad_words_ids": [[1, 0]],
             "repetition_penalty": 1.2,
@@ -146,6 +145,17 @@ class GenerationTesterMixin:
                     "temperature": 0.7,
                 }
             )
+        # TODO (joao, raushan): see this comment for a long-term fix
+        # https://github.com/huggingface/transformers/pull/33593#issuecomment-2361824264)
+        # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
+        # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
+        if config is not None:
+            image_token_index = config.image_token_index if hasattr(config, "image_token_index") else None
+            video_token_index = config.video_token_index if hasattr(config, "video_token_index") else None
+            if image_token_index is not None and image_token_index < config.get_text_config().vocab_size:
+                logits_processor_kwargs["bad_words_ids"].append([image_token_index])
+            if video_token_index is not None and video_token_index < config.get_text_config().vocab_size:
+                logits_processor_kwargs["bad_words_ids"].append([video_token_index])
 
         return logits_processor_kwargs
 
@@ -211,7 +221,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -246,7 +256,7 @@ class GenerationTesterMixin:
         use_cache=True,
     ):
         torch.manual_seed(0)
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -281,7 +291,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -316,7 +326,7 @@ class GenerationTesterMixin:
         use_cache=True,
     ):
         torch.manual_seed(0)
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -350,7 +360,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -385,7 +395,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -424,7 +434,7 @@ class GenerationTesterMixin:
             "top_k": 5,
         }
 
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -1647,26 +1657,42 @@ class GenerationTesterMixin:
                 continue
 
             # Traditional way of generating text
-            outputs_from_ids = model.generate(input_ids, max_new_tokens=5)
-            self.assertEqual(outputs_from_ids.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
+            outputs_from_ids = model.generate(
+                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
+            )
+            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
             inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds, max_new_tokens=5)
-            self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
+            outputs_from_embeds = model.generate(
+                input_ids,
+                inputs_embeds=inputs_embeds,
+                max_new_tokens=5,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+            self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
 
-            # But if we pass different inputs_embeds, we should get different outputs
-            torch.manual_seed(0)
+            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
+            # same, but the logits will almost surely be different)
             random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds, max_new_tokens=5)
-            with self.assertRaises(AssertionError):
-                self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
+            outputs_from_rand_embeds = model.generate(
+                input_ids,
+                inputs_embeds=random_embeds,
+                max_new_tokens=5,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+            for i in range(len(outputs_from_rand_embeds.scores)):
+                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
             # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
-            outputs_from_embeds_wo_ids = model.generate(inputs_embeds=inputs_embeds, max_new_tokens=5)
+            outputs_from_embeds_wo_ids = model.generate(
+                inputs_embeds=inputs_embeds, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
+            )
             self.assertListEqual(
-                outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids.tolist(),
+                outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
+                outputs_from_embeds_wo_ids.sequences.tolist(),
             )
 
     @pytest.mark.generate
@@ -2008,6 +2034,7 @@ class GenerationTesterMixin:
                 output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
                 self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
+    @pytest.mark.generate
     def test_generate_methods_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
@@ -2036,6 +2063,8 @@ class GenerationTesterMixin:
             )
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
+    @pytest.mark.generate
+    @is_flaky()  # assisted generation tests are flaky (minor fp ops differences)
     def test_assisted_decoding_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
