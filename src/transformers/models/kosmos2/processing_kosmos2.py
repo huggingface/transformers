@@ -169,8 +169,6 @@ class Kosmos2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        # Temporary fix for "paddding_side" in init_kwargs
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
         num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
