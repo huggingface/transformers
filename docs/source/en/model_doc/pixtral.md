@@ -39,7 +39,7 @@ Here is an example of how to run it:
 from transformers import LlavaForConditionalGeneration, AutoProcessor
 from PIL import Image
 
-model_id = "hf-internal-testing/pixtral-12b"
+model_id = "mistral-community/pixtral-12b"
 model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
 processor = AutoProcessor.from_pretrained(model_id)
 
