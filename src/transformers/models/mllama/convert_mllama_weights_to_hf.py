@@ -289,7 +289,6 @@ def write_model(
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
-        attention_bias=False,  # Constant set to False
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
     )

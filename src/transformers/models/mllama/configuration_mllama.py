@@ -14,7 +14,7 @@
 """Mllama model configuration"""
 
 import os
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -169,15 +169,23 @@ class MllamaTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        vocab_size (`int`, *optional*, defaults to 128256):
+            Vocabulary size of the Mllama text model. Defines the maximum number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`MllamaTextModel`].
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimensionality of the embeddings and hidden states.
+        hidden_activation (`str` or `Callable`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
+        num_hidden_layers (`int`, *optional*, defaults to 40):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
+            specified, will default to `num_attention_heads`.
+        intermediate_size (`int`, *optional*, defaults to 14336):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -216,22 +224,39 @@ class MllamaTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        use_scaled_rope (`bool`, *optional*, defaults to `True`):
+            Whether to use scaled rope.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
+        cross_attention_layers (`List[int]`, *optional*):
+            Indices of the cross attention layers. If not specified, will default to [3, 8, 13, 18, 23, 28, 33, 38].
+        dropout (`float`, *optional*, defaults to 0):
+            The dropout probability for self- and cross-attention layers.
+        bos_token_id (`int`, *optional*, defaults to 128000):
+            The id of the beginning of sentence token.
+        eos_token_id (`int`, *optional*, defaults to 128001):
+            The id of the end of sentence token.
+        pad_token_id (`int`, *optional*, defaults to 128004):
+            The id of the padding token.
+
     Example:
 
     ```python
-    >>> from transformers import MllamaForConditionalGeneration, MllamaConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import MllamaTextModel, MllamaTextConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Mllama text config
+    >>> config = MllamaTextConfig()
 
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
-
-    >>> # Initializing a Mllama mllama-1.5-7b style configuration
-    >>> configuration = MllamaConfig(vision_config, text_config)
-
-    >>> # Initializing a model from the mllama-1.5-7b style configuration
-    >>> model = MllamaForConditionalGeneration(configuration)
+    >>> # Initializing a model from the Mllama text configuration
+    >>> model = MllamaTextModel(config)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -241,33 +266,33 @@ class MllamaTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        num_hidden_layers=40,
-        cross_attention_layers=None,
-        hidden_size=4096,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        rope_theta=500000,
-        use_scaled_rope=True,
-        intermediate_size=14336,
-        max_position_embeddings=16_384,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        dropout=0,
-        hidden_activation="silu",
+        vocab_size: int = 128256,
+        hidden_size: int = 4096,
+        hidden_activation: str = "silu",
+        num_hidden_layers: int = 40,
+        num_attention_heads: int = 32,
+        num_key_value_heads: int = 8,
+        intermediate_size: int = 14_336,
+        rope_theta: float = 500_000,
+        rope_scaling: Optional[Dict] = None,
+        use_scaled_rope: bool = True,
+        rms_norm_eps: float = 1e-5,
+        max_position_embeddings: int = 131_072,
+        initializer_range: float = 0.02,
+        use_cache: bool = True,
+        tie_word_embeddings: bool = False,
+        cross_attention_layers: Optional[List[int]] = None,
+        dropout: float = 0,
+        bos_token_id: int = 128000,
+        eos_token_id: int = 128001,
+        pad_token_id: Optional[int] = 128004,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.num_hidden_layers = num_hidden_layers
         if cross_attention_layers is None:
             cross_attention_layers = [3, 8, 13, 18, 23, 28, 33, 38]
+
+        self.vocab_size = vocab_size
+        self.num_hidden_layers = num_hidden_layers
         self.cross_attention_layers = cross_attention_layers
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -280,7 +305,6 @@ class MllamaTextConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.hidden_activation = hidden_activation
-        self.attention_bias = attention_bias
         self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
         rope_config_validation(self)
@@ -323,9 +347,9 @@ class MllamaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `MllamaVisionConfig`):
             The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaTextConfig`):
             The config object or dictionary of the text backbone.
         image_token_index (`int`, *optional*, defaults to 128256):
             The image token index to encode the image prompt.
@@ -333,18 +357,18 @@ class MllamaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MllamaForConditionalGeneration, MllamaConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import MllamaForConditionalGeneration, MllamaConfig, MllamaVisionConfig, MllamaTextConfig
 
     >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> vision_config = MllamaVisionConfig()
 
     >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
+    >>> text_config = MllamaTextConfig()
 
-    >>> # Initializing a Mllama mllama-1.5-7b style configuration
+    >>> # Initializing a mllama-11b style configuration
     >>> configuration = MllamaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the mllama-1.5-7b style configuration
+    >>> # Initializing a model from the mllama-11b style configuration
     >>> model = MllamaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
