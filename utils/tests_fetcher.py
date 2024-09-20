@@ -1193,9 +1193,9 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--commit_message",
-        type=str,
-        help="The commit message (which could contain a command to force all tests or skip the CI).",
+        "--fetch_all",
+        action="store_true",
+        help="Will fetch all tests.",
         default=None,
     )
     args = parser.parse_args()
@@ -1212,6 +1212,9 @@ if __name__ == "__main__":
             quit()
         if commit_flags["no_filter"]:
             print("Running all tests fetched without filtering.")
+
+        if args.fetch_all:
+            commit_flags["test_all"] = True
         if commit_flags["test_all"]:
             print("Force-launching all tests")
 
