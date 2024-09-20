@@ -4206,6 +4206,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(generated_text_no_padding, generated_text_with_padding)
         self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
 
+@require_torch
+class UtilsFunctionsTest(unittest.TestCase):
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
