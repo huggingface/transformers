@@ -50,7 +50,7 @@ class MllamaVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input image.
-        intermediate_size (`int`, *optional*, defaults to 14336):
+        intermediate_size (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         projection_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the projection layer.
@@ -98,7 +98,7 @@ class MllamaVisionConfig(PretrainedConfig):
         num_global_layers: int = 8,
         num_attention_heads: int = 16,
         num_channels: int = 3,
-        intermediate_size: int = 14336,
+        intermediate_size: int = 5120,
         projection_dim: int = 4096,
         vision_output_dim: int = 7680,
         image_size: int = 448,
