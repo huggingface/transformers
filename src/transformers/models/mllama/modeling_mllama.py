@@ -897,6 +897,7 @@ MLLAMA_START_DOCSTRING = r"""
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
+    # supports_gradient_checkpointing = True # TODO:check this
     _no_split_modules = ["MllamaSdpaCrossAttention"]
     _supports_cache_class = True
     _supports_static_cache = True
@@ -935,14 +936,14 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         self.patch_size = config.patch_size
         self.max_num_tiles = config.max_num_tiles
         self.hidden_size = config.hidden_size
-        self.in_channels = config.in_channels
+        self.num_channels = config.num_channels
         self.intermediate_layers_indices = config.intermediate_layers_indices
 
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.hidden_size**-0.5
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=config.in_channels,
+            in_channels=config.num_channels,
             out_channels=self.hidden_size,
             kernel_size=self.patch_size,
             stride=self.patch_size,
