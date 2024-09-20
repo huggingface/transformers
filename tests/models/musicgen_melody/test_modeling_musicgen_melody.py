@@ -303,7 +303,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
         return config, input_ids, attention_mask, inputs_dict
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
@@ -1469,7 +1469,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         return output_generate
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
