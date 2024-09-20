@@ -37,6 +37,13 @@ class DynamicCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class DynamicSlidingWindowCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EncoderDecoderCache(metaclass=DummyObject):
     _backends = ["torch"]
 
