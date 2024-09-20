@@ -17,12 +17,11 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-import sys
 from typing import List, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     AddedToken,
     BatchEncoding,
@@ -31,12 +30,6 @@ from ...tokenization_utils_base import (
 )
 from ...utils import logging
 from ..auto import AutoTokenizer
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 
 logger = logging.get_logger(__name__)

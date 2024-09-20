@@ -16,18 +16,11 @@
 Processor class for Pix2Struct.
 """
 
-import sys
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 
 class Pix2StructImagesKwargs(ImagesKwargs, total=False):
