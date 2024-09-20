@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from typing import List
+from typing import List, Optional
 
 import regex as re
 import torch
@@ -96,13 +96,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
-CONFIG_KEY_MAPPING = {
-    "n_heads": "num_attention_heads",
-    "vocab_size": "vocab_size",
-    "dim": "hidden_size",
-    "norm_eps": "rms_norm_eps",
-    "rope_theta": "rope_theta",
-}
+CONTEXT_LENGTH = 131072
 
 
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
@@ -230,27 +224,22 @@ def write_model(
         params = json.load(f)
 
     params = params.get("model", params)
+    torch_dtype = "bfloat16"
 
-    n_layers = params["n_layers"]
-    # cross-attention layers: 20 for 90B, 8 for 11B
-    n_layers_cross_attention = params["vision_num_cross_attention_layers"]
-    n_heads = params["n_heads"]
-    n_heads_per_shard = n_heads // num_shards
-    dim = params["dim"]
-    dims_per_head = dim // n_heads
-    patch_size = 14
-    num_channels = 3
-    # intermediate size: 28672 for 90B, 5120 for 11B
-    intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])
-    intermediate_layers_indices = [3, 7, 15, 23, 30]  # TODO: Check for 90B model
+    # ------------------------------------------------------------
+    # Text model params and config
+    # ------------------------------------------------------------
 
-    # vision model
-    n_layers_vision = 32  # constant
-    n_layers_vision_global = 8  # constant
-    dim_vision = 1280
-    n_heads_vision = 16
-    n_heads_per_shard_vision = n_heads_vision // num_shards
-    dims_per_head_vision = dim_vision // n_heads_vision
+    # params from config
+    text_vocab_size = params["vocab_size"]
+    text_num_layers = params["n_layers"]
+    text_dim = params["dim"]
+    text_num_heads = params["n_heads"]
+    text_rms_norm_eps = params["norm_eps"]
+    text_rope_theta = params["rope_theta"]
+    cross_attention_num_layers = params["vision_num_cross_attention_layers"]
+
+    # some constans from original code
     rope_scaling = {
         "rope_type": "llama3",
         "factor": 8.0,
@@ -258,16 +247,100 @@ def write_model(
         "high_freq_factor": 4.0,
         "original_max_position_embeddings": 8192,
     }
-    max_position_embeddings = 16_384
+    max_position_embeddings = CONTEXT_LENGTH
+
+    # compute additional params for weight conversion
+    text_num_heads_per_shard = text_num_heads // num_shards
+    text_dim_per_head = text_dim // text_num_heads
+    text_intermediate_size = compute_intermediate_size(text_dim, multiple_of=params["multiple_of"])
 
     if params.get("n_kv_heads", None) is not None:
-        num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
-        num_local_key_value_heads = num_key_value_heads // num_shards
-        key_value_dim = dims_per_head * num_key_value_heads
+        text_num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
+        text_num_key_value_heads_per_shard = text_num_key_value_heads // num_shards
+        text_key_value_dim = text_dim_per_head * text_num_key_value_heads
     else:  # compatibility with other checkpoints
-        num_key_value_heads = n_heads
-        num_local_key_value_heads = n_heads_per_shard
-        key_value_dim = dim
+        text_num_key_value_heads = text_num_heads
+        text_num_key_value_heads_per_shard = text_num_heads_per_shard
+        text_key_value_dim = text_dim
+
+    # cross-attention layers: 20 for 90B, 8 for 11B
+    cross_attention_frequency = math.ceil(text_num_layers / cross_attention_num_layers)
+    text_num_total_layers = text_num_layers + cross_attention_num_layers
+    cross_attention_layers_shift = list(
+        range(cross_attention_frequency - 1, text_num_total_layers, cross_attention_frequency + 1)
+    )
+    self_attention_layers_shift = [k for k in range(text_num_total_layers) if k not in cross_attention_layers_shift]
+
+    bos_token_id = 128000
+    eos_token_id = [128001, 128008, 128009] if instruct else 128001
+    pad_token_id = 128004
+
+    text_config = MllamaTextConfig(
+        num_attention_heads=text_num_heads,
+        vocab_size=text_vocab_size,
+        hidden_size=text_dim,
+        rms_norm_eps=text_rms_norm_eps,
+        rope_theta=text_rope_theta,
+        num_hidden_layers=text_num_total_layers,
+        cross_attention_layers=cross_attention_layers_shift,
+        intermediate_size=text_intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        rope_scaling=rope_scaling,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
+        attention_bias=False,  # Constant set to False
+        tie_word_embeddings=False,  # Constant set to False
+        torch_dtype=torch_dtype,
+    )
+
+    # ------------------------------------------------------------
+    # Vision model params and config
+    # ------------------------------------------------------------
+
+    # params from config
+    vision_tile_size = params["vision_chunk_size"]
+    vision_max_num_tiles = params["vision_max_num_chunks"]
+
+    # some constants from original code
+    vision_patch_size = 14
+    vision_num_channels = 3
+    vision_num_layers = 32
+    vision_num_layers_global = 8
+    vision_dim = 1280
+    vision_num_heads = 16
+    vision_intermediate_layers_indices = [3, 7, 15, 23, 30]
+
+    # compute additional params for weight conversion
+    vision_dim_per_head = vision_dim // vision_num_heads
+    vision_num_heads_per_shard = vision_num_heads // num_shards
+    vision_intermediate_size = vision_dim * 4
+    vision_supported_aspect_ratios = get_all_supported_aspect_ratios(vision_max_num_tiles)
+
+    vision_config = MllamaVisionConfig(
+        hidden_size=vision_dim,
+        patch_size=vision_patch_size,
+        num_channels=vision_num_channels,
+        intermediate_size=vision_intermediate_size,
+        num_hidden_layers=vision_num_layers,
+        num_attention_heads=vision_num_heads,
+        num_global_layers=vision_num_layers_global,
+        intermediate_layers_indices=vision_intermediate_layers_indices,
+        image_size=vision_tile_size,
+        max_num_tiles=vision_max_num_tiles,
+        supported_aspect_ratios=vision_supported_aspect_ratios,
+        torch_dtype=torch_dtype,
+    )
+
+    # save config
+    config = MllamaConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
+    config.architectures = ["MllamaForConditionalGeneration"]
+    config.save_pretrained(model_path)
+    print("Model config saved successfully...")
+
+    # ------------------------------------------------------------
+    # Convert weights
+    # ------------------------------------------------------------
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     if num_shards == 1:
@@ -282,11 +355,6 @@ def write_model(
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
-    cross_attention_frequency = math.ceil(n_layers / n_layers_cross_attention)
-    n_total_layers = n_layers + n_layers_cross_attention
-    cross_layer_shift = list(range(cross_attention_frequency - 1, n_total_layers, cross_attention_frequency + 1))
-    attn_layer_shift = [k for k in range(n_total_layers) if k not in cross_layer_shift]
-
     state_dict = {}
     for key in all_keys:
         # Sharded
@@ -296,11 +364,15 @@ def write_model(
         new_key = new_keys[key]
         if "cross_attention" in key and "language_model" in new_key:
             new_key = re.sub(
-                r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key
+                r"layers.(\d+).",
+                lambda _match: f"layers.{cross_attention_layers_shift[int(_match.groups()[0])]}.",
+                new_key,
             )
         elif "text_model.layers" in key and "language_model" in new_key:
             new_key = re.sub(
-                r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key
+                r"layers.(\d+).",
+                lambda _match: f"layers.{self_attention_layers_shift[int(_match.groups()[0])]}.",
+                new_key,
             )
 
         current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded]
@@ -312,41 +384,52 @@ def write_model(
         # Post-process the current_parameter.
         if "q_proj.weight" in new_key and "language_model" in new_key:
             current_parameter = torch.cat(
-                [param.view(n_heads_per_shard, dims_per_head, dim) for param in current_parameter], dim=concat_dim
+                [param.view(text_num_heads_per_shard, text_dim_per_head, text_dim) for param in current_parameter],
+                dim=concat_dim,
             )
             if "cross_attn" not in new_key:
-                current_parameter = permute_for_rope(current_parameter, n_heads, dim, dim)
-            state_dict[new_key] = current_parameter.reshape(n_heads * dims_per_head, dim)
+                current_parameter = permute_for_rope(current_parameter, text_num_heads, text_dim, text_dim)
+            state_dict[new_key] = current_parameter.reshape(text_num_heads * text_dim_per_head, text_dim)
 
         elif "k_proj.weight" in new_key and "language_model" in new_key:
             current_parameter = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in current_parameter],
-                dim=concat_dim,
-            )
-            if "cross_attn" not in new_key:
-                current_parameter = permute_for_rope(current_parameter, num_key_value_heads, key_value_dim, dim)
-            state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
-
-        elif "v_proj.weight" in new_key and "language_model" in new_key:
-            current_parameter = torch.cat(
-                [param.view(num_local_key_value_heads, dims_per_head, dim) for param in current_parameter],
-                dim=concat_dim,
-            )
-            state_dict[new_key] = current_parameter.reshape(num_key_value_heads * dims_per_head, dim)
-
-        elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
-            param = torch.cat(
                 [
-                    param.view(n_heads_per_shard_vision, dims_per_head_vision, dim_vision)
+                    param.view(text_num_key_value_heads_per_shard, text_dim_per_head, text_dim)
                     for param in current_parameter
                 ],
                 dim=concat_dim,
             )
-            state_dict[new_key] = param.reshape(n_heads_vision * dims_per_head_vision, dim_vision)
+            if "cross_attn" not in new_key:
+                current_parameter = permute_for_rope(
+                    current_parameter, text_num_key_value_heads, text_key_value_dim, text_dim
+                )
+            state_dict[new_key] = current_parameter.reshape(text_num_key_value_heads * text_dim_per_head, text_dim)
+
+        elif "v_proj.weight" in new_key and "language_model" in new_key:
+            current_parameter = torch.cat(
+                [
+                    param.view(text_num_key_value_heads_per_shard, text_dim_per_head, text_dim)
+                    for param in current_parameter
+                ],
+                dim=concat_dim,
+            )
+            state_dict[new_key] = current_parameter.reshape(text_num_key_value_heads * text_dim_per_head, text_dim)
+
+        elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
+            param = torch.cat(
+                [
+                    param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim)
+                    for param in current_parameter
+                ],
+                dim=concat_dim,
+            )
+            state_dict[new_key] = param.reshape(vision_num_heads * vision_dim_per_head, vision_dim)
 
         elif new_key == "vision_model.patch_embedding.weight":
             current_parameter = torch.cat(current_parameter, dim=concat_dim)
-            state_dict[new_key] = current_parameter.reshape(-1, num_channels, patch_size, patch_size)
+            state_dict[new_key] = current_parameter.reshape(
+                -1, vision_num_channels, vision_patch_size, vision_patch_size
+            )
 
         elif new_key.endswith("gate"):
             state_dict[new_key] = current_parameter[0].view(1)
@@ -372,41 +455,7 @@ def write_model(
     del loaded
     gc.collect()
 
-    # Write configs
-    bos_token_id = 128000
-    eos_token_id = [128001, 128008, 128009] if instruct else 128001
-    pad_token_id = 128004
-
-    config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
-    vision_config = MllamaVisionConfig(
-        hidden_size=dim_vision,  # Constant, taken directly from your notes
-        intermediate_size=dim_vision * 4,
-        num_hidden_layers=n_layers_vision,
-        num_attention_heads=n_heads_vision,
-        num_global_layers=n_layers_vision_global,
-        intermediate_layers_indices=intermediate_layers_indices,  # Based on return_intermediate indices
-        image_size=params["vision_chunk_size"],
-        max_num_tiles=params["vision_max_num_chunks"],
-        supported_aspect_ratios=get_all_supported_aspect_ratios(params["vision_max_num_chunks"]),
-    )
-    text_config = MllamaTextConfig(
-        **config_parameters,
-        num_hidden_layers=len(cross_layer_shift) + n_layers,
-        cross_attention_layers=cross_layer_shift,
-        attention_bias=False,  # Constant set to False
-        tie_word_embeddings=False,  # Constant set to False
-        intermediate_size=intermediate_size,
-        max_position_embeddings=max_position_embeddings,
-        rope_scaling=rope_scaling,
-        bos_token_id=bos_token_id,
-        eos_token_id=eos_token_id,
-        pad_token_id=pad_token_id,
-    )
-    config = MllamaConfig(vision_config=vision_config, text_config=text_config)
-    config.architectures = ["MllamaForConditionalGeneration"]
-    config.save_pretrained(model_path)
     print("Loading the checkpoint in a Llama model.")
-
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
@@ -438,44 +487,55 @@ def write_model(
 
 
 class MllamaConverter(TikTokenConverter):
-    def __init__(self, vocab_file, num_reserved_special_tokens=256, chat_template=None, instruct=False, **kwargs):
-        super().__init__(vocab_file, **kwargs)
-        num_reserved_special_tokens = 256
-        special_tokens = [
-            "<|begin_of_text|>",
-            "<|end_of_text|>",
-            "<|reserved_special_token_0|>",
-            "<|reserved_special_token_1|>",
-            "<|finetune_right_pad_id|>",
-            "<|step_id|>",
-            "<|start_header_id|>",
-            "<|end_header_id|>",
-            "<|eom_id|>",  # end of message
-            "<|eot_id|>",  # end of turn
-            "<|python_tag|>",
-        ]
-        special_tokens += [
-            f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
-        ]
-        # original tokenizer has <|image|> with 128011 token_id,
-        # however, later in the code it is replaced with 128256 token_id
-        special_tokens.append("<|image|>")
+    def __init__(
+        self,
+        vocab_file,
+        special_tokens: List[str],
+        pattern: str,
+        model_max_length: int,
+        chat_template: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(vocab_file, pattern=pattern)
         self.additional_special_tokens = special_tokens
         tokenizer = self.converted()
-
-        instruct_kwargs = {"chat_template": chat_template} if instruct else {}
+        if chat_template is not None:
+            kwargs["chat_template"] = chat_template
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
-            bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
-            pad_token="<|finetune_right_pad_id|>",
             model_input_names=["input_ids", "attention_mask"],
-            model_max_length=131072,
-            **instruct_kwargs,
+            model_max_length=model_max_length,
+            **kwargs,
         )
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
+    model_max_length = CONTEXT_LENGTH
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
+
+    # Special tokens
+    num_reserved_special_tokens = 256
+    special_tokens = [
+        "<|begin_of_text|>",
+        "<|end_of_text|>",
+        "<|reserved_special_token_0|>",
+        "<|reserved_special_token_1|>",
+        "<|finetune_right_pad_id|>",
+        "<|step_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|eom_id|>",  # end of message
+        "<|eot_id|>",  # end of turn
+        "<|python_tag|>",
+    ]
+    special_tokens += [
+        f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
+    ]
+    # original tokenizer has <|image|> with 128011 token_id,
+    # however, later in the code it is replaced with 128256 token_id
+    special_tokens.append("<|image|>")
+
+    # Chat template
     chat_template = (
         "{% for message in messages %}"
         "{% if loop.index0 == 0 %}"
@@ -501,10 +561,14 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     )
 
     converter = MllamaConverter(
-        tokenizer_path,
-        chat_template=chat_template,
-        instruct=instruct,
-        pattern=r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",  # noqa: W605
+        vocab_file=tokenizer_path,
+        pattern=pattern,
+        special_tokens=special_tokens,
+        model_max_length=model_max_length,
+        chat_template=chat_template if instruct else None,
+        bos_token="<|begin_of_text|>",
+        eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
+        pad_token="<|finetune_right_pad_id|>",
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)

@@ -85,7 +85,6 @@ class MllamaVisionConfig(PretrainedConfig):
         patch_size=14,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
-        attention_dropout=0.0,
         num_global_layers=8,
         projection_dim=4096,
         vision_output_dim=7680,
@@ -231,7 +230,6 @@ class MllamaTextConfig(PretrainedConfig):
         rope_theta=500000,
         use_scaled_rope=True,
         intermediate_size=14336,
-        hidden_act="silu",
         max_position_embeddings=16_384,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
@@ -242,9 +240,6 @@ class MllamaTextConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_scaling=None,
         attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
         dropout=0,
         hidden_activation="silu",
         **kwargs,
@@ -275,6 +270,7 @@ class MllamaTextConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
         )
 
     @classmethod
