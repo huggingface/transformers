@@ -36,6 +36,8 @@ else:
     _import_structure["modeling_mllama"] = [
         "MllamaForConditionalGeneration",
         "MllamaForCausalLM",
+        "MllamaTextModel",
+        "MllamaVisionModel",
         "MllamaPreTrainedModel",
     ]
 
@@ -62,6 +64,8 @@ if TYPE_CHECKING:
             MllamaForCausalLM,
             MllamaForConditionalGeneration,
             MllamaPreTrainedModel,
+            MllamaTextModel,
+            MllamaVisionModel,
         )
 
     try:

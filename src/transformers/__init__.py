@@ -2690,6 +2690,8 @@ else:
     _import_structure["models.mllama"].extend(
         [
             "MllamaForCausalLM",
+            "MllamaTextModel",
+            "MllamaVisionModel",
             "MllamaForConditionalGeneration",
             "MllamaPreTrainedModel",
         ]
@@ -7264,6 +7266,8 @@ if TYPE_CHECKING:
             MllamaForConditionalGeneration,
             MllamaPreTrainedModel,
             MllamaProcessor,
+            MllamaTextModel,
+            MllamaVisionModel,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
