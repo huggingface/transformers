@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Models
+# 모델
 
 기본 클래스 [`PreTrainedModel`], [`TFPreTrainedModel`], [`FlaxPreTrainedModel`]는 로컬 파일과 디렉토리로부터 모델을 로드하고 저장하거나 또는 (허깅페이스 AWS S3 리포지토리로부터 다운로드된) 라이브러리에서 제공하는 사전훈련 모델 설정값을 로드하고 저장하는 것을 지원하는 기본 메소드를 구현하였습니다.   
 
@@ -59,10 +59,10 @@ rendered properly in your Markdown viewer.
     - push_to_hub
     - all
 
-## Pushing to the Hub
+## 허브에 저장하기
 
 [[autodoc]] utils.PushToHubMixin
 
-## Sharded checkpoints
+## 공유된 체크포인트
 
 [[autodoc]] modeling_utils.load_sharded_checkpoint
