@@ -1154,7 +1154,7 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if not self.config.vocab_size == assistant_model.config.vocab_size:
+        if not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
             raise ValueError("Make sure the main and assistant model use the same tokenizer")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
@@ -1334,23 +1334,26 @@ class GenerationMixin:
             # the following conditions must be met
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
             # 2) the generation config must have seen no modification since its creation (the hash is the same);
-            # 3) the user must have set generation parameters in the model config.
+            # 3) there are non-default generation parameters in the model config.
+            # 4) the user must have set new generation parameters in the model config.
             # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
             if (
                 not is_torchdynamo_compiling()
                 and self.generation_config._from_model_config  # 1)
                 and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
+                and len(self.config._get_non_default_generation_parameters()) > 0  # 3)
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:  # 3)
+                if new_generation_config != self.generation_config:  # 4)
                     warnings.warn(
                         "You have modified the pretrained model configuration to control generation. This is a"
-                        " deprecated strategy to control generation and will be removed soon, in a future version."
+                        " deprecated strategy to control generation and will be removed in v5."
                         " Please use and modify the model generation configuration (see"
-                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )"
+                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                        UserWarning,
                     )
                     self.generation_config = new_generation_config
-            using_model_generation_config = True
+
             generation_config = self.generation_config
             using_model_generation_config = True
 
@@ -1473,7 +1476,7 @@ class GenerationMixin:
             layer_device_map = get_layer_device_map(execution_device_map)
 
             cache_kwargs = {
-                "config": self.config if hasattr(self.config, "text_config") else self.config,
+                "config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
@@ -1861,6 +1864,10 @@ class GenerationMixin:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
             )
+        elif kwargs_has_attention_mask:
+            # TODO (joao): generalize this check with other types of inputs
+            if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
+                raise ValueError("`attention_mask` passed to `generate` must be 2D.")
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
