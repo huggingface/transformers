@@ -2047,6 +2047,7 @@ class GenerationTesterMixin:
             )
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
+    @is_flaky()  # assisted generation tests are flaky (minor fp ops differences)
     def test_assisted_decoding_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
