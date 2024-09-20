@@ -1148,6 +1148,7 @@ JOB_TO_TEST_FILE = {
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
+    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
 
 
