@@ -1057,9 +1057,9 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     start_time = round(token_timestamps[i] + time_offset, 2)
                     if i + 1 < len(token_timestamps):
                         end_time = round(token_timestamps[i + 1] + time_offset, 2)
+                        current_token_timestamps.append((start_time, end_time))
                     else:
                         end_time = None  # should never happen
-                    current_token_timestamps.append((start_time, end_time))
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
@@ -1192,7 +1192,7 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                 # and have timestamps that are in order
                 matches = sum(
                     1
-                    for idx, elem in enumerate(left)
+                    for idx, elem in enumerate(left[:-1])
                     if (
                         elem == right[idx]
                         and left_token_timestamp_sequence[left_start + idx]
