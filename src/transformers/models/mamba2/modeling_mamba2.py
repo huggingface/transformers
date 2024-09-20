@@ -510,7 +510,7 @@ class Mamba2Mixer(nn.Module):
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
             C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            pad_size = self.chunk_size - (seq_len % self.chunk_size)
+            pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
 
