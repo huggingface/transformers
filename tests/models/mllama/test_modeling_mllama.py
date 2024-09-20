@@ -21,6 +21,7 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     MllamaConfig,
     MllamaForCausalLM,
     MllamaForConditionalGeneration,
@@ -437,8 +438,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "s0409/model-1"  # TODO: change it to final checkpoint
-        self.processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        self.base_model_checkpoint = "Llama-3.2-11B-Vision"  # TODO: change it to final checkpoint
+        self.instruct_model_checkpoint = "Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
         gc.collect()
@@ -449,22 +450,29 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_11b_model_integration_generate(self):
         # Prepare inputs
+        processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
+
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
-
         url = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(torch_device)
+        inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
+
         # Check inputs ids
         expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], expected_input_ids))
 
-        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
+        # Load model in 4 bit
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.base_model_checkpoint, quantization_config=quantization_config
+        )
 
+        # Generate
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
-        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\nA dock on a lake.\nIn the middle of a forest.\nWith a mountain"  # fmt: skip
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "If I had to write a haiku for this one, it would be:.\\nLong exposure dock.\\nWhistler, British Columbia.\\nNikon D800E"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -477,20 +485,26 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_11b_model_integration_forward(self):
         # Prepare inputs
+        processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
+
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
-
         url = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(torch_device)
+        inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
-        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
+        # Load model in 4 bit
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.base_model_checkpoint, quantization_config=quantization_config
+        )
 
+        # Forward
         with torch.inference_mode():
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([8.8438, 7.2305, 4.2031, -0.1223, 2.6270])
+        expected_logits = torch.tensor([8.5781, 7.6719, 4.6406, 0.7192, 3.0918])
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -502,6 +516,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_bitsandbytes
     def test_11b_model_integration_batched_generate(self):
+        processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
+
         # Prepare inputs
         prompt = [
             "<|image|><|begin_of_text|>If I had to write a haiku for this one",
@@ -510,16 +526,31 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
-        inputs = self.processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
+        inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
         )
 
-        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
+        # Load model in 4 bit
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.base_model_checkpoint, quantization_config=quantization_config
+        )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
-        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\nA dock on a lake.\nIn the middle of a forest.\nWith a mountain"  # fmt: skip
+        # Check first output
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "If I had to write a haiku for this one, it would be:.\\nLong exposure dock.\\nWhistler, British Columbia.\\nNikon D800E"  # fmt: skip
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
+        expected_output = "This image shows is a photo of a stop sign in front of a Chinese arch. The stop sign is red and white, and the arch"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -531,8 +562,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_bitsandbytes
     def test_11b_model_integration_multi_image_generate(self):
+        processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
+
         # Prepare inputs
-        prompt = ["<|image|><|image|><|begin_of_text|>"]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
@@ -544,7 +576,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What’s shown in this image?"},
                 ],
             },
-            {"role": "assistant", "content": [{"type": "text", "text": "This image shows a red stop sign."}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "This image shows a long wooden dock extending out into a lake."}
+                ],
+            },
             {
                 "role": "user",
                 "content": [
@@ -554,31 +591,25 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        template = (
-            "{% for message in messages %}"
-            "{% if loop.index0 == 0 %}"
-            "{{bos_token}}"
-            "{% endif %}"
-            "{{'<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
-            "{# Render all images first #}"
-            "{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
-            "{{ '<|image|>' }}"
-            "{% endfor %}"
-            "{# Render all text next #}"
-            "{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
-            "{{content['text'] | trim + '<|eot_id|>' }}"
-            "{% endfor %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"
+        prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+        inputs = processor(text=prompt, images=[[image1, image2]], return_tensors="pt").to(torch_device)
+        prompt_len = inputs["input_ids"].shape[-1]
+
+        # Load model in 4 bit
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.instruct_model_checkpoint, quantization_config=quantization_config
         )
-        prompt = self.processor.apply_chat_template(conversation, chat_template=template, add_generation_prompt=True)
-        inputs = self.processor(text=prompt, images=[[image1, image2]], return_tensors="pt").to(torch_device)
 
-        model = MllamaForConditionalGeneration.from_pretrained(self.small_model_checkpoint, load_in_4bit=True)
-        output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
-        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
-        expected_output = '<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n<|image|>What’s shown in this image?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThis image shows a red stop sign.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n<|image|>What about this one, what do you see here? Can you describe in detail?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThis image shows a stop sign. It is a red octagon with white letters that spell out "STOP". The sign is attached to a brown pole. There are two white lions on either side of'  # fmt: skip
+        # Check first output
+        generated_output = output[0][prompt_len:]
+        decoded_output = processor.decode(generated_output, skip_special_tokens=False)
+
+        # model should response about "stop sign", however it responses about "dock"
+        # this happens only in quantized version, bfloat16 works fine
+        expected_output = "This image shows a long wooden dock extending out into a lake. The dock is made of wooden planks and has a railing"
 
         self.assertEqual(
             decoded_output,
