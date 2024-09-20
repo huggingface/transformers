@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # 모델 출력
 
-모든 모델에는 [`~utils.ModelOutput`]의 서브클래스의 인스턴스인 출력이 있습니다. 이들은
+모든 모델에는 [`~utils.ModelOutput`]의 서브클래스의 인스턴스인 모델 출력이 있습니다. 이들은
 모델에서 반환되는 모든 정보를 포함하는 데이터 구조이지만 튜플이나 딕셔너리로도 사용할 수 있습니다.
 딕셔너리로도 사용할 수 있습니다.
 
-예제에서 어떻게 보이는지 살펴보겠습니다:
+예제를 통해 살펴보겠습니다:
 
 ```python
 from transformers import BertTokenizer, BertForSequenceClassification
@@ -34,7 +34,7 @@ labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
 outputs = model(**inputs, labels=labels)
 ```
 
-`outputs`` 객체는 아래 해당 클래스의 문서에서 볼 수 있듯이 [`~modeling_outputs.SequenceClassifierOutput`]입니다.
+`outputs` 객체는 아래 해당 클래스의 문서에서 볼 수 있듯이 [`~modeling_outputs.SequenceClassifierOutput`]입니다.
 아래 해당 클래스의 문서에서 볼 수 있듯이, `loss`(선택적), `logits`, `hidden_states`(선택적) 및 `attentions`(선택적) 항목이 있습니다. 여기에서는 `labels`를 전달했기 때문에 `loss`가 있지만 `hidden_states`와 `attentions`가 없는데, 이는 `output_hidden_states=True` 또는 `output_attentions=True`를 전달하지 않았기 때문입니다.
 
 <Tip>
@@ -45,7 +45,7 @@ outputs = model(**inputs, labels=labels)
 </Tip>
 
 
-평소처럼 각 속성에 접근할 수 있으며, 해당 속성이 모델에서 반환되지 않은 경우 `None`이 반환됩니다. 예를 들어 여기서 `outputs.loss`는 모델에서 계산한 손실이고 `outputs.attentions`는 `None`입니다.
+일반적으로 각 속성들에 접근할 수 있으며, 모델이 해당 속성을 반환하지 않은 경우 `None`이 반환됩니다. 예를 들어 여기서 `outputs.loss`는 모델에서 계산한 손실이고 `outputs.attentions`는 `None`입니다.
 
 `outputs` 객체를 튜플로 간주할 때는 `None` 값이 없는 속성만 고려합니다. 
 예를 들어 여기에는 `loss`와 `logits`라는 두 개의 요소가 있습니다. 그러므로, 예를 들어
