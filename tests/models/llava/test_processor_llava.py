@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import shutil
 import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -32,11 +33,11 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
+
         image_processor = CLIPImageProcessor(do_center_crop=False)
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-
-        processor = LlavaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
+        processor_kwargs = self.prepare_processor_dict()
+        processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -47,6 +48,28 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    def prepare_processor_dict(self):
+        return {"chat_template": "dummy_template"}
+
+    @unittest.skip(
+        "Skip because the model has no processor kwargs except for chat template and"
+        "chat template is saved as a separate file. Stop skipping this test when the processor"
+        "has new kwargs saved in config file."
+    )
+    def test_processor_to_json_string(self):
+        pass
+
+    def test_chat_template_is_saved(self):
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        # chat templates aren't serialized to json in processors
+        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+
+        # they have to be saved as separate file and loaded back from that file
+        # so we check if the same template is loaded
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
@@ -70,29 +93,3 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
-        inputs = processor(
-            images=image_input,
-            text=input_str,
-            return_tensors="pt",
-            size={"height": 214, "width": 214},
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 5)
