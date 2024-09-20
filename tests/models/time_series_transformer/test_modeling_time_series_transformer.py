@@ -107,6 +107,14 @@ class TimeSeriesTransformerModelTester:
             scaling="std",  # we need std to get non-zero `loc`
         )
 
+    def create_and_check_model(self, config, input_values):
+        model = TimeSeriesTransformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(**input_values)
+        future_dimension = input_values["future_values"].shape[-1]
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, future_dimension, self.hidden_size))
+
     def prepare_time_series_transformer_inputs_dict(self, config):
         _past_length = config.context_length + max(config.lags_sequence)
 

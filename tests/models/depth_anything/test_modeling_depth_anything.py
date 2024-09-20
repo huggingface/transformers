@@ -161,6 +161,10 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Depth Anything doesn't have a base model")
+    def test_model(self):
+        pass
+
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)

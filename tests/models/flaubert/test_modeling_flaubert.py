@@ -157,7 +157,7 @@ class FlaubertModelTester:
             use_proj=self.use_proj,
         )
 
-    def create_and_check_flaubert_model(
+    def create_and_check_model(
         self,
         config,
         input_ids,

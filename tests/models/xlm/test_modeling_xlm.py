@@ -159,7 +159,7 @@ class XLMModelTester:
             bos_token_id=self.bos_token_id,
         )
 
-    def create_and_check_xlm_model(
+    def create_and_check_model(
         self,
         config,
         input_ids,
@@ -426,10 +426,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = XLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
-
-    def test_xlm_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlm_model(*config_and_inputs)
 
     # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->XLM
     def test_xlm_model_with_sinusoidal_encodings(self):

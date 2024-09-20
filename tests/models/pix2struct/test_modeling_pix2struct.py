@@ -405,6 +405,13 @@ class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = Pix2StructModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=Pix2StructConfig,
+            common_properties=["is_vqa", "pad_token_id", "eos_token_id", "decoder_start_token_id"],
+            # common_properties=["decoder_start_token_id", "is_vqa"],
+            has_text_modality=False,
+        )
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -123,7 +123,7 @@ class EncodecModelTester:
             codebook_size=self.codebook_size,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
