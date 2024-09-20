@@ -1068,7 +1068,7 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
                 if huggingface_js_only:
                     error.append(f"Huggingface.js only: {huggingface_js_only}")
                 if transformers_only:
-                    error.append(f"Transformers args: {transformers_only}")
+                    error.append(f"Transformers only: {transformers_only}")
                 error.append("")
             raise ValueError("\n".join(error))
 
