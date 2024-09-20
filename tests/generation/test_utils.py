@@ -1816,7 +1816,10 @@ class GenerationTesterMixin:
                         )
 
             new_cache = new_results.past_key_values
-            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
+            if cache_cls == DynamicSlidingWindowCache:
+                legacy_cache_converted = cache_cls.from_legacy_cache(config.sliding_window, legacy_results.past_key_values)
+            else:
+                legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
                     # TODO: @raushan, please look into this for new cache format
