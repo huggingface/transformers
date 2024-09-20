@@ -422,6 +422,8 @@
         title: LLaMA
       - local: model_doc/llama2
         title: LLaMA2
+      - local: model_doc/llama3
+        title: LLaMA3
       - local: in_translation
         title: (번역중) Longformer
       - local: in_translation
