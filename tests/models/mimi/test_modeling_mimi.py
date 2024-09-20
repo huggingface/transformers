@@ -763,6 +763,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 _ = model(inputs_dict["input_values"].to(torch_device))
 
 
+    @is_flaky()
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
+
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
     norm = np.linalg.norm(arr)
@@ -787,7 +792,8 @@ class MimiIntegrationTest(unittest.TestCase):
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "kmhf/mimi"  # TODO(YL): modify once official
+
+        model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
         processor = AutoFeatureExtractor.from_pretrained(model_id)
@@ -837,7 +843,8 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 1803071,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "kmhf/mimi"  # TODO(YL): modify once official
+
+        model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 

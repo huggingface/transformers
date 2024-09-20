@@ -1000,8 +1000,17 @@ class MimiTransformerModel(nn.Module):
             )
             use_cache = False
 
-        if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        if use_cache and not isinstance(past_key_values, Cache):
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+            else:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                logger.warning_once(
+                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1679,7 +1688,8 @@ class MimiModel(MimiPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "kmhf/mimi"
+
+        >>> model_id = "kyutai/mimi"
         >>> model = MimiModel.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

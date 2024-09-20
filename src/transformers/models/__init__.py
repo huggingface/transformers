@@ -189,6 +189,7 @@ from . import (
     phi3,
     phobert,
     pix2struct,
+    pixtral,
     plbart,
     poolformer,
     pop2piano,
