@@ -2,7 +2,6 @@ import os, click
 import numpy as np
 from pathlib import Path
 
-# from datasets import load_dataset
 from torchvision import datasets
 from transformers import get_scheduler, ViTImageProcessor, ViTForImageClassification
 from accelerate import Accelerator
@@ -10,6 +9,8 @@ from torch.optim import AdamW
 import torch
 from torch.utils.data import DataLoader
 from timm.utils import accuracy, AverageMeter
+from distill_vit_configuration import DistillViTConfig
+import torch.nn.functional as F
 
 
 def get_dataloaders(dataset, batch_size):
@@ -38,6 +39,19 @@ def get_dataloaders(dataset, batch_size):
     return train_dataloader, val_dataloader
 
 
+def distill_loss_kldiv(log_student_softmax, teacher_softmax, temperature):
+    t = teacher_softmax.shape
+    s = log_student_softmax.shape
+    assert t == s and len(t) >= 2
+    if len(t) > 2:
+        teacher_softmax = teacher_softmax.view(-1, t[-1])
+        log_student_softmax = log_student_softmax.view(-1, s[-1])
+
+    return F.kl_div(log_student_softmax, teacher_softmax, reduction="batchmean") * (
+        temperature**2
+    )
+
+
 def train_one_epoch(
     epoch,
     teacher_model,
@@ -46,12 +60,15 @@ def train_one_epoch(
     accelerator,
     optimizer,
     lr_scheduler,
+    kl_loss_weight=0.5,
+    temperature=5,
 ):
 
     print_freq = max(100, int(len(train_dataloader) / 1000))
     loss_meter = AverageMeter()
     acc1_meter = AverageMeter()
     student_model.train()
+    total = len(train_dataloader)
     for idx, (images, labels) in enumerate(train_dataloader):
         teacher_outputs = teacher_model(
             pixel_values=images,
@@ -66,21 +83,27 @@ def train_one_epoch(
             output_hidden_states=True,
         )
 
-        # Placeholder
-        loss = student_outputs.loss
+        ce_loss = student_outputs.loss
+        # TODO: make sure that torch.nn.functional is device-agnostic and thus we do not need to move it to cuda devices.
+        soft_teacher = F.softmax(teacher_outputs.logits / temperature, dim=-1)
+        log_soft_student = F.log_softmax(student_outputs.logits / temperature, dim=-1)
+        distillation_loss = distill_loss_kldiv(
+            log_soft_student, soft_teacher, temperature
+        )
+        loss = kl_loss_weight * distillation_loss + (1 - kl_loss_weight) * ce_loss
 
         accelerator.backward(loss)
         optimizer.step()
 
         current_lr = lr_scheduler.get_last_lr()[0]
         (acc1,) = accuracy(student_outputs.logits, labels, topk=(1,))
-        
+
         loss_meter.update(loss.item())
         acc1_meter.update(acc1.item())
 
         if accelerator.is_main_process and (idx % print_freq == 0):
             print(
-                f"[{epoch}:{idx}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}), acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), learning rate = {current_lr:.5f}"
+                f"[Train {epoch}:{idx}/{total}] loss = {loss_meter.val:.4f} ({loss_meter.avg:.4f}), acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), learning rate = {current_lr:.5f}"
             )
 
         lr_scheduler.step()
@@ -93,6 +116,7 @@ def evaluate(epoch, student_model, val_dataloader, accelerator):
     acc1_meter = AverageMeter()
     acc5_meter = AverageMeter()
     student_model.eval()
+    total = len(val_dataloader)
     for idx, (images, labels) in enumerate(val_dataloader):
         student_outputs = student_model(
             pixel_values=images,
@@ -106,7 +130,7 @@ def evaluate(epoch, student_model, val_dataloader, accelerator):
         acc5_meter.update(acc5.item())
 
         print(
-            f"[{epoch}:{idx}] acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), acc@5 = {acc5_meter.val:.3f}% ({acc5_meter.avg:.3f}%)"
+            f"[Eval {epoch}:{idx}/{total}] acc@1 = {acc1_meter.val:.3f}% ({acc1_meter.avg:.3f}%), acc@5 = {acc5_meter.val:.3f}% ({acc5_meter.avg:.3f}%)"
         )
 
     acc1 = accelerator.gather_for_metrics([acc1_meter.avg])
@@ -115,6 +139,7 @@ def evaluate(epoch, student_model, val_dataloader, accelerator):
         print(
             f"\n[Epoch {epoch} evaluation] acc@1 = {np.mean(acc1):.3f}%, acc@5 = {np.mean(acc5):.3f}%\n"
         )
+    return np.mean(acc1), np.mean(acc5)
 
 
 @click.command()
@@ -148,6 +173,8 @@ def evaluate(epoch, student_model, val_dataloader, accelerator):
     help="Path to save a checkpoint for the student model.",
 )
 def main(dataset, batch, epoch, lr, save):
+    os.makedirs(save, exist_ok=True)
+
     train_dataloader, val_dataloader = get_dataloaders(dataset, batch)
 
     teacher_model = ViTForImageClassification.from_pretrained(
@@ -157,10 +184,9 @@ def main(dataset, batch, epoch, lr, save):
     for param in teacher_model.parameters():
         param.requires_grad = False
 
-    # placeholder
-    student_model = ViTForImageClassification.from_pretrained(
-        "google/vit-base-patch16-224"
-    )
+    student_config = DistillViTConfig()
+    student_model = ViTForImageClassification(student_config)
+    print(student_model)
 
     optimizer = AdamW(student_model.parameters(), lr=lr)
 
@@ -178,6 +204,7 @@ def main(dataset, batch, epoch, lr, save):
         num_training_steps=epoch * len(train_dataloader),
     )
 
+    max_acc1, max_acc5 = -1.0, -1.0
     for e in range(epoch):
         # training
         train_one_epoch(
@@ -190,19 +217,25 @@ def main(dataset, batch, epoch, lr, save):
             lr_scheduler,
         )
 
-        # save both hugginface and pytorch checkpoints        
+        # evaluation
+        acc1, acc5 = evaluate(e, student_model, val_dataloader, accelerator)
+
+        # save a checkpoint
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
-            unwrapped_student_model = accelerator.unwrap_model(student_model)
-            unwrapped_student_model.save_pretrained(save)
-            torch.save(
-                unwrapped_student_model.state_dict(),
-                os.path.join(save, f"student-vit-base-patch16-224-epoch{e}.pth"),
-            )
-            print(f"\nEpoch {e} checkpoints saved.\n")
-
-        # evaluation
-        evaluate(e, student_model, val_dataloader, accelerator)
+            max_acc5 = max(acc5, max_acc5)
+            if acc1 > max_acc1:
+                max_acc1 = acc1
+                unwrapped_student_model = accelerator.unwrap_model(student_model)
+                # our huggingface save_pretrained checkpoint is not fully verified yet.
+                # unwrapped_student_model.save_pretrained(save)
+                torch.save(
+                    unwrapped_student_model.state_dict(),
+                    os.path.join(save, f"student-vit-base-patch16-224-epoch{e}.pth"),
+                )
+                print(
+                    f"\nEpoch {e} checkpoints saved. acc@1 = {max_acc1:.3f}%, acc@5 = {max_acc5:.3f}%.\n"
+                )
 
 
 if __name__ == "__main__":
