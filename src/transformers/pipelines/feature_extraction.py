@@ -37,7 +37,9 @@ class FeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
-    def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
+    def _sanitize_parameters(
+        self, truncation=None, truncation_direction=None, tokenize_kwargs=None, return_tensors=None, **kwargs
+    ):
         if tokenize_kwargs is None:
             tokenize_kwargs = {}
 
@@ -47,6 +49,13 @@ class FeatureExtractionPipeline(Pipeline):
                     "truncation parameter defined twice (given as keyword argument as well as in tokenize_kwargs)"
                 )
             tokenize_kwargs["truncation"] = truncation
+        if truncation_direction is not None:
+            if "truncation_side" in tokenize_kwargs:
+                raise ValueError(
+                    "truncation_side parameter defined twice (given as keyword argument as well as in tokenize_kwargs)"
+                )
+            # The JS spec uses title-case, transformers uses lower, so we normalize
+            tokenize_kwargs["truncation_side"] = truncation_direction.lower()
 
         preprocess_params = tokenize_kwargs
 
@@ -73,14 +82,19 @@ class FeatureExtractionPipeline(Pipeline):
         elif self.framework == "tf":
             return model_outputs[0].numpy().tolist()
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *inputs, **kwargs):
         """
         Extract the features of the input(s).
 
         Args:
-            args (`str` or `List[str]`): One or several texts (or one list of texts) to get the features of.
+            inputs (`str` or `List[str]`): One or several texts (or one list of texts) to get the features of.
+            truncate(`bool`, *optional*, defaults to `None`):
+                Whether to truncate the input to max length or not. Overrides the value passed when initializing the
+                pipeline.
+            truncation_direction (`str`, *optional*, defaults to `None`): The side to truncate from the input sequence
+                if truncation is enabled. Can be 'left' or 'right'.
 
         Return:
             A nested list of `float`: The features computed by the model.
         """
-        return super().__call__(*args, **kwargs)
+        return super().__call__(*inputs, **kwargs)

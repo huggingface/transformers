@@ -995,6 +995,7 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
                 DocumentQuestionAnsweringPipeline,
                 inference_specs.DocumentQuestionAnsweringInput,
             ),
+            "feature-extraction": (FeatureExtractionPipeline, inference_specs.FeatureExtractionInput),
             "image-classification": (ImageClassificationPipeline, inference_specs.ImageClassificationInput),
             "text-to-audio": (TextToAudioPipeline, inference_specs.TextToAudioInput),
             "text-classification": (TextClassificationPipeline, inference_specs.TextClassificationInput),
@@ -1028,7 +1029,6 @@ class HuggingfaceJSEquivalencetest(unittest.TestCase):
         PIPELINES_WITHOUT_SPEC = {  # noqa: F841
             "image-feature-extraction": ImageFeatureExtractionPipeline,
             "zero-shot-audio-classification": ZeroShotAudioClassificationPipeline,
-            "feature-extraction": FeatureExtractionPipeline,
             "mask-generation": MaskGenerationPipeline,
             "image-to-image": ImageToImagePipeline,  # The huggingface_hub version of this looks like diffusers
         }
