@@ -244,6 +244,7 @@ class BioGptAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->BioGpt
 class BioGptSdpaAttention(BioGptAttention):
     def forward(
         self,
@@ -258,11 +259,8 @@ class BioGptSdpaAttention(BioGptAttention):
         if output_attentions or layer_head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "BioGptModel is using BioGptSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does "
-                "not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual "
-                "attention implementation, but specifying the manual implementation will be required from Transformers "
-                'version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` '
-                "when loading the model."
+                "BioGptModel is using BioGptSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
                 hidden_states,
@@ -320,15 +318,13 @@ class BioGptSdpaAttention(BioGptAttention):
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an
-        # inline conditional assignment in SDPA to support both torch.compile's dynamic shapes and full graph options.
-        # An inline conditional prevents dynamic shapes from compiling. The tgt_len > 1 is necessary to match with
-        # AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
         is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
 
-        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs
-        # and a custom attn_mask, but we are fine here as `_shape` do call `.contiguous()`.
-        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
