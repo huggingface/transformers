@@ -293,8 +293,8 @@
     - local: in_translation
       title: (번역중) Optimization
     - local: in_translation
-      title: (번역중) Model outputs
-    - local: in_translation
+      title: main_classes/Model outputs
+    - local: 모델 출력
       title: (번역중) Pipelines
     - local: in_translation
       title: (번역중) Processors
