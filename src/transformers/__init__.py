@@ -2690,10 +2690,10 @@ else:
     _import_structure["models.mllama"].extend(
         [
             "MllamaForCausalLM",
-            "MllamaTextModel",
-            "MllamaVisionModel",
             "MllamaForConditionalGeneration",
             "MllamaPreTrainedModel",
+            "MllamaTextModel",
+            "MllamaVisionModel",
         ]
     )
     _import_structure["models.mobilebert"].extend(
