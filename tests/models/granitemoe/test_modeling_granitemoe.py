@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Granite model."""
+"""Testing suite for the PyTorch GraniteMoe model."""
 
 import tempfile
 import unittest
@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, GraniteMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -35,22 +35,21 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GraniteForCausalLM,
-        GraniteModel,
+        GraniteMoeForCausalLM,
+        GraniteMoeModel,
     )
-    from transformers.models.granite.modeling_granite import (
-        GraniteRotaryEmbedding,
+    from transformers.models.granitemoe.modeling_granitemoe import (
+        GraniteMoeRotaryEmbedding,
     )
 
 
-class GraniteModelTester:
+class GraniteMoeModelTester:
     def __init__(
         self,
         parent,
@@ -125,7 +124,7 @@ class GraniteModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return GraniteConfig(
+        return GraniteMoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -144,7 +143,7 @@ class GraniteModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = GraniteModel(config=config)
+        model = GraniteMoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -164,7 +163,7 @@ class GraniteModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = GraniteModel(config)
+        model = GraniteMoeModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -193,7 +192,7 @@ class GraniteModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = GraniteForCausalLM(config=config)
+        model = GraniteMoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -213,7 +212,7 @@ class GraniteModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = GraniteForCausalLM(config=config)
+        model = GraniteMoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -277,20 +276,20 @@ class GraniteModelTester:
 
 
 @require_torch
-class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            GraniteModel,
-            GraniteForCausalLM,
+            GraniteMoeModel,
+            GraniteMoeForCausalLM,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GraniteForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (GraniteMoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": GraniteModel,
-            "text-generation": GraniteForCausalLM,
+            "feature-extraction": GraniteMoeModel,
+            "text-generation": GraniteMoeForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -304,11 +303,11 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "ibm/PowerLM-3b"
+    _torch_compile_test_ckpt = "ibm/PowerMoE-3b"
 
     def setUp(self):
-        self.model_tester = GraniteModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteConfig, hidden_size=37)
+        self.model_tester = GraniteMoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GraniteMoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -323,7 +322,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Granite buffers include complex numbers, which breaks this test")
+    @unittest.skip("GraniteMoe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -334,7 +333,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = GraniteModel(config)
+        original_model = GraniteMoeModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -342,7 +341,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = GraniteModel(config)
+        scaled_model = GraniteMoeModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -372,7 +371,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = GraniteRotaryEmbedding(config=config).to(torch_device)
+        original_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -381,7 +380,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
         config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = GraniteRotaryEmbedding(config=config).to(torch_device)
+        linear_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -395,7 +394,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
         config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = GraniteRotaryEmbedding(config=config).to(torch_device)
+        ntk_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -409,7 +408,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = GraniteRotaryEmbedding(config=config).to(torch_device)
+        yarn_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
@@ -433,13 +432,13 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         """
         Overwritting the common test as the test is flaky on tiny models
         """
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
+        model = GraniteMoeForCausalLM.from_pretrained(
+            "ibm-granite/granitemoe-3b",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granitemoe-3b")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -451,8 +450,8 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_native = tokenizer.batch_decode(output_native)
 
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
+        model = GraniteMoeForCausalLM.from_pretrained(
+            "ibm-granite/granitemoe-3b",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -476,7 +475,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
-                new_model = GraniteForCausalLM.from_pretrained(
+                new_model = GraniteMoeForCausalLM.from_pretrained(
                     tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
                 ).to("cuda")
 
@@ -501,7 +500,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch_gpu
-class GraniteIntegrationTest(unittest.TestCase):
+class GraniteMoeIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
@@ -514,25 +513,23 @@ class GraniteIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    def test_model_3b_logits_bf16(self):
+    def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
-        )
+        model = GraniteMoeForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
 
         # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-1.9798, -3.1626, -2.8062, -2.3777, -2.7091, -2.2338, -2.5924, -2.3974]])
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.8750, -2.1875, -2.1875, -2.1875, -2.1875, -2.8438, -2.1875, -2.1875,
-        -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875]])
+        EXPECTED_SLICE = torch.tensor([[4.8785, -2.2890, -2.2892, -2.2885, -2.2890, -3.5007, -2.2897, -2.2892,
+        -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]])
         # fmt: on
 
         self.assertTrue(
@@ -545,17 +542,19 @@ class GraniteIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_read_token
-    def test_model_3b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+    def test_model_3b_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXT_COMPLETION = (
+            "Simply put, the theory of relativity states that \n$$\n\\frac{d^2x^\\mu}{d\\tau^2} = "
+            "\\frac{1}{c^2}\\frac{d^2x^\\mu}{dt^2}\n$$\nwhere $x^\\mu$ is a four-vector, $\\tau$ is the proper time"
+        )
+        prompt = "Simply put, the theory of relativity states that "
+        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
+        model = GraniteMoeForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.float16)
+        # greedy generation outputs
+        generated_ids = model.generate(**model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-
-        # fmt: off
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]])
-
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

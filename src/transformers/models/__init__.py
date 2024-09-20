@@ -107,6 +107,7 @@ from . import (
     gpt_sw3,
     gptj,
     granite,
+    granitemoe,
     grounding_dino,
     groupvit,
     herbert,

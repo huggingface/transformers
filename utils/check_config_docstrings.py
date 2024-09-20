@@ -45,6 +45,7 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "VisionTextDualEncoderConfig",
     "LlamaConfig",
     "GraniteConfig",
+    "GraniteMoeConfig",
 }
 
 
