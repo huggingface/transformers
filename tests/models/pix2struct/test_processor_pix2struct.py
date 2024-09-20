@@ -37,6 +37,8 @@ if is_vision_available():
 @require_torch
 class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Pix2StructProcessor
+    text_input_name = "decoder_input_ids"
+    images_input_name = "flattened_patches"
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -181,22 +183,22 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
 
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+    # @require_vision
+    # @require_torch
+    # def test_tokenizer_defaults_preserved_by_kwargs(self):
+    #     # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+    #     if "image_processor" not in self.processor_class.attributes:
+    #         self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    #     image_processor = self.get_component("image_processor")
+    #     tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+    #     processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+    #     self.skip_processor_without_typed_kwargs(processor)
+    #     input_str = "lower newer"
+    #     image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 117)
+    #     inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+    #     self.assertEqual(len(inputs["decoder_input_ids"][0]), 117)
 
     @require_torch
     @require_vision
@@ -216,24 +218,24 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
 
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", padding="longest")
+    # @require_vision
+    # @require_torch
+    # def test_kwargs_overrides_default_tokenizer_kwargs(self):
+    #     # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+    #     if "image_processor" not in self.processor_class.attributes:
+    #         self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    #     image_processor = self.get_component("image_processor")
+    #     tokenizer = self.get_component("tokenizer", padding="longest")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+    #     processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+    #     self.skip_processor_without_typed_kwargs(processor)
+    #     input_str = "lower newer"
+    #     image_input = self.prepare_image_inputs()
 
-        inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
-        )
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 112)
+    #     inputs = processor(
+    #         text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+    #     )
+    #     self.assertEqual(len(inputs["decoder_input_ids"][0]), 112)
 
     @require_torch
     @require_vision
