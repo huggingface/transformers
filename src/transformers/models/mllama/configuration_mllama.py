@@ -157,13 +157,12 @@ class MllamaVisionConfig(PretrainedConfig):
 
 
 class MllamaTextConfig(PretrainedConfig):
-    # TODO fix config docstring
     r"""
-    This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
-    Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mllama-9B.
+    This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
+    Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Mllama-11B.
 
-    e.g. [mllama-hf/mllama-9b](https://huggingface.co/mllama-hf/mllama-9b)
+    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -341,13 +340,13 @@ class MllamaConfig(PretrainedConfig):
     Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Mllama-9B.
 
-    e.g. [mllama-hf/mllama-9b](https://huggingface.co/mllama-hf/mllama-9b)
+    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `MllamaVisionConfig`):
+        vision_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaVisionConfig`):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaTextConfig`):
             The config object or dictionary of the text backbone.
