@@ -1397,8 +1397,8 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MllamaForCausalLM
 
-        >>> model = MllamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-11b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-11b-hf")
+        >>> model = MllamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

@@ -5969,20 +5969,6 @@ class MllamaForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MllamaTextModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MllamaVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class MllamaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5998,6 +5984,20 @@ class MllamaPreTrainedModel(metaclass=DummyObject):
 
 
 class MllamaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

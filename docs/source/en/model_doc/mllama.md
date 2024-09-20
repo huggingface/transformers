@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# mllama
+# Mllama
 
 ## Overview
 
@@ -30,39 +30,33 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## Usage Tips;
+## Usage Tips
 
 - For text-only generation use `MllamaForCausalGeneration` and for image+text cases use `MllamaForConditionalGeneration`.
 - Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images in a batch for input to the model.
 - The text passed to the processor should have the <|image|> tokens where the images should be inserted
 - The processor has its own apply_chat_template method to convert chat messages to text that can then be passed as text to the processor.
 
-## Usage Example;
+## Usage Example
 
 ```python
 
 import requests
-from PIL import Image
-
 import torch
-from transformers import MllamaProcessor, MllamaForConditionalGeneration, StaticCache
+from PIL import Image
+from transformers import MllamaForConditionalGeneration, AutoProcessor
 
+model_id = "meta-llama/Llama-3.2-11B-Vision"
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+processor = AutoProcessor.from_pretrained(model_id)
 
-url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-stop_image = Image.open(requests.get(url, stream=True).raw)
+prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+url = "https://llava-vl.github.io/static/images/view.jpg"
+raw_image = Image.open(requests.get(url, stream=True).raw)
 
-url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-snowman_image = Image.open(requests.get(url, stream=True).raw)
-
-processor = MllamaProcessor.from_pretrained("s0409/model-3")
-model = MllamaForConditionalGeneration.from_pretrained("s0409/model-3", torch_dtype=torch.bfloat16, device_map="auto")
-
-texts = ["<|image|><|begin_of_text|>The image shows"]
-inputs = processor(text=texts, images=[[stop_image]], padding=True, return_tensors="pt").to(model.device, torch.bfloat16)
-
-output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
-generated_text = processor.batch_decode(output.sequences, skip_special_tokens=False)
-
+inputs = processor(text=prompt, images=raw_image, return_tensors="pt").to(model.device)
+output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 
@@ -74,7 +68,32 @@ generated_text = processor.batch_decode(output.sequences, skip_special_tokens=Fa
 
 [[autodoc]] MllamaProcessor
 
+
+## MllamaImageProcessor
+
+[[autodoc]] MllamaImageProcessor
+
 ## MllamaForConditionalGeneration
 
 [[autodoc]] MllamaForConditionalGeneration
+    - forward
+
+## MllamaForCausalLM
+
+[[autodoc]] MllamaForCausalLM
+    - forward
+
+## MllamaTextModel
+
+[[autodoc]] MllamaTextModel
+    - forward
+
+## MllamaForCausalLM
+
+[[autodoc]] MllamaForCausalLM
+    - forward
+
+## MllamaVisionModel
+
+[[autodoc]] MllamaVisionModel
     - forward
