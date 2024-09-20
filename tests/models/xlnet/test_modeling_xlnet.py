@@ -170,7 +170,7 @@ class XLNetModelTester:
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-    def create_and_check_xlnet_base_model(
+    def create_and_check_model(
         self,
         config,
         input_ids_1,
@@ -569,11 +569,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = XLNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
-
-    def test_xlnet_base_model(self):
-        self.model_tester.set_seed()
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
 
     def test_xlnet_base_model_use_mems(self):
         # checking that in auto-regressive mode, `use_mems` gives the same results
