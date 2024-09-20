@@ -14,7 +14,7 @@
 """Mllama model configuration"""
 
 import os
-from typing import Union
+from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -25,48 +25,64 @@ logger = logging.get_logger(__name__)
 
 
 class MllamaVisionConfig(PretrainedConfig):
-    # TODO fix config docstring
     r"""
-    This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
-    Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mllama-9B.
+    This is the configuration class to store the configuration of a [`MllamaVisionModel`]. It is used to instantiate an
+    Mllama vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Mllama-11B.
 
-    e.g. [mllama-hf/mllama-9b](https://huggingface.co/mllama-hf/mllama-9b)
+    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-        The index of the layer to select the vision feature.
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Dimensionality of the encoder layers and the pooler layer.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_global_layers (`int`, *optional*, defaults to 8):
+            Number of global layers in the Transformer encoder.
+            Vision model has a second transformer encoder, called global.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input image.
+        intermediate_size (`int`, *optional*, defaults to 14336):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the projection layer.
+        vision_output_dim (`int`, *optional*, defaults to 7680):
+            Dimensionality of the vision output, before applying the projection layer.
+            Includes output of transforemer encoder with intermediate layers and global
+            transformer encoder.
+        image_size (`int`, *optional*, defaults to 448):
+            The size (resolution) of each image *tile*.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        max_num_tiles (`int`, *optional*, defaults to 4):
+            Maximum number of tiles for image splitting.
+        intermediate_layers_indices (`List[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
+            Indices of intermediate layers of transformer encoder from which to extract and output features.
+            These output features are concatenated with final hidden state of transformer encoder.
+        supported_aspect_ratios (`List[List[int]]`, *optional*):
+            List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
+            are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
 
     Example:
 
     ```python
-    >>> from transformers import MllamaForConditionalGeneration, MllamaConfig, CLIPVisionConfig, LlamaConfig
-
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> from transformers import MllamaVisionConfig, MllamaVisionModel
 
     >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
+    >>> config = MllamaVisionConfig()
 
-    >>> # Initializing a Mllama mllama-1.5-7b style configuration
-    >>> configuration = MllamaConfig(vision_config, text_config)
-
-    >>> # Initializing a model from the mllama-1.5-7b style configuration
-    >>> model = MllamaForConditionalGeneration(configuration)
+    >>> # Initializing a vision model from the mllama-11b style configuration
+    >>> model = MllamaVisionModel(config)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -76,33 +92,37 @@ class MllamaVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=1280,
-        intermediate_size=5120,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=224,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        num_global_layers=8,
-        projection_dim=4096,
-        vision_output_dim=7680,
-        intermediate_layers_indices=[3, 7, 15, 23, 30],
-        max_num_tiles=4,  # same as vision max num chunks? yes ;-)
-        norm_eps=1.0e-5,
-        in_channels=3,
-        supported_aspect_ratios=None,
+        hidden_size: int = 1280,
+        hidden_act: str = "gelu",
+        num_hidden_layers: int = 32,
+        num_global_layers: int = 8,
+        num_attention_heads: int = 16,
+        num_channels: int = 3,
+        intermediate_size: int = 14336,
+        projection_dim: int = 4096,
+        vision_output_dim: int = 7680,
+        image_size: int = 448,
+        patch_size: int = 14,
+        norm_eps: float = 1e-5,
+        max_num_tiles: int = 4,
+        intermediate_layers_indices: Optional[List[int]] = None,
+        supported_aspect_ratios: Optional[List[List[int]]] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        if supported_aspect_ratios is None:
+            if max_num_tiles != 4:
+                raise ValueError("max_num_tiles must be 4 for default supported aspect ratios")
+            supported_aspect_ratios = [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]]
+
+        if intermediate_layers_indices is None:
+            intermediate_layers_indices = [3, 7, 15, 23, 30]
+
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
         self.num_channels = num_channels
+        self.intermediate_size = intermediate_size
         self.image_size = image_size
-        self.layer_norm_eps = layer_norm_eps
         self.vision_output_dim = vision_output_dim
         self.patch_size = patch_size
         self.projection_dim = projection_dim
@@ -110,9 +130,9 @@ class MllamaVisionConfig(PretrainedConfig):
         self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
         self.norm_eps = norm_eps
-        self.in_channels = in_channels
         self.attention_heads = num_attention_heads
         self.supported_aspect_ratios = supported_aspect_ratios
+        super().__init__(**kwargs)
 
     @property
     def max_aspect_ratio_id(self) -> int:

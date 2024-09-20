@@ -296,8 +296,8 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.self_attn = MLLAMA_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = MllamaVisionMLP(config)
 
-        self.input_layernorm = nn.LayerNorm(self.hidden_size)
-        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
 
         # there used to be an if else here, no code path
         if is_gated:
@@ -439,6 +439,7 @@ MLLAMA_START_DOCSTRING = r"""
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
+    # supports_gradient_checkpointing = True # TODO: enable this
     _no_split_modules = ["MllamaSdpaCrossAttention"]
     _supports_cache_class = True
     _supports_static_cache = True
@@ -477,14 +478,14 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         self.patch_size = config.patch_size
         self.max_num_tiles = config.max_num_tiles
         self.hidden_size = config.hidden_size
-        self.in_channels = config.in_channels
+        self.num_channels = config.num_channels
         self.intermediate_layers_indices = config.intermediate_layers_indices
 
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.hidden_size**-0.5
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=config.in_channels,
+            in_channels=config.num_channels,
             out_channels=self.hidden_size,
             kernel_size=self.patch_size,
             stride=self.patch_size,
