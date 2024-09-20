@@ -99,11 +99,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
 def _prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
-    past_key_values: Cache,
     num_vision_tokens: int,
-    cross_attention_states: torch.Tensor,
-    cross_attention_layers: List[int],
-    device: str,
     dtype: str,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # reshape so it can be used by attn module
@@ -1677,8 +1673,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, MllamaForConditionalGeneration
 
-        >>> model = MllamaForConditionalGeneration.from_pretrained("<mllama-checkpoint>")
-        >>> processor = AutoProcessor.from_pretrained("<mllama-checkpoint>")
+        >>> checkpoint = "meta-llama/Llama-3.2-11B-Vision"
+        >>> model = MllamaForConditionalGeneration.from_pretrained(checkpoint)
+        >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
         >>> prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -1687,9 +1684,13 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "TODO: fill this out"
+        >>> output = model.generate(**inputs, max_new_tokens=15)
+
+        >>> prompt_len = inputs.input_ids.shape[-1]
+        >>> generated_ids = output[:, prompt_len:]
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        >>> print(generated_text)
+        [', it would be:.\\nA stop sign in Chinatown.\\n']
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1717,11 +1718,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if cross_attention_mask is not None:
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
                 cross_attention_mask,
-                past_key_values=past_key_values,
                 num_vision_tokens=self.vision_model.num_patches,
-                cross_attention_layers=self.language_model.model.cross_attention_layers,
-                cross_attention_states=cross_attention_states,
-                device=self.device,
                 dtype=self.dtype,
             )
         else:
