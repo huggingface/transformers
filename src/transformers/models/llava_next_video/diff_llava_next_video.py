@@ -29,7 +29,6 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
-from ...cache_utils import Cache
 from ...utils import (
     logging,
     replace_return_docstrings,
@@ -389,13 +388,17 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
             # if the number of image/video tokens is more than image embeddings seq length, then prob we expanded it in processing
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
-            img_token_count = (input_ids == self.config.image_token_index).sum(1).max()
-            video_token_count = (input_ids == self.config.video_token_index).sum(1).max()
-            inputs_expanded = (
-                img_token_count < self.config.image_seq_length and video_token_count < self.config.video_seq_length
+            img_token_not_enough = (input_ids == self.config.image_token_index).sum(
+                1
+            ).max() < self.config.image_seq_length
+            video_token_not_enough = (input_ids == self.config.video_token_index).sum(
+                1
+            ).max() < self.config.video_seq_length
+            inputs_not_expanded = (img_token_not_enough and pixel_values is not None) or (
+                video_token_not_enough and pixel_values_videos is not None
             )
-            pixels_present = input_ids.shape[-1] == 1 and pixel_values is not None and pixel_values_videos is not None
-            legacy_processing = inputs_expanded or pixels_present
+            pixels_present = input_ids.shape[-1] == 1 and (pixel_values is not None or pixel_values_videos is not None)
+            legacy_processing = inputs_not_expanded or pixels_present
 
         image_features = feature_lens = None
         if pixel_values is not None and pixel_values.size(0) > 0:
@@ -414,75 +417,76 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
 
-            if legacy_processing:
-                logger.warning_once(
-                    "Expanding inputs for image.video tokens in LLaVa-NeXT-Video should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+        if legacy_processing:
+            logger.warning_once(
+                "Expanding inputs for image.video tokens in LLaVa-NeXT-Video should be done in processing. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+            )
+            if input_ids.shape[1] != 1:
+                iterator = (
+                    (image_features, feature_lens, self.config.image_token_index),
+                    (video_features, video_feature_lens, self.config.video_token_index),
                 )
-                if input_ids.shape[1] != 1:
-                    iterator = (
-                        (image_features, feature_lens, self.config.image_token_index),
-                        (video_features, video_feature_lens, self.config.video_token_index),
-                    )
-                    for features, lens, special_token in zip(iterator):
-                        if features is not None:
-                            (
-                                inputs_embeds,
-                                attention_mask,
-                                position_ids,
-                                labels,
-                                input_ids,
-                            ) = self._merge_input_ids_with_image_features(
-                                features,
-                                lens,
-                                inputs_embeds,
-                                input_ids,
-                                attention_mask,
-                                position_ids,
-                                labels=labels,
-                                image_token_index=special_token,
-                            )
-                else:
-                    # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
-                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
-                    # Get the target length
-                    target_length = input_ids.shape[1]
-                    past_length = first_layer_past_key_value.shape[-1]
-                    extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], past_length),
-                        dtype=attention_mask.dtype,
-                        device=attention_mask.device,
-                    )
-                    # Filter out only the tokens that can be un-attended, this can happen
-                    # if one uses Llava + Fused modules where the cache on the
-                    # first iteration is already big enough, or if one passes custom cache
-                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-                    new_batch_index = batch_index[valid_indices]
-                    new_non_attended_tokens = non_attended_tokens[valid_indices]
-                    # Zero-out the places where we don't need to attend
-                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
-                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
-                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-
-            # TODO: @raushan retain only the new behavior after v4.47
+                for features, lens, special_token in iterator:
+                    if features is not None:
+                        (
+                            inputs_embeds,
+                            attention_mask,
+                            position_ids,
+                            labels,
+                            input_ids,
+                        ) = self._merge_input_ids_with_image_features(
+                            features,
+                            lens,
+                            inputs_embeds,
+                            input_ids,
+                            attention_mask,
+                            position_ids,
+                            labels=labels,
+                            image_token_index=special_token,
+                        )
+                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
             else:
-                if image_features is not None:
-                    special_image_mask = (
-                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    )
-                    image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+                # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
+                first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+                # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+                # Get the target length
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
+                extended_attention_mask = torch.ones(
+                    (attention_mask.shape[0], past_length),
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
+                # Filter out only the tokens that can be un-attended, this can happen
+                # if one uses Llava + Fused modules where the cache on the
+                # first iteration is already big enough, or if one passes custom cache
+                valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                new_batch_index = batch_index[valid_indices]
+                new_non_attended_tokens = non_attended_tokens[valid_indices]
+                # Zero-out the places where we don't need to attend
+                extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[-target_length:]
 
-                if video_features is not None:
-                    special_image_mask = (
-                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    )
-                    video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+        # TODO: @raushan retain only the new behavior after v4.47
+        else:
+            if image_features is not None:
+                special_image_mask = (
+                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                )
+                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            if video_features is not None:
+                special_image_mask = (
+                    (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                )
+                video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -493,6 +497,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]
@@ -534,58 +539,34 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         pixel_values_videos=None,
         image_sizes=None,
         attention_mask=None,
+        cache_position=None,
         **kwargs,
     ):
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
+        if input_ids is not None:
+            img_token_not_enough = (input_ids == self.config.image_token_index).sum(
+                1
+            ).max() < self.config.image_seq_length
+            video_token_not_enough = (input_ids == self.config.video_token_index).sum(
+                1
+            ).max() < self.config.video_seq_length
+            legacy_processing = (img_token_not_enough and pixel_values is not None) or (
+                video_token_not_enough and pixel_values_videos is not None
+            )
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-            elif self.config.image_token_index in input_ids or self.config.video_token_index in input_ids:
-                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
-
-            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
-            # older attention values, as their corresponding values are not part of the input.
-            if cache_length < past_length and attention_mask is not None:
-                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-                "pixel_values_videos": pixel_values_videos,
-                "image_sizes": image_sizes,
-            }
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            **kwargs,
         )
+
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model
+        if legacy_processing or cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["image_sizes"] = image_sizes
+
         return model_inputs

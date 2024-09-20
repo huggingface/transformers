@@ -848,7 +848,8 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
+# copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
+# TODO (Raushan): bring back copied after compile compatibility
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
@@ -1022,7 +1023,7 @@ class MixtralModel(MixtralPreTrainedModel):
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.46. "
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
             )
 
@@ -1121,11 +1122,6 @@ class MixtralModel(MixtralPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1353,7 +1349,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         output_router_logits=False,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1378,6 +1374,9 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1386,7 +1385,6 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
-                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs

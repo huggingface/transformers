@@ -565,6 +565,8 @@ class PretrainedConfig(PushToHubMixin):
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict is None:
+            return {}, kwargs
         if "_commit_hash" in config_dict:
             original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
@@ -635,6 +637,8 @@ class PretrainedConfig(PushToHubMixin):
                     subfolder=subfolder,
                     _commit_hash=commit_hash,
                 )
+                if resolved_config_file is None:
+                    return None, kwargs
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -1019,17 +1023,17 @@ class PretrainedConfig(PushToHubMixin):
         """
         non_default_generation_parameters = {}
         decoder_attribute_name = None
-        default_config = None
 
         # Composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
         try:
             default_config = self.__class__()
         except ValueError:
-            for decoder_attribute_name in ("decoder", "generator", "text_config"):
-                if hasattr(self, decoder_attribute_name):
-                    default_config = getattr(self, decoder_attribute_name).__class__()
-                    break
+            decoder_config = self.get_text_config(decoder=True)
+            if decoder_config is not self:
+                default_config = decoder_config.__class__()
+            else:
+                decoder_config = None
 
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
@@ -1056,6 +1060,36 @@ class PretrainedConfig(PushToHubMixin):
                     non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
 
         return non_default_generation_parameters
+
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
+
+        If `decoder` is set to `True`, then only search for decoder config names.
+        """
+        decoder_possible_text_config_names = ("decoder", "generator", "text_config")
+        encoder_possible_text_config_names = ("text_encoder",)
+        if decoder:
+            possible_text_config_names = decoder_possible_text_config_names
+        else:
+            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+
+        valid_text_config_names = []
+        for text_config_name in possible_text_config_names:
+            if hasattr(self, text_config_name):
+                text_config = getattr(self, text_config_name, None)
+                if text_config is not None:
+                    valid_text_config_names += [text_config_name]
+
+        if len(valid_text_config_names) > 1:
+            raise ValueError(
+                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
+                "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
+            )
+        elif len(valid_text_config_names) == 1:
+            return getattr(self, valid_text_config_names[0])
+        return self
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:

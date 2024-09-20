@@ -15,6 +15,7 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import importlib.machinery
 import importlib.metadata
 import importlib.util
 import json
@@ -27,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
 
 from packaging import version
 
@@ -89,6 +90,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
+GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
 
@@ -102,6 +104,7 @@ _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
+_schedulefree_available = _is_package_available("schedulefree")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -156,7 +159,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
-_is_gguf_available = _is_package_available("gguf")
+_is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -178,6 +181,8 @@ _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
+_tiktoken_available = _is_package_available("tiktoken")
+_blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 
 
@@ -359,6 +364,10 @@ def is_lomo_available():
 
 def is_grokadamw_available():
     return _grokadamw_available
+
+
+def is_schedulefree_available():
+    return _schedulefree_available
 
 
 def is_pyctcdecode_available():
@@ -914,8 +923,8 @@ def is_seqio_available():
     return _is_seqio_available
 
 
-def is_gguf_available():
-    return _is_gguf_available
+def is_gguf_available(min_version: str = GGUF_MIN_VERSION):
+    return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
 def is_protobuf_available():
@@ -1170,6 +1179,10 @@ def is_mlx_available():
     return _mlx_available
 
 
+def is_tiktoken_available():
+    return _tiktoken_available and _blobfile_available
+
+
 def is_liger_kernel_available():
     if not _liger_kernel_available:
         return False
@@ -1374,6 +1387,11 @@ explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+TORCHAUDIO_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
+runtime.
+"""
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -1549,6 +1567,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
@@ -1607,6 +1626,10 @@ def is_torch_fx_proxy(x):
     return False
 
 
+BACKENDS_T = FrozenSet[str]
+IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+
+
 class _LazyModule(ModuleType):
     """
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
@@ -1614,21 +1637,71 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
+    def __init__(
+        self,
+        name: str,
+        module_file: str,
+        import_structure: IMPORT_STRUCTURE_T,
+        module_spec: importlib.machinery.ModuleSpec = None,
+        extra_objects: Dict[str, object] = None,
+    ):
         super().__init__(name)
-        self._modules = set(import_structure.keys())
-        self._class_to_module = {}
-        for key, values in import_structure.items():
-            for value in values:
-                self._class_to_module[value] = key
-        # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
-        self.__file__ = module_file
-        self.__spec__ = module_spec
-        self.__path__ = [os.path.dirname(module_file)]
-        self._objects = {} if extra_objects is None else extra_objects
-        self._name = name
-        self._import_structure = import_structure
+
+        self._object_missing_backend = {}
+        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+            self._modules = set()
+            self._class_to_module = {}
+            self.__all__ = []
+
+            _import_structure = {}
+
+            for backends, module in import_structure.items():
+                missing_backends = []
+                for backend in backends:
+                    if backend not in BACKENDS_MAPPING:
+                        raise ValueError(
+                            f"Error: the following backend: '{backend}' was specified around object {module} but isn't specified in the backends mapping."
+                        )
+                    callable, error = BACKENDS_MAPPING[backend]
+                    if not callable():
+                        missing_backends.append(backend)
+                self._modules = self._modules.union(set(module.keys()))
+
+                for key, values in module.items():
+                    if len(missing_backends):
+                        self._object_missing_backend[key] = missing_backends
+
+                    for value in values:
+                        self._class_to_module[value] = key
+                        if len(missing_backends):
+                            self._object_missing_backend[value] = missing_backends
+                    _import_structure.setdefault(key, []).extend(values)
+
+                # Needed for autocompletion in an IDE
+                self.__all__.extend(list(module.keys()) + list(chain(*module.values())))
+
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = _import_structure
+
+        # This can be removed once every exportable object has a `export()` export.
+        else:
+            self._modules = set(import_structure.keys())
+            self._class_to_module = {}
+            for key, values in import_structure.items():
+                for value in values:
+                    self._class_to_module[value] = key
+            # Needed for autocompletion in an IDE
+            self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
@@ -1645,6 +1718,19 @@ class _LazyModule(ModuleType):
             return self._objects[name]
         if name in self._modules:
             value = self._get_module(name)
+        elif name in self._object_missing_backend.keys():
+            missing_backends = self._object_missing_backend[name]
+
+            class Placeholder(metaclass=DummyObject):
+                _backends = missing_backends
+
+                def __init__(self, *args, **kwargs):
+                    requires_backends(self, missing_backends)
+
+            Placeholder.__name__ = name
+            Placeholder.__module__ = self.__spec__
+
+            value = Placeholder
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
@@ -1688,3 +1774,385 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     spec.loader.exec_module(module)
     module = sys.modules[name]
     return module
+
+
+def export(*, backends=()):
+    """
+    This decorator enables two things:
+    - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
+      to execute correctly without instantiating it
+    - The '@export' string is used to dynamically import objects
+    """
+    for backend in backends:
+        if backend not in BACKENDS_MAPPING:
+            raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
+
+    if not isinstance(backends, tuple):
+        raise ValueError("Backends should be a tuple.")
+
+    def inner_fn(fun):
+        fun.__backends = backends
+        return fun
+
+    return inner_fn
+
+
+BASE_FILE_REQUIREMENTS = {
+    lambda e: "modeling_tf_" in e: ("tf",),
+    lambda e: "modeling_flax_" in e: ("flax",),
+    lambda e: "modeling_" in e: ("torch",),
+    lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
+}
+
+
+def fetch__all__(file_content):
+    """
+    Returns the content of the __all__ variable in the file content.
+    Returns None if not defined, otherwise returns a list of strings.
+    """
+
+    if "__all__" not in file_content:
+        return []
+
+    lines = file_content.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("__all__"):
+            start_index = index
+
+    lines = lines[start_index:]
+
+    if not lines[0].startswith("__all__"):
+        raise ValueError(
+            "fetch__all__ accepts a list of lines, with the first line being the __all__ variable declaration"
+        )
+
+    # __all__ is defined on a single line
+    if lines[0].endswith("]"):
+        return [obj.strip("\"' ") for obj in lines[0].split("=")[1].strip(" []").split(",")]
+
+    # __all__ is defined on multiple lines
+    else:
+        _all = []
+        for __all__line_index in range(1, len(lines)):
+            if lines[__all__line_index].strip() == "]":
+                return _all
+            else:
+                _all.append(lines[__all__line_index].strip("\"', "))
+
+        return _all
+
+
+@lru_cache()
+def create_import_structure_from_path(module_path):
+    """
+    This method takes the path to a file/a folder and returns the import structure.
+    If a file is given, it will return the import structure of the parent folder.
+
+    Import structures are designed to be digestible by `_LazyModule` objects. They are
+    created from the __all__ definitions in each files as well as the `@export` decorators
+    above methods and objects.
+
+    The import structure allows explicit display of the required backends for a given object.
+    These backends are specified in two ways:
+
+    1. Through their `@export`, if they are exported with that decorator. This `@export` decorator
+       accepts a `backend` tuple kwarg mentioning which backends are required to run this object.
+
+    2. If an object is defined in a file with "default" backends, it will have, at a minimum, this
+       backend specified. The default backends are defined according to the filename:
+
+       - If a file is named like `modeling_*.py`, it will have a `torch` backend
+       - If a file is named like `modeling_tf_*.py`, it will have a `tf` backend
+       - If a file is named like `modeling_flax_*.py`, it will have a `flax` backend
+       - If a file is named like `tokenization_*_fast.py`, it will have a `tokenizers` backend
+
+    Backends serve the purpose of displaying a clear error message to the user in case the backends are not installed.
+    Should an object be imported without its required backends being in the environment, any attempt to use the
+    object will raise an error mentioning which backend(s) should be added to the environment in order to use
+    that object.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+    """
+    import_structure = {}
+    if os.path.isdir(module_path):
+        directory = module_path
+        adjacent_modules = []
+
+        for f in os.listdir(module_path):
+            if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
+                import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+
+            elif not os.path.isdir(os.path.join(directory, f)):
+                adjacent_modules.append(f)
+
+    else:
+        directory = os.path.dirname(module_path)
+        adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+
+    # We're only taking a look at files different from __init__.py
+    # We could theoretically export things directly from the __init__.py
+    # files, but this is not supported at this time.
+    if "__init__.py" in adjacent_modules:
+        adjacent_modules.remove("__init__.py")
+
+    module_requirements = {}
+    for module_name in adjacent_modules:
+        # Only modules ending in `.py` are accepted here.
+        if not module_name.endswith(".py"):
+            continue
+
+        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+            file_content = f.read()
+
+        # Remove the .py suffix
+        module_name = module_name[:-3]
+
+        previous_line = ""
+        previous_index = 0
+
+        # Some files have some requirements by default.
+        # For example, any file named `modeling_tf_xxx.py`
+        # should have TensorFlow as a required backend.
+        base_requirements = ()
+        for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
+            if string_check(module_name):
+                base_requirements = requirements
+                break
+
+        # Objects that have a `@export` assigned to them will get exported
+        # with the backends specified in the decorator as well as the file backends.
+        exported_objects = set()
+        if "@export" in file_content:
+            lines = file_content.split("\n")
+            for index, line in enumerate(lines):
+                # This allows exporting items with other decorators. We'll take a look
+                # at the line that follows at the same indentation level.
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
+                    continue
+
+                # Skipping line enables putting whatever we want between the
+                # export() call and the actual class/method definition.
+                # This is what enables having # Copied from statements, docs, etc.
+                skip_line = False
+
+                if "@export" in previous_line:
+                    skip_line = False
+
+                    # Backends are defined on the same line as export
+                    if "backends" in previous_line:
+                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
+
+                    # Backends are defined in the lines following export, for example such as:
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece",
+                    #             "torch",
+                    #             "tf",
+                    #     )
+                    # )
+                    #
+                    # or
+                    #
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece", "tf"
+                    #     )
+                    # )
+                    elif "backends" in lines[previous_index + 1]:
+                        backends = []
+                        for backend_line in lines[previous_index:index]:
+                            if "backends" in backend_line:
+                                backend_line = backend_line.split("=")[1]
+                            if '"' in backend_line or "'" in backend_line:
+                                if ", " in backend_line:
+                                    backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
+                                else:
+                                    backends.append(backend_line.strip("()\"', "))
+
+                            # If the line is only a ')', then we reached the end of the backends and we break.
+                            if backend_line.strip() == ")":
+                                break
+                        backends = tuple(backends)
+
+                    # No backends are registered for export
+                    else:
+                        backends = ()
+
+                    backends = frozenset(backends + base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
+
+                    if not line.startswith("class") and not line.startswith("def"):
+                        skip_line = True
+                    else:
+                        start_index = 6 if line.startswith("class") else 4
+                        object_name = line[start_index:].split("(")[0].strip(":")
+                        module_requirements[backends][module_name].add(object_name)
+                        exported_objects.add(object_name)
+
+                if not skip_line:
+                    previous_line = line
+                    previous_index = index
+
+        # All objects that are in __all__ should be exported by default.
+        # These objects are exported with the file backends.
+        if "__all__" in file_content:
+            for _all_object in fetch__all__(file_content):
+                if _all_object not in exported_objects:
+                    backends = frozenset(base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
+
+                    module_requirements[backends][module_name].add(_all_object)
+
+    import_structure = {**module_requirements, **import_structure}
+    return import_structure
+
+
+def spread_import_structure(nested_import_structure):
+    """
+    This method takes as input an unordered import structure and brings the required backends at the top-level,
+    aggregating modules and objects under their required backends.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    """
+
+    def propagate_frozenset(unordered_import_structure):
+        tuple_first_import_structure = {}
+        for _key, _value in unordered_import_structure.items():
+            if not isinstance(_value, dict):
+                tuple_first_import_structure[_key] = _value
+
+            elif any(isinstance(v, frozenset) for v in _value.keys()):
+                # Here we want to switch around key and v
+                for k, v in _value.items():
+                    if isinstance(k, frozenset):
+                        if k not in tuple_first_import_structure:
+                            tuple_first_import_structure[k] = {}
+                        tuple_first_import_structure[k][_key] = v
+
+            else:
+                tuple_first_import_structure[_key] = propagate_frozenset(_value)
+
+        return tuple_first_import_structure
+
+    def flatten_dict(_dict, previous_key=None):
+        items = []
+        for _key, _value in _dict.items():
+            _key = f"{previous_key}.{_key}" if previous_key is not None else _key
+            if isinstance(_value, dict):
+                items.extend(flatten_dict(_value, _key).items())
+            else:
+                items.append((_key, _value))
+        return dict(items)
+
+    # The tuples contain the necessary backends. We want these first, so we propagate them up the
+    # import structure.
+    ordered_import_structure = nested_import_structure
+
+    # 6 is a number that gives us sufficient depth to go through all files and foreseeable folder depths
+    # while not taking too long to parse.
+    for i in range(6):
+        ordered_import_structure = propagate_frozenset(ordered_import_structure)
+
+    # We then flatten the dict so that it references a module path.
+    flattened_import_structure = {}
+    for key, value in ordered_import_structure.copy().items():
+        if isinstance(key, str):
+            del ordered_import_structure[key]
+        else:
+            flattened_import_structure[key] = flatten_dict(value)
+
+    return flattened_import_structure
+
+
+def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
+    """
+    This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    The import structure is a dict defined with frozensets as keys, and dicts of strings to sets of objects.
+    """
+    import_structure = create_import_structure_from_path(module_path)
+    return spread_import_structure(import_structure)

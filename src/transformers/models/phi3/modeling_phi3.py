@@ -257,7 +257,7 @@ class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
-        seq_len = torch.max(position_ids) + 1
+        seq_len = seq_len or torch.max(position_ids) + 1
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
         else:
@@ -900,7 +900,8 @@ PHI3_INPUTS_DOCSTRING = r"""
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
             Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
             - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
             shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
@@ -1007,7 +1008,7 @@ class Phi3Model(Phi3PreTrainedModel):
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.46. "
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
             )
 
@@ -1094,11 +1095,6 @@ class Phi3Model(Phi3PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1243,6 +1239,15 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         'This is an example script .\n Certainly! Below is a sample script that demonstrates a simple task, such as calculating the sum'
         ```"""
+        if (
+            use_cache
+            and self.config.rope_scaling
+            and cache_position is not None
+            and cache_position[0] == self.config.original_max_position_embeddings
+        ):
+            logger.warning(
+                f"If you are not using the generate method, you may encounter nonsensical outputs after the {self.config.original_max_position_embeddings}th token, as the KV cache needs to be recomputed."
+            )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1299,7 +1304,6 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1309,9 +1313,20 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
+        # When the first time input length reached long and short factor switching point, enforce re-compute cache
+        # It will cause downside of slower at this single token position, however, better than current failure.
+        if (
+            past_key_values
+            and self.config.rope_scaling
+            and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
+        ):
+            past_length = cache_position[0]
+            if past_length <= self.config.original_max_position_embeddings:
+                past_key_values = None
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
@@ -1360,6 +1375,9 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 batch_size=batch_size,
             )
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1367,7 +1385,6 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs

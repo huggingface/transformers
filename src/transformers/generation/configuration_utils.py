@@ -43,11 +43,34 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 NEEDS_CACHE_CONFIG = {}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+QUANT_BACKEND_CLASSES_MAPPING = {}
+ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
-    from ..cache_utils import QuantizedCacheConfig
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        MambaCache,
+        OffloadedStaticCache,
+        QuantizedCacheConfig,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+        StaticCacheConfig,
+    )
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
+    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+        "static": StaticCache,
+        "offloaded_static": OffloadedStaticCache,
+        "sliding_window": SlidingWindowCache,
+        "hybrid": HybridCache,
+        "mamba": MambaCache,
+    }
+    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys())
 
 
 class GenerationMode(ExplicitEnum):
@@ -70,7 +93,7 @@ class GenerationMode(ExplicitEnum):
 
 class GenerationConfig(PushToHubMixin):
     # no-format
-    r"""
+    rf"""
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
@@ -146,7 +169,10 @@ class GenerationConfig(PushToHubMixin):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
-            Cache class that should be used when generating.
+            Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
+            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+            passed to `generate` through the `past_key_values` argument. See our
+            [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
@@ -288,7 +314,9 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
+            sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
+            or optional outputs (see flags starting with `output_`)
 
         > Special tokens that can be used at generation time
 
@@ -322,6 +350,11 @@ class GenerationConfig(PushToHubMixin):
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
+        assistant_confidence_threshold (`float`, *optional*):
+            The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
+            than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
+            (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
+            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*, default to `None`):
@@ -333,6 +366,8 @@ class GenerationConfig(PushToHubMixin):
             Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
             present in `generate`'s signature will be used in the model forward pass.
     """
+
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -419,6 +454,7 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -695,6 +731,11 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 5. check cache-related arguments
+        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+            raise ValueError(
+                f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
+                f"{ALL_CACHE_IMPLEMENTATIONS}"
+            )
         if self.cache_config is not None:
             cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
             if cache_class is None:
@@ -727,7 +768,17 @@ class GenerationConfig(PushToHubMixin):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 7. check common issue: passing `generate` arguments inside the generation config
+        # 7. other incorrect combinations
+        if self.return_dict_in_generate is not True:
+            for extra_output_flag in self.extra_output_flags:
+                if getattr(self, extra_output_flag) is True:
+                    warnings.warn(
+                        f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
+                        f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.",
+                        UserWarning,
+                    )
+
+        # 8. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
             "logits_processor",
             "stopping_criteria",
@@ -786,7 +837,8 @@ class GenerationConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token` instead.",
                 FutureWarning,
             )
             if kwargs.get("token", None) is not None:
@@ -1177,20 +1229,30 @@ class GenerationConfig(PushToHubMixin):
         """
         config_dict = model_config.to_dict()
         config_dict.pop("_from_model_config", None)
-        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
+        generation_config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config.
-        for decoder_name in ("decoder", "generator", "text_config"):
-            if decoder_name in config_dict:
-                default_generation_config = GenerationConfig()
-                decoder_config = config_dict[decoder_name]
-                for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
-                        setattr(config, attr, decoder_config[attr])
+        # generation config (which in turn is defined from the outer attributes of model config).
+        decoder_config = model_config.get_text_config(decoder=True)
+        if decoder_config is not model_config:
+            default_generation_config = GenerationConfig()
+            decoder_config_dict = decoder_config.to_dict()
+            for attr in generation_config.to_dict().keys():
+                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                if attr in decoder_config_dict and is_unset:
+                    setattr(generation_config, attr, decoder_config_dict[attr])
 
-        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
-        return config
+        # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
+        if generation_config.return_dict_in_generate is False:
+            if any(
+                getattr(generation_config, extra_output_flag, False)
+                for extra_output_flag in generation_config.extra_output_flags
+            ):
+                generation_config.return_dict_in_generate = True
+
+        # Hash to detect whether the instance was modified
+        generation_config._original_object_hash = hash(generation_config)
+        return generation_config
 
     def update(self, **kwargs):
         """
