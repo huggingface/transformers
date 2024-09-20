@@ -4206,6 +4206,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(generated_text_no_padding, generated_text_with_padding)
         self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
 
+
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
     def test_speculative_sampling(self):
