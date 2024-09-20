@@ -606,8 +606,8 @@ class DynamicSlidingWindowCache(DynamicCache):
         # Update the cache
         if len(self.key_cache) <= layer_idx:
             # Add only up to sliding window size if larger
-            self.key_cache.append(key_states[..., -self.sliding_window:, :])
-            self.value_cache.append(value_states[..., -self.sliding_window:, :])
+            self.key_cache.append(key_states[..., -self.sliding_window :, :])
+            self.value_cache.append(value_states[..., -self.sliding_window :, :])
             # We should return full states during prefill even though we only save up to sliding window
             return key_states, value_states
         else:
@@ -615,17 +615,23 @@ class DynamicSlidingWindowCache(DynamicCache):
             current_seq_len = self.get_seq_length(layer_idx)
             if new_seq_len + current_seq_len > self.sliding_window:
                 # We need to slice
-                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx][..., -(self.sliding_window-new_seq_len):, :], key_states], dim=-2)
-                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx][..., -(self.sliding_window-new_seq_len):, :], value_states], dim=-2)
+                self.key_cache[layer_idx] = torch.cat(
+                    [self.key_cache[layer_idx][..., -(self.sliding_window - new_seq_len) :, :], key_states], dim=-2
+                )
+                self.value_cache[layer_idx] = torch.cat(
+                    [self.value_cache[layer_idx][..., -(self.sliding_window - new_seq_len) :, :], value_states], dim=-2
+                )
             else:
                 # Similar to DynamicCache
                 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
                 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
-    
+
     @classmethod
-    def from_legacy_cache(cls, sliding_window: int, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(
+        cls, sliding_window: int, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicSlidingWindowCache`. Used for
         backward compatibility."""
         cache = cls(sliding_window)
@@ -646,7 +652,7 @@ class DynamicSlidingWindowCache(DynamicCache):
             current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
             out.append(current_split)
         return out
-    
+
     @classmethod
     def from_batch_splits(cls, splits: List["DynamicSlidingWindowCache"]) -> "DynamicSlidingWindowCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
