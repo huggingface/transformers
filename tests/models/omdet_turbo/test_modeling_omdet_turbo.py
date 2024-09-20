@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import OmDetTurboForObjectDetection, OmDetTurboModel
+    from transformers import OmDetTurboForObjectDetection
 
 
 if is_vision_available():
@@ -179,14 +179,6 @@ class OmDetTurboModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    def create_and_check_model(self, config, inputs_dict):
-        model = OmDetTurboModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(**inputs_dict)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
-
     def create_and_check_object_detection_head_model(self, config, inputs_dict):
         model = OmDetTurboForObjectDetection(config=config)
         model.to(torch_device)
@@ -202,7 +194,7 @@ class OmDetTurboModelTester:
 
 @require_torch
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (OmDetTurboModel, OmDetTurboForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -227,10 +219,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(config, inputs_dict)
 
     def test_object_detection_head_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

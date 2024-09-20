@@ -122,60 +122,6 @@ class OmDetTurboDecoderOutput(ModelOutput):
 
 
 @dataclass
-class OmDetTurboModelOutput(ModelOutput):
-    """
-    Output type of [`OmDetTurboObjectDetectionOutput`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder.
-        decoder_coords (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            The predicted coordinates logits of the objects.
-        decoder_classes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
-            The predicted classes of the objects.
-        init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            The initial reference points.
-        intermediate_reference_points (`Tuple[Tuple[torch.FloatTensor]]`):
-            The intermediate reference points.
-        encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            The predicted coordinates of the objects from the encoder.
-        encoder_class_logits (`Tuple[torch.FloatTensor]`):
-            The predicted class of the objects from the encoder.
-        encoder_extracted_states (`torch.FloatTensor`):
-            The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
-        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`Optional[Tuple[Tuple[torch.FloatTensor]]]`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        encoder_attentions (`Optional[Tuple[Tuple[torch.FloatTensor]]]`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    decoder_coords: torch.FloatTensor = None
-    decoder_classes: torch.FloatTensor = None
-    init_reference_points: torch.FloatTensor = None
-    intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_coord_logits: torch.FloatTensor = None
-    encoder_class_logits: Tuple[torch.FloatTensor] = None
-    encoder_extracted_states: torch.FloatTensor = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-
-
-@dataclass
 class OmDetTurboObjectDetectionOutput(ModelOutput):
     """
     Output type of [`OmDetTurboObjectDetectionOutput`].
@@ -1709,7 +1655,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     """,
     OMDET_TURBO_START_DOCSTRING,
 )
-class OmDetTurboModel(OmDetTurboPreTrainedModel):
+class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__(config)
         self.vision_backbone = OmDetTurboVisionBackbone(config)
@@ -1734,146 +1680,6 @@ class OmDetTurboModel(OmDetTurboPreTrainedModel):
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_backbone.model.resize_token_embeddings(
-            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
-        )
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
-
-    @add_start_docstrings_to_model_forward(OMDET_TURBO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OmDetTurboModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Tensor,
-        classes_input_ids: Tensor,
-        classes_attention_mask: Tensor,
-        tasks_input_ids: Tensor,
-        tasks_attention_mask: Tensor,
-        classes_structure: Tensor,
-        labels: Optional[Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ) -> Union[Tuple[torch.FloatTensor], OmDetTurboModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> import requests
-        >>> from PIL import Image
-
-        >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
-
-        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
-        >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> classes = ["cat", "remote"]
-        >>> task = "Detect {}.".format(", ".join(classes))
-        >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 900, 256]
-        ```"""
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        image_features = self.vision_backbone(pixel_values)
-        encoder_outputs = self.encoder(
-            image_features,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        class_features, task_features, task_mask = self.get_language_embedding(
-            classes_input_ids,
-            classes_attention_mask,
-            tasks_input_ids,
-            tasks_attention_mask,
-            classes_structure,
-        )
-        encoder_extracted_states = encoder_outputs.extracted_states if return_dict else encoder_outputs[-1]
-        decoder_outputs = self.decoder(
-            encoder_extracted_states,
-            class_features,
-            task_features,
-            task_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return tuple(
-                output
-                for output in [
-                    None,
-                    decoder_outputs[0],
-                    decoder_outputs[3],
-                    decoder_outputs[4],
-                    decoder_outputs[7],
-                    decoder_outputs[8],
-                    decoder_outputs[5],
-                    decoder_outputs[6],
-                    encoder_outputs[-1],
-                    decoder_outputs[1],
-                    decoder_outputs[2],
-                    encoder_outputs[1],
-                    encoder_outputs[2],
-                ]
-                if output is not None
-            )
-
-        return OmDetTurboModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_coords=decoder_outputs.decoder_coords,
-            decoder_classes=decoder_outputs.decoder_classes,
-            init_reference_points=decoder_outputs.init_reference_points,
-            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            encoder_coord_logits=decoder_outputs.encoder_coord_logits,
-            encoder_class_logits=decoder_outputs.encoder_class_logits,
-            encoder_extracted_states=encoder_outputs.extracted_states,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    OmDetTurbo Model (consisting of a vision and a text backbone, and encoder-decoder architecture) outputting
-    raw hidden states.
-    """,
-    OMDET_TURBO_START_DOCSTRING,
-)
-class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
-    def __init__(self, config: OmDetTurboConfig):
-        super().__init__(config)
-        self.model = OmDetTurboModel(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.language_backbone.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_backbone.model.set_input_embeddings(value)
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.model.language_backbone.model.resize_token_embeddings(
             new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
         )
         self.config.text_config.vocab_size = model_embeds.num_embeddings
@@ -1946,36 +1752,62 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         loss = None
-        outputs = self.model(
-            pixel_values=pixel_values,
-            classes_input_ids=classes_input_ids,
-            classes_attention_mask=classes_attention_mask,
-            tasks_input_ids=tasks_input_ids,
-            tasks_attention_mask=tasks_attention_mask,
-            classes_structure=classes_structure,
+        image_features = self.vision_backbone(pixel_values)
+        encoder_outputs = self.encoder(
+            image_features,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        class_features, task_features, task_mask = self.get_language_embedding(
+            classes_input_ids,
+            classes_attention_mask,
+            tasks_input_ids,
+            tasks_attention_mask,
+            classes_structure,
+        )
+        encoder_extracted_states = encoder_outputs.extracted_states if return_dict else encoder_outputs[-1]
+        decoder_outputs = self.decoder(
+            encoder_extracted_states,
+            class_features,
+            task_features,
+            task_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
         if not return_dict:
-            object_detection_outputs = (loss, outputs[1][-1], outputs[2][-1]) + outputs[3:]
-            return tuple(output for output in object_detection_outputs if output is not None)
-
-        decoder_coord_logits = outputs.decoder_coords[-1]
-        decoder_class_logits = outputs.decoder_classes[-1]
+            return tuple(
+                output
+                for output in [
+                    loss,
+                    decoder_outputs[3][-1],
+                    decoder_outputs[4][-1],
+                    decoder_outputs[7],
+                    decoder_outputs[8],
+                    decoder_outputs[5],
+                    decoder_outputs[6],
+                    encoder_outputs[-1],
+                    decoder_outputs[1],
+                    decoder_outputs[2],
+                    encoder_outputs[1],
+                    encoder_outputs[2],
+                ]
+                if output is not None
+            )
 
         return OmDetTurboObjectDetectionOutput(
             loss=loss,
-            decoder_coord_logits=decoder_coord_logits,
-            decoder_class_logits=decoder_class_logits,
-            init_reference_points=outputs.init_reference_points,
-            intermediate_reference_points=outputs.intermediate_reference_points,
-            encoder_coord_logits=outputs.encoder_coord_logits,
-            encoder_class_logits=outputs.encoder_class_logits,
-            encoder_extracted_states=outputs.encoder_extracted_states,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+            decoder_coord_logits=decoder_outputs.decoder_coords[-1],
+            decoder_class_logits=decoder_outputs.decoder_classes[-1],
+            init_reference_points=decoder_outputs.init_reference_points,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            encoder_coord_logits=decoder_outputs.encoder_coord_logits,
+            encoder_class_logits=decoder_outputs.encoder_class_logits,
+            encoder_extracted_states=encoder_outputs.extracted_states,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
