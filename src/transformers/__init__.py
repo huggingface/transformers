@@ -766,6 +766,8 @@ _import_structure = {
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
+    "models.timm_wrapper": ["TimmWrapperConfig"],
+    "models.timm_wrapper": ["TimmWrapperConfig"],
     "models.trocr": [
         "TrOCRConfig",
         "TrOCRProcessor",
@@ -3448,6 +3450,8 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapper"])
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapper"])
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -5628,6 +5632,8 @@ if TYPE_CHECKING:
         TimesformerConfig,
     )
     from .models.timm_backbone import TimmBackboneConfig
+    from .models.timm_wrapper import TimmWrapperConfig
+    from .models.timm_wrapper import TimmWrapperConfig
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
@@ -7878,6 +7884,8 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
+        from .models.timm_wrapper import TimmWrapper
+        from .models.timm_wrapper import TimmWrapper
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,

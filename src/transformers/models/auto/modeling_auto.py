@@ -247,6 +247,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
+        ("timm_wrapper", "TimmWrapper"),
+        ("timm_wrapper", "TimmWrapper"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
@@ -589,6 +591,8 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("table-transformer", "TableTransformerModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
+        ("timm_wrapper", "TimmWrapper"),
+        ("timm_wrapper", "TimmWrapper"),
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
@@ -1313,6 +1317,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),
+        ("timm_wrapper", "TimmWrapper"),
+        ("timm_wrapper", "TimmWrapper"),
         ("vitdet", "VitDetBackbone"),
     ]
 )
