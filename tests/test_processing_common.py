@@ -20,11 +20,9 @@ import tempfile
 
 import numpy as np
 
-from transformers import CLIPTokenizerFast, ProcessorMixin
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    require_tokenizers,
     require_torch,
     require_vision,
 )
@@ -35,13 +33,10 @@ try:
     from typing import Unpack
 except ImportError:
     from typing_extensions import Unpack
-import unittest
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import CLIPImageProcessor
 
 
 def prepare_image_inputs():
@@ -158,6 +153,11 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        """
+        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We then check that the mean of the pixel_values is less than or equal to 0 after processing.
+        Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
+        """
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
@@ -343,63 +343,27 @@ class ProcessorTesterMixin:
                 text_kwargs={"padding": "do_not_pad"},
             )
 
-
-class MyProcessor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-    optional_call_args = ["optional_1", "optional_2"]
-
-    def __init__(self, image_processor=None, tokenizer=None, processor_attr_1=1, processor_attr_2=True):
-        super().__init__(image_processor, tokenizer)
-
-        self.processor_attr_1 = processor_attr_1
-        self.processor_attr_2 = processor_attr_2
-
-
-@require_tokenizers
-@require_vision
-class ProcessorTest(unittest.TestCase):
-    processor_class = MyProcessor
-
-    def prepare_processor_dict(self):
-        return {"processor_attr_1": 1, "processor_attr_2": False}
-
-    def get_processor(self):
-        image_processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14")
-        tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-large-patch14")
-        processor = MyProcessor(image_processor, tokenizer, **self.prepare_processor_dict())
-
-        return processor
-
-    def test_processor_to_json_string(self):
-        processor = self.get_processor()
-        obj = json.loads(processor.to_json_string())
-        for key, value in self.prepare_processor_dict().items():
-            self.assertEqual(obj[key], value)
-            self.assertEqual(getattr(processor, key, None), value)
-
-    def test_processor_from_and_save_pretrained(self):
-        processor_first = self.get_processor()
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = processor_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            processor_second = self.processor_class.from_pretrained(tmpdirname)
-
-        self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
-
     def test_prepare_and_validate_optional_call_args(self):
         processor = self.get_processor()
+        optional_call_args_name = getattr(processor, "optional_call_args", [])
+        num_optional_call_args = len(optional_call_args_name)
+        if num_optional_call_args == 0:
+            self.skipTest("No optional call args")
         # test all optional call args are given
-        optional_call_args = processor.prepare_and_validate_optional_call_args("optional_1", "optional_2")
-        self.assertEqual(optional_call_args, {"optional_1": "optional_1", "optional_2": "optional_2"})
+        optional_call_args = processor.prepare_and_validate_optional_call_args(
+            *(f"optional_{i}" for i in range(num_optional_call_args))
+        )
+        self.assertEqual(
+            optional_call_args, {arg_name: f"optional_{i}" for i, arg_name in enumerate(optional_call_args_name)}
+        )
         # test only one optional call arg is given
         optional_call_args = processor.prepare_and_validate_optional_call_args("optional_1")
-        self.assertEqual(optional_call_args, {"optional_1": "optional_1"})
+        self.assertEqual(optional_call_args, {optional_call_args_name[0]: "optional_1"})
         # test no optional call arg is given
         optional_call_args = processor.prepare_and_validate_optional_call_args()
         self.assertEqual(optional_call_args, {})
         # test too many optional call args are given
         with self.assertRaises(ValueError):
-            processor.prepare_and_validate_optional_call_args("optional_1", "optional_2", "optional_3")
+            processor.prepare_and_validate_optional_call_args(
+                *(f"optional_{i}" for i in range(num_optional_call_args + 1))
+            )
