@@ -57,11 +57,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     r"""
     Constructs a LLaVa-Onevision processor which wraps a LLaVa-Onevision video processor, LLaVa-NeXT image processor and a LLaMa tokenizer into a single processor.
 
-    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaNextImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaOnevisionImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaOnevisionVideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`LlavaNextImageProcessor`], *optional*):
+        image_processor ([`LlavaOnevisionImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -114,6 +114,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:

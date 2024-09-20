@@ -61,29 +61,3 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
         self.assertEqual(len(inputs["input_ids"][0]), 112 + 14)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            size={"height": 214, "width": 214},
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 10)
