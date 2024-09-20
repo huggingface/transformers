@@ -350,7 +350,8 @@ class StaticCacheConfig(CacheConfig):
 
 class DynamicCache(Cache):
     """
-    A cache that grows dynamically as more tokens are generated. This is the default for generative models.
+    A cache that grows dynamically as more tokens are generated. This is the default for generative models without sliding window attention
+    (see `DynamicSlidingWindowCache` in this case).
 
     It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]`.
@@ -548,7 +549,7 @@ class DynamicCache(Cache):
 class DynamicSlidingWindowCache(DynamicCache):
     """
     A cache that grows dynamically as more tokens are generated, but will stop growing if the sequence length is bigger than the sliding window.
-    This is the default for generative models with sliding window attention.
+    This is the default for generative models with sliding window attention (except for assisted decoding where `DynamicCache` is used).
 
     It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]` and up to `[batch_size, num_heads, sliding_window, head_dim]` if seq_len >= sliding_window.
