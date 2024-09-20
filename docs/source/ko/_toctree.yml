@@ -669,8 +669,8 @@
         title: (번역중) BridgeTower
       - local: in_translation
         title: (번역중) Chinese-CLIP
-      - local: in_translation
-        title: (번역중) CLIP
+      - local: model_doc/clip
+        title: CLIP
       - local: in_translation
         title: (번역중) CLIPSeg
       - local: in_translation
