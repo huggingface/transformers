@@ -83,6 +83,8 @@ class MllamaText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "bos_token_id": 1,
+            "eos_token_id": 2,
         },
         is_training=True,
     ):
@@ -229,6 +231,8 @@ class MllamaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "bos_token_id": 1,
+            "eos_token_id": 2,
             # TODO: add generation tests with all model kwargs, not only text-related ones
             #  "cross_attention_layers": [1],
         },
@@ -290,15 +294,18 @@ class MllamaVisionText2TextModelTester:
             ]
         )
         aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device).transpose(0, 1)
+        # batch_size, max_num_images, max_image_tiles
+        aspect_ratio_mask = torch.ones(self.batch_size, 1, 4)
         config = self.get_config()
 
-        return config, pixel_values, aspect_ratio_ids
+        return config, pixel_values, aspect_ratio_ids, aspect_ratio_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, aspect_ratio_ids = config_and_inputs
+        config, pixel_values, aspect_ratio_ids, aspect_ratio_mask = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
+        aspect_ratio_mask = aspect_ratio_mask.to(torch_device)
 
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, 1] = config.image_token_index
@@ -307,6 +314,7 @@ class MllamaVisionText2TextModelTester:
             "aspect_ratio_ids": aspect_ratio_ids,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "aspect_ratio_mask": aspect_ratio_mask,
         }
         return config, inputs_dict
 
