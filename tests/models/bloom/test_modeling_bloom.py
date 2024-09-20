@@ -134,7 +134,7 @@ class BloomModelTester:
             dtype="float32",
         )
 
-    def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_model(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
