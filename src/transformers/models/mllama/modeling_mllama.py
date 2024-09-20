@@ -572,11 +572,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class MllamaTextSelfAttention(nn.Module):
-    def __init__(
-        self,
-        config: Optional[MllamaTextConfig] = None,
-        layer_idx: Optional[int] = None,
-    ):
+    def __init__(self, config: MllamaTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_heads = config.num_attention_heads
@@ -585,6 +581,7 @@ class MllamaTextSelfAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -819,11 +816,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
 
 
 class MllamaRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Optional[MllamaTextConfig] = None,
-        device=None,
-    ):
+    def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()
         self.rope_type = config.rope_scaling["rope_type"]
         self.max_seq_len_cached = config.max_position_embeddings

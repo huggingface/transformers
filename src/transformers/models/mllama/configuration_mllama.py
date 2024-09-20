@@ -52,12 +52,9 @@ class MllamaVisionConfig(PretrainedConfig):
             Number of channels in the input image.
         intermediate_size (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the projection layer.
         vision_output_dim (`int`, *optional*, defaults to 7680):
-            Dimensionality of the vision output, before applying the projection layer.
-            Includes output of transforemer encoder with intermediate layers and global
-            transformer encoder.
+            Dimensionality of the vision model output. Includes output of transformer
+            encoder with intermediate layers and global transformer encoder.
         image_size (`int`, *optional*, defaults to 448):
             The size (resolution) of each image *tile*.
         patch_size (`int`, *optional*, defaults to 14):
@@ -99,7 +96,6 @@ class MllamaVisionConfig(PretrainedConfig):
         num_attention_heads: int = 16,
         num_channels: int = 3,
         intermediate_size: int = 5120,
-        projection_dim: int = 4096,
         vision_output_dim: int = 7680,
         image_size: int = 448,
         patch_size: int = 14,
@@ -125,7 +121,6 @@ class MllamaVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.vision_output_dim = vision_output_dim
         self.patch_size = patch_size
-        self.projection_dim = projection_dim
         self.intermediate_layers_indices = intermediate_layers_indices
         self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
@@ -223,8 +218,6 @@ class MllamaTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        use_scaled_rope (`bool`, *optional*, defaults to `True`):
-            Whether to use scaled rope.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -274,7 +267,6 @@ class MllamaTextConfig(PretrainedConfig):
         intermediate_size: int = 14_336,
         rope_theta: float = 500_000,
         rope_scaling: Optional[Dict] = None,
-        use_scaled_rope: bool = True,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
@@ -299,7 +291,6 @@ class MllamaTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.use_scaled_rope = use_scaled_rope
         self.rms_norm_eps = rms_norm_eps
         self.intermediate_size = intermediate_size
         self.dropout = dropout

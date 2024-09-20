@@ -130,6 +130,12 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "MllamaTextConfig": [
+        "initializer_range",
+    ],
+    "MllamaVisionConfig": [
+        "supported_aspect_ratios",
+    ],
 }
 
 
