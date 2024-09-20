@@ -1713,7 +1713,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 -1, cross_attention_states.shape[-2], self.hidden_size
             )
 
-        if cross_attention_mask is not None and cache_position is not None:
+        if cross_attention_mask is not None:
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
                 cross_attention_mask,
                 past_key_values=past_key_values,
@@ -1723,10 +1723,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 device=self.device,
                 dtype=self.dtype,
             )
-            cross_attention_mask = cross_attention_mask[:, :, cache_position]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
         else:
             full_text_row_masked_out_mask = None
+
+        if cross_attention_mask is not None and cache_position is not None:
+            cross_attention_mask = cross_attention_mask[:, :, cache_position]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
 
         outputs = self.language_model(
             input_ids=input_ids,
