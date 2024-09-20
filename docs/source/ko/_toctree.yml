@@ -284,8 +284,8 @@
       title: (번역중) Keras callbacks
     - local: in_translation
       title: (번역중) Logging
-    - local: in_translation
-      title: (번역중) Models
+    - local: main_classes/model
+      title: Models
     - local: in_translation
       title: (번역중) Text Generation
     - local: in_translation
