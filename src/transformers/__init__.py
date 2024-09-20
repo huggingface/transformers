@@ -2692,6 +2692,7 @@ else:
             "MllamaForCausalLM",
             "MllamaForConditionalGeneration",
             "MllamaPreTrainedModel",
+            "MllamaProcessor",
             "MllamaTextModel",
             "MllamaVisionModel",
         ]
