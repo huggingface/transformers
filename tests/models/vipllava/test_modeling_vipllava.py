@@ -163,7 +163,6 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     """
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True

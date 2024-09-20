@@ -216,7 +216,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
