@@ -430,6 +430,8 @@
         title: (번역중) LUKE
       - local: in_translation
         title: (번역중) M2M100
+      - local: model_doc/mamba2
+        title: Mamba2
       - local: in_translation
         title: (번역중) MarianMT
       - local: in_translation
