@@ -88,8 +88,10 @@ class UdopProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         # The following is to capture `text_pair` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
+        # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
+        #
         *args,
         audio=None,
         videos=None,
@@ -121,6 +123,7 @@ class UdopProcessor(ProcessorMixin):
         text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
         return_overflowing_tokens = output_kwargs["text_kwargs"].get("return_overflowing_tokens", False)
         return_offsets_mapping = output_kwargs["text_kwargs"].get("return_offsets_mapping", False)
+        text_target = output_kwargs["text_kwargs"].get("text_target", None)
 
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
@@ -132,10 +135,10 @@ class UdopProcessor(ProcessorMixin):
                 "You cannot provide word labels if you initialized the image processor with apply_ocr set to True."
             )
 
-        if return_overflowing_tokens is True and return_offsets_mapping is False:
+        if return_overflowing_tokens and not return_offsets_mapping:
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
-        if output_kwargs["text_kwargs"].get("text_target", None) is not None:
+        if text_target is not None:
             # use the processor to prepare the targets of UDOP
             return self.tokenizer(
                 **output_kwargs["text_kwargs"],
@@ -148,8 +151,8 @@ class UdopProcessor(ProcessorMixin):
             features_words = features.pop("words", None)
             features_boxes = features.pop("boxes", None)
 
-            _ = output_kwargs["text_kwargs"].pop("text_target", None)
-            _ = output_kwargs["text_kwargs"].pop("text_pair_target", None)
+            output_kwargs["text_kwargs"].pop("text_target", None)
+            output_kwargs["text_kwargs"].pop("text_pair_target", None)
             output_kwargs["text_kwargs"]["text_pair"] = text_pair
             output_kwargs["text_kwargs"]["boxes"] = boxes if boxes is not None else features_boxes
             output_kwargs["text_kwargs"]["word_labels"] = word_labels
