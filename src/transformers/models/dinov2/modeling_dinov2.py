@@ -231,6 +231,38 @@ class Dinov2SelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Dinov2
+class Dinov2SdpaSelfAttention(Dinov2SelfAttention):
+    def __init__(self, config: Dinov2Config) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Dinov2
 class Dinov2SelfOutput(nn.Module):
     """
@@ -288,6 +320,13 @@ class Dinov2Attention(nn.Module):
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Dinov2
+class Dinov2SdpaAttention(Dinov2Attention):
+    def __init__(self, config: Dinov2Config) -> None:
+        super().__init__(config)
+        self.attention = Dinov2SdpaSelfAttention(config)
 
 
 class Dinov2LayerScale(nn.Module):
@@ -371,6 +410,12 @@ class Dinov2SwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
+DINOV2_ATTENTION_CLASSES = {
+    "eager": Dinov2Attention,
+    "sdpa": Dinov2SdpaAttention,
+}
+
+
 class Dinov2Layer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -378,7 +423,7 @@ class Dinov2Layer(nn.Module):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov2Attention(config)
+        self.attention = DINOV2_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -485,6 +530,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2SwiGLUFFN"]
+    _supports_sdpa = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
