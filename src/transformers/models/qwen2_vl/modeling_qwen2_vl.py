@@ -634,6 +634,11 @@ class Qwen2VLAttention(nn.Module):
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
+        # Fix precision issues in Qwen2-VL float16 inference
+        # Replace inf values with zeros in attention weights to prevent NaN propagation
+        if query_states.dtype == torch.float16:
+            attn_weights = torch.where(torch.isinf(attn_weights), torch.zeros_like(attn_weights), attn_weights)
+
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
