@@ -11,6 +11,7 @@ class RobertaEmbeddings(BertEmbeddings):
             config.max_position_embeddings, config.hidden_size, config.pad_token_id
         )
 
+
 class RobertaModel(BertModel):
     def __init__(self, config):
         super().__init__(self, config)

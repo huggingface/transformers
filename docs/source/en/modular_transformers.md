@@ -106,6 +106,14 @@ class RobertaForMaskedLM(BertForMaskedLM):
     self.model = RobertaModel(config)
 ```
 
+Note that if you do not use the dependency that you defined, you will have the following error:
+
+```bash
+ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should be used
+                                    when you define `BertModel`, as it is one of it's direct dependencies. Make sure
+                                    you use it in the `__init__` function.
+```
+
 Additionally, you may find a list of examples here:
 
 ## What it is not

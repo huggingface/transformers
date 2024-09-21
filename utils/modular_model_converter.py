@@ -624,9 +624,9 @@ class DiffConverterTransformer(CSTTransformer):
                             calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
                             if not calls:
                                 raise ValueError(
-                                    f"You defined `{dependency}` in the modular_{model_name}.py, it should be used \
-                                    when you define `{super_class}`, as it is one of it's direct dependencies. Make sure \
-                                    you use it in the `__init__` function."
+                                    f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
+                                    when you define `{super_class}`, as it is one of it's direct dependencies. Make sure
+                                    you use it in the `__init__` function."""
                                 )
                     self.inserted_deps.append(dependency)
 
