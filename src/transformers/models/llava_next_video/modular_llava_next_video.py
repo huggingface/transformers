@@ -214,10 +214,6 @@ class LlavaNextVideoPooler(nn.Module):
         return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
 
 
-class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
-    pass
-
-
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     def __init__(self, config: LlavaNextVideoConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)

@@ -495,9 +495,11 @@ class Gemma2DecoderLayer(GemmaDecoderLayer):
         super().__init__(config, layer_idx)
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
+        self.mlp = Gemma2MLP(config)
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
+        self.post_init()
 
     def forward(
         self,
@@ -575,8 +577,14 @@ class Gemma2PreTrainedModel(GemmaPreTrainedModel):
 
         return config
 
+class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.post_init()
 
-class Gemma2Model(GemmaModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -739,6 +747,11 @@ class Gemma2Model(GemmaModel):
 
 
 class Gemma2ForCausalLM(GemmaForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Gemma2Model(config)
+        self.post_init()
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -915,8 +928,14 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
 
 class Gemma2ForSequenceClassification(GemmaForSequenceClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Gemma2Model(config)
+        self.post_init()
 
 
 class Gemma2ForTokenClassification(GemmaForTokenClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Gemma2Model(config)
+        self.post_init()

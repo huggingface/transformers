@@ -30,7 +30,6 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import is_torchdynamo_compiling, logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
-    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -456,8 +455,7 @@ class GemmaSdpaAttention(GemmaAttention):
         return attn_output, None, past_key_value
 
 
-# TODO felix: does this inheritance really work out in the end to GemmaFlashAttention2 inheriting form GemmaAttention?
-class GemmaFlashAttention2(LlamaFlashAttention2):
+class GemmaFlashAttention2(GemmaAttention):
     """
     Gemma flash attention module. This module inherits from `GemmaAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -558,7 +556,19 @@ class GemmaFlashAttention2(LlamaFlashAttention2):
         return attn_output, attn_weights, past_key_value
 
 
+GEMMA_ATTENTION_CLASSES = {
+    "eager": GemmaAttention,
+    "flash_attention_2": GemmaFlashAttention2,
+    "sdpa": GemmaSdpaAttention,
+}
+
+
 class GemmaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config, layer_idx=None):
+        super().__init__(config)
+        self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.mlp = GemmaMLP(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,

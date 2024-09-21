@@ -84,12 +84,16 @@ class ClassFinder(CSTVisitor):
         self.function_def = {}                          # stores global scope function definition
         self.assignments = {}                           # LLAMA_DOCSTRING
         self.class_dependency_mapping = {}              # "LlamaModel":["LlamaDecoderLayer, "LlamaRMSNorm", "LlamaPreTrainedModel"], "LlamaDecoderLayer":["LlamaAttention","Llama"]
+        self.first_lvl_dependency_mapping = {}              # "LlamaModel":["LlamaDecoderLayer, "LlamaRMSNorm", "LlamaPreTrainedModel"], "LlamaDecoderLayer":["LlamaAttention","Llama"]
         # fmt: on
 
     def _update_class_dependency(self, name, value):
         """Update the dependency mapping for `name` with `value` by appending the previous
         dependencies to the new `value`.
         """
+        dep = set(self.first_lvl_dependency_mapping.get(name, set())) | set({value})
+        self.first_lvl_dependency_mapping[name] = dep
+
         dep = set(self.class_dependency_mapping.get(value, set()))
         dep |= set(self.class_dependency_mapping.get(name, {})) | set({value})
         self.class_dependency_mapping[name] = dep
@@ -571,6 +575,7 @@ class DiffConverterTransformer(CSTTransformer):
         """
         class_name = original_node.name.value
         bases = [k.value.value for k in original_node.bases if k.value.value in self.imported_mapping]
+        all_bases = [k.value.value for k in original_node.bases]
         self.global_scope_index += 100
         for super_class in bases:
             if super_class not in self.imported_mapping:
@@ -608,7 +613,7 @@ class DiffConverterTransformer(CSTTransformer):
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
             start_insert_idx = self.global_scope_index
             file_to_update = self.files[file_type]
-
+            is_empty_node = self.python_module.code_for_node(original_node.body) == "pass\n"
             for dependency, _ in list_dependencies:
                 # we can write to the correct body, using the source of the parent class
                 node = class_finder.global_nodes.get(dependency, None)
@@ -619,13 +624,13 @@ class DiffConverterTransformer(CSTTransformer):
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
-                        if dependency in file_to_update.keys():
+                        if dependency in file_to_update.keys() and dependency in class_finder.first_lvl_dependency_mapping[class_name]:
                             # If dependency is defined, but not used, raise error
                             calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
-                            if not calls:
+                            if not calls and not is_empty_node and dependency not in all_bases:
                                 raise ValueError(
                                     f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
-                                    when you define `{super_class}`, as it is one of it's direct dependencies. Make sure
+                                    when you define `{class_name}`, as it is one of it's direct dependencies. Make sure
                                     you use it in the `__init__` function."""
                                 )
                     self.inserted_deps.append(dependency)
@@ -721,7 +726,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["examples/diff-conversion/modular_roberta.py"],
+        default=["all"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
