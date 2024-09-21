@@ -123,7 +123,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
 
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None], num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
+    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None], num_experts: Optional[int] = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
 ) -> Union[torch.Tensor, int]:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -139,7 +139,7 @@ def load_balancing_loss_func(
         attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
-        num_experts (`int`, *optional*):
+        num_experts:
             Number of experts
 
     Returns:
