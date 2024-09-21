@@ -39,7 +39,7 @@ Here is an example of how to run it:
 from transformers import LlavaForConditionalGeneration, AutoProcessor
 from PIL import Image
 
-model_id = "hf-internal-testing/pixtral-12b"
+model_id = "mistral-community/pixtral-12b"
 model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
 processor = AutoProcessor.from_pretrained(model_id)
 
@@ -53,7 +53,7 @@ PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
 inputs = processor(images=IMG_URLS, text=PROMPT, return_tensors="pt").to("cuda")
 generate_ids = model.generate(**inputs, max_new_tokens=500)
-ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 EXPECTED_GENERATION = """
 Describe the images.
