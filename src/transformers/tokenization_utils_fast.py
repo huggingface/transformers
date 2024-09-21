@@ -365,7 +365,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             `Iterator[int]`: an iterator of token ids.
         """
         return (self._convert_token_to_id_with_added_voc(token) for token in tokens)
-    
+
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         index = self._tokenizer.token_to_id(token)
         if index is None:
