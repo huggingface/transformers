@@ -84,6 +84,47 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
     return new_layer
 
 
+def prune_embedding_layer(layer: nn.Embedding, index: torch.LongTensor) -> nn.Embedding:
+    """
+    Prune an embedding layer to keep only entries in index.
+
+    Used to remove embedding channels.
+
+    Args:
+        layer (`torch.nn.Embedding`): The layer to prune.
+        index (`torch.LongTensor`): The indices to keep in the layer.
+
+    Returns:
+        `torch.nn.Embedding`: The pruned layer as a new layer with `requires_grad=True`.
+    """
+    index = index.to(layer.weight.device)
+    W = layer.weight.index_select(1, index).clone().detach()
+    new_size = list(layer.weight.size())
+    new_size[1] = len(index)
+    new_layer = nn.Embedding(new_size[0], new_size[1], padding_idx=layer.padding_idx).to(layer.weight.device)
+    new_layer.weight.requires_grad = False
+    new_layer.weight.copy_(W.contiguous())
+    new_layer.weight.requires_grad = True
+    return new_layer
+
+
+def prune_parameter_layer(param: torch.nn.Parameter, index: torch.LongTensor) -> nn.Parameter:
+    """
+    Prune an `nn.Parameter` to keep only entries in index along a given dimension.
+
+    Args:
+        layer (`torch.nn.Parameter`): The parameter to prune.
+        index (`torch.LongTensor`): The indices to keep in the parameter.
+
+    Returns:
+        `torch.nn.Parameter`: The pruned layer as a new layer with `requires_grad=True`.
+    """
+    index = index.to(param.device)
+    pruned_data = param.index_select(0, index).clone().detach()
+    pruned_param = torch.nn.Parameter(pruned_data, requires_grad=True)
+    return pruned_param
+
+
 class Conv1D(nn.Module):
     """
     1D-convolutional layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2).
