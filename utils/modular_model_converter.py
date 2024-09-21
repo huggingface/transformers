@@ -608,6 +608,7 @@ class DiffConverterTransformer(CSTTransformer):
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
             start_insert_idx = self.global_scope_index
             file_to_update = self.files[file_type]
+
             for dependency, _ in list_dependencies:
                 # we can write to the correct body, using the source of the parent class
                 node = class_finder.global_nodes.get(dependency, None)
@@ -618,6 +619,15 @@ class DiffConverterTransformer(CSTTransformer):
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
+                        if dependency in file_to_update.keys():
+                            # If dependency is defined, but not used, raise error
+                            calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
+                            if not calls:
+                                raise ValueError(
+                                    f"You defined `{dependency}` in the modular_{model_name}.py, it should be used \
+                                    when you define `{super_class}`, as it is one of it's direct dependencies. Make sure \
+                                    you use it in the `__init__` function."
+                                )
                     self.inserted_deps.append(dependency)
 
             if len(list_dependencies) > 0:
@@ -711,7 +721,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma2/modular_gemma2.py"],
+        default=["examples/diff-conversion/modular_roberta.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
