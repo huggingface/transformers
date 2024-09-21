@@ -352,7 +352,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
-        return (self._convert_token_to_id_with_added_voc(token) for token in tokens)
+        return [self._convert_token_to_id_with_added_voc(token) for token in tokens]
 
     def convert_tokens_to_ids_lazy(self, tokens: Iterable[str]) -> Iterator[int]:
         """
