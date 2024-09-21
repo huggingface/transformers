@@ -542,9 +542,9 @@ class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
         self.mlp = Gemma2MLP(config)
@@ -786,8 +786,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+        self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
