@@ -24,7 +24,6 @@ from torch import nn
 from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
-    LlavaNextMultiModalProjector,
     image_size_to_num_patches,
 )
 

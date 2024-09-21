@@ -577,6 +577,7 @@ class Gemma2PreTrainedModel(GemmaPreTrainedModel):
 
         return config
 
+
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

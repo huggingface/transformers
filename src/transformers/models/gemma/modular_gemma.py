@@ -568,6 +568,8 @@ class GemmaDecoderLayer(LlamaDecoderLayer):
         super().__init__(config)
         self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -636,6 +638,10 @@ class GemmaDecoderLayer(LlamaDecoderLayer):
 class GemmaModel(LlamaModel):
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
 
     def forward(
@@ -771,6 +777,11 @@ class GemmaModel(LlamaModel):
 
 # Example where we ony modify the docstring and call super
 class GemmaForCausalLM(LlamaForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -844,8 +855,14 @@ class GemmaForCausalLM(LlamaForCausalLM):
 
 
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()
 
 
 class GemmaForTokenClassification(LlamaForTokenClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()

@@ -624,7 +624,10 @@ class DiffConverterTransformer(CSTTransformer):
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
-                        if dependency in file_to_update.keys() and dependency in class_finder.first_lvl_dependency_mapping[class_name]:
+                        if (
+                            dependency in file_to_update.keys()
+                            and dependency in class_finder.first_lvl_dependency_mapping[class_name]
+                        ):
                             # If dependency is defined, but not used, raise error
                             calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
                             if not calls and not is_empty_node and dependency not in all_bases:
