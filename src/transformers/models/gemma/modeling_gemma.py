@@ -1040,7 +1040,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         Example:
 
-
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 

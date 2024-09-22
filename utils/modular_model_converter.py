@@ -252,13 +252,18 @@ def SUPER_CALL_NODE(func_name):
 
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
-    match = re.search(r'^\s*(?:"""|\'\'\')\n(\s+)', docstring)
+    match = re.search(r'(?:"""|\'\'\'|```)\n(\s+)', docstring)
     if match:
         # Return the indentation spaces captured
-        return match.group(1)
-    return None
+        return len(match.group(1))
+    return -1
 
 def merge_docstrings(original_docstring, updated_docstring):
+    indent_level = get_docstring_indent(updated_docstring)
+    original_level = get_docstring_indent(original_docstring)
+    if indent_level != original_level:
+        updated_docstring = updated_docstring.replace("\n    ",  "\n        ")
+
     if "        Args:\n        " not in updated_docstring:
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
@@ -271,7 +276,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             updated_docstring = "".join(
                 [
                     parts[0].rstrip(" \n") + new_parts[0],
-                    "\n    ```",
+                    f"\n{original_level*" "}```",
                     parts[1],
                     "```",
                     parts[2],
@@ -280,13 +285,6 @@ def merge_docstrings(original_docstring, updated_docstring):
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
             updated_docstring = original_docstring.rstrip('\"')+ "\n" + updated_docstring.lstrip('r\"')
-    else:
-        updated_docstring = original_docstring
-
-    indent_level = get_docstring_indent(updated_docstring)
-    original_level = get_docstring_indent(original_docstring)
-    if indent_level != original_level:
-        updated_docstring = updated_docstring.replace("\n    ",  "\n        ")
     return updated_docstring
 
 
