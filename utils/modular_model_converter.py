@@ -265,7 +265,6 @@ def merge_docstrings(original_docstring, updated_docstring):
         if len(parts) > 1:
             doc = re.sub(r"\n {4}(?!\`)(?!\S)", "\n        ", updated_docstring)
             doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
-            # TODO ADD TABULATION AS MAKE STYLE REMOVES THEM!!!!!
             updated_docstring = "".join(
                 [
                     parts[0] + doc,
@@ -276,7 +275,9 @@ def merge_docstrings(original_docstring, updated_docstring):
                 ]
             )
         elif updated_docstring not in original_docstring:
-            updated_docstring = original_docstring + "\n" + updated_docstring.replace('r"""\n', "")
+            # add tabulation:
+            updated_docstring = updated_docstring.replace("    ", "        ")
+            updated_docstring = original_docstring.rstrip('\"')+ "\n" + updated_docstring.lstrip('r\"')
     return updated_docstring
 
 
