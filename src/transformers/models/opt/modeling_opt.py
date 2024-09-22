@@ -379,7 +379,7 @@ class OPTSdpaAttention(OPTAttention):
         output_attentions: bool = False,
         position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
+        if output_attentions or layer_head_mask is not None:
             logger.warning_once("""OPTModel is using SDPA attention, which currently does not support output_attentions=True.
                                    failing back to eager attention. remove warning using attn_implementation="eager".""")
 
