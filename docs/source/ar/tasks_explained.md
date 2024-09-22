@@ -59,7 +59,7 @@
 
 <Tip>
 
-يقوم النهج الثالث بمزج المحولات مع التلافيف (على سبيل المثال، [Convolutional Vision Transformer](model_doc/cvt) أو [LeViT](model_doc/levit)). لن نناقشها لأنها تجمع ببساطة بين النهجين اللذين ندرسهما هنا.
+يقوم النهج الثالث بمزج المحولات مع التلافيف (على سبيل المثال، [Convolutional Vision Transformer](model_doc/cvt) أو [LeViT](model_doc/levit)). لن نناقشها لأنها تجمع ببساطة بين النهجين اللذين نستعرضهما هنا.
 
 </Tip>
 
