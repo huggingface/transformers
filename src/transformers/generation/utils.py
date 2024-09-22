@@ -517,7 +517,7 @@ class GenerationMixin:
         model_input_name = model_input_name if model_input_name is not None else self.main_input_name
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
-        model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
+        model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs) # type: ignore
 
         return model_kwargs
 
@@ -4007,12 +4007,7 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            if isinstance(candidate_generator, AssistedCandidateGeneratorDifferentTokenizers):
-                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
-                    input_ids, stopping_criteria
-                )
-            else:
-                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
 
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)

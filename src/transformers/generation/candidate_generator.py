@@ -420,9 +420,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(
-        self, input_ids: torch.LongTensor, stopping_criteria
-    ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         input_ids = input_ids.to(self.assistant_model.device)
         convert_kwargs = {"source_tokenizer": self.target_tokenizer, "destination_tokenizer": self.assistant_tokenizer}
         remove_from_pkv = 0
@@ -535,9 +533,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.prev_target_ids = input_ids
 
-        for stopping_criterion in stopping_criteria:
-            if hasattr(stopping_criterion, "max_length"):
-                new_target_ids = new_target_ids[:, : stopping_criteria.max_length]
+        if hasattr(self.generation_config, "max_length"):
+            new_target_ids = new_target_ids[:, : self.generation_config.max_length]
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
