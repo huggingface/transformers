@@ -399,31 +399,32 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_lookbehind = assistant_lookbehind
 
         self.prev_tokens = None
+        self.prev_assistant_ids = None
 
     def convert_token_ids(
         self,
         input_ids,
-        src,
-        dest,
+        source_tokenizer,
+        destination_tokenizer,
     ):
         """
         Convert token IDs from one tokenizer to another.
         Args:
             input_ids: The input token IDs.
-            src: The source tokenizer.
-            dest: The destination tokenizer.
+            source_tokenizer: The source tokenizer.
+            destination_tokenizer: The destination tokenizer.
         Returns:
             The converted token IDs.
         """
-        text = src.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        dest_ids = dest(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
+        text = source_tokenizer.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
     def get_candidates(
         self, input_ids: torch.LongTensor, stopping_criteria
     ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         input_ids = input_ids.to(self.assistant_model.device)
-        convert_kwargs = {"src": self.target_tokenizer, "dest": self.assistant_tokenizer}
+        convert_kwargs = {"source_tokenizer": self.target_tokenizer, "destination_tokenizer": self.assistant_tokenizer}
         remove_from_pkv = 0
 
         if self.prev_tokens is None:
@@ -512,8 +513,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         new_target_ids_from_window = self.convert_token_ids(
             assistant_output.sequences[:, start_assistant_look_index:],
-            src=self.assistant_tokenizer,
-            dest=self.target_tokenizer,
+            source_tokenizer=self.assistant_tokenizer,
+            destination_tokenizer=self.target_tokenizer,
         )
         target_prompt_use_length = new_target_ids_from_window.shape[1]
 
