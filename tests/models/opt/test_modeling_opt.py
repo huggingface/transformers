@@ -340,7 +340,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         """
         max_new_tokens = 30
 
-        tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-125M")
+        tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350M")
 
         texts = [
             "hi here's a longer context, getting longer and",
@@ -349,7 +349,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         ]
 
         model_sdpa = OPTForCausalLM.from_pretrained(
-            "facebook/opt-125M",
+            "facebook/opt-350M",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",
@@ -358,7 +358,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = OPTForCausalLM.from_pretrained(
-            "facebook/opt-125M",
+            "facebook/opt-350M",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
