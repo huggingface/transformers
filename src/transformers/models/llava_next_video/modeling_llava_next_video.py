@@ -128,6 +128,12 @@ def unpad_image(tensor, original_size):
     Returns:
         `torch.Tensor`: The unpadded image tensor.
     """
+    if not isinstance(original_size, (list, tuple)):
+        if not isinstance(original_size, (torch.Tensor, np.ndarray)):
+            raise TypeError(
+                f"image_size invalid type: {type(original_size)} not valid, should be either list, tuple, np.ndarray or tensor"
+            )
+        original_size = original_size.tolist()
     original_height, original_width = original_size
     current_height, current_width = tensor.shape[1:]
 
@@ -178,9 +184,6 @@ class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
         image_hidden_states (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-        video_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -189,7 +192,6 @@ class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class LlavaNextVideoPooler(nn.Module):
@@ -692,7 +694,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
 
         return final_embedding, final_attention_mask, position_ids, final_labels, final_input_ids
 
-    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -701,6 +703,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
+            vision_feature_select_strategy (`str`)
+                The feature selection strategy used to select the vision feature from the vision backbone.
             image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
         Returns:
@@ -715,8 +719,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-                if height * width != base_image_feature.shape[0]:
+
+                if vision_feature_select_strategy == "default":
+                    expected_num_patches = height * width
+                elif vision_feature_select_strategy == "full":
+                    expected_num_patches = height * width + 1
+                if expected_num_patches != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
+
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
@@ -1007,8 +1017,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
     def prepare_inputs_for_generation(
