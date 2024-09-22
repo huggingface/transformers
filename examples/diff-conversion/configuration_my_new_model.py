@@ -4,6 +4,7 @@
 #         the file from the diff. If any change should be done, please apply the change to the
 #                           diff.py file directly. One of our CI enforces this
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
@@ -110,10 +111,9 @@ class MyNewModelConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
+        new_param (`int`, *optional*, defaults to `False`):
+            A fun new parameter
 
-    r
-    new_param (`int`, *optional*, defaults to `False`):
-        A fun new parameter
     ```python
     >>> from transformers import MyNewModelModel, MyNewModelConfig
 
@@ -157,8 +157,6 @@ class MyNewModelConfig(PretrainedConfig):
         new_param=0,
         **kwargs,
     ):
-        self.mlp_bias = mlp_bias
-        self.new_param = new_param
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -182,7 +180,7 @@ class MyNewModelConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
+        # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
@@ -194,3 +192,5 @@ class MyNewModelConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.mlp_bias = mlp_bias
+        self.new_param = new_param
