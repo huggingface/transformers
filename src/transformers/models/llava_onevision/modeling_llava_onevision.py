@@ -124,6 +124,12 @@ def unpad_image(tensor, original_size):
     Returns:
         `torch.Tensor`: The unpadded image tensor.
     """
+    if not isinstance(original_size, (list, tuple)):
+        if not isinstance(original_size, (torch.Tensor, np.ndarray)):
+            raise TypeError(
+                f"image_size invalid type: {type(original_size)} not valid, should be either list, tuple, np.ndarray or tensor"
+            )
+        original_size = original_size.tolist()
     original_height, original_width = original_size
     current_height, current_width = tensor.shape[1:]
 
@@ -145,7 +151,7 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaOnevision
+# Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoCausalLMOutputWithPast with LlavaNextVideo->LlavaOnevision
 class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaOnevision causal language model (or autoregressive) outputs.
@@ -172,11 +178,12 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        video_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -184,7 +191,8 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaOnevision
@@ -467,8 +475,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         image_features = image_features.view(batch_frames, height, width, -1)
         image_features = image_features.permute(0, 3, 1, 2).contiguous()
 
-        height, weight = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(weight / 2)]
+        height, width = image_features.shape[2:]
+        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
         image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
 
         image_features = image_features.permute(0, 2, 3, 1)
@@ -690,6 +698,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+            video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
     def prepare_inputs_for_generation(

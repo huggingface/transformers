@@ -1187,7 +1187,7 @@ def is_liger_kernel_available():
     if not _liger_kernel_available:
         return False
 
-    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
 # docstyle-ignore
@@ -1924,7 +1924,7 @@ def create_import_structure_from_path(module_path):
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name)) as f:
+        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix

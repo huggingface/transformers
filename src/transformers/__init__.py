@@ -70,6 +70,7 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
+        "tool",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -464,6 +465,7 @@ _import_structure = {
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
+    "models.granitemoe": ["GraniteMoeConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -572,6 +574,7 @@ _import_structure = {
         "MgpstrProcessor",
         "MgpstrTokenizer",
     ],
+    "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
@@ -649,6 +652,7 @@ _import_structure = {
         "Pix2StructTextConfig",
         "Pix2StructVisionConfig",
     ],
+    "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
@@ -1199,6 +1203,7 @@ else:
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
+    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
@@ -1359,7 +1364,6 @@ else:
             "AlignVisionModel",
         ]
     )
-
     _import_structure["models.altclip"].extend(
         [
             "AltCLIPModel",
@@ -2340,6 +2344,13 @@ else:
             "GranitePreTrainedModel",
         ]
     )
+    _import_structure["models.granitemoe"].extend(
+        [
+            "GraniteMoeForCausalLM",
+            "GraniteMoeModel",
+            "GraniteMoePreTrainedModel",
+        ]
+    )
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2664,6 +2675,12 @@ else:
             "MgpstrPreTrainedModel",
         ]
     )
+    _import_structure["models.mimi"].extend(
+        [
+            "MimiModel",
+            "MimiPreTrainedModel",
+        ]
+    )
     _import_structure["models.mistral"].extend(
         [
             "MistralForCausalLM",
@@ -2977,6 +2994,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
+    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -4817,6 +4835,7 @@ if TYPE_CHECKING:
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
+        tool,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -5226,6 +5245,7 @@ if TYPE_CHECKING:
     )
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
+    from .models.granitemoe import GraniteMoeConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5341,6 +5361,9 @@ if TYPE_CHECKING:
         MgpstrProcessor,
         MgpstrTokenizer,
     )
+    from .models.mimi import (
+        MimiConfig,
+    )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
     from .models.mobilebert import (
@@ -5433,6 +5456,10 @@ if TYPE_CHECKING:
         Pix2StructProcessor,
         Pix2StructTextConfig,
         Pix2StructVisionConfig,
+    )
+    from .models.pixtral import (
+        PixtralProcessor,
+        PixtralVisionConfig,
     )
     from .models.plbart import PLBartConfig
     from .models.poolformer import (
@@ -6009,6 +6036,7 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
+        from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
@@ -6957,6 +6985,11 @@ if TYPE_CHECKING:
             GraniteModel,
             GranitePreTrainedModel,
         )
+        from .models.granitemoe import (
+            GraniteMoeForCausalLM,
+            GraniteMoeModel,
+            GraniteMoePreTrainedModel,
+        )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
@@ -7203,6 +7236,10 @@ if TYPE_CHECKING:
             MgpstrModel,
             MgpstrPreTrainedModel,
         )
+        from .models.mimi import (
+            MimiModel,
+            MimiPreTrainedModel,
+        )
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
@@ -7447,6 +7484,10 @@ if TYPE_CHECKING:
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
             Pix2StructVisionModel,
+        )
+        from .models.pixtral import (
+            PixtralModel,
+            PixtralPreTrainedModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,
