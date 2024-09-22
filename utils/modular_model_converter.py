@@ -263,12 +263,12 @@ def merge_docstrings(original_docstring, updated_docstring):
             updated_docstring = "".join(split_updated_docstring[:1] + split_updated_docstring[2:])
 
         if len(parts) > 1:
-            doc = re.sub(r"\n {4}(?!\`)(?!\S)", "\n        ", updated_docstring)
-            doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
+            doc = re.sub(r"\n\s{3}\s", "\n        ", updated_docstring, count=1)
+            doc = doc.lstrip('r\"').replace('"""', "")
             updated_docstring = "".join(
                 [
-                    parts[0] + doc,
-                    "\n        ```",
+                    parts[0].rstrip(" \n")  + doc,
+                    "\n    ```",
                     parts[1],
                     "```",
                     parts[2],
@@ -276,7 +276,6 @@ def merge_docstrings(original_docstring, updated_docstring):
             )
         elif updated_docstring not in original_docstring:
             # add tabulation:
-            updated_docstring = updated_docstring.replace("    ", "        ")
             updated_docstring = original_docstring.rstrip('\"')+ "\n" + updated_docstring.lstrip('r\"')
     return updated_docstring
 
@@ -730,7 +729,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["examples/diff-conversion/modular_my_new_model.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
