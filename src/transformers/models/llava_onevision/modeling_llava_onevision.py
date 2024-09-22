@@ -475,8 +475,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         image_features = image_features.view(batch_frames, height, width, -1)
         image_features = image_features.permute(0, 3, 1, 2).contiguous()
 
-        height, weight = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(weight / 2)]
+        height, width = image_features.shape[2:]
+        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
         image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
 
         image_features = image_features.permute(0, 2, 3, 1)

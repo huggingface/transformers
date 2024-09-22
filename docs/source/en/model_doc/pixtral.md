@@ -55,7 +55,7 @@ PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
 inputs = processor(images=IMG_URLS, text=PROMPT, return_tensors="pt").to("cuda")
 generate_ids = model.generate(**inputs, max_new_tokens=500)
-ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 EXPECTED_GENERATION = """
 Describe the images.
