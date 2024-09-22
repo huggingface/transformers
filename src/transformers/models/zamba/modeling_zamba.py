@@ -834,7 +834,7 @@ class ZambaMambaMixer(nn.Module):
                 raise ValueError(
                     "Fast Mamba kernels are not available. Make sure to they are installed and that "
                     "the mamba module is on a CUDA device. lease run 'pip install causal-conv1d>=1.2.0' "
-                    "and 'pip install mamba-ssm', or set use_fast_kernels=False in the model's config."
+                    "and 'pip install mamba-ssm', or set use_mamba_kernels=False in the model's config."
                 )
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask=attention_mask)
         return self.slow_forward(hidden_states, cache_params, attention_mask=attention_mask)
