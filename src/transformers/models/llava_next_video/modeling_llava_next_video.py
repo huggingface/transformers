@@ -186,9 +186,9 @@ class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
 
 
-    video_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        video_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None

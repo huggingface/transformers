@@ -250,6 +250,7 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 def SUPER_CALL_NODE(func_name):
     return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
+
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
     match = re.search(r'(?:"""|\'\'\'|```)\n(\s+)', docstring)
@@ -258,17 +259,18 @@ def get_docstring_indent(docstring):
         return len(match.group(1))
     return -1
 
+
 def merge_docstrings(original_docstring, updated_docstring):
-    indent_level = get_docstring_indent(updated_docstring)
+    # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if indent_level != original_level:
-        updated_docstring = updated_docstring.replace("\n    ",  "\n        ")
+    # if indent_level != original_level:
+    #     updated_docstring = updated_docstring.replace("\n    ", "\n        ")
 
     if "        Args:\n        " not in updated_docstring:
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
-            updated_docstring = updated_docstring.lstrip('r\"')
+            updated_docstring = updated_docstring.lstrip('r"')
             new_parts = updated_docstring.split("```")
             if len(new_parts) != 3:
                 raise ValueError("There should only be one example, and it should have opening and closing '```'")
@@ -284,7 +286,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             )
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
-            updated_docstring = original_docstring.rstrip('\"')+ "\n" + updated_docstring.lstrip('r\"')
+            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"')
     return updated_docstring
 
 
