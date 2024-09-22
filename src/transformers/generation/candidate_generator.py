@@ -30,90 +30,6 @@ if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
 
 
-def _get_longest_diag_dict(some, some_nonzero):
-    """
-    Calculates the length of the longest diagonal sequence in a given matrix.
-    Args:
-        some (torch.Tensor): The input matrix.
-        some_nonzero (torch.Tensor): The indices of the non-zero elements in the matrix.
-    Returns:
-        dict: A dictionary where the keys are the indices of the non-zero elements and the values are the lengths of the longest diagonal sequences starting from those indices.
-    """
-
-    visited = set()
-    diags = {}
-    for idx in some_nonzero:
-        start_idx = torch.clone(idx)
-        tuple_start_idx = tuple(start_idx.tolist())
-
-        if tuple_start_idx in visited:
-            continue
-
-        visited.add(tuple_start_idx)
-        cur_diag_len = 1
-        start_idx += 1
-        while start_idx[0] < some.shape[0] and start_idx[1] < some.shape[1]:
-            tuple_start_idx = tuple(start_idx.tolist())
-            visited.add(tuple_start_idx)
-
-            if some[start_idx[0], start_idx[1]] == 1:
-                cur_diag_len += 1
-                start_idx += 1
-            else:
-                break
-
-        diags[idx] = cur_diag_len
-    return diags
-
-
-def _get_longest_diag_index(some):
-    """
-    Returns the start index and length of the longest diagonal in the given input.
-    Args:
-        some (numpy.ndarray): The input array.
-    Returns:
-        tuple: A tuple containing the start index and length of the longest diagonal.
-    """
-
-    diags = _get_longest_diag_dict(some, some.nonzero())
-    diags_values = list(diags.values())
-    diags_keys = list(diags.keys())
-    best_diag = np.argmax(diags_values)
-    diag_start_index = diags_keys[best_diag]
-    diag_start_length = diags_values[best_diag]
-    return diag_start_index, diag_start_length
-
-
-def _get_tokens_diag(prompt, prompt_plus_new_tokens):
-    """
-    Input:
-        prompt: 2D array of shape (batch_size, prompt_length), represents the original prompt tokens
-        prompt_plus_new_tokens: 2D array of shape (batch_size, prompt_length), represents the suffix of the original prompt, with additional new tokens.
-    Output:
-        replace_tokens_from_prompt: 2D array of shape (batch_size, disrep_length), represents the tokens that need to be replaced from prompt
-        disrep_length: int, represents the number of tokens that need to be replaced from prompt
-        new_tokens_with_disrep: 2D array of shape (batch_size, new_token_length), represents the new tokens that need to be added to prompt, with the tokens that need to be replaced from prompt
-        new_tokens_only: 2D array of shape (batch_size, new_token_length), represents the new tokens that are not in prompt
-        discrep_only: 2D array of shape (batch_size, disrep_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
-    """
-    compare_mat = prompt_plus_new_tokens.T == prompt
-    compare_mat_int = compare_mat.to(int)
-
-    if not compare_mat_int.any().item():
-        # empty intersection between prompt and prompt_plus_new_tokens
-        return None, None, None, None, None
-
-    longest_location, longest_diag_length = _get_longest_diag_index(compare_mat_int)
-    new_token_start_index = longest_location[0] + longest_diag_length
-    discrep_with_old = longest_location[1] + longest_diag_length
-    replace_tokens_from_prompt = prompt[:, discrep_with_old:]
-    disrep_length = (prompt.shape[1] - discrep_with_old).item()
-    new_tokens_with_disrep = prompt_plus_new_tokens[:, new_token_start_index:]
-    new_tokens_only = prompt_plus_new_tokens[:, new_token_start_index + disrep_length :]
-    discrep_only = prompt_plus_new_tokens[:, new_token_start_index : new_token_start_index + disrep_length]
-    return replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only
-
-
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
@@ -401,6 +317,90 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.prev_tokens = None
         self.prev_assistant_ids = None
 
+    @staticmethod
+    def _get_longest_diag_dict(inp, nonzero_idx):
+        """
+        Calculates the length of the longest diagonal sequence in a given matrix.
+        Args:
+            inp (torch.Tensor): The input matrix.
+            nonzero_idx (torch.Tensor): The indices of the non-zero elements in the matrix.
+        Returns:
+            dict: A dictionary where the keys are the indices of the non-zero elements and the values are the lengths of the longest diagonal sequences starting from those indices.
+        """
+
+        visited = set()
+        diags = {}
+        for idx in nonzero_idx:
+            start_idx = torch.clone(idx)
+            tuple_start_idx = tuple(start_idx.tolist())
+
+            if tuple_start_idx in visited:
+                continue
+
+            visited.add(tuple_start_idx)
+            cur_diag_len = 1
+            start_idx += 1
+            while start_idx[0] < inp.shape[0] and start_idx[1] < inp.shape[1]:
+                tuple_start_idx = tuple(start_idx.tolist())
+                visited.add(tuple_start_idx)
+
+                if inp[start_idx[0], start_idx[1]] == 1:
+                    cur_diag_len += 1
+                    start_idx += 1
+                else:
+                    break
+
+            diags[idx] = cur_diag_len
+        return diags
+
+    @staticmethod
+    def _get_longest_diag_index(inp):
+        """
+        Returns the start index and length of the longest diagonal in the given input.
+        Args:
+            inp (numpy.ndarray): The input array.
+        Returns:
+            tuple: A tuple containing the start index and length of the longest diagonal.
+        """
+
+        diags = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_dict(inp, inp.nonzero())
+        diags_values = list(diags.values())
+        diags_keys = list(diags.keys())
+        best_diag = np.argmax(diags_values)
+        diag_start_index = diags_keys[best_diag]
+        diag_start_length = diags_values[best_diag]
+        return diag_start_index, diag_start_length
+
+    @staticmethod
+    def _get_tokens_diag(prompt, prompt_plus_new_tokens):
+        """
+        Input:
+            prompt: 2D array of shape (batch_size, prompt_length), represents the original prompt tokens
+            prompt_plus_new_tokens: 2D array of shape (batch_size, prompt_length), represents the suffix of the original prompt, with additional new tokens.
+        Output:
+            discrepancy_length: int, represents the number of tokens that need to be replaced from prompt
+            new_tokens_only: 2D array of shape (batch_size, new_token_length), represents the new tokens that are not in prompt
+            discrepancy_only: 2D array of shape (batch_size, discrepancy_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
+        """
+        compare_mat = prompt_plus_new_tokens.T == prompt
+        compare_mat_int = compare_mat.to(int)
+
+        if not compare_mat_int.any().item():
+            # empty intersection between prompt and prompt_plus_new_tokens
+            return None, None, None
+
+        longest_location, longest_diag_length = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_index(
+            compare_mat_int
+        )
+        new_token_start_index = longest_location[0] + longest_diag_length
+        discrepancy_with_old = longest_location[1] + longest_diag_length
+        discrepancy_length = (prompt.shape[1] - discrepancy_with_old).item()
+        new_tokens_only = prompt_plus_new_tokens[:, new_token_start_index + discrepancy_length :]
+        discrepancy_only = prompt_plus_new_tokens[
+            :, new_token_start_index : new_token_start_index + discrepancy_length
+        ]
+        return discrepancy_length, new_tokens_only, discrepancy_only
+
     def convert_token_ids(
         self,
         input_ids,
@@ -443,22 +443,22 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 prompt_use_length = new_assistant_ids.shape[1]
                 prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
-                replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
-                    _get_tokens_diag(prompt_use, new_assistant_ids)
+                discrepancy_length, new_tokens_only, discrepancy_only = (
+                    AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt_use, new_assistant_ids)
                 )
                 assistant_input_ids = self.prev_assistant_ids
 
                 if new_tokens_only is not None:
-                    if disrep_length > 0 and discrep_only.shape[1] > 0:
-                        if disrep_length == discrep_only.shape[1]:
-                            assistant_input_ids[:, -disrep_length:] = discrep_only
+                    if discrepancy_length > 0 and discrepancy_only.shape[1] > 0:
+                        if discrepancy_length == discrepancy_only.shape[1]:
+                            assistant_input_ids[:, -discrepancy_length:] = discrepancy_only
 
-                        elif disrep_length > discrep_only.shape[1]:
-                            disrep_length_diff = disrep_length - discrep_only.shape[1]
-                            assistant_input_ids = assistant_input_ids[:, :-disrep_length_diff]
-                            assistant_input_ids[:, -discrep_only.shape[1] :] = discrep_only
+                        elif discrepancy_length > discrepancy_only.shape[1]:
+                            discrepancy_length_diff = discrepancy_length - discrepancy_only.shape[1]
+                            assistant_input_ids = assistant_input_ids[:, :-discrepancy_length_diff]
+                            assistant_input_ids[:, -discrepancy_only.shape[1] :] = discrepancy_only
 
-                        remove_from_pkv = disrep_length
+                        remove_from_pkv = discrepancy_length
 
                     if new_tokens_only.shape[1] > 0:
                         assistant_input_ids = torch.cat([assistant_input_ids, new_tokens_only], dim=-1)
@@ -520,13 +520,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         target_prompt_use = input_ids[:, -target_prompt_use_length:]
 
-        (
-            tar_replace_tokens_from_prompt,
-            tar_disrep_length,
-            tar_new_tokens_with_disrep,
-            tar_new_tokens_only,
-            tar_discrep_only,
-        ) = _get_tokens_diag(target_prompt_use, new_target_ids_from_window)
+        _, tar_new_tokens_only, _ = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
+            target_prompt_use, new_target_ids_from_window
+        )
 
         new_target_ids = input_ids
 
@@ -549,8 +545,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         # 4. Prepare variables for output
         if input_ids.shape[1] >= new_target_ids.shape[1]:
-            some_suffix = torch.tensor([[0, 1, 2, 3, 4]], device=new_target_ids.device)
-            new_target_ids = torch.cat([new_target_ids, some_suffix], dim=1)
+            return input_ids, None
 
         return new_target_ids, None
 
