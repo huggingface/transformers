@@ -18,8 +18,6 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
-    require_tf,
     require_torch,
     require_torchvision,
     require_vision,
@@ -36,7 +34,7 @@ if is_torch_available():
     import torch
 
 if is_tf_available():
-    import tensorflow as tf
+    pass
 
 
 @require_vision

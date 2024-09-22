@@ -7898,6 +7898,13 @@ class SamPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Sam2ImagePredictor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Sam2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7906,6 +7913,13 @@ class Sam2Model(metaclass=DummyObject):
 
 
 class Sam2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Sam2VideoPredictor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

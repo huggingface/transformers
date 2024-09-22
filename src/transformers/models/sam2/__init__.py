@@ -17,18 +17,16 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
-    is_vision_available,
 )
 
 
 _import_structure = {
     "configuration_sam2": [
         "Sam2Config",
-        "Sam2MaskDecoderConfig",
-        "Sam2PromptEncoderConfig",
-        "Sam2VisionConfig",
+        "Sam2ImageEncoderConfig",
+        "Sam2MemoryAttentionConfig",
+        "Sam2MemoryEncoderConfig",
     ],
-    "processing_sam2": ["Sam2Processor"],
 }
 
 
@@ -38,27 +36,18 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    pass
     _import_structure["modeling_sam2"] = [
+        "Sam2ImagePredictor",
         "Sam2Model",
         "Sam2PreTrainedModel",
+        "Sam2VideoPredictor",
     ]
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_sam2"] = ["Sam2ImageProcessor"]
-
 
 if TYPE_CHECKING:
-    from .configuration_sam2 import (
-        Sam2Config,
-        Sam2MaskDecoderConfig,
-        Sam2PromptEncoderConfig,
-        Sam2VisionConfig,
-    )
-    from .processing_sam2 import Sam2Processor
+    from .configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2VisionConfig
+
+    # from .processing_sam import SamProcessor
 
     try:
         if not is_torch_available():
@@ -66,15 +55,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_sam2 import Sam2Model, Sam2PreTrainedModel
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_sam2 import Sam2ImageProcessor
+        from .modeling_sam2 import (
+            Sam2ImageEncoder,
+            Sam2Model,
+            Sam2PreTrainedModel,
+            Sam2VideoPredictor,
+        )
 
 else:
     import sys

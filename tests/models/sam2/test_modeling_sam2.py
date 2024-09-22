@@ -23,7 +23,6 @@ from transformers import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderCon
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
