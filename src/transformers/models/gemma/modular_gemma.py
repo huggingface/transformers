@@ -30,6 +30,7 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import is_torchdynamo_compiling, logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
+    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -455,7 +456,7 @@ class GemmaSdpaAttention(GemmaAttention):
         return attn_output, None, past_key_value
 
 
-class GemmaFlashAttention2(GemmaAttention):
+class GemmaFlashAttention2(LlamaFlashAttention2, GemmaAttention):
     """
     Gemma flash attention module. This module inherits from `GemmaAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of

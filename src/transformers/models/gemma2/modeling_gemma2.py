@@ -551,7 +551,6 @@ class Gemma2DecoderLayer(nn.Module):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
-        self.post_init()
 
     def forward(
         self,

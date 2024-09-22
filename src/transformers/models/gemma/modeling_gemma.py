@@ -41,14 +41,12 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
 from .configuration_gemma import GemmaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class GemmaRMSNorm(nn.Module):
@@ -69,6 +67,9 @@ class GemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+logger = logging.get_logger(__name__)
 
 
 class GemmaRotaryEmbedding(nn.Module):
@@ -128,6 +129,30 @@ class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
         return cos, sin
 
 
+class GemmaMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if config.hidden_activation is None:
+            logger.warning_once(
+                "`config.hidden_act` is ignored, you should use `config.hidden_activation` instead.\n"
+                "Gemma's activation function will be set to `gelu_pytorch_tanh`. Please, use\n"
+                "`config.hidden_activation` if you want to override this behaviour.\n"
+                "See https://github.com/huggingface/transformers/pull/29402 for more details."
+            )
+            config.hidden_activation = "gelu_pytorch_tanh"
+        hidden_activation = config.hidden_activation
+        self.act_fn = ACT2FN[hidden_activation]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -160,30 +185,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-class GemmaMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        if config.hidden_activation is None:
-            logger.warning_once(
-                "`config.hidden_act` is ignored, you should use `config.hidden_activation` instead.\n"
-                "Gemma's activation function will be set to `gelu_pytorch_tanh`. Please, use\n"
-                "`config.hidden_activation` if you want to override this behaviour.\n"
-                "See https://github.com/huggingface/transformers/pull/29402 for more details."
-            )
-            config.hidden_activation = "gelu_pytorch_tanh"
-        hidden_activation = config.hidden_activation
-        self.act_fn = ACT2FN[hidden_activation]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -392,6 +393,14 @@ class GemmaFlashAttention2(GemmaAttention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
