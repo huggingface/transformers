@@ -723,6 +723,7 @@ class OPTDecoder(OPTPreTrainedModel):
         input_shape: Tuple[int, int],
         past_key_values_length: int,
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
     ):
         """
@@ -748,7 +749,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
-        if self._use_sdpa and not output_attentions:
+        if self._use_sdpa and not output_attentions and head_mask is None:
             causal_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
@@ -843,7 +844,7 @@ class OPTDecoder(OPTPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         causal_attention_mask, attention_mask = self._update_causal_mask(
-            inputs_embeds, input_shape, past_key_values_length, attention_mask, output_attentions
+            inputs_embeds, input_shape, past_key_values_length, attention_mask, head_mask, output_attentions
         )
         # embed positions
 
