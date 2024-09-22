@@ -557,7 +557,7 @@ GEMMA_ATTENTION_CLASSES = {
 
 
 class GemmaDecoderLayer(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
@@ -771,13 +771,11 @@ class GemmaModel(GemmaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
         self.layers = nn.ModuleList(
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -855,15 +853,6 @@ class GemmaModel(GemmaPreTrainedModel):
         # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-        if (
-            use_cache and not isinstance(past_key_values, Cache) and not self.training
-        ):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
-            )
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1051,19 +1040,20 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         Example:
 
+
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("meta-gemma/Gemma-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-gemma/Gemma-2-7b-hf")
+        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        "What is your favorite condiment?"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

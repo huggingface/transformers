@@ -565,7 +565,7 @@ GEMMA_ATTENTION_CLASSES = {
 
 
 class GemmaDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__(config)
         self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.mlp = GemmaMLP(config)
@@ -644,6 +644,7 @@ class GemmaModel(LlamaModel):
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
+        self.post_init()
 
     def forward(
         self,
@@ -714,15 +715,6 @@ class GemmaModel(LlamaModel):
         # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-        if (
-            use_cache and not isinstance(past_key_values, Cache) and not self.training
-        ):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
-            )
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -805,6 +797,21 @@ class GemmaForCausalLM(LlamaForCausalLM):
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        ```python
+        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+
+        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
+
+        >>> prompt = "What is your favorite condiment?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "What is your favorite condiment?"
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
