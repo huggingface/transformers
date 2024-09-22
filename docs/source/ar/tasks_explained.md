@@ -21,7 +21,7 @@
 
 ## الكلام والصوت
 
-[Wav2Vec2](model_doc/wav2vec2) هو نموذج ذاتي الإشراف تم تدريبه مسبقًا على بيانات الكلام غير الموسومة وتم ضبط دقته على بيانات موسومة لتصنيف الصوت والتعرف التلقائي على الكلام.
+يُعدّ  [Wav2Vec2](model_doc/wav2vec2)  نموذجًا مُدرَّبًا ذاتيًا (Self-Supervised)  على بيانات الكلام غير المُصنّفة،  ويُمكن  ضبطه  بدقة (Fine-tuning)  على بيانات موسومة  لأداء  مهام  تصنيف الصوت  والتعرف التلقائي على الكلام. 
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/wav2vec2_architecture.png"/>
