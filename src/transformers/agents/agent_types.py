@@ -105,7 +105,7 @@ class AgentImage(AgentType, ImageType):
         elif isinstance(value, torch.Tensor):
             self._tensor = value
         elif isinstance(value, np.ndarray):
-            self._tensor = torch.tensor(value)
+            self._tensor = torch.from_numpy(value)
         else:
             raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
 
@@ -192,7 +192,10 @@ class AgentAudio(AgentType, str):
             self._tensor = value
         elif isinstance(value, tuple):
             self.samplerate = value[0]
-            self._tensor = torch.tensor(value[1])
+            if isinstance(value[1], np.ndarray):
+                self._tensor = torch.from_numpy(value[1])
+            else:
+                self._tensor = torch.tensor(value[1])
         else:
             raise ValueError(f"Unsupported audio type: {type(value)}")
 
@@ -231,7 +234,7 @@ class AgentAudio(AgentType, str):
             return self._path
 
 
-AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
+AGENT_TYPE_MAPPING = {"string": AgentText, "image": AgentImage, "audio": AgentAudio}
 INSTANCE_TYPE_MAPPING = {str: AgentText, ImageType: AgentImage}
 
 if is_torch_available():

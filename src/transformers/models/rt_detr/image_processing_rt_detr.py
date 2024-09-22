@@ -45,10 +45,10 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
+    filter_out_non_signature_kwargs,
     is_flax_available,
     is_jax_tensor,
     is_tf_available,
@@ -471,27 +471,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
         self.pad_size = pad_size
-        self._valid_processor_keys = [
-            "images",
-            "annotations",
-            "return_segmentation_masks",
-            "masks_path",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "do_convert_annotations",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "pad_size",
-            "format",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def prepare_annotation(
         self,
@@ -800,6 +779,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -821,7 +801,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         pad_size: Optional[Dict[str, int]] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -920,7 +899,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
 

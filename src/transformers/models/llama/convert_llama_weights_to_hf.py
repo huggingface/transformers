@@ -332,7 +332,7 @@ def write_model(
 
 class Llama3Converter(TikTokenConverter):
     def __init__(self, vocab_file, special_tokens=None, instruct=False, model_max_length=None, **kwargs):
-        super().__init__(vocab_file, **kwargs)
+        super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
         chat_template = (
             "{% set loop_messages = messages %}"
@@ -345,7 +345,6 @@ class Llama3Converter(TikTokenConverter):
             "{% endfor %}"
             "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
         )
-        tokenizer.add_special_tokens(special_tokens)
 
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
@@ -449,7 +448,8 @@ def main():
     if args.model_size is None and args.num_shards is None:
         raise ValueError("You have to set at least `num_shards` if you are not giving the `model_size`")
     if args.special_tokens is None:
-        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS[str(args.llama_version)]
+        # no special tokens by default
+        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS.get(str(args.llama_version), [])
 
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
     vocab_size = len(

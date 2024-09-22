@@ -13,7 +13,7 @@
 # limitations under the License.
 "AQLM (Additive Quantization of Language Model) integration file"
 
-from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available
+from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_aqlm_available, is_torch_available
 
 
 if is_torch_available():
@@ -50,7 +50,9 @@ def replace_with_aqlm_linear(
         raise ValueError("AQLM is not available. Please install it with `pip install aqlm[cpu,gpu]`")
 
     if not is_accelerate_available():
-        raise ValueError("AQLM requires Accelerate to be installed: `pip install accelerate`")
+        raise ValueError(
+            f"AQLM requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+        )
 
     if linear_weights_not_to_quantize is None:
         linear_weights_not_to_quantize = []

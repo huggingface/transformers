@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
@@ -23,7 +24,13 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
+from ..utils import (
+    ACCELERATE_MIN_VERSION,
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_torch_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -61,7 +68,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         if not is_accelerate_available():
-            raise ImportError("Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+            )
         if not is_bitsandbytes_available():
             raise ImportError(
                 "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
@@ -199,11 +208,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
+            param_kwargs = {}
+            if self.is_bnb_supports_quant_storage_module:
+                param_kwargs["module"] = module
+
             new_value = bnb.nn.Params4bit.from_prequantized(
                 data=param_value,
                 quantized_stats=quantized_stats,
                 requires_grad=False,
                 device=target_device,
+                **param_kwargs,
             )
         else:
             new_value = param_value.to("cpu")
@@ -309,6 +323,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             return False
 
         return True
+
+    @cached_property
+    def is_bnb_supports_quant_storage_module(self) -> bool:
+        """
+        determines if the current version of bitsandbytes supports
+        the `module` parameter in `Params4bit.from_prequantized`
+        :return:
+        """
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
 
     @property
     def is_trainable(self) -> bool:
