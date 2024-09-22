@@ -748,8 +748,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
-
-        if self._use_sdpa:
+        if self._use_sdpa and not output_attentions:
             causal_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
