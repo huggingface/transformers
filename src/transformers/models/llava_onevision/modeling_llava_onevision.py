@@ -181,9 +181,6 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
         image_hidden_states (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-        video_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -192,7 +189,6 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaOnevision
