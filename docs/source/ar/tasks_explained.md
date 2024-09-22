@@ -6,7 +6,7 @@
 
 - [Wav2Vec2](model_doc/wav2vec2) لتصنيف الصوت والتعرف التلقائي على الكلام (ASR)
 - [Vision Transformer (ViT)](model_doc/vit) و [ConvNeXT](model_doc/convnext) لتصنيف الصور
-- [DETR](model_doc/detr) للكشف عن الأشياء
+- [DETR](model_doc/detr) للكشف عن الأجسام
 - [Mask2Former](model_doc/mask2former) لتجزئة الصورة
 - [GLPN](model_doc/glpn) لتقدير العمق
 - [BERT](model_doc/bert) لمهام NLP مثل تصنيف النصوص، وتصنيف الرموز، والإجابة على الأسئلة التي تستخدم مشفرًا
