@@ -52,6 +52,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
 * [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
+* [GraniteMoe](https://huggingface.co/docs/transformers/model_doc/granitemoe#transformers.GraniteMoeModel)
 * [Idefics2](https://huggingface.co/docs/transformers/model_doc/idefics2#transformers.Idefics2Model)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
@@ -61,6 +62,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
@@ -207,6 +209,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
+* [BioGpt](https://huggingface.co/docs/transformers/model_doc/biogpt#transformers.BioGptModel)
 * [CamemBERT](https://huggingface.co/docs/transformers/model_doc/camembert#transformers.CamembertModel)
 * [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
 * [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
@@ -214,6 +217,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DeiT](https://huggingface.co/docs/transformers/model_doc/deit#transformers.DeiTModel)
+* [Dinov2](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
@@ -224,10 +228,12 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
+* [GraniteMoe](https://huggingface.co/docs/transformers/model_doc/granitemoe#transformers.GraniteMoeModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
@@ -269,7 +275,6 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
-
 
 <Tip>
 
