@@ -214,6 +214,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [Mimi](model_doc/mimi)                          |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
+|                     [MixtureOfTokens](model_doc/mot)                     |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
 |                    [MobileBERT](model_doc/mobilebert)                    |       ✅        |         ✅         |      ❌      |
