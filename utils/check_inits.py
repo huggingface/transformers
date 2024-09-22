@@ -333,6 +333,7 @@ IGNORE_SUBMODULES = [
     "safetensors_conversion",
     "modeling_gguf_pytorch_utils",
     "kernels.falcon_mamba",
+    "kernels",
 ]
 
 

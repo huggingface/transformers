@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
-from .agent_types import AgentAudio, AgentImage, AgentText
+from .agent_types import AgentAudio, AgentImage
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfApiEngine, MessageRole
 from .prompts import (
@@ -626,10 +626,9 @@ class CodeAgent(Agent):
         Example:
 
         ```py
-        from transformers.agents import CodeAgent, PythonInterpreterTool
+        from transformers.agents import CodeAgent
 
-        python_interpreter = PythonInterpreterTool()
-        agent = CodeAgent(tools=[python_interpreter])
+        agent = CodeAgent(tools=[])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -1019,20 +1018,17 @@ class ReactJsonAgent(ReactAgent):
                 arguments = {}
             observation = self.execute_tool_call(tool_name, arguments)
             observation_type = type(observation)
-            if observation_type == AgentText:
-                updated_information = str(observation).strip()
-            else:
-                # TODO: observation naming could allow for different names of same type
+            if observation_type in [AgentImage, AgentAudio]:
                 if observation_type == AgentImage:
                     observation_name = "image.png"
                 elif observation_type == AgentAudio:
                     observation_name = "audio.mp3"
-                else:
-                    observation_name = "object.object"
+                # TODO: observation naming could allow for different names of same type
 
                 self.state[observation_name] = observation
                 updated_information = f"Stored '{observation_name}' in memory."
-
+            else:
+                updated_information = str(observation).strip()
             self.logger.info(updated_information)
             current_step_logs["observation"] = updated_information
             return current_step_logs
