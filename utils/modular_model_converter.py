@@ -250,25 +250,27 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 def SUPER_CALL_NODE(func_name):
     return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
+def get_docstring_indent(docstring):
+    # Match the first line after the opening triple quotes
+    match = re.search(r'^\s*(?:"""|\'\'\')\n(\s+)', docstring)
+    if match:
+        # Return the indentation spaces captured
+        return match.group(1)
+    return None
 
 def merge_docstrings(original_docstring, updated_docstring):
     if "        Args:\n        " not in updated_docstring:
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
-        if "```" in updated_docstring and len(parts) > 0:
-            # an example is provide! Overwrite the other example
-            split_updated_docstring = updated_docstring.split("```")
-            parts[1] = updated_docstring.split("```")[1]
-            updated_docstring = "".join(split_updated_docstring[:1] + split_updated_docstring[2:])
-
-        if len(parts) > 1:
-            # tabulation when tabulation is missing
-            if False:
-                updated_docstring = re.sub(r"\n\s{4}", "\n        ", updated_docstring, count=1)
-            doc = updated_docstring.lstrip('r\"').replace('"""', "")
+        if "```" in updated_docstring and len(parts) > 1:
+            updated_docstring = updated_docstring.lstrip('r\"')
+            new_parts = updated_docstring.split("```")
+            if len(new_parts) != 3:
+                raise ValueError("There should only be one example, and it should have opening and closing '```'")
+            parts[1] = new_parts[1]
             updated_docstring = "".join(
                 [
-                    parts[0].rstrip(" \n") + doc,
+                    parts[0].rstrip(" \n") + new_parts[0],
                     "\n    ```",
                     parts[1],
                     "```",
@@ -278,6 +280,13 @@ def merge_docstrings(original_docstring, updated_docstring):
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
             updated_docstring = original_docstring.rstrip('\"')+ "\n" + updated_docstring.lstrip('r\"')
+    else:
+        updated_docstring = original_docstring
+
+    indent_level = get_docstring_indent(updated_docstring)
+    original_level = get_docstring_indent(original_docstring)
+    if indent_level != original_level:
+        updated_docstring = updated_docstring.replace("\n    ",  "\n        ")
     return updated_docstring
 
 
