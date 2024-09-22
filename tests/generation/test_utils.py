@@ -86,7 +86,7 @@ if is_torch_available():
         WatermarkDetector,
         WatermarkingConfig,
     )
-    from transformers.generation.candidate_generator import _get_tokens_diag
+    from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
     from transformers.generation.utils import _speculative_sampling
 
 
@@ -3500,14 +3500,14 @@ class TestGetTokensDiag(unittest.TestCase):
     def test_no_intersection(self):
         prompt = np.array([[1, 2, 3]])
         prompt_plus_new_tokens = np.array([[4, 5, 6]])
-        result = _get_tokens_diag(prompt, prompt_plus_new_tokens)
+        result = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt, prompt_plus_new_tokens)
         self.assertEqual(result, (None, None, None, None, None))
 
     def test_complete_overlap(self):
         prompt = np.array([[1, 2, 3]])
         prompt_plus_new_tokens = np.array([[1, 2, 3, 4, 5]])
         replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
-            _get_tokens_diag(prompt, prompt_plus_new_tokens)
+            AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt, prompt_plus_new_tokens)
         )
         np.testing.assert_array_equal(replace_tokens_from_prompt, np.array([[]]))
         self.assertEqual(disrep_length, 0)
@@ -3519,7 +3519,7 @@ class TestGetTokensDiag(unittest.TestCase):
         prompt = np.array([[1, 2, 3]])
         prompt_plus_new_tokens = np.array([[2, 3, 4, 5]])
         replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
-            _get_tokens_diag(prompt, prompt_plus_new_tokens)
+            AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt, prompt_plus_new_tokens)
         )
         np.testing.assert_array_equal(replace_tokens_from_prompt, np.array([[]]))
         self.assertEqual(disrep_length, 0)
@@ -3531,7 +3531,7 @@ class TestGetTokensDiag(unittest.TestCase):
         prompt = np.array([[1, 2, 3]])
         prompt_plus_new_tokens = np.array([[1, 2, 3]])
         replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
-            _get_tokens_diag(prompt, prompt_plus_new_tokens)
+            AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt, prompt_plus_new_tokens)
         )
         np.testing.assert_array_equal(replace_tokens_from_prompt, np.array([[]]))
         self.assertEqual(disrep_length, 0)
