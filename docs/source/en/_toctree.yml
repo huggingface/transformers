@@ -1,8 +1,6 @@
 - sections:
   - local: index
     title: 🤗 Transformers
-  - local: transformers_philosophy
-    title: transformers' philosophy
   - local: quicktour
     title: Quick tour
   - local: installation
