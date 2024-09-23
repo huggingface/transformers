@@ -1968,7 +1968,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = self.chat_template
             else:
                 raise ValueError(
-                    "Cannot use get_chat_template() because tokenizer.chat_template is not set and no template "
+                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
                     "argument was passed! For information about writing templates and setting the "
                     "tokenizer.chat_template attribute, please see the documentation at "
                     "https://huggingface.co/docs/transformers/main/en/chat_templating"
