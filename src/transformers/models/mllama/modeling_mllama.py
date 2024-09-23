@@ -1397,17 +1397,20 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MllamaForCausalLM
 
-        >>> model = MllamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
+        >>> model = MllamaForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "<|begin_of_text|>If I had to write a haiku, it would be:"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=40, do_sample=True, temperature=0.6)
+        >>> result = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(result)
+        If I had to write a haiku, it would be: "Snowflakes gently fall" - simple, yet peaceful.
+        I love the idea of snowflakes gently falling, each one
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
