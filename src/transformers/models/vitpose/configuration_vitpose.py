@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
@@ -88,12 +89,6 @@ class VitPoseConfig(PretrainedConfig):
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
 
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if use_timm_backbone:
-            raise ValueError("Currently using timm backbone is not supported yet.")
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
             backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_indices=[4])
@@ -102,8 +97,13 @@ class VitPoseConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.backbone = backbone
