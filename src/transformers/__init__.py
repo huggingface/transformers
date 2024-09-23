@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    get_available_devices,
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
@@ -917,6 +918,7 @@ _import_structure = {
         "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
+        "get_available_devices",
         "is_apex_available",
         "is_av_available",
         "is_bitsandbytes_available",
@@ -5741,6 +5743,7 @@ if TYPE_CHECKING:
         TensorType,
         add_end_docstrings,
         add_start_docstrings,
+        get_available_devices,
         is_apex_available,
         is_av_available,
         is_bitsandbytes_available,

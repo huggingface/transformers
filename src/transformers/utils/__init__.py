@@ -16,6 +16,7 @@
 # limitations under the License.
 
 from functools import lru_cache
+from typing import FrozenSet
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
@@ -283,9 +284,9 @@ def check_min_version(min_version):
 
 
 @lru_cache()
-def get_available_devices():
+def get_available_devices() -> FrozenSet[str]:
     """
-    Returns a set of devices available for the current PyTorch installation.
+    Returns a frozenset of devices available for the current PyTorch installation.
     """
     devices = {"cpu"}  # `cpu` is always supported as a device in PyTorch
 
@@ -307,4 +308,4 @@ def get_available_devices():
     if is_torch_musa_available():
         devices.add("musa")
 
-    return devices
+    return frozenset(devices)
