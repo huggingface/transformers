@@ -2302,7 +2302,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
         )
 
-        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+        self.assertEqual(generate_outputs["sequences"].shape, generate_outputs["token_timestamps"].shape)
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
@@ -2313,7 +2313,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
+        self.assertTrue(torch.allclose(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT))
 
     @slow
     def test_large_token_timestamp_generation(self):
@@ -2332,7 +2332,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             **input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
         )
 
-        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+        self.assertEqual(generate_outputs["sequences"].shape, generate_outputs["token_timestamps"].shape)
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
@@ -2343,7 +2343,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
+        self.assertTrue(torch.allclose(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT))
 
     @slow
     def test_tiny_token_timestamp_batch_generation(self):
@@ -2370,9 +2370,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         # task id and lang id prompts should not have timestamp tokens
-        self.assertEqual(generate_outputs.sequences.shape[-1] - 2, generate_outputs.token_timestamps.shape[-1])
+        self.assertEqual(generate_outputs["sequences"].shape[-1] - 2, generate_outputs["token_timestamps"].shape[-1])
 
-        self.assertEqual(len(generate_outputs.sequences), num_return_sequences * num_samples)
+        self.assertEqual(len(generate_outputs["sequences"]), num_return_sequences * num_samples)
 
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
@@ -2863,7 +2863,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
+        decoded = processor.batch_decode(result["sequences"], skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT
 
@@ -2878,7 +2878,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
+        decoded = processor.batch_decode(result["sequences"], skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT1
 
@@ -3178,7 +3178,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         }
 
         result = model.generate(**inputs, **gen_kwargs)
-        decoded_all = processor.batch_decode(result.sequences, skip_special_tokens=True)
+        decoded_all = processor.batch_decode(result["sequences"], skip_special_tokens=True)
 
         for i in range(num_samples):
             if isinstance(EXPECTED_TEXT[i], str):

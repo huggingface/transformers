@@ -224,7 +224,6 @@ class WhisperGenerationMixin:
         input_length = weight_length or cross_attentions[0].shape[2]
         batch_size = generate_outputs.sequences.shape[0]
         timestamps = torch.zeros((batch_size, input_length + 1), dtype=torch.float32, device=generate_outputs.sequences.device)
-        batch_size = timestamps.shape[0]
 
         if num_frames is not None:
             # two cases:
@@ -244,6 +243,7 @@ class WhisperGenerationMixin:
             else:
                 # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
+                num_frames = num_frames.cpu() if isinstance(num_frames, (torch.Tensor)) else num_frames
                 num_frames = np.repeat(num_frames, repeat_time)
 
         if num_frames is None or isinstance(num_frames, int):
