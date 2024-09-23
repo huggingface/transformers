@@ -689,7 +689,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids`" " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -1002,7 +1002,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids`" " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -1134,7 +1134,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids`" " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
