@@ -196,6 +196,7 @@ class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
