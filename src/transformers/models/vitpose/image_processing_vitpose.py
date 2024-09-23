@@ -574,9 +574,6 @@ class VitPoseImageProcessor(BaseImageProcessor):
             - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
                 Scores (confidence) of the keypoints.
         """
-        # Avoid mutation
-        heatmaps = heatmaps.numpy().copy()
-
         batch_size, _, height, width = heatmaps.shape
 
         coords, scores = get_keypoint_predictions(heatmaps)
