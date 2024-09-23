@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -2006,7 +2007,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     """,
     BLIP_2_START_DOCSTRING,
 )
-class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
+class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
 

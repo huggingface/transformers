@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1101,7 +1102,7 @@ class UMT5Model(UMT5PreTrainedModel):
 
 
 @add_start_docstrings("""UMT5 Model with a `language modeling` head on top.""", UMT5_START_DOCSTRING)
-class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
+class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     r"""
     Examples:
 

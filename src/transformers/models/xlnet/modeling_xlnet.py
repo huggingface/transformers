@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -1286,7 +1287,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
-class XLNetLMHeadModel(XLNetPreTrainedModel):
+class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_loss.weight"]
 
     def __init__(self, config):
