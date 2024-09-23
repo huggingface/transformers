@@ -13,7 +13,8 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-from typing import Dict, List, Optional
+import os
+from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -131,6 +132,23 @@ class MllamaVisionConfig(PretrainedConfig):
     @property
     def max_aspect_ratio_id(self) -> int:
         return len(self.supported_aspect_ratios)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if config_dict.get("model_type") == "mllama":
+            config_dict = config_dict["vision_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
 
 
 class MllamaTextConfig(PretrainedConfig):
@@ -288,6 +306,23 @@ class MllamaTextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if config_dict.get("model_type") == "mllama":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
 
 
 class MllamaConfig(PretrainedConfig):
