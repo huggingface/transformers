@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -1033,7 +1034,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
 @add_start_docstrings(
     """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""", ROFORMER_START_DOCSTRING
 )
-class RoFormerForCausalLM(RoFormerPreTrainedModel):
+class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
