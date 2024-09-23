@@ -141,7 +141,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    has_attentions = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -163,10 +162,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
-    def test_attention_outputs(self):
         pass
 
     @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
@@ -342,7 +337,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    has_attentions = False
     test_torchscript = False
 
     def setUp(self):
@@ -391,24 +385,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Mllama has only SDPA layers and returns no attention outputs")
     def test_attention_outputs(self):
