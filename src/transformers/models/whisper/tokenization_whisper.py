@@ -891,7 +891,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
-    
+
     def _is_timestamp_token(self, token_id) -> bool:
         token = self.convert_ids_to_tokens(int(token_id))
         return self.timestamp_pat.match(token)
