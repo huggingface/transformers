@@ -281,7 +281,7 @@ MLLAMA_VISION_ATTENTION_CLASSES = {"eager": MllamaVisionSdpaAttention, "sdpa": M
 
 
 class MllamaVisionEncoderLayer(nn.Module):
-    def __init__(self, config, is_gated: bool = False):
+    def __init__(self, config: MllamaVisionConfig, is_gated: bool = False):
         super().__init__()
 
         self.hidden_size = config.hidden_size
@@ -295,7 +295,6 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
 
-        # there used to be an if else here, no code path
         if is_gated:
             self.gate_attn = nn.Parameter(torch.ones(1) * math.pi / 4)
             self.gate_ffn = nn.Parameter(torch.ones(1) * math.pi / 4)
@@ -310,15 +309,17 @@ class MllamaVisionEncoderLayer(nn.Module):
         residual = hidden_state
         hidden_state = self.input_layernorm(hidden_state)
         hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
-        gate_attn = 1 if not self.is_gated else self.gate_attn.tanh()
-        hidden_state = residual + gate_attn * hidden_state
+        if self.is_gated:
+            hidden_state = self.gate_attn.tanh() * hidden_state
+        hidden_state = residual + hidden_state
 
         # Feed forward
         residual = hidden_state
         hidden_state = self.post_attention_layernorm(hidden_state)
         hidden_state = self.mlp(hidden_state)
-        gate_ffn = 1 if not self.is_gated else self.gate_ffn.tanh()
-        hidden_state = residual + gate_ffn * hidden_state
+        if self.is_gated:
+            hidden_state = self.gate_ffn.tanh() * hidden_state
+        hidden_state = residual + hidden_state
 
         outputs = (hidden_state,)
 
