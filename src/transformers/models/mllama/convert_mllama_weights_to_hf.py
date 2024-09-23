@@ -17,7 +17,6 @@ import gc
 import json
 import math
 import os
-import warnings
 from typing import List, Optional
 
 import regex as re
@@ -34,15 +33,6 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
 from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
 
-
-try:
-    from transformers import LlamaTokenizerFast
-except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
-    )
-    LlamaTokenizerFast = None
 
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
