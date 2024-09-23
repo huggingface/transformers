@@ -3874,13 +3874,6 @@ class WhisperStandaloneDecoderModelTester:
 
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_decoder(self):
-        config, input_features = self.prepare_config_and_inputs()
-        input_ids = input_features["input_ids"]
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-
-        return (config, input_ids, encoder_hidden_states)
-
     def create_and_check_decoder_model_past(self, config, input_ids):
         config.use_cache = True
         model = WhisperDecoder(config=config).to(torch_device).eval()
