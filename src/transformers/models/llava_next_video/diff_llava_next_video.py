@@ -29,7 +29,6 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
-from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...utils import (
     logging,
