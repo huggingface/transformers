@@ -1115,7 +1115,11 @@ class MllamaPreTrainedModel(PreTrainedModel):
     # some of the layers has None gradient.
     # related to https://github.com/huggingface/transformers/pull/27124
     supports_gradient_checkpointing = False
-    _no_split_modules = ["MllamaVisionEncoderLayer", "MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
+    _no_split_modules = [
+        "MllamaVisionEncoderLayer",
+        "MllamaCrossAttentionDecoderLayer",
+        "MllamaSelfAttentionDecoderLayer",
+    ]
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_sdpa = True
