@@ -434,7 +434,7 @@ def write_model(
     del loaded
     gc.collect()
 
-    print("Loading the checkpoint in a Llama model.")
+    print("Loading the checkpoint in a Mllama model.")
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
