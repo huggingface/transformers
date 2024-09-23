@@ -452,9 +452,9 @@ class GenerationConfig(PushToHubMixin):
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
-        self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
-        self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
-        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
+        self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 20)
+        self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "constant")
+        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
