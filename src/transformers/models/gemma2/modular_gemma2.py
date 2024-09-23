@@ -577,7 +577,7 @@ class Gemma2PreTrainedModel(GemmaPreTrainedModel):
 
 
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -589,7 +589,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[HybridCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -618,19 +618,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            if past_key_values is None:
-                cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
-            else:
-                raise ValueError("When `past_key_values` is passed, `cache_position` must be too")
-
-        # Probably a forward call with caching, so we set up cache for one call only
         if use_cache and past_key_values is None and not self.training:
-            logger.warning_once(
-                "You are calling the model with `use_cache=True` but didn't pass `past_key_values` while not training. ",
-                "If you want to compute with cache, make sure to pass an instance of `HybridCache`. An empty `HybridCache` instance "
-                "will be created for this call. See for more: (https://huggingface.co/docs/transformers/main/en/internal/generation_utils#transformers.HybridCache)",
-            )
             batch_size, seq_len, _ = inputs_embeds.shape
             past_key_values = HybridCache(
                 self.config,
@@ -638,6 +626,12 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
                 max_cache_len=seq_len,
                 device=self.device,
                 dtype=inputs_embeds.dtype,
+            )
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         if position_ids is None:
@@ -713,7 +707,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Cache,
+        past_key_values: HybridCache,
         output_attentions: bool,
     ):
         # Flash Attention currently doesn't support static cache but Gemma2 work only with static cache.
@@ -756,7 +750,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[HybridCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
