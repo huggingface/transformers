@@ -349,6 +349,7 @@ class VitPoseBackboneEncoder(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
+                    dataset_index,
                     layer_head_mask,
                     output_attentions,
                 )
