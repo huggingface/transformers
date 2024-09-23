@@ -3101,12 +3101,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     def test_default_assisted_generation(self):
         # Initialize the GenerationConfig object
         config = GenerationConfig()
-        
+
         # Check the default values
         self.assertEqual(config.num_assistant_tokens, 20)
         self.assertEqual(config.num_assistant_tokens_schedule, "constant")
         self.assertEqual(config.assistant_confidence_threshold, 0.4)
-
 
     def test_generated_length_assisted_generation(self):
         # PT-only test: TF doesn't support assisted decoding yet.
