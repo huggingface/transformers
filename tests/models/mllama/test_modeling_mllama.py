@@ -136,21 +136,15 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 
 class MllamaVisionText2TextModelTester:
-    # TODO add correct dummy config
     def __init__(
         self,
         parent,
         ignore_index=-100,
         image_token_index=4,
-        projector_hidden_act="gelu",
         seq_length=7,
+        is_training=True,
         text_config={
-            "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
+            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -158,45 +152,36 @@ class MllamaVisionText2TextModelTester:
             "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
             # TODO: add generation tests with all model kwargs, not only text-related ones
-            #  "cross_attention_layers": [1],
+            # "cross_attention_layers": [1],
         },
-        is_training=True,
         vision_config={
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
-            "is_training": True,
             "hidden_size": 16,
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
             "projection_dim": 32,
             "num_hidden_layers": 2,
+            "num_global_layers": 1,
             "num_attention_heads": 4,
             "intermediate_size": 37,
             "dropout": 0.1,
-            "attention_dropout": 0.1,
             "initializer_range": 0.02,
-            # needed to init tile emb dimensions, let's make more to avoid slicing errors
-            "supported_aspect_ratios": [30, 30] * 10,
+            "supported_aspect_ratios": [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]],
         },
     ):
         self.parent = parent
+        self.is_training = is_training
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -205,12 +190,11 @@ class MllamaVisionText2TextModelTester:
         self.vocab_size = text_config["vocab_size"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.pad_token_id = 0
+        self.pad_token_id = self.text_config["pad_token_id"]
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 336
+        self.image_size = 224
 
     def get_config(self):
         return MllamaConfig(
