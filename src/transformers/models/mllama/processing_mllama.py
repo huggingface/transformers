@@ -113,7 +113,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     length: int,
 ) -> np.ndarray:
     """
-    Convert the cross attention mask indices to corss attention mask 4D array.
+    Convert the cross attention mask indices to a cross attention mask 4D array.
 
     This function takes a sparse representation of cross attention masks and converts it to a dense 4D numpy array.
     The sparse representation is a nested list structure that defines attention ranges for each image in each batch item.
