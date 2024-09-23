@@ -195,6 +195,8 @@ class MllamaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 224
+        self.max_num_images = 1
+        self.max_image_tiles = 4
 
     def get_config(self):
         return MllamaConfig(
@@ -207,16 +209,15 @@ class MllamaVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                1,  # num images per batch item
-                4,  # num tiles
+                self.max_num_images,
+                self.max_image_tiles,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
         )
         aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device).transpose(0, 1)
-        # batch_size, max_num_images, max_image_tiles
-        aspect_ratio_mask = torch.ones(self.batch_size, 1, 4)
+        aspect_ratio_mask = torch.ones(self.batch_size, self.max_num_images, self.max_image_tiles)
         config = self.get_config()
 
         return config, pixel_values, aspect_ratio_ids, aspect_ratio_mask
@@ -227,6 +228,10 @@ class MllamaVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         aspect_ratio_mask = aspect_ratio_mask.to(torch_device)
+        cross_attention_mask = torch.ones(
+            (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles),
+            device=torch_device
+        )
 
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, 1] = config.image_token_index
@@ -236,6 +241,7 @@ class MllamaVisionText2TextModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "aspect_ratio_mask": aspect_ratio_mask,
+            "cross_attention_mask": cross_attention_mask,
         }
         return config, inputs_dict
 
