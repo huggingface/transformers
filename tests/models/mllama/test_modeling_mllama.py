@@ -159,7 +159,7 @@ class MllamaVisionText2TextModelTester:
             "bos_token_id": 1,
             "eos_token_id": 2,
             # TODO: add generation tests with all model kwargs, not only text-related ones
-            # "cross_attention_layers": [1],
+            "cross_attention_layers": [1],
         },
         vision_config={
             "image_size": 30,
