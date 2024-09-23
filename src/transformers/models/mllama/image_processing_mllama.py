@@ -264,7 +264,6 @@ def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_imag
     # Set the first tile to 1 for all aspect ratios
     # because in original implementation aspect ratios are padded with (1, 1),
     # but original code examples are not built to handle batches, so we might remove it later
-    # TODO: check when batch generation with aspect_ratio_mask is supported
     aspect_ratio_mask[:, :, 0] = 1
 
     # Set the aspect ratio mask for the rest of the tiles
