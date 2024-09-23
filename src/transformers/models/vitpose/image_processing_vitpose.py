@@ -520,9 +520,9 @@ class VitPoseImageProcessor(BaseImageProcessor):
                     new_images.append(transformed_image)
             images = new_images
 
-        # since the number of boxes can differ per image, the image processor takes a list
-        # rather than a numpy array of boxes
-        # it currently creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
+        # For batch processing, the number of boxes must be consistent across all images in the batch.
+        # When using a list input, the number of boxes can vary dynamically per image.
+        # The image processor creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
         if self.do_rescale:
             images = [
