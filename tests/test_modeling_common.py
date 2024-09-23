@@ -1581,14 +1581,14 @@ class ModelTesterMixin:
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
-            config.get_text_config().output_hidden_states = True
+            config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.get_text_config().output_hidden_states = True
-        config.get_text_config().output_attentions = self.has_attentions
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
