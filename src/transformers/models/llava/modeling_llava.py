@@ -406,7 +406,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)

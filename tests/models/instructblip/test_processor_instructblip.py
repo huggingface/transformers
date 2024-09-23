@@ -409,3 +409,31 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    def test_overlapping_text_kwargs_handling(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_kwargs = {}
+        processor_kwargs["image_processor"] = self.get_component("image_processor")
+        processor_kwargs["tokenizer"] = tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        if "video_processor" in self.processor_class.attributes:
+            processor_kwargs["video_processor"] = self.get_component("video_processor")
+
+        qformer_tokenizer = self.get_component("qformer_tokenizer")
+
+        processor = self.processor_class(**processor_kwargs, qformer_tokenizer=qformer_tokenizer)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                padding="max_length",
+                text_kwargs={"padding": "do_not_pad"},
+            )

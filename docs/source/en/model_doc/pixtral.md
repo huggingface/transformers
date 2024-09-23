@@ -24,7 +24,7 @@ The Pixtral model was released by the Mistral AI team on [Vllm](https://github.c
 Tips:
 
 - Pixtral is a multimodal model, the main contribution is the 2d ROPE on the images, and support for arbitrary image size (the images are not padded together nor are they resized)
-- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders. 
+- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders.
 - The format for one or mulitple prompts is the following:
 ```
 "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
@@ -35,11 +35,11 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 
 Here is an example of how to run it:
 
-```python 
+```python
 from transformers import LlavaForConditionalGeneration, AutoProcessor
 from PIL import Image
 
-model_id = "hf-internal-testing/pixtral-12b"
+model_id = "mistral-community/pixtral-12b"
 model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
 processor = AutoProcessor.from_pretrained(model_id)
 
@@ -51,9 +51,9 @@ IMG_URLS = [
 ]
 PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
-inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+inputs = processor(images=IMG_URLS, text=PROMPT, return_tensors="pt").to("cuda")
 generate_ids = model.generate(**inputs, max_new_tokens=500)
-ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 EXPECTED_GENERATION = """
 Describe the images.

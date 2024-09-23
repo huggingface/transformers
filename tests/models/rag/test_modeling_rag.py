@@ -653,7 +653,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
     def config_and_inputs(self):
         question_encoder_tester = DPRModelTester(self)
         dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
-        generator_tester = T5ModelTester(self, vocab_size=1100)
+        generator_tester = T5ModelTester(self, vocab_size=1101)
         t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
 
         (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs

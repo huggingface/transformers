@@ -818,7 +818,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
-    loaded_state_dict_keys,  # left for now but could be removed, see below
     start_prefix,
     expected_keys,
     device_map=None,
@@ -847,8 +846,6 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
-    #   they won't get loaded.
 
     error_msgs = []
 
@@ -868,6 +865,18 @@ def _load_state_dict_into_meta_model(
             # We add only the first key as an example
             new_key = key.replace("beta", "bias")
             renamed_beta[key] = new_key if not renamed_beta else renamed_beta
+
+        # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            if "weight_g" in key:
+                new_key = key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                new_key = key.replace("weight_v", "parametrizations.weight.original1")
+        else:
+            if "parametrizations.weight.original0" in key:
+                new_key = key.replace("parametrizations.weight.original0", "weight_g")
+            if "parametrizations.weight.original1" in key:
+                new_key = key.replace("parametrizations.weight.original1", "weight_v")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -884,8 +893,7 @@ def _load_state_dict_into_meta_model(
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
     for param_name, param in state_dict.items():
-        # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+        if param_name not in expected_keys:
             continue
 
         if param_name.startswith(start_prefix):
@@ -4152,6 +4160,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("beta", "bias")
             if "gamma" in key:
                 return key.replace("gamma", "weight")
+
+            # to avoid logging parametrized weight norm renaming
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                if "weight_g" in key:
+                    return key.replace("weight_g", "parametrizations.weight.original0")
+                if "weight_v" in key:
+                    return key.replace("weight_v", "parametrizations.weight.original1")
+            else:
+                if "parametrizations.weight.original0" in key:
+                    return key.replace("parametrizations.weight.original0", "weight_g")
+                if "parametrizations.weight.original1" in key:
+                    return key.replace("parametrizations.weight.original1", "weight_v")
             return key
 
         original_loaded_keys = loaded_keys
@@ -4396,7 +4416,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
-                    loaded_keys,
                     start_prefix,
                     expected_keys,
                     device_map=device_map,
@@ -4473,7 +4492,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             state_dict,
-                            loaded_keys,
                             start_prefix,
                             expected_keys,
                             device_map=device_map,
@@ -4629,7 +4647,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         error_msgs = _load_state_dict_into_meta_model(
             model,
             state_dict,
-            loaded_state_dict_keys,
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,
