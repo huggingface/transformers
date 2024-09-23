@@ -179,7 +179,7 @@ class VitPoseSimpleDecoder(nn.Module):
         super().__init__()
 
         self.scale_factor = config.scale_factor
-        self.conv = nn.Conv2d(config.backbone_hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
         # Transform input: ReLu + upsample
@@ -206,7 +206,7 @@ class VitPoseClassicDecoder(nn.Module):
         super().__init__()
 
         self.deconv1 = nn.ConvTranspose2d(
-            config.backbone_hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
+            config.backbone_config.hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
         )
         self.batchnorm1 = nn.BatchNorm2d(256)
         self.relu1 = nn.ReLU()
@@ -252,9 +252,6 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         if not hasattr(self.backbone.config, "patch_size"):
             raise ValueError("The backbone should have a patch_size attribute")
 
-        config.backbone_hidden_size = self.backbone.config.hidden_size
-        config.image_size = self.backbone.config.image_size
-        config.patch_size = self.backbone.config.patch_size
         self.head = VitPoseSimpleDecoder(config) if config.use_simple_decoder else VitPoseClassicDecoder(config)
 
         # Initialize weights and apply final processing
@@ -316,8 +313,8 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
         sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
         batch_size = sequence_output.shape[0]
-        patch_height = self.config.image_size[0] // self.config.patch_size[0]
-        patch_width = self.config.image_size[1] // self.config.patch_size[1]
+        patch_height = self.config.backbone_config.image_size[0] // self.config.backbone_config.patch_size[0]
+        patch_width = self.config.backbone_config.image_size[1] // self.config.backbone_config.patch_size[1]
         sequence_output = (
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
