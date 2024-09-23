@@ -87,7 +87,9 @@ class VitPoseConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if use_pretrained_backbone:
-            logger.info("`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value.")
+            logger.info(
+                "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
+            )
 
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
