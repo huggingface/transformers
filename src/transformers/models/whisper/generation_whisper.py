@@ -25,7 +25,7 @@ from torch import nn
 
 from transformers.cache_utils import EncoderDecoderCache
 
-from ...generation.configuration_utils import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...generation.logits_process import (
     LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
@@ -172,7 +172,7 @@ def _pad_to_max_length(
     return sequences
 
 
-class WhisperGenerationMixin:
+class WhisperGenerationMixin(GenerationMixin):
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to

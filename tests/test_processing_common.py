@@ -21,6 +21,7 @@ import tempfile
 import numpy as np
 
 from transformers.models.auto.processing_auto import processor_class_from_name
+from transformers.processing_utils import Unpack
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,

@@ -29,6 +29,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1290,7 +1291,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     """,
     INSTRUCTBLIPVIDEO_START_DOCSTRING,
 )
-class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel):
+class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
     config_class = InstructBlipVideoConfig
     main_input_name = "pixel_values"
 

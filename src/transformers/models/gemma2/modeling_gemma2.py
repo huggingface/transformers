@@ -952,7 +952,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         return causal_mask
 
 
-class Gemma2ForCausalLM(Gemma2PreTrainedModel):
+class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
