@@ -357,18 +357,12 @@ def write_model(
     state_dict = {}
     for key in all_keys:
         new_key = new_keys[key]
-        if "cross_attention" in key and "language_model" in new_key:
-            new_key = re.sub(
-                r"layers.(\d+).",
-                lambda _match: f"layers.{cross_attention_layers_shift[int(_match.groups()[0])]}.",
-                new_key,
-            )
-        elif "text_model.layers" in key and "language_model" in new_key:
-            new_key = re.sub(
-                r"layers.(\d+).",
-                lambda _match: f"layers.{self_attention_layers_shift[int(_match.groups()[0])]}.",
-                new_key,
-            )
+
+        # In the original model, self-attention layers and cross-attention layers are different lists of layers.
+        # In the converted model, they are merged into one list with corresponding index shift to preserve the order.
+        if ("cross_attention" in key or "text_model.layers" in key) and "language_model" in new_key:
+            shift = cross_attention_layers_shift if "cross_attention" in key else self_attention_layers_shift
+            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{shift[int(_match.groups()[0])]}.", new_key)
 
         current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded]
         if not is_param_different_across_shards(new_key):
