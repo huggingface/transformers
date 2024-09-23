@@ -3106,6 +3106,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(config.num_assistant_tokens, 20)
         self.assertEqual(config.num_assistant_tokens_schedule, "constant")
         self.assertEqual(config.assistant_confidence_threshold, 0.4)
+        self.assertEqual(config.is_assistant, False)
+
 
     def test_generated_length_assisted_generation(self):
         # PT-only test: TF doesn't support assisted decoding yet.

@@ -953,7 +953,9 @@ class GenerationMixin:
         if generation_config._eos_token_tensor is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config._eos_token_tensor))
         if (
-            generation_config.assistant_confidence_threshold is not None
+            generation_config.is_assistant is not None
+            and generation_config.is_assistant
+            and generation_config.assistant_confidence_threshold is not None
             and generation_config.assistant_confidence_threshold > 0
         ):
             criteria.append(
@@ -1801,6 +1803,9 @@ class GenerationMixin:
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model)
+        if assistant_model is not None:
+            # this flag allow us set the confidence stopping criteria for assistant model generation.
+            assistant_model.generation_config.is_assistant = True
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
