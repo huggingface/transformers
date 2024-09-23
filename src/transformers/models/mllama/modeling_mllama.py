@@ -1031,16 +1031,11 @@ class MllamaVisionModel(MllamaPreTrainedModel):
             output_hidden_states=True,
             output_attentions=output_attentions,
         )
-        hidden_state, all_intermediate_hidden_states = output[0], output[1]
-        intermediate_hidden_states = [
-            hidden_state
-            for idx, hidden_state in enumerate(all_intermediate_hidden_states)
-            if idx in self.intermediate_layers_indices
-        ]
-        intermediate_hidden_states = torch.stack(intermediate_hidden_states, dim=-1)
+        hidden_state = output[0]
+
+        hidden_state = self.layernorm_post(hidden_state)
 
         # Apply global encoder
-        hidden_state = self.layernorm_post(hidden_state)
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
         )
@@ -1055,13 +1050,20 @@ class MllamaVisionModel(MllamaPreTrainedModel):
             output_attentions=output_attentions,
         )
         hidden_state = global_output[0]
+
+        # Remove padding form hidden state
         hidden_state = hidden_state.reshape(
             batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
         )
         hidden_state = hidden_state[:, :, :slice_index]
-
-        # Adding intermediate layer outputs
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, dim)
+
+        # Collect intermediate layer outputs from encoder output
+        all_intermediate_hidden_states = output[1]
+        intermediate_hidden_states = torch.stack(all_intermediate_hidden_states, dim=-1)
+        intermediate_hidden_states = intermediate_hidden_states[..., self.intermediate_layers_indices]
+
+        # Remove padding from intermediate hidden states
         intermediate_hidden_states = intermediate_hidden_states.reshape(
             batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, -1
         )
@@ -1069,6 +1071,8 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         intermediate_hidden_states = intermediate_hidden_states.reshape(
             batch_size, num_concurrent_media, num_tiles, num_patches, -1
         )
+
+        # Concatenate final hidden state and intermediate hidden states
         hidden_state = torch.cat([hidden_state, intermediate_hidden_states], dim=-1)
 
         if output_hidden_states:
