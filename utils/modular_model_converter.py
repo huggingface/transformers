@@ -275,7 +275,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             updated_docstring = "".join(
                 [
                     parts[0].rstrip(" \n") + new_parts[0],
-                    f"\n{original_level*" "}```",
+                    f"\n{original_level*' '}```",
                     parts[1],
                     "```",
                     parts[2],
