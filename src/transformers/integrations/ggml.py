@@ -197,9 +197,7 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
     },
     "bloom": {
-        "context_length": "context_length",
         "block_count": "n_layer",
-        "feed_forward_length": "feed_forward_length",
         "embedding_length": "hidden_size",
         "attention.head_count": "n_head",
         "vocab_size": "vocab_size",
