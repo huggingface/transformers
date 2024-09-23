@@ -184,7 +184,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
         try:
             importlib.import_module(imp)
         except ImportError as exception:
-            logger.error(f"Encountered exception while importing {imp}: {exception}")
+            logger.warning(f"Encountered exception while importing {imp}: {exception}")
             # Some packages can fail with an ImportError because of a dependency issue.
             # This check avoids hiding such errors.
             # See https://github.com/huggingface/transformers/issues/33604
