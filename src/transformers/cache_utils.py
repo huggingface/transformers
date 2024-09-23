@@ -318,7 +318,7 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, num_hidden_layers: int = None) -> None:
+    def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
         super().__init__()
         if num_hidden_layers is None:
             self.key_cache: List[torch.Tensor] = []
