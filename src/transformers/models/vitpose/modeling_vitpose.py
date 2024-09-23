@@ -179,7 +179,9 @@ class VitPoseSimpleDecoder(nn.Module):
         super().__init__()
 
         self.scale_factor = config.scale_factor
-        self.conv = nn.Conv2d(config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(
+            config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
+        )
 
     def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
         # Transform input: ReLu + upsample
