@@ -263,9 +263,6 @@ def get_docstring_indent(docstring):
 def merge_docstrings(original_docstring, updated_docstring):
     # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    # if indent_level != original_level:
-    #     updated_docstring = updated_docstring.replace("\n    ", "\n        ")
-
     if "        Args:\n        " not in updated_docstring:
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
@@ -286,6 +283,9 @@ def merge_docstrings(original_docstring, updated_docstring):
             )
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
+            if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
+                print("arg block!")
+                updated_docstring = updated_docstring.replace("\n    ", "\n        ")
             updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"')
     return updated_docstring
 
