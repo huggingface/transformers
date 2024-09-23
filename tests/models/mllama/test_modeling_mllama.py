@@ -460,7 +460,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
-        prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+        prompt = "<|image|>If I had to write a haiku for this one"
         url = "https://llava-vl.github.io/static/images/view.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
@@ -494,7 +494,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_11b_model_integration_generate_text_only(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
-        prompt = "<|begin_of_text|>If I had to write a haiku"
+        prompt = "If I had to write a haiku"
         inputs = processor(text=prompt, return_tensors="pt").to(torch_device)
 
         # Check inputs ids
@@ -526,7 +526,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
-        prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+        prompt = "<|image|>If I had to write a haiku for this one"
         url = "https://llava-vl.github.io/static/images/view.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
@@ -559,8 +559,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         prompt = [
-            "<|image|><|begin_of_text|>If I had to write a haiku for this one",
-            "<|image|><|begin_of_text|>This image shows",
+            "<|image|>If I had to write a haiku for this one",
+            "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)

@@ -154,6 +154,43 @@ def convert_sparse_cross_attention_mask_to_dense(
     return cross_attention_mask
 
 
+def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> str:
+    """
+    Builds a string from the input prompt by adding `bos_token` if not already present.
+
+    Args:
+        prompt (`str`):
+            The input prompt string.
+        bos_token (`str`):
+            The beginning of sentence token to be added.
+        image_token (`str`):
+            The image token used to identify the start of an image sequence.
+
+    Returns:
+        str: The modified prompt string with the `bos_token` added if necessary.
+
+    Examples:
+        >>> build_string_from_input("Hello world", "<begin_of_text>", "<|image|>")
+        '<begin_of_text>Hello world'
+
+        >>> build_string_from_input("<|image|>Hello world", "<begin_of_text>", "<|image|>")
+        '<|image|><begin_of_text>Hello world'
+
+        >>> build_string_from_input("<begin_of_text>Hello world", "<begin_of_text>", "<|image|>")
+        '<begin_of_text>Hello world'
+    """
+
+    if bos_token in prompt:
+        return prompt
+
+    num_image_tokens_on_start = 0
+    while prompt.startswith(image_token):
+        prompt = prompt[len(image_token) :]
+        num_image_tokens_on_start += 1
+
+    return f"{image_token * num_image_tokens_on_start}{bos_token}{prompt}"
+
+
 class MllamaProcessor(ProcessorMixin):
     r"""
     Constructs a Mllama processor which wraps [`MllamaImageProcessor`] and
@@ -171,7 +208,7 @@ class MllamaProcessor(ProcessorMixin):
 
         processor(
             images=your_pil_image,
-            text=["<|image|><|begin_of_text|>If I had to write a haiku for this one"],
+            text=["<|image|>If I had to write a haiku for this one"],
             images_kwargs = {"size": {"height": 448, "width": 448}},
             text_kwargs = {"padding": "left"},
             common_kwargs = {"return_tensors": "pt"},
@@ -195,6 +232,7 @@ class MllamaProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
+        self.bos_token = tokenizer.bos_token
         self.chat_template = tokenizer.chat_template
         super().__init__(image_processor, tokenizer)
 
@@ -254,6 +292,7 @@ class MllamaProcessor(ProcessorMixin):
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
             n_images_in_text = [t.count(self.image_token) for t in text]
+            text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
             _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)

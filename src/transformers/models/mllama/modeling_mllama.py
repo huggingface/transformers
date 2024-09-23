@@ -1400,7 +1400,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel):
         >>> model = MllamaForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
         >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
 
-        >>> prompt = "<|begin_of_text|>If I had to write a haiku, it would be:"
+        >>> prompt = "If I had to write a haiku, it would be:"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
@@ -1717,7 +1717,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         >>> model = MllamaForConditionalGeneration.from_pretrained(checkpoint)
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
-        >>> prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+        >>> prompt = "<|image|>If I had to write a haiku for this one"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
