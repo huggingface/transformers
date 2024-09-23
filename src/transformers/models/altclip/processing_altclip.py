@@ -41,8 +41,6 @@ class AltCLIPProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        feature_extractor ([`CLIPFeatureExtractor`], *optional*):
-            The feature extractor is a deprecated input.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -82,12 +80,6 @@ class AltCLIPProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
