@@ -56,16 +56,10 @@ class MllamaText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=4,
-        projector_hidden_act="gelu",
         seq_length=7,
+        is_training=True,
         text_config={
-            "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
+            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -73,24 +67,16 @@ class MllamaText2TextModelTester:
             "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
         },
-        is_training=True,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.projector_hidden_act = projector_hidden_act
         self.text_config = text_config
         self.seq_length = seq_length
 
@@ -103,9 +89,7 @@ class MllamaText2TextModelTester:
         self.batch_size = 3
 
     def get_config(self):
-        return MllamaTextConfig(
-            **self.text_config,
-        )
+        return MllamaTextConfig(**self.text_config)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -146,44 +130,8 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
     def test_generate_compile_fullgraph(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_cpu_offload(self):
         pass
 
 

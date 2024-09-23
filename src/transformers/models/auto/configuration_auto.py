@@ -170,7 +170,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralConfig"),
         ("mixtral", "MixtralConfig"),
         ("mllama", "MllamaConfig"),
-        ("mllama", "MllamaConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
