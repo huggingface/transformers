@@ -892,7 +892,7 @@ MLLAMA_START_DOCSTRING = r"""
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
-    # supports_gradient_checkpointing = True # TODO:check this
+    supports_gradient_checkpointing = True  # TODO: check this
     _no_split_modules = ["MllamaSdpaCrossAttention"]
     _supports_cache_class = True
     _supports_static_cache = True
