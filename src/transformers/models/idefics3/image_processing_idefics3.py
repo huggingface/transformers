@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -222,40 +222,6 @@ def make_pixel_mask(
     return mask
 
 
-# Custom to_pil_image function to support image_mode
-def to_pil_image(
-    image: Union[np.ndarray, "PIL.Image.Image", TensorType],
-    image_mode: Optional[str] = None,
-) -> "PIL.Image.Image":
-    """
-    Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
-    needed.
-
-    Args:
-        image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor` or `tf.Tensor`):
-            The image to convert to the `PIL.Image` format.
-        image_mode (`str`, *optional*):
-            The mode of the image.
-
-    Returns:
-        `PIL.Image.Image`: The converted image.
-    """
-    if isinstance(image, PIL.Image.Image):
-        return image
-    # Convert all tensors to numpy arrays before converting to PIL image
-    image = to_numpy_array(image)
-
-    # If the channel has been moved to first dim, we put it back at the end.
-    image = to_channel_dimension_format(
-        image, ChannelDimension.LAST, infer_channel_dimension_format(image, num_channels=(1, 3, 4))
-    )
-
-    # If there is a single channel, we squeeze it, as otherwise PIL can't handle it.
-    image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
-    image = image.astype(np.uint8)
-    return PIL.Image.fromarray(image, mode=image_mode)
-
-
 def convert_to_rgb(
     image: np.ndarray,
     palette: Optional[PIL.ImagePalette.ImagePalette] = None,
@@ -282,7 +248,6 @@ def convert_to_rgb(
     data_format = input_data_format if data_format is None else data_format
 
     mode = "P" if palette is not None else None
-    # Custom to_pil_image function to support image_mode
     image = to_pil_image(image, image_mode=mode)
     if image.mode == "P" and palette is not None:
         image.putpalette(palette)
