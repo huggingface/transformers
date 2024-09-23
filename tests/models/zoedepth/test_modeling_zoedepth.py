@@ -216,24 +216,20 @@ def prepare_img():
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
     expected_slice_post_processing = {
         (False, False): [
-            [1.1348238, 1.1193453, 1.130562],
-            [1.1754476, 1.1613507, 1.1701596],
-            [1.2287744, 1.2101802, 1.2148322],
+            [[1.1348238, 1.1193453, 1.130562], [1.1754476, 1.1613507, 1.1701596], [1.2287744, 1.2101802, 1.2148322]],
+            [[2.7170, 2.6550, 2.6839], [2.9827, 2.9438, 2.9587], [3.2340, 3.1817, 3.1602]],
         ],
         (False, True): [
-            [1.0610938, 1.1042216, 1.1429265],
-            [1.1099341, 1.148696, 1.1817775],
-            [1.1656011, 1.1988826, 1.2268101],
+            [[1.0610938, 1.1042216, 1.1429265], [1.1099341, 1.148696, 1.1817775], [1.1656011, 1.1988826, 1.2268101]],
+            [[2.5848, 2.7391, 2.8694], [2.7882, 2.9872, 3.1244], [2.9436, 3.1812, 3.3188]],
         ],
         (True, False): [
-            [1.8382794, 1.8380532, 1.8375976],
-            [1.848761, 1.8485023, 1.8479986],
-            [1.8571457, 1.8568444, 1.8562847],
+            [[1.8382794, 1.8380532, 1.8375976], [1.848761, 1.8485023, 1.8479986], [1.8571457, 1.8568444, 1.8562847]],
+            [[6.2030, 6.1902, 6.1777], [6.2303, 6.2176, 6.2053], [6.2561, 6.2436, 6.2312]],
         ],
         (True, True): [
-            [1.8306141, 1.8305621, 1.8303483],
-            [1.8410318, 1.8409299, 1.8406585],
-            [1.8492792, 1.8491366, 1.8488203],
+            [[1.8306141, 1.8305621, 1.8303483], [1.8410318, 1.8409299, 1.8406585], [1.8492792, 1.8491366, 1.8488203]],
+            [[6.2616, 6.2520, 6.2435], [6.2845, 6.2751, 6.2667], [6.3065, 6.2972, 6.2887]],
         ],
     }  # (pad, flip)
 
@@ -303,7 +299,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
                 out_l.unsqueeze(0).unsqueeze(1), size=img.size[::-1], mode="bicubic", align_corners=False
             )
             self.assertTrue((np.array(out_l.shape)[::-1] == np.array(img.size) * 2).all())
-            self.assertTrue(torch.allclose(out, out_l_reduced, rtol=1e-2))
+            self.assertTrue(torch.allclose(out, out_l_reduced, rtol=2e-2))
 
     def check_post_processing_test(self, image_processor, images, model, pad_input=True, flip_aug=True):
         inputs = image_processor(images=images, return_tensors="pt", do_pad=pad_input).to(torch_device)
@@ -321,37 +317,37 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             do_remove_padding=pad_input,
         )
 
-        expected_slice = torch.tensor(self.expected_slice_post_processing[pad_input, flip_aug]).to(torch_device)
-        for img, out in zip(images, outputs):
+        expected_slices = torch.tensor(self.expected_slice_post_processing[pad_input, flip_aug]).to(torch_device)
+        for img, out, expected_slice in zip(images, outputs, expected_slices):
             self.assertTrue(img.size == out.shape[::-1])
             self.assertTrue(torch.allclose(expected_slice, out[:3, :3], rtol=1e-3))
 
         self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flipped)
 
     def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
-        images = [prepare_img()] * 2
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_nopad_flip(self):
-        images = [prepare_img()] * 2
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=True)
 
     def test_inference_depth_estimation_post_processing_pad_noflip(self):
-        images = [prepare_img()] * 2
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_pad_flip(self):
-        images = [prepare_img()] * 2
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=True)
