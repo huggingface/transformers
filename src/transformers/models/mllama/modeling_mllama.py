@@ -1115,7 +1115,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     # some of the layers has None gradient.
     # related to https://github.com/huggingface/transformers/pull/27124
     supports_gradient_checkpointing = False
-    _no_split_modules = ["MllamaSdpaCrossAttention"]
+    _no_split_modules = ["MllamaVisionEncoderLayer", "MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_sdpa = True
@@ -1145,7 +1145,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
 class MllamaVisionModel(MllamaPreTrainedModel):
     config_class = MllamaVisionConfig
     base_model_prefix = "vision_encoder"
-    _no_split_modules = ["MllamaVisionSdpaAttention"]
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -1322,7 +1321,6 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 class MllamaTextModel(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
     base_model_prefix = "model"
-    _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
     def __init__(self, config: MllamaTextConfig):
         super().__init__(config)
@@ -1551,7 +1549,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
 class MllamaForCausalLM(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model"
-    _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
