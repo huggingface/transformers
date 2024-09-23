@@ -229,8 +229,7 @@ class MllamaVisionText2TextModelTester:
         attention_mask = input_ids.ne(1).to(torch_device)
         aspect_ratio_mask = aspect_ratio_mask.to(torch_device)
         cross_attention_mask = torch.ones(
-            (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles),
-            device=torch_device
+            (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles), device=torch_device
         )
 
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
