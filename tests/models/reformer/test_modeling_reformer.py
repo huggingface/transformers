@@ -684,13 +684,13 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def test_left_padding_compatibility(self):
         pass
 
-    def _get_input_ids_and_config(self, *args, **kwargs):
+    def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
         # override because overwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
         # NOTE: seq_length has to be multiple of 4, otherwise it fails for other tests
         original_sequence_length = self.model_tester.seq_length
         self.model_tester.seq_length = 16
-        test_inputs = super()._get_input_ids_and_config(*args, **kwargs)
+        test_inputs = super().prepare_config_and_inputs_for_generate(*args, **kwargs)
         self.model_tester.seq_length = original_sequence_length
         return test_inputs
 

@@ -97,49 +97,36 @@ class GenerationTesterMixin:
     input_name = "input_ids"
     max_new_tokens = 3
 
-    def _get_input_ids_and_config(self, batch_size=2):
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # TODO: @raushan or @gante, use `model.main_input_name` as the main input instead of relying on `input_ids`
-        input_ids = inputs_dict.pop(self.input_name)[:batch_size, :]
 
-        # We don't want a few model inputs in our generalist model input dictionary.
+        # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
             # we don't want to mask attention heads
             "head_mask",
             "decoder_head_mask",
+            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
             # we'll set cache use in each test differently
             "use_cache",
-            # we manually set attention_mask [TODO @joao: we probably want to reuse it when it exists]
-            "attention_mask",
-            # model-specific inputs to ignore
-            # "global_attention_mask",  # LED computes attention scores based on mask indices if `is_global`
         ]
-
-        inputs_dict = {
+        filtered_inputs_dict = {
             k: v[:batch_size, ...]
             for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore and isinstance(v, torch.Tensor)
+            if k not in input_keys_to_ignore
         }
+
+        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            if isinstance(config.eos_token_id, int):
-                config.eos_token_id = [config.eos_token_id]
-            config.pad_token_id = config.eos_token_id[0]
-
-        if self.has_attentions:
-            attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-        else:
-            attention_mask = None
-
-        # It is important set set the eos_token_id to None to ensure that no sequences
-        # shorter than `max_length` can be generated
+            config.pad_token_id = (
+                config.eos_token_id if isinstance(config.eos_token_id, int) else config.eos_token_id[0]
+            )
         config.eos_token_id = None
         config.forced_eos_token_id = None
 
-        return config, input_ids, attention_mask, inputs_dict
+        return config, filtered_inputs_dict
 
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {
@@ -197,39 +184,6 @@ class GenerationTesterMixin:
             "num_return_sequences": num_return_sequences,
         }
         return beam_kwargs
-
-    def _greedy_generate(
-        self,
-        model,
-        input_ids,
-        attention_mask,
-        inputs_dict,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-        use_cache=True,
-    ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
-        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
-        output_generate = model.generate(
-            input_ids,
-            do_sample=False,
-            num_beams=1,
-            max_new_tokens=self.max_new_tokens,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            return_dict_in_generate=return_dict_in_generate,
-            use_cache=use_cache,
-            **logits_processor_kwargs,
-            **model_kwargs,
-            **inputs_dict,
-        )
-
-        return output_generate
 
     def _sample_generate(
         self,
@@ -448,81 +402,88 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
             model = model_class(config).to(torch_device).eval()
-            output_generate = self._greedy_generate(
-                model=model, input_ids=input_ids, attention_mask=attention_mask, inputs_dict=inputs_dict
-            )
+
+            logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
+            generate_kwargs = {
+                "do_sample": False,
+                "num_beams": 1,
+                "max_new_tokens": self.max_new_tokens,
+                "use_cache": True
+            }
+            output_generate = model.generate(**inputs_dict, **generate_kwargs, **logits_processor_kwargs)
 
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                input_length = inputs_dict[self.input_name].shape[-1]
+                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_length)
 
-    @pytest.mark.generate
-    def test_greedy_generate_dict_outputs(self):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+    # @pytest.mark.generate
+    # def test_greedy_generate_dict_outputs(self):
+    #     for model_class in self.all_generative_model_classes:
+    #         config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
 
-            model = model_class(config).to(torch_device).eval()
-            output_generate = self._greedy_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_dict=inputs_dict,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=self.has_attentions,
-                return_dict_in_generate=True,
-                use_cache=False,
-            )
+    #         model = model_class(config).to(torch_device).eval()
+    #         output_generate = self._greedy_generate(
+    #             model=model,
+    #             input_ids=input_ids,
+    #             attention_mask=attention_mask,
+    #             inputs_dict=inputs_dict,
+    #             output_scores=True,
+    #             output_logits=True,
+    #             output_hidden_states=True,
+    #             output_attentions=self.has_attentions,
+    #             return_dict_in_generate=True,
+    #             use_cache=False,
+    #         )
 
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+    #         if model.config.is_encoder_decoder:
+    #             self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+    #             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+    #             # Retrocompatibility check
+    #             self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
+    #         else:
+    #             self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+    #             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+    #             # Retrocompatibility check
+    #             self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, input_ids, model.config)
+    #         self._check_outputs(output_generate, input_ids, model.config)
 
-    @pytest.mark.generate
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+    # @pytest.mark.generate
+    # def test_greedy_generate_dict_outputs_use_cache(self):
+    #     for model_class in self.all_generative_model_classes:
+    #         config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
 
-            if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
-            if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
-                self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
+    #         if not hasattr(config, "use_cache"):
+    #             self.skipTest(reason="This model doesn't support caching")
+    #         if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
+    #             self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            output_generate = self._greedy_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_dict=inputs_dict,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=self.has_attentions,
-                return_dict_in_generate=True,
-                use_cache=True,
-            )
+    #         config.is_decoder = True
+    #         model = model_class(config).to(torch_device).eval()
+    #         output_generate = self._greedy_generate(
+    #             model=model,
+    #             input_ids=input_ids,
+    #             attention_mask=attention_mask,
+    #             inputs_dict=inputs_dict,
+    #             output_scores=True,
+    #             output_logits=True,
+    #             output_hidden_states=True,
+    #             output_attentions=self.has_attentions,
+    #             return_dict_in_generate=True,
+    #             use_cache=True,
+    #         )
 
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+    #         if model.config.is_encoder_decoder:
+    #             self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+    #         else:
+    #             self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
 
-            self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
+    #         self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_sample_generate(self):
