@@ -443,8 +443,8 @@ class MllamaVisionEncoder(nn.Module):
                 )
             else:
                 layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
+                    hidden_state=hidden_states,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -893,7 +893,7 @@ class MllamaTextMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LlamaDecoder->MllamaSelfAttentionDecoder, Llama->MllamaText, LLAMA->MLLAMA_TEXT
+# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(nn.Module):
     def __init__(self, config: MllamaTextConfig, layer_idx: int):
         super().__init__()
@@ -905,20 +905,21 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
         self.input_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # Ignore copy
         self.layer_idx = layer_idx
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
-        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -956,7 +957,6 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
-            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -999,12 +999,13 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         cross_attention_mask: torch.Tensor,
         attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> torch.Tensor:
+        position_embeddings: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
