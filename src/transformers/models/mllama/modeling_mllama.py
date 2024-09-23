@@ -1111,7 +1111,10 @@ MLLAMA_START_DOCSTRING = r"""
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True  # TODO: check this
+    # gradient checkpointing is implemented but fails with testing,
+    # some of the layers has None gradient.
+    # related to https://github.com/huggingface/transformers/pull/27124
+    supports_gradient_checkpointing = False
     _no_split_modules = ["MllamaSdpaCrossAttention"]
     _supports_cache_class = True
     _supports_static_cache = True
