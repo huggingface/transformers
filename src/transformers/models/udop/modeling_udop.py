@@ -1790,7 +1790,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> # one can use the various task prefixes (prompts) used during pre-training
         >>> # e.g. the task prefix for DocVQA is "Question answering. "
         >>> question = "Question answering. What is the date on the form?"
-        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
+        >>> encoding = processor(image, question, text_pair=words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
