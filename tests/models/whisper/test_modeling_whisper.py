@@ -1980,14 +1980,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " Mein sechster Sohn scheint, wenigstens auf den ersten Blick,"
+        EXPECTED_TRANSCRIPT = " Denken Sie, soeben walten meine Gedanken bei Ihnen in Adela"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " My sixth son seems, at least at first glance, the most deeply-minded"
+        EXPECTED_TRANSCRIPT = " Think, my thoughts were just rolling with you in Adelaide, and I"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
