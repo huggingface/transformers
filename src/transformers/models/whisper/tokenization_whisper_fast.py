@@ -147,10 +147,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self.task = task
         self.predict_timestamps = predict_timestamps
 
-    @property
-    def timestamp_end(self) -> int:
-        timestamp_ids = [value for key, value in self.added_tokens_encoder.items() if self.timestamp_pat.match(key)]
-        return max(timestamp_ids)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._batch_encode_plus
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
@@ -180,14 +176,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
         """
         timestamp_begin = self.all_special_ids[-1] + 1
-        timestamp_end = self.timestamp_end
         outputs = [[]]
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
 
         for token in token_ids:
-            if timestamp_begin <= token <= timestamp_end:
+            if self._is_timestamp_token(token):
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
@@ -224,8 +219,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
         timestamp_begin = self.all_special_ids[-1] + 1
-        timestamp_end = self.timestamp_end
-        timestamp_tokens = (timestamp_begin <= token_ids) & (token_ids <= timestamp_end)
+        timestamp_tokens = self._is_timestamp_token(token_ids)
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
@@ -626,3 +620,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+    
+    def _is_timestamp_token(self, token_id) -> bool:
+        token = self.convert_ids_to_tokens(int(token_id))
+        return self.timestamp_pat.match(token)
