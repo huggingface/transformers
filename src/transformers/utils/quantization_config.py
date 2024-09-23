@@ -1176,6 +1176,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
 
+@dataclass
 class FbgemmFp8Config(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
