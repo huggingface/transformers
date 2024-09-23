@@ -107,7 +107,8 @@ for pose_result in pose_results:
     x, y, score = keypoint
     print(f"coordinate : [{x}, {y}], score : {score}")
 
-def visualize_keypoints(img,
+def visualize_keypoints(
+    img,
   pose_result,
   skeleton=None,
   kpt_score_thr=0.3,
