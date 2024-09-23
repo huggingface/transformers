@@ -147,7 +147,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self.task = task
         self.predict_timestamps = predict_timestamps
 
-
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._batch_encode_plus
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
@@ -620,7 +619,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
-    
+
     def _is_timestamp_token(self, token_id) -> bool:
         token = self.convert_ids_to_tokens(int(token_id))
         return self.timestamp_pat.match(token)
