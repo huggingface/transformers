@@ -490,7 +490,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
         if isinstance(boxes, list) and len(images) != len(boxes):
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
-        elif len(images) != boxes.shape[0]:
+        elif isinstance(boxes, np.ndarray) and len(images) != boxes.shape[0]:
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
 
         # All transformations expect numpy arrays.
