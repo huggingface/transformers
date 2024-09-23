@@ -16,20 +16,14 @@
 Processor class for Pixtral.
 """
 
-import sys
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
 
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
 
