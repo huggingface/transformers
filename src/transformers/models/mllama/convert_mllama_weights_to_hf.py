@@ -356,10 +356,6 @@ def write_model(
 
     state_dict = {}
     for key in all_keys:
-        # Sharded
-        # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
-        # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
-        # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
         new_key = new_keys[key]
         if "cross_attention" in key and "language_model" in new_key:
             new_key = re.sub(
