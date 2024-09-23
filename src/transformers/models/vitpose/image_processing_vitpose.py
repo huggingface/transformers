@@ -488,12 +488,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if isinstance(boxes, list):
-            if len(images) != len(boxes):
-                raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
-        else:
-            if len(images) != boxes.shape[0]:
-                raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
+        if isinstance(boxes, list)and len(images) != len(boxes):
+            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
+        elif len(images) != boxes.shape[0]:
+            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
