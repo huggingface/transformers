@@ -1780,8 +1780,23 @@ MLLAMA_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`MllamaImageProcessor.__call__`] for details ([]`MllamaProcessor`] uses
             [`MllamaImageProcessor`] for processing images).
-        aspect_ratio_mask: Optional[List[List[int]]] = None, # TODO
-        aspect_ratio_ids: Optional[torch.Tensor] = None, # TODO
+        aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):
+            Mask to avoid performing attention on padding tiles. Mask values selected in `[0, 1]`:
+
+            - 1 for tiles that are **not masked**,
+            - 0 for tiles that are **masked**.
+        aspect_ratio_ids (`torch.Tensor` of shape `(batch_size, max_num_images)`, *optional*):
+            Aspect ratio ids used to select the appropriate precomputed tile embeddings based on the aspect ratio of each input image.
+            These ids correspond to indices in the model's list of supported aspect ratios, offset by 1.
+
+            For example, if the model supports aspect ratios [[1, 1], [1, 2], [2, 1]]:
+            - An image with aspect ratio [1, 1] would have ID 1
+            - An image with aspect ratio [1, 2] would have ID 2
+            - An image with aspect ratio [2, 1] would have ID 3
+
+            The id 0 is reserved for padding (i.e., no image).
+
+            If an image has aspect ratio [1, 2], that means it was split into 2 tiles horizontally, and its `aspect_ratio_id` would be 2.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1802,8 +1817,16 @@ MLLAMA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        cross_attention_mask: Optional[torch.Tensor] = None, # TODO
-        cross_attention_states: Optional[torch.Tensor] = None, # TODO
+        cross_attention_mask (`torch.Tensor` of shape `(batch_size, seq_length, max_num_images, max_num_tiles)`, *optional*):
+            Cross-attention mask to control the interaction between text tokens and image tiles.
+            This 4D tensor defines which image tiles each text token should attend to.
+
+            For each text token (in seq_length):
+            - 1 indicates the token **should attend** to the corresponding image tile
+            - 0 indicates the token **should not attend** to the corresponding image tile
+        cross_attention_states (`torch.FloatTensor`, *optional*):
+            Output of the vision model, used for cross-attention. This tensor contains the processed image features that
+            the language model will attend to.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -1902,9 +1925,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        aspect_ratio_mask: Optional[List[List[int]]] = None,
+        aspect_ratio_mask: Optional[torch.Tensor] = None,
         aspect_ratio_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[List[List[List[int]]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         cross_attention_mask: Optional[torch.Tensor] = None,
         cross_attention_states: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
