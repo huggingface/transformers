@@ -782,15 +782,16 @@ class ModelTesterMixin:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
         for model_class in self.all_model_classes:
-            if (
-                model_class.__name__
-                in [
-                    *get_values(MODEL_MAPPING_NAMES),
-                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
-                ]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
+            with self.subTest(model_class.__name__):
+                if (
+                    model_class.__name__
+                    in [
+                        *get_values(MODEL_MAPPING_NAMES),
+                        *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                    ]
+                    or not model_class.supports_gradient_checkpointing
+                ):
+                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class}.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
