@@ -285,7 +285,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             # add tabulation if we are at the lowest level.
             if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
                 updated_docstring = updated_docstring.replace("\n    ", "\n        ")
-            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\\n')
+            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\n')
     return updated_docstring
 
 
@@ -426,7 +426,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     }
     end_meth = []
 
-    assing_targets = {}
+    assign_targets = {}
     docstring_node = []
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
     for func in original_node.body.body:
@@ -444,7 +444,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             func = func.with_changes(body=updated_methods[name].body, params=new_params)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
-            assing_targets[target] = func
+            assign_targets[target] = func
+        elif m.matches(func, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            target = class_finder.python_module.code_for_node(func.body[0].target)
+            assign_targets[target] = func
         elif m.matches(func, DOCSTRING_NODE):
             docstring_node = [func]
         else:
@@ -465,9 +468,13 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
+            # TODO we only use single assign might cause issues
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
-            assing_targets[target] = func
-    end_meth = docstring_node + list(assing_targets.values()) + end_meth
+            assign_targets[target] = func
+        if m.matches(func, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            target = class_finder.python_module.code_for_node(func.body[0].target)
+            assign_targets[target] = func
+    end_meth = docstring_node + list(assign_targets.values()) + end_meth
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
