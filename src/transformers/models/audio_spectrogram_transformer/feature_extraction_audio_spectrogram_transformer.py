@@ -191,6 +191,12 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
+            timem (`int`, *optional*):
+                The maximum possible length of the mask in the time domain.
+            freqm (`int`, *optional*):
+                The maximum possible length of the mask in the frequency domain.
+            add_noise (`bool`, *optional*):
+                Whether or not to add noise to the input.
         """
 
         if sampling_rate is not None:
@@ -254,7 +260,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         if freqm == 0 and timem == 0:
             return fbank
         if not is_speech_available():
-            raise ImportError("Torchaudio is required for use with frequency and time masking.")
+            raise ImportError("Torchaudio is required to use frequency and/or time masking.")
         if not isinstance(fbank, torch.Tensor):
             fbank = torch.tensor(fbank)
         fbank = torch.transpose(fbank, 0, 1)
