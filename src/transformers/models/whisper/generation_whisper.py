@@ -173,7 +173,7 @@ def _pad_to_max_length(
 
 
 class WhisperGenerationMixin:
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, num_input_ids=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
@@ -200,6 +200,10 @@ class WhisperGenerationMixin:
             # since the beam search strategy chooses the most probable sequences at the end of the search.
             # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
             weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            
+            # beam search takes `decoder_input_ids` into account in the `beam_indices` length 
+            # but forgot to shift the beam_indices by the number of `decoder_input_ids`
+            weight_length = weight_length if num_input_ids is None else weight_length + num_input_ids
             weights = weights[:, :, :weight_length]
 
             # If beam index is still -1, it means that the associated token id is EOS
@@ -218,7 +222,8 @@ class WhisperGenerationMixin:
 
         # make sure timestamps are as long as weights
         input_length = weight_length or cross_attentions[0].shape[2]
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, : input_length + 1]
+        batch_size = generate_outputs.sequences.shape[0]
+        timestamps = torch.zeros((batch_size, input_length + 1), dtype=torch.float32, device=generate_outputs.sequences.device)
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
@@ -948,7 +953,7 @@ class WhisperGenerationMixin:
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                seek_outputs, generation_config.alignment_heads, num_frames=num_frames
+                seek_outputs, generation_config.alignment_heads, num_frames=num_frames, num_input_ids=decoder_input_ids.shape[-1]
             )
             seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, start_idx:]
 
