@@ -168,7 +168,7 @@ class MllamaTextConfig(PretrainedConfig):
             by the `inputs_ids` passed when calling [`MllamaTextModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
-        hidden_activation (`str` or `Callable`, *optional*, defaults to `"silu"`):
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
         num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer encoder.
@@ -260,7 +260,7 @@ class MllamaTextConfig(PretrainedConfig):
         self,
         vocab_size: int = 128256,
         hidden_size: int = 4096,
-        hidden_activation: str = "silu",
+        hidden_act: str = "silu",
         num_hidden_layers: int = 40,
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
@@ -294,7 +294,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.intermediate_size = intermediate_size
         self.dropout = dropout
-        self.hidden_activation = hidden_activation
+        self.hidden_act = hidden_act
         self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
         rope_config_validation(self)
