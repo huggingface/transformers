@@ -2863,7 +2863,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result["sequences"], skip_special_tokens=True)
+        decoded = processor.batch_decode(result, skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT
 
@@ -2878,7 +2878,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result["sequences"], skip_special_tokens=True)
+        decoded = processor.batch_decode(result, skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT1
 
@@ -3178,7 +3178,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         }
 
         result = model.generate(**inputs, **gen_kwargs)
-        decoded_all = processor.batch_decode(result["sequences"], skip_special_tokens=True)
+        decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         for i in range(num_samples):
             if isinstance(EXPECTED_TEXT[i], str):
