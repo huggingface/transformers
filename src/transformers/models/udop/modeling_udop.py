@@ -34,6 +34,7 @@ from transformers.modeling_outputs import (
 )
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -1679,7 +1680,7 @@ class UdopModel(UdopPreTrainedModel):
     This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
     UDOP_START_DOCSTRING,
 )
-class UdopForConditionalGeneration(UdopPreTrainedModel):
+class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
