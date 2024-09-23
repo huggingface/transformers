@@ -1189,14 +1189,15 @@ class MllamaTextModel(MllamaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if (
-                idx in self.cross_attention_layers
-                and cross_attention_states is None
-                and (
-                    past_key_values is None
-                    or (past_key_values is not None and past_key_values.get_seq_length(idx) == 0)
-                )
-            ):
+            # For text-only path we should skip cross attention layers.
+            # Let's check if the layer is cross attention layer and if we have cross attention states
+            # or cached cross attention states.
+            is_cross_attention_layer = idx in self.cross_attention_layers
+            is_cross_attention_cache_empty = past_key_values is None or (
+                past_key_values is not None and past_key_values.get_seq_length(idx) == 0
+            )
+
+            if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:
                 continue
 
             if self.gradient_checkpointing and self.training:

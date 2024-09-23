@@ -491,6 +491,37 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    def test_11b_model_integration_generate_text_only(self):
+        # Prepare inputs
+        processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
+        prompt = "<|begin_of_text|>If I had to write a haiku"
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device)
+
+        # Check inputs ids
+        expected_input_ids = [128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342]
+        self.assertEqual(inputs["input_ids"].cpu().squeeze().tolist(), expected_input_ids)
+
+        # Load model in 4 bit
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.base_model_checkpoint, quantization_config=quantization_config
+        )
+
+        # Generate
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "If I had to write a haiku about my life, I think it would be something like:\n\"Life is a messy stream\nTwists and turns, ups"  # fmt: skip
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_gpu
+    @require_bitsandbytes
     def test_11b_model_integration_forward(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
