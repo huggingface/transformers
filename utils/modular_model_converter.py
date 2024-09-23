@@ -257,7 +257,7 @@ def get_docstring_indent(docstring):
     if match:
         # Return the indentation spaces captured
         return len(match.group(1))
-    return -1
+    return 0
 
 
 def merge_docstrings(original_docstring, updated_docstring):
