@@ -284,9 +284,8 @@ def merge_docstrings(original_docstring, updated_docstring):
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
             if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
-                print("arg block!")
                 updated_docstring = updated_docstring.replace("\n    ", "\n        ")
-            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"')
+            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\\n')
     return updated_docstring
 
 
