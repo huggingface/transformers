@@ -32,10 +32,11 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## Usage Tips
 
-- For text-only generation use `MllamaForCausalGeneration` and for image+text cases use `MllamaForConditionalGeneration`.
-- Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images in a batch for input to the model.
-- The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted
-- The processor has its own apply_chat_template method to convert chat messages to text that can then be passed as text to the processor.
+- For text-only generation use `MllamaForCausalLM` to avoid loading vision tower.
+- For text-only or image+text cases use `MllamaForConditionalGeneration`.
+- Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images across samples and to a maximum number of tiles within each image.
+- The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted.
+- The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor.
 
 ## Usage Example
 
@@ -50,7 +51,7 @@ model_id = "meta-llama/Llama-3.2-11B-Vision"
 model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
 processor = AutoProcessor.from_pretrained(model_id)
 
-prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+prompt = "<|image|>If I had to write a haiku for this one"
 url = "https://llava-vl.github.io/static/images/view.jpg"
 raw_image = Image.open(requests.get(url, stream=True).raw)
 
