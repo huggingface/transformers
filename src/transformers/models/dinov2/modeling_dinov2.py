@@ -231,7 +231,6 @@ class Dinov2SelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Dinov2
 class Dinov2SdpaSelfAttention(Dinov2SelfAttention):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__(config)
