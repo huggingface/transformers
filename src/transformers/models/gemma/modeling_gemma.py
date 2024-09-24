@@ -771,11 +771,13 @@ class GemmaModel(GemmaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.gradient_checkpointing = False
         self.layers = nn.ModuleList(
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -985,9 +987,11 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
+        self.model = GemmaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.model = GemmaModel(config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1205,8 +1209,10 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
         self.model = GemmaModel(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1318,6 +1324,7 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.model = GemmaModel(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
@@ -1326,7 +1333,8 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
         self.score = nn.Linear(config.hidden_size, config.num_labels)
-        self.model = GemmaModel(config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):

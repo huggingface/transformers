@@ -184,6 +184,7 @@ class Gemma2Attention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self.scaling = config.query_pre_attn_scalar**-0.5
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
@@ -200,7 +201,6 @@ class Gemma2Attention(nn.Module):
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
-        self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
@@ -544,11 +544,11 @@ class Gemma2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
-        self.mlp = Gemma2MLP(config)
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
@@ -786,10 +786,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.gradient_checkpointing = False
-        self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
 
     def get_input_embeddings(self):
