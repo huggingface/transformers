@@ -587,6 +587,10 @@ class DynamicSlidingWindowCache(DynamicCache):
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`. Discard previous
         tokens according to the sliding window if needed.
 
+        Note: we always keep `sliding_window` tokens in the cache, instead of the `sliding_window - 1` tokens that
+        are strictly necesary. This allows to roll back one token in the past with `cache.crop(-1)` in contrastive search.
+        Assisted decoding would need to roll back additional tokens, and is therefore not supported with this Cache class.
+        
         Parameters:
             key_states (`torch.Tensor`):
                 The new key states to cache.
@@ -615,13 +619,17 @@ class DynamicSlidingWindowCache(DynamicCache):
             new_seq_len = key_states.shape[-2]
             current_seq_len = self.get_seq_length(layer_idx)
             if new_seq_len + current_seq_len > self.sliding_window:
-                # We need to slice
-                self.key_cache[layer_idx] = torch.cat(
-                    [self.key_cache[layer_idx][..., -(self.sliding_window - new_seq_len) :, :], key_states], dim=-2
+                # We may need to return longer states (e.g. to continue generation with previous cache, with added tokens), but we only keep
+                # the last `sliding_window` states in the cache for next forward
+                full_key_states = torch.cat(
+                    [self.key_cache[layer_idx][..., -(self.sliding_window - 1) :, :], key_states], dim=-2
                 )
-                self.value_cache[layer_idx] = torch.cat(
-                    [self.value_cache[layer_idx][..., -(self.sliding_window - new_seq_len) :, :], value_states], dim=-2
+                full_value_states = torch.cat(
+                    [self.value_cache[layer_idx][..., -(self.sliding_window - 1) :, :], value_states], dim=-2
                 )
+                self.key_cache[layer_idx] = full_key_states[..., -self.sliding_window :, :]
+                self.value_cache[layer_idx] = full_value_states[..., -self.sliding_window :, :]
+                return full_key_states, full_value_states
             else:
                 # Similar to DynamicCache
                 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
