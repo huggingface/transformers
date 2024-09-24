@@ -18,11 +18,12 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet. 
+In [Chameleon: Mixed-Modal Early-Fusion Foundation Models
+](https://arxiv.org/abs/2405.09818v1) Meta FAIR's Chameleon Team introduced a family of early-fusion Vision-Language Models (VLMs). These models are capable of understanding and generating images and text interleaved in any arbitrary sequence.
 
+Warning: The image generation module has not yet been released.
 
-The abstract from the paper is the following:
+The abstract from the paper is as follows:
 
 *We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
 approach from inception, an alignment recipe, and an architectural parameterization tailored for the
@@ -54,8 +55,15 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 - Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
 
-> [!NOTE]
-> Chameleon implementation in Transformers uses a special image token to indicate where to merge image embeddings. For special image token we didn't add a new one but used one of the reserved tokens: `<reserved08707>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
+## How are images handled by Chameleon in Transformers?
+
+The `ChameleonProcessor` takes as input strings and images and preprocesses them. The strings are tokenized as you would see with other models with one exception, for every instance of the substring `<image>` in the input strings you will get a sequence of 1026 tokens: `<img_start>`, 1024 * `<reserved08707>`, `<img_end>`. This `<reserved08707>` token indicates where to merge the image tokens later when the `ChameleonModel`'s are called. All these tokens, those for the text with the interleaved image sentinel and placeholder tokens are all placed in the output dictionary mapped to the key `input_ids`.
+
+The images passed to `ChameleonProcessor` are processed through a sequence of transformations: format conversion, center cropping, resizing, normalizing etc. The processed images are put into the output dictionary mapped to the key `pixel_values`.
+
+The conversion of the `pixel_values` tensors into image tokens and substitution into the placeholder tokens in `input_ids` happens when you call the `ChameleonModel`. This conversion is done in two steps, the first of which uses a [Vector Quantized Variational AutoEncoder (VQ-GAE)](https://arxiv.org/abs/1711.00937) to generate image tokens which are then mapped to Byte Pair Encoding (BPE) tokens. These image tokens are then swapped into the placeholder tokens in `input_ids`.
+
+Tip: If you want to see the image tokens a given image maps to, you can use the `ChameleonModel`'s `get_image_tokens` method, passing it the `pixel_values`.
 
 ## Usage example
 
@@ -128,7 +136,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the majority of the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
 
 <Tip>
 
@@ -143,7 +151,7 @@ Simply change the snippet above with:
 ```python
 from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig
 
-# specify how to quantize the model
+# Specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
