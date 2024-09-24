@@ -212,7 +212,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [MGP-STR](model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
-|                        [mllama](model_doc/mllama)                        |       ✅        |         ❌         |      ❌      |
+|                        [Mllama](model_doc/mllama)                        |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
 |                    [MobileBERT](model_doc/mobilebert)                    |       ✅        |         ✅         |      ❌      |
