@@ -5,7 +5,7 @@ import logging
 from io import StringIO
 
 # Console for rich printing
-from modular_model_converter import convert_diff_file
+from modular_model_converter import convert_modular_file
 from rich.console import Console
 from rich.syntax import Syntax
 
@@ -16,7 +16,7 @@ console = Console()
 
 
 def process_file(generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
-    file_path = diff_file_path.replace("modular_", f"{file_type}_")
+    file_path = modular_file_path.replace("modular_", f"{file_type}_")
     # Read the actual modeling file
     with open(file_path, "r") as modeling_file:
         content = modeling_file.read()
@@ -48,9 +48,9 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
         return 0
 
 
-def compare_files(diff_file_path, fix_and_overwrite=False):
+def compare_files(modular_file_path, fix_and_overwrite=False):
     # Generate the expected modeling content
-    generated_modeling_content = convert_diff_file(diff_file_path)
+    generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
     for file_type in generated_modeling_content.keys():
         diff += process_file(generated_modeling_content, file_type, fix_and_overwrite)
@@ -58,8 +58,10 @@ def compare_files(diff_file_path, fix_and_overwrite=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compare diff_xxx.py files with modeling_xxx.py files.")
-    parser.add_argument("--files", default=["all"], type=list, nargs="+", help="List of diff_xxx.py files to compare.")
+    parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
+    parser.add_argument(
+        "--files", default=["all"], type=list, nargs="+", help="List of modular_xxx.py files to compare."
+    )
     parser.add_argument(
         "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
     )
@@ -67,8 +69,8 @@ if __name__ == "__main__":
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     non_matching_files = 0
-    for diff_file_path in args.files:
-        non_matching_files += compare_files(diff_file_path, args.fix_and_overwrite)
+    for modular_file_path in args.files:
+        non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
 
     if non_matching_files and not args.fix_and_overwrite:
         raise ValueError("Some diff and their modeling code did not match.")
