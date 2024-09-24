@@ -198,9 +198,8 @@ class Blip2VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-        self.position_embeddings = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
+        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -212,14 +211,14 @@ class Blip2VisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, :1]
+        patch_pos_embed = self.position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -251,7 +250,7 @@ class Blip2VisionEmbeddings(nn.Module):
         if interpolate_pos_encoding:
             position_embedding = self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            position_embedding = self.position_embeddings
+            position_embedding = self.position_embedding
         embeddings = embeddings + position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
@@ -432,7 +431,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Blip2VisionEmbeddings):
             if hasattr(self.config, "vision_config") and not isinstance(self.config, Blip2VisionConfig):
                 factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
 
         elif isinstance(module, nn.LayerNorm):
