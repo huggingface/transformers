@@ -15,7 +15,7 @@ logging.getLogger().setLevel(logging.ERROR)
 console = Console()
 
 
-def process_file(generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
+def process_file(modular_file_path, generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
     file_path = modular_file_path.replace("modular_", f"{file_type}_")
     # Read the actual modeling file
     with open(file_path, "r") as modeling_file:
@@ -35,7 +35,7 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
     if diff_list:
         if fix_and_overwrite:
             with open(file_path, "w") as modeling_file:
-                modeling_file.write(generated_modeling_content)
+                modeling_file.write(generated_modeling_content[file_type][0])
             console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         else:
             console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
@@ -53,7 +53,7 @@ def compare_files(modular_file_path, fix_and_overwrite=False):
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
     for file_type in generated_modeling_content.keys():
-        diff += process_file(generated_modeling_content, file_type, fix_and_overwrite)
+        diff += process_file(modular_file_path, generated_modeling_content, file_type, fix_and_overwrite)
     return diff
 
 
