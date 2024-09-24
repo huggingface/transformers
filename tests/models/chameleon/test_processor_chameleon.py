@@ -36,8 +36,9 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = ChameleonImageProcessor.from_pretrained("facebook/chameleon-7b")
-        tokenizer = LlamaTokenizer.from_pretrained("facebook/chameleon-7b", vocab_file=SAMPLE_VOCAB)
+        image_processor = ChameleonImageProcessor()
+        tokenizer = LlamaTokenizer(vocab_file=SAMPLE_VOCAB)
+        tokenizer.pad_token_id = 0
+        tokenizer.sep_token_id = 1
         processor = self.processor_class(image_processor=image_processor, tokenizer=tokenizer)
         processor.save_pretrained(self.tmpdirname)
