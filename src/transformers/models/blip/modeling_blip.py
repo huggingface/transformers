@@ -231,7 +231,7 @@ class BlipVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
+        self.position_embeddings = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
     # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -284,7 +284,7 @@ class BlipVisionEmbeddings(nn.Module):
         if interpolate_pos_encoding:
             position_embedding = self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            position_embedding = self.position_embedding
+            position_embedding = self.position_embeddings
         embeddings = embeddings + position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
