@@ -225,8 +225,8 @@
     title: ما الذي يمكن أن تفعله 🤗 المحولات
   - local: tasks_explained
     title: كيف تحل المحولات المهام
-  # - local: model_summary
-  #   title: عائلة نماذج المحول
+  - local: model_summary
+    title: عائلة نماذج المحول
   - local: tokenizer_summary
     title: ملخص برنامج مقسم النصوص (tokenizers)
   # - local: attention
