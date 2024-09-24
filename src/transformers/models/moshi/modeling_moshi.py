@@ -1927,8 +1927,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             if moshi_input_values is not None and moshi_audio_codes is None:
                 moshi_audio_codes = self.audio_encoder.encode(moshi_input_values, num_quantizers=self.num_codebooks, **kwargs_audio_encoder)[0]
             
-            # TODO: make sure it's the right order (user than moshi) + make sure it's done over the right dim
-            audio_codes = torch.cat([user_audio_codes, moshi_audio_codes], dim=1)
+            audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
 
             if input_ids is None and audio_codes is None:
                 raise ValueError("You must provide at least one of `input_ids`, `inputs_embeds`, `input_values` and `audio_codes`.")
@@ -2040,21 +2039,21 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                     max_length=generation_config.max_length,
                 )
             
-            audio_codes = None
+            audio_inputs_embeds = None
             if user_audio_codes is not None and moshi_audio_codes is not None:
-                # TODO: make sure it's the right order (user than moshi) + make sure it's done over the right dim
-                audio_codes = torch.cat([user_audio_codes, moshi_audio_codes], dim=1)
-            elif user_audio_codes is not None:
-                audio_codes = user_audio_codes
+                audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
+                audio_inputs_embeds = sum([self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])])
             elif moshi_audio_codes is not None:
                 audio_codes = moshi_audio_codes
-            
+                audio_inputs_embeds = sum([self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])])
+            elif user_audio_codes is not None:
+                audio_codes = user_audio_codes
+                audio_inputs_embeds = sum([self.embed_tokens[codebook](audio_codes[:, codebook+self.num_codebooks]) for codebook in range(audio_codes.shape[1])])
+
             if input_ids is not None:
                 inputs_embeds = self.decoder.model.embed_tokens(input_ids)
             
-            if audio_codes is not None:
-                # TODO: this is False if user_audio_codes is None
-                audio_inputs_embeds = sum([self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])])
+            if audio_inputs_embeds is not None:
                 inputs_embeds = audio_inputs_embeds if inputs_embeds is None else audio_inputs_embeds + inputs_embeds
 
         return inputs_embeds, moshi_audio_codes, delay_pattern_mask
