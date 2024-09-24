@@ -37,6 +37,7 @@ if is_pytesseract_available():
 @require_pytesseract
 @require_tokenizers
 class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    images_input_name = "image"
     tokenizer_class = LayoutLMv2Tokenizer
     rust_tokenizer_class = LayoutLMv2TokenizerFast
     processor_class = LayoutLMv2Processor
@@ -182,6 +183,23 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
+    def test_model_specific_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", apply_ocr=True)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            # LayoutLMv2's processor expects `text` to be provided when `apply_ocr` is set to False
+            processor(
+                images=image_input,
+                return_tensors="pt",
+                apply_ocr=False,
+            )
 
 
 # different use cases tests

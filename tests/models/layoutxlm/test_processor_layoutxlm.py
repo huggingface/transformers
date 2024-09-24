@@ -28,12 +28,12 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
-if is_pytesseract_available():
+if is_vision_available():
     from PIL import Image
 
     from transformers import LayoutLMv2ImageProcessor
@@ -43,6 +43,7 @@ if is_pytesseract_available():
 @require_sentencepiece
 @require_tokenizers
 class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    images_input_name = "image"
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
@@ -61,6 +62,8 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
         self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+        tokenizer = LayoutXLMTokenizer.from_pretrained(self.tokenizer_pretrained_name)
+        tokenizer.save_pretrained(self.tmpdirname)
 
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
@@ -181,6 +184,23 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
+    def test_model_specific_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", apply_ocr=True)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            # LayoutXLM's processor expects `text` to be provided when `apply_ocr` is set to False
+            processor(
+                images=image_input,
+                return_tensors="pt",
+                apply_ocr=False,
+            )
 
 
 # different use cases tests

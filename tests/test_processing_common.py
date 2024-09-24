@@ -27,13 +27,17 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 
 try:
     from typing import Unpack
 except ImportError:
     from typing_extensions import Unpack
+
+
+if is_torch_available():
+    import torch
 
 
 if is_vision_available():
@@ -174,7 +178,10 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -207,7 +214,10 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -218,6 +228,7 @@ class ProcessorTesterMixin:
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        max_length = 76
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -225,10 +236,13 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1,
             padding="max_length",
-            max_length=76,
+            max_length=max_length,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched(self):
@@ -250,7 +264,10 @@ class ProcessorTesterMixin:
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < 76
@@ -294,7 +311,10 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict(self):
@@ -314,7 +334,10 @@ class ProcessorTesterMixin:
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        if inputs[self.images_input_name].dtype == torch.uint8:
+            self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        else:
+            self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs

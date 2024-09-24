@@ -23,12 +23,12 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTraine
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
-if is_pytesseract_available():
+if is_vision_available():
     from PIL import Image
 
     from transformers import LayoutLMv3ImageProcessor
@@ -37,6 +37,7 @@ if is_pytesseract_available():
 @require_pytesseract
 @require_tokenizers
 class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlmv3-base"
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     processor_class = LayoutLMv3Processor
@@ -86,6 +87,9 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
+
+        tokenizer = LayoutLMv3Tokenizer.from_pretrained(self.from_pretrained_id)
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -162,6 +166,23 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    def test_model_specific_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", apply_ocr=True)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            # LayoutLMv3's processor expects `text` to be provided when `apply_ocr` is set to False
+            processor(
+                images=image_input,
+                return_tensors="pt",
+                apply_ocr=False,
+            )
 
 
 # different use cases tests
