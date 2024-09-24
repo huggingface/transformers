@@ -5,6 +5,8 @@
     title: Quick tour
   - local: installation
     title: Installation
+  - local: add_new_model
+    title: Adding a new model to `transformers`
   title: Get started
 - sections:
   - local: pipeline_tutorial
@@ -149,6 +151,8 @@
     title: Interoperability with GGUF files
   - local: tiktoken
     title: Interoperability with TikToken files
+  - local: modular_transformers
+    title: Modularity in `transformers`
   title: Developer guides
 - sections:
   - local: quantization/overview
