@@ -576,7 +576,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
         timestamp_begin = self.all_special_ids[-1] + 1
-        timestamp_tokens = self._is_timestamp_token(token_ids)
+        timestamp_tokens = np.array([self._is_timestamp_token(tok) for tok in token_ids])
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
@@ -889,7 +889,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _is_timestamp_token(self, token_id) -> bool:
         token = self.convert_ids_to_tokens(int(token_id))
-        return self.timestamp_pat.match(token)
+        return bool(self.timestamp_pat.match(token))
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
