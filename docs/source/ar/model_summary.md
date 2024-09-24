@@ -8,7 +8,7 @@
     <iframe width="560" height="315" src="https://www.youtube.com/embed/H39Z_720T5s" title="مشغل فيديو YouTube" frameborder="0" allow="accelerometer؛ تشغيل تلقائي؛ قائمة تشغيل مدمجة؛ محسّنات الفيديو؛ ميزة الإشارات المرجعية" allowfullscreen></iframe>
 </div>
 
-## رؤية الكمبيوتر
+## رؤية الحاسب
 
 <iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FacQBpeFBVvrDUlzFlkejoz%2FModelscape-timeline%3Fnode-id%3D0%253A1%26t%3Dm0zJ7m2BQ9oe0WtO-1" allowfullscreen></iframe> 
 
