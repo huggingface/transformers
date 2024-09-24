@@ -21,6 +21,7 @@ import sys
 import types
 
 import torch
+from packaging import version
 
 from transformers import AutoTokenizer, GPT2Config
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
@@ -611,12 +612,11 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     if megatron_exists:
         from megatron.core import package_info
 
-        version = package_info.__version__
-        version = tuple(map(int, version.split(".")))
-        if version < (0, 6):
-            from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-        else:
+        if version.parse(package_info.__version__) >= version.parse("0.6.0"):
             from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
+        else:
+            from megatron.tokenizer.tokenizer import _vocab_size_with_padding
+
     else:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
