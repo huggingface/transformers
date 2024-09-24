@@ -908,6 +908,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             image_features, feature_lens = self.pack_image_features(
                 image_features,
                 image_sizes,
+                self.vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
 
