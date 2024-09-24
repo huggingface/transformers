@@ -188,6 +188,8 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_proj_bias = mamba_proj_bias
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
+        
+        assert (self.mamba_expand * self.hidden_size) % self.n_mamba_heads == 0, '`intermediate_size` should be divisible by `n_mamba_heads`.'
 
         super().__init__(
             pad_token_id=pad_token_id,
