@@ -25,7 +25,7 @@ Warning: The image generation module has not yet been released.
 
 The abstract from the paper is as follows:
 
-*We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
+_We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
 approach from inception, an alignment recipe, and an architectural parameterization tailored for the
 early-fusion, token-based, mixed-modal setting. The models are evaluated on a comprehensive range
 of tasks, including visual question answering, image captioning, text generation, image generation, and
@@ -35,8 +35,7 @@ being competitive with models such as Mixtral 8x7B and Gemini-Pro, and performs 
 generation, all in a single model. It also matches or exceeds the performance of much larger models,
 including Gemini Pro and GPT-4V, according to human judgments on a new long-form mixed-modal
 generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
-text. Chameleon marks a significant step forward in unified modeling of full multimodal documents*
-
+text. Chameleon marks a significant step forward in unified modeling of full multimodal documents_
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chameleon_arch.png"
 alt="drawing" width="600"/>
@@ -45,7 +44,6 @@ alt="drawing" width="600"/>
 
 This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/facebookresearch/chameleon).
-
 
 ## Usage tips
 
@@ -57,7 +55,7 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 ## How are images handled by Chameleon in Transformers?
 
-The `ChameleonProcessor` takes as input strings and images and preprocesses them. The strings are tokenized as you would see with other models with one exception, for every instance of the substring `<image>` in the input strings you will get a sequence of 1026 tokens: `<img_start>`, 1024 * `<reserved08707>`, `<img_end>`. This `<reserved08707>` token indicates where to merge the image tokens later when the `ChameleonModel`'s are called. All these tokens, those for the text with the interleaved image sentinel and placeholder tokens are all placed in the output dictionary mapped to the key `input_ids`.
+The `ChameleonProcessor` takes as input strings and images and preprocesses them. The strings are tokenized as you would see with other models with one exception, for every instance of the substring `<image>` in the input strings you will get a sequence of 1026 tokens: `<img_start>`, 1024 \* `<reserved08707>`, `<img_end>`. This `<reserved08707>` token indicates where to merge the image tokens later when the `ChameleonModel`'s are called. All these tokens, those for the text with the interleaved image sentinel and placeholder tokens are all placed in the output dictionary mapped to the key `input_ids`.
 
 The images passed to `ChameleonProcessor` are processed through a sequence of transformations: format conversion, center cropping, resizing, normalizing etc. The processed images are put into the output dictionary mapped to the key `pixel_values`.
 
@@ -69,7 +67,7 @@ Tip: If you want to see the image tokens a given image maps to, you can use the 
 
 ### Single image inference
 
-Chameleon is a gated model so make sure to have access and login to Hugging Face Hub using a token. 
+Chameleon is a gated model so make sure to have access and login to Hugging Face Hub using a token.
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`):
 
 ```python
@@ -170,8 +168,8 @@ from transformers import ChameleonForConditionalGeneration
 
 model_id = "facebook/chameleon-7b"
 model = ChameleonForConditionalGeneration.from_pretrained(
-    model_id, 
-    torch_dtype=torch.bfloat16, 
+    model_id,
+    torch_dtype=torch.bfloat16,
     low_cpu_mem_usage=True,
     attn_implementation="flash_attention_2"
 ).to(0)
@@ -191,20 +189,16 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 
 ## ChameleonImageProcessor
 
-[[autodoc]] ChameleonImageProcessor
-    - preprocess
+[[autodoc]] ChameleonImageProcessor - preprocess
 
 ## ChameleonVQVAE
 
-[[autodoc]] ChameleonVQVAE
-    - forward
+[[autodoc]] ChameleonVQVAE - forward
 
 ## ChameleonModel
 
-[[autodoc]] ChameleonModel
-    - forward
+[[autodoc]] ChameleonModel - forward
 
 ## ChameleonForConditionalGeneration
 
-[[autodoc]] ChameleonForConditionalGeneration
-    - forward
+[[autodoc]] ChameleonForConditionalGeneration - forward
