@@ -849,15 +849,29 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+@lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available():
+    if not is_torch_available() or not _bitsandbytes_available:
         return False
 
-    # bitsandbytes throws an error if cuda is not available
-    # let's avoid that by adding a simple check
     import torch
 
-    return _bitsandbytes_available and torch.cuda.is_available()
+    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+    # so those versions of the library are practically only available when CUDA is too.
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        return torch.cuda.is_available()
+
+    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
+    return True
+
+
+def is_bitsandbytes_multi_backend_available() -> bool:
+    if not is_bitsandbytes_available():
+        return False
+
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
 
 
 def is_flash_attn_2_available():
