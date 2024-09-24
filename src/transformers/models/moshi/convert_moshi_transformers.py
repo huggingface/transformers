@@ -19,7 +19,6 @@ import argparse
 import safetensors
 import torch
 
-from transformers.models.moshi.generation_configuration_moshi import MoshiGenerationConfig
 
 from transformers import (
     GenerationConfig,
@@ -215,12 +214,7 @@ def convert_checkpoint(
         do_sample=True, temperature=0.8, top_k=250, min_length = config.num_codebooks + 1,
 max_length=config.num_codebooks + 1
     )
-    
-    # TODO: do we need  MoshiGenerationConfig? 
-    # generation_config = MoshiGenerationConfig.from_depth_decoder_config(depth_decoder_config=depth_decoder_generation_config, 
-    #                                                                     do_sample=True,
-    #                                                                     temp=0.7,
-    #                                                                     top_k=25)
+
     
     generation_config = GenerationConfig(do_sample=True, temp=0.7, top_k=25)
     generation_config.depth_decoder_config = depth_decoder_generation_config.to_diff_dict()
