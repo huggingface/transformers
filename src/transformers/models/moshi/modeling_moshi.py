@@ -2005,7 +2005,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         moshi_input_values: Optional[torch.FloatTensor] = None, # audio_codes has priority over input_values - precise it
         moshi_audio_codes: Optional[torch.Tensor] = None, # TODO add to docstrings
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        generation_config: Optional[GenerationConfig] = None,
+        apply_delay_pattern_mask: bool = False,
     ):
+        delay_pattern_mask = None
+        
         # If inputs_embeds is provided, it has the priority over input_ids and audio_codes, which won't be used
         if inputs_embeds is None:
             if input_ids is None and user_input_values is None and user_audio_codes is None and moshi_input_values is None and moshi_audio_codes is None:
@@ -2018,6 +2022,23 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 
             if moshi_input_values is not None and moshi_audio_codes is None:
                 moshi_audio_codes = self.audio_encoder.encode(moshi_input_values, num_quantizers=self.num_codebooks)[0]
+            
+            if apply_delay_pattern_mask and user_audio_codes is not None:
+                user_audio_codes, delay_pattern_mask = self.build_delay_pattern_mask(
+                    user_audio_codes,
+                    bos_token_id=generation_config.bos_token_id,
+                    pad_token_id=generation_config.pad_token_id,
+                    max_length=generation_config.max_length,
+                )
+                
+            if apply_delay_pattern_mask and moshi_audio_codes is not None:
+                # since we already checked that moshi and user's audio codes have the same length, they'll have the same delay pattern mask
+                moshi_audio_codes, delay_pattern_mask = self.build_delay_pattern_mask(
+                    moshi_audio_codes,
+                    bos_token_id=generation_config.bos_token_id,
+                    pad_token_id=generation_config.pad_token_id,
+                    max_length=generation_config.max_length,
+                )
             
             audio_codes = None
             if user_audio_codes is not None and moshi_audio_codes is not None:
@@ -2032,10 +2053,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 inputs_embeds = self.decoder.model.embed_tokens(input_ids)
             
             if audio_codes is not None:
+                # TODO: this is False if user_audio_codes is None
                 audio_inputs_embeds = sum([self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])])
                 inputs_embeds = audio_inputs_embeds if inputs_embeds is None else audio_inputs_embeds + inputs_embeds
 
-        return inputs_embeds, moshi_audio_codes
+        return inputs_embeds, moshi_audio_codes, delay_pattern_mask
 
     @torch.no_grad()
     def generate(
@@ -2078,18 +2100,26 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
-        inputs_embeds, moshi_audio_codes = self._prepare_inputs_embeds_for_generation(
+        # needs to prepare generation config, even though it'll be done again in `generate`
+        generation_config, kwargs = self._prepare_generation_config(kwargs.pop("generation_config", None), **kwargs)
+        
+        inputs_embeds, moshi_audio_codes, delay_pattern_mask = self._prepare_inputs_embeds_for_generation(
             input_ids=input_ids,
             user_input_values=user_input_values,
             user_audio_codes=user_audio_codes,
             moshi_input_values=moshi_input_values,
             moshi_audio_codes=moshi_audio_codes,
             inputs_embeds=inputs_embeds,
+            generation_config=generation_config,
+            apply_delay_pattern_mask=True,
         )
+        
+        # set delay pattern mask for the rest of the generation
+        kwargs["delay_pattern_mask"] = delay_pattern_mask if delay_pattern_mask is not None else kwargs.get("delay_pattern_mask")
         
         self.generated_audio_codes = moshi_audio_codes
         
-        outputs = super().generate(inputs_embeds=inputs_embeds, **kwargs)
+        outputs = super().generate(inputs_embeds=inputs_embeds, input_ids=input_ids, generation_config=generation_config, **kwargs)
 
         # check if outputs is a dict or a Tensor (depending on unaccessed `generation_config.return_dict_in_generate`)
         if isinstance(outputs, torch.Tensor):
@@ -2097,9 +2127,28 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         else:
             output_text_ids = outputs.sequences
             
-        output_audio_codes = self.generated_audio_codes
-
         
+        # TODO: allow passing generation kwargs
+        # we need to make a last generation with the latest generated tokens
+        last_generated_audio_codes = self.depth_decoder.generate(
+                last_hidden_state=self.last_hidden_state.view(-1, 1, self.last_hidden_state.shape[-1]),
+                input_ids=output_text_ids[:, -1:].view(-1, 1),
+                min_length=self.num_codebooks + 1,# TODO: change
+                max_length=self.num_codebooks + 1,# TODO: change
+            )
+
+        last_generated_audio_codes = last_generated_audio_codes[:, 1:].unsqueeze(2)
+        
+        self.generated_audio_codes = torch.cat([self.generated_audio_codes, last_generated_audio_codes], dim=2)
+
+        # apply the pattern mask to the final audio ids
+        output_audio_codes = self.apply_delay_pattern_mask(self.generated_audio_codes, delay_pattern_mask)
+        
+        # revert the pattern delay mask by filtering the pad token id and bos token ids
+        mask = (delay_pattern_mask != generation_config.bos_token_id) & (delay_pattern_mask != generation_config.pad_token_id)
+        
+        output_audio_codes = output_audio_codes[mask].reshape(mask.shape[0], self.num_codebooks, -1)
+
         output_values = self.audio_encoder.decode(
             output_audio_codes,
         ).audio_values
@@ -2118,6 +2167,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         position_ids=None,
         use_cache=True,
         num_logits_to_keep=None,
+        delay_pattern_mask=None,
         **kwargs,
     ):
         # 1. Do usual operations done on LLMs like Gemma - because we pre-processed inputs, the first pass always has inputs_embeds
@@ -2206,7 +2256,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             self.generated_audio_codes = torch.cat([self.generated_audio_codes, generated_audio_codes], dim=2)
             
             # TODO: for now, we don't use blank user input ids !!
-            inputs_embeds, _ = self._prepare_inputs_embeds_for_generation(input_ids, moshi_audio_codes=generated_audio_codes)
+            inputs_embeds, _, delay_pattern_mask = self._prepare_inputs_embeds_for_generation(input_ids, moshi_audio_codes=generated_audio_codes)
             
             model_inputs["input_ids"] = None
             model_inputs["inputs_embeds"] = inputs_embeds
@@ -2222,7 +2272,10 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         model_kwargs = super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
         
         # update last_hidden_state that'll be used in the depth decoder
-        model_kwargs["last_hidden_state"] = outputs.get("last_hidden_state")
+        model_kwargs["last_hidden_state"] = outputs.get("last_hidden_state")[:, -1:]
+        
+        # dirty, but we need to make a last depth_decoder.generate
+        self.last_hidden_state = outputs.get("last_hidden_state")[:, -1:]
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -2250,3 +2303,57 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         for param in self.depth_decoder.parameters():
             param.requires_grad = False
         self.depth_decoder._requires_grad = False
+        
+        
+    @staticmethod
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM.apply_delay_pattern_mask
+    def apply_delay_pattern_mask(input_ids, decoder_pad_token_mask):
+        """Apply a delay pattern mask to the decoder input ids, only preserving predictions where
+        the mask is set to -1, and otherwise setting to the value detailed in the mask."""
+        seq_len = input_ids.shape[-1]
+        decoder_pad_token_mask = decoder_pad_token_mask[..., :seq_len]
+        input_ids = torch.where(decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask)
+        return input_ids
+    
+    def build_delay_pattern_mask(self, input_ids: torch.LongTensor, bos_token_id: int, pad_token_id: int, max_length: int = None):
+        """Build a delayed pattern mask to the input_ids. Each codebook, except the first one, is offset by
+        one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
+        are 4 codebooks and a max sequence length of 6, we have the delayed pattern mask of shape `(codebooks,
+        seq_len)`:
+        - [-1, -1, -1, -1, -1,  P]
+        - [ B, -1, -1, -1, -1, -1]
+        - [ B, -1, -1, -1, -1, -1]
+        - [ B, -1, -1, -1, -1, -1]
+        where B is the begining-of-sentence token, P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
+        a prompt (input ids), the -1 positions indicate where new tokens should be predicted. Otherwise, the
+        mask is set to the value in the prompt:
+        - [ a0, a1, -1, -1, -1,  P]
+        - [ B, b0,  b1, -1, -1, -1]
+        - [ B, c0,  c1, -1, -1, -1]
+        - [ B, d0,  d1, -1, -1, -1]
+        where a-d indicate the codebook channel and 0/1 indicates the temporality. Now, we only override the -1
+        tokens in our prediction.
+        """
+        bsz, num_codebooks, seq_len = input_ids.shape
+
+        max_length = max_length if max_length is not None else self.generation_config.max_length
+        input_ids_shifted = (
+            torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=input_ids.device) * -1
+        )
+        
+        # the first codebook channel is not shifted
+        seq_len_to_keep = min(seq_len, max_length-1)
+        input_ids_shifted[:, 0, :seq_len_to_keep] = input_ids[:, 0, :seq_len_to_keep]
+        
+        # fill the shifted ids with the prompt entries
+        input_ids_shifted[:, 1:, 1:seq_len_to_keep+1] = input_ids[:, 1:, :seq_len_to_keep]
+        
+        # fill with BOS and PAD
+        input_ids_shifted[:, 1:, 0] = bos_token_id
+        input_ids_shifted[:, 0, -1] = pad_token_id
+
+        # construct a pattern mask that indicates the positions of BOS and PAD tokens for each codebook
+        pattern_mask = input_ids_shifted
+        
+        input_ids = input_ids_shifted[..., :seq_len_to_keep]
+        return input_ids, pattern_mask
