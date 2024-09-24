@@ -31,6 +31,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "set_module_8bit_tensor_to_device",
         "set_module_quantized_tensor_to_device",
+        "validate_bnb_backend_availability",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -124,6 +125,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         set_module_8bit_tensor_to_device,
         set_module_quantized_tensor_to_device,
+        validate_bnb_backend_availability,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,

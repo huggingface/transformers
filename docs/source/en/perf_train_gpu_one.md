@@ -284,7 +284,7 @@ training_args = TrainingArguments(per_device_train_batch_size=4, optim="adamw_bn
 
 However, we can also use a third-party implementation of the 8-bit optimizer for demonstration purposes to see how that can be integrated.
 
-First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
+First, follow the installation guide in the GitHub [repo](https://github.com/bitsandbytes-foundation/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
 
 Next you need to initialize the optimizer. This involves two steps: 
