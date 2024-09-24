@@ -894,4 +894,3 @@ class InverseChatTemplateTest(unittest.TestCase):
         inverted_chat = tokenizer.apply_inverse_template(chat_str)
         self.assertEqual(inverted_chat["messages"], chat)
         self.assertEqual(inverted_chat["tools"], [get_json_schema(tool_fn)])
-        raise ValueError("Just checking this gets run!")
