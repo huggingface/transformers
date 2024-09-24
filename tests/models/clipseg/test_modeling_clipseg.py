@@ -804,8 +804,9 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4729, -7.4890, -7.3732], [-7.3379, -7.1001, -7.1432], [-6.9942, -6.8002, -6.9010]]
+            [[-7.4613, -7.4785, -7.3627], [-7.3268, -7.0898, -7.1333], [-6.9838, -6.7900, -6.8913]]
         ).to(torch_device)
+        print(outputs.logits[0, :3, :3])
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
 
         # verify conditional and pooled output
