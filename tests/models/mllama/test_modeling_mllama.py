@@ -325,19 +325,25 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists")
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         # TypeError: list indices must be integers or slices, not tuple
         # TODO: @raushan, please look into this for new cache format
         pass
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists")
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
     def test_beam_search_low_memory(self):
         # TypeError: expected Tensor as element 0 in argument 0, but got list
         # TODO: @raushan, please look into this for new cache format
         pass
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists")
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
     def test_static_cache_matches_dynamic(self):
         # TypeError: list indices must be integers or slices, not tuple
         # TODO: @raushan, please look into this for new cache format
@@ -365,11 +371,11 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_cpu_offload(self):
         pass
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
+    @unittest.skip(reason="Mllama is not yet supported by compile")
+    def test_sdpa_can_compile_dynamic(self):
+        # TODO: look into this, AttributeError("'tensor' object has no attribute '__pow__'")
+        # relevant issue: https://github.com/pytorch/pytorch/issues/133166
+        pass
 
 
 @require_torch
