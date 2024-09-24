@@ -88,8 +88,8 @@ OmDet-Turbo can perform batched multi-image inference, with support for differen
 >>> from PIL import Image
 >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
 
->>> processor = AutoProcessor.from_pretrained("yonigozlan/omdet-turbo-tiny")
->>> model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny")
+>>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
+>>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
 
 >>> url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image1 = Image.open(BytesIO(requests.get(url1).content)).convert("RGB")

@@ -321,8 +321,8 @@ def convert_omdet_turbo_checkpoint(args):
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"yonigozlan/{model_name}")
-        processor.push_to_hub(f"yonigozlan/{model_name}")
+        model.push_to_hub(f"omlab/{model_name}")
+        processor.push_to_hub(f"omlab/{model_name}")
 
 
 if __name__ == "__main__":

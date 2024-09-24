@@ -676,10 +676,10 @@ def prepare_text_batched():
 class OmDetTurboModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return AutoProcessor.from_pretrained("yonigozlan/omdet-turbo-tiny") if is_vision_available() else None
+        return AutoProcessor.from_pretrained("omlab/omdet-turbo-swin-tiny-hf") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
+        model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -719,7 +719,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(results["classes"], expected_classes)
 
     def test_inference_object_detection_head_fp16(self):
-        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(
+        model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(
             torch_device, dtype=torch.float16
         )
 
@@ -765,7 +765,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(results["classes"], expected_classes)
 
     def test_inference_object_detection_head_no_task(self):
-        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
+        model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -806,7 +806,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
 
     def test_inference_object_detection_head_batched(self):
         torch_device = "cpu"
-        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
+        model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(torch_device)
 
         processor = self.default_processor
         images_batched = prepare_img_batched()
@@ -872,7 +872,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         classes, task = prepare_text()
         encoding = processor(images=image, text=classes, task=task, return_tensors="pt")
         # 1. run model on CPU
-        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny")
+        model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
 
         with torch.no_grad():
             cpu_outputs = model(**encoding)

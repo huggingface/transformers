@@ -28,7 +28,7 @@ class OmDetTurboConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`OmDetTurboForObjectDetection`].
     It is used to instantiate a OmDet-Turbo model according to the specified arguments, defining the model architecture
     Instantiating a configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
-    [yonigozlan/omdet-turbo-tiny](https://huggingface.co/yonigozlan/omdet-turbo-tiny) architecture.
+    [omlab/omdet-turbo-swin-tiny-hf](https://huggingface.co/omlab/omdet-turbo-swin-tiny-hf) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
