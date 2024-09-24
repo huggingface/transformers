@@ -14,19 +14,18 @@
 # limitations under the License.
 
 import os
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...utils import is_timm_available, is_torch_available, requires_backends
-from ...image_utils import make_list_of_images, ImageInput
 from ...image_transforms import to_pil_image
-from ...utils import TensorType, is_vision_available
+from ...image_utils import ImageInput, make_list_of_images
+from ...utils import TensorType, is_timm_available, is_torch_available, is_vision_available, requires_backends
 
 
 if is_vision_available():
-    import PIL
+    pass
 
 
 if is_timm_available():
@@ -34,7 +33,7 @@ if is_timm_available():
 
 
 if is_torch_available():
-    from torch import Tensor
+    pass
 
 
 class TimmWrapperImageProcessor(BaseImageProcessor):
@@ -70,7 +69,9 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         Get the image processor dict for the model.
         """
         image_processor_filename = kwargs.pop("image_processor_filename", "config.json")
-        return super().get_image_processor_dict(pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs)
+        return super().get_image_processor_dict(
+            pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
+        )
 
     def preprocess(
         self,
