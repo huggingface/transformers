@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -815,7 +816,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     """GPTNeoXJapanese Model with a `language modeling` head on top for Classifier Model fine-tuning.""",
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
-class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
+class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):

@@ -44,6 +44,7 @@ from .test_framework_agnostic import GenerationIntegrationTestsMixin
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         AutoModelForCausalLM,
@@ -59,6 +60,7 @@ if is_torch_available():
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
+        T5ForConditionalGeneration,
     )
     from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
@@ -89,7 +91,6 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 
-@pytest.mark.generate
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
@@ -132,7 +133,7 @@ class GenerationTesterMixin:
 
         return config, input_ids, attention_mask, inputs_dict
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {
             "bad_words_ids": [[1, 0]],
             "repetition_penalty": 1.2,
@@ -146,6 +147,17 @@ class GenerationTesterMixin:
                     "temperature": 0.7,
                 }
             )
+        # TODO (joao, raushan): see this comment for a long-term fix
+        # https://github.com/huggingface/transformers/pull/33593#issuecomment-2361824264)
+        # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
+        # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
+        if config is not None:
+            image_token_index = config.image_token_index if hasattr(config, "image_token_index") else None
+            video_token_index = config.video_token_index if hasattr(config, "video_token_index") else None
+            if image_token_index is not None and image_token_index < config.get_text_config().vocab_size:
+                logits_processor_kwargs["bad_words_ids"].append([image_token_index])
+            if video_token_index is not None and video_token_index < config.get_text_config().vocab_size:
+                logits_processor_kwargs["bad_words_ids"].append([video_token_index])
 
         return logits_processor_kwargs
 
@@ -211,7 +223,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -246,7 +258,7 @@ class GenerationTesterMixin:
         use_cache=True,
     ):
         torch.manual_seed(0)
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -281,7 +293,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -316,7 +328,7 @@ class GenerationTesterMixin:
         use_cache=True,
     ):
         torch.manual_seed(0)
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -350,7 +362,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -385,7 +397,7 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
         use_cache=True,
     ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -424,7 +436,7 @@ class GenerationTesterMixin:
             "top_k": 5,
         }
 
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
+        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
@@ -2024,6 +2036,7 @@ class GenerationTesterMixin:
                 output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
                 self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
+    @pytest.mark.generate
     def test_generate_methods_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
@@ -2052,6 +2065,8 @@ class GenerationTesterMixin:
             )
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
+    @pytest.mark.generate
+    @is_flaky()  # assisted generation tests are flaky (minor fp ops differences)
     def test_assisted_decoding_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
@@ -2083,6 +2098,15 @@ class GenerationTesterMixin:
                 input_ids, attention_mask=attention_mask, **inputs_dict, **generation_kwargs
             )
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
+
+    @pytest.mark.generate
+    def test_inherits_generation_mixin(self):
+        """
+        Tests that the model class directly inherits `GenerationMixin`, as opposed to relying on `PreTrainedModel`
+        to inherit it.
+        """
+        for model_class in self.all_generative_model_classes:
+            self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
@@ -3630,6 +3654,139 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         key_cache_1 = results.past_key_values.key_cache[1]
         value_cache_1 = results.past_key_values.value_cache[1]
         self.assertTrue(key_cache_1.device == value_cache_1.device == torch.device(1))
+
+    @slow
+    def test_padding_input_contrastive_search_gpt2(self):
+        # Load the pre-trained GPT-2 model and tokenizer
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
+        model.to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", clean_up_tokenization_spaces=True)
+
+        # Set the tokenizer to left-pad the sequences
+        tokenizer.padding_side = "left"
+
+        # Define the PAD token as the EOS token
+        tokenizer.pad_token = tokenizer.eos_token
+        model.generation_config.pad_token_id = model.generation_config.eos_token_id
+
+        # Define the input prompt
+        prompt_text = "The whispered legends of the haunted mansion spoke"
+
+        # Tokenize the input prompt
+        encoded_prompt = tokenizer(prompt_text, return_tensors="pt", padding=True)
+        input_ids = encoded_prompt.input_ids.to(torch_device)
+        attention_mask = encoded_prompt.attention_mask.to(torch_device)
+
+        # Define the contrastive search params
+        penalty_alpha = 0.6
+        top_k = 4
+
+        # Define the padding length to add to the input IDs and attention mask
+        padding_length = 10
+
+        # Generate text without padding
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            penalty_alpha=penalty_alpha,
+            top_k=top_k,
+            max_new_tokens=64,
+        )
+        generated_text_no_padding = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        # Pad the input IDs and attention mask on the left
+        padded_input_ids = F.pad(
+            input_ids, (padding_length, 0), "constant", value=model.generation_config.pad_token_id
+        )
+        padded_attention_mask = F.pad(attention_mask, (padding_length, 0), "constant", value=0)
+
+        # Generate text with padded inputs
+        outputs_with_padding = model.generate(
+            input_ids=padded_input_ids,
+            attention_mask=padded_attention_mask,
+            do_sample=False,
+            penalty_alpha=penalty_alpha,
+            top_k=top_k,
+            max_new_tokens=64,
+        )
+        generated_text_with_padding = tokenizer.decode(outputs_with_padding[0], skip_special_tokens=True)
+
+        # Assert that the generated texts are identical for padded and non-padded inputs
+        self.assertEqual(generated_text_no_padding, generated_text_with_padding)
+        self.assertEqual(
+            generated_text_with_padding,
+            'The whispered legends of the haunted mansion spoke of the "souls of the dead" who were "falling '
+            'out of the sky" and "falling into the sea."\n\nThe ghostly apparitions were said to have been '
+            'created by the spirits of the dead, who were "falling out of the sky" and "falling into the sea',
+        )
+
+    @slow
+    def test_padding_input_contrastive_search_t5(self):
+        # Load the pre-trained T5 model and tokenizer
+        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        model.to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", clean_up_tokenization_spaces=True)
+
+        # Define the input prompt
+        prompt_text = "translate English to German: I need to finish this task before the end of the day."
+
+        # Tokenize the input prompt
+        encoded_prompt = tokenizer(prompt_text, return_tensors="pt")
+        input_ids = encoded_prompt.input_ids.to(torch_device)
+        attention_mask = encoded_prompt.attention_mask.to(torch_device)
+
+        # Define the decoder prompt
+        decoder_prompt_text = "Ich muss diese Aufgabe"
+        encoded_decoder_prompt = tokenizer(decoder_prompt_text, add_special_tokens=False, return_tensors="pt")
+        decoder_input_ids = encoded_decoder_prompt.input_ids.to(torch_device)
+        decoder_attention_mask = encoded_decoder_prompt.attention_mask.to(torch_device)
+
+        # Define the contrastive search params
+        penalty_alpha = 0.6
+        top_k = 4
+
+        # Generate text without padding
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            do_sample=False,
+            penalty_alpha=penalty_alpha,
+            top_k=top_k,
+            max_new_tokens=64,
+        )
+        generated_text_no_padding = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        # Define the padding length to add to the input IDs and attention mask
+        padding_length = 10
+
+        # Pad the decoder input IDs and attention mask on the left
+        padded_decoder_input_ids = F.pad(
+            decoder_input_ids, (padding_length, 0), "constant", value=model.generation_config.pad_token_id
+        )
+        padded_decoder_attention_mask = F.pad(decoder_attention_mask, (padding_length, 0), "constant", value=0)
+        # Since the decoder_start_token_id is the same as the pad_token_id,
+        # the last padded token represents the decoder start token.
+        # Set the attention mask for the decoder_start_token_id to True (1).
+        padded_decoder_attention_mask[:, padding_length - 1] = 1
+        # Generate text with padded inputs
+        outputs_with_padding = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=padded_decoder_input_ids,
+            decoder_attention_mask=padded_decoder_attention_mask,
+            do_sample=False,
+            penalty_alpha=penalty_alpha,
+            top_k=top_k,
+            max_new_tokens=64,
+        )
+        generated_text_with_padding = tokenizer.decode(outputs_with_padding[0], skip_special_tokens=True)
+
+        # Assert that the generated texts are identical for padded and non-padded inputs
+        self.assertEqual(generated_text_no_padding, generated_text_with_padding)
+        self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
 
 
 @require_torch

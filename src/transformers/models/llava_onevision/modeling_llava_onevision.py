@@ -23,10 +23,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     logging,
@@ -358,7 +359,7 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
     """The LLaVA-Onevision model which consists of a vision backbone and a language model.""",
     LLAVA_ONEVISION_START_DOCSTRING,
 )
-class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
+class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
@@ -475,8 +476,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         image_features = image_features.view(batch_frames, height, width, -1)
         image_features = image_features.permute(0, 3, 1, 2).contiguous()
 
-        height, weight = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(weight / 2)]
+        height, width = image_features.shape[2:]
+        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
         image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
 
         image_features = image_features.permute(0, 2, 3, 1)

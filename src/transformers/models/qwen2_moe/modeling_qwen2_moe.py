@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
@@ -388,6 +389,7 @@ class Qwen2MoeAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
@@ -1252,7 +1254,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         return causal_mask
 
 
-class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
+class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
