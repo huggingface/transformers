@@ -50,6 +50,8 @@ class ZambaConfig(PretrainedConfig):
             Number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
+        attention_head_dim (`int`, *optional*):
+            Dimension of the attention head in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
@@ -127,7 +129,7 @@ class ZambaConfig(PretrainedConfig):
         intermediate_size=14848,
         num_hidden_layers=76,
         num_attention_heads=16,
-        attention_head_dim=None, 
+        attention_head_dim=None,
         num_key_value_heads=None,
         n_mamba_heads=2,
         hidden_act="gelu",
@@ -193,8 +195,10 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_proj_bias = mamba_proj_bias
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
-        
-        assert (self.mamba_expand * self.hidden_size) % self.n_mamba_heads == 0, '`intermediate_size` should be divisible by `n_mamba_heads`.'
+
+        assert (
+            self.mamba_expand * self.hidden_size
+        ) % self.n_mamba_heads == 0, "`intermediate_size` should be divisible by `n_mamba_heads`."
 
         super().__init__(
             pad_token_id=pad_token_id,
