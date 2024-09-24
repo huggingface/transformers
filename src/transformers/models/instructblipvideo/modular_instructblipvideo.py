@@ -21,32 +21,18 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.instructblip.configuration_instructblip import (
-    InstructBlipConfig,
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
 from transformers.models.instructblip.modeling_instructblip import (
-    InstructBlipAttention,
-    InstructBlipEncoder,
-    InstructBlipEncoderLayer,
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
-    InstructBlipMLP,
-    InstructBlipPreTrainedModel,
-    InstructBlipQFormerAttention,
-    InstructBlipQFormerEmbeddings,
-    InstructBlipQFormerEncoder,
-    InstructBlipQFormerIntermediate,
-    InstructBlipQFormerLayer,
-    InstructBlipQFormerModel,
-    InstructBlipQFormerOutput,
-    InstructBlipQFormerSelfOutput,
-    InstructBlipVisionEmbeddings,
-    InstructBlipVisionModel,
 )
 
-from ...generation import GenerationMixin
+from ...configuration_utils import PretrainedConfig
+from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -60,8 +46,124 @@ class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
 
 
-class InstructBlipVideoConfig(InstructBlipConfig):
-    pass
+class InstructBlipVideoConfig(PretrainedConfig):
+    r"""
+    [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
+    [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
+    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
+    the defaults will yield a similar configuration to that of the Instructblipvideo
+    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`InstructBlipVideoVisionConfig`].
+        qformer_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+        num_query_tokens (`int`, *optional*, defaults to 32):
+            The number of query tokens passed through the Transformer.
+
+        video_token_index (`int`, *optional*):
+            Token index of special video token.
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     InstructBlipVideoVisionConfig,
+    ...     InstructBlipVideoQFormerConfig,
+    ...     OPTConfig,
+    ...     InstructBlipVideoConfig,
+    ...     InstructBlipVideoForConditionalGeneration,
+    ... )
+
+    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> configuration = InstructBlipVideoConfig()
+
+    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> model = InstructBlipVideoForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a InstructBlipVideoConfig from a InstructBlipVideoVisionConfig, InstructBlipVideoQFormerConfig and any PretrainedConfig
+
+    >>> # Initializing Instructblipvideo vision, Instructblipvideo Q-Former and language model configurations
+    >>> vision_config = InstructBlipVideoVisionConfig()
+    >>> qformer_config = InstructBlipVideoQFormerConfig()
+    >>> text_config = OPTConfig()
+
+    >>> config = InstructBlipVideoConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    ```"""
+
+    model_type = "instructblipvideo"
+
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        text_config=None,
+        num_query_tokens=32,
+        video_token_index=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the InstructBlipVideoVisionConfig with default values.")
+
+        if qformer_config is None:
+            qformer_config = {}
+            logger.info("qformer_config is None. Initializing the InstructBlipVideoQFormerConfig with default values.")
+
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+
+        self.vision_config = InstructBlipVideoVisionConfig(**vision_config)
+        self.qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
+        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+
+        self.tie_word_embeddings = self.text_config.tie_word_embeddings
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
+
+        self.num_query_tokens = num_query_tokens
+        self.video_token_index = video_token_index
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
+        self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        self.initializer_factor = 1.0
+        self.initializer_range = 0.02
+
+    @classmethod
+    def from_vision_qformer_text_configs(
+        cls,
+        vision_config: InstructBlipVideoVisionConfig,
+        qformer_config: InstructBlipVideoQFormerConfig,
+        text_config: PretrainedConfig,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`InstructBlipVideoConfig`] (or a derived class) from a InstructBlipVideo vision model, Q-Former and
+        language model configurations.
+
+        Returns:
+            [`InstructBlipVideoConfig`]: An instance of a configuration object
+        """
+
+        return cls(
+            vision_config=vision_config.to_dict(),
+            qformer_config=qformer_config.to_dict(),
+            text_config=text_config.to_dict(),
+            **kwargs,
+        )
 
 
 @dataclass
@@ -69,67 +171,7 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
     pass
 
 
-class InstructBlipVideoVisionEmbeddings(InstructBlipVisionEmbeddings):
-    pass
-
-
-class InstructBlipVideoAttention(InstructBlipAttention):
-    pass
-
-
-class InstructBlipVideoMLP(InstructBlipMLP):
-    pass
-
-
-class InstructBlipVideoEncoderLayer(InstructBlipEncoderLayer):
-    pass
-
-
-class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
-    pass
-
-
-class InstructBlipVideoEncoder(InstructBlipEncoder):
-    pass
-
-
-class InstructBlipVideoVisionModel(InstructBlipVisionModel):
-    pass
-
-
-class InstructBlipVideoQFormerSelfOutput(InstructBlipQFormerSelfOutput):
-    pass
-
-
-class InstructBlipVideoQFormerAttention(InstructBlipQFormerAttention):
-    pass
-
-
-class InstructBlipVideoQFormerIntermediate(InstructBlipQFormerIntermediate):
-    pass
-
-
-class InstructBlipVideoQFormerOutput(InstructBlipQFormerOutput):
-    pass
-
-
-class InstructBlipVideoQFormerLayer(InstructBlipQFormerLayer):
-    pass
-
-
-class InstructBlipVideoQFormerEncoder(InstructBlipQFormerEncoder):
-    pass
-
-
-class InstructBlipVideoQFormerEmbeddings(InstructBlipQFormerEmbeddings):
-    pass
-
-
-class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
-    pass
-
-
-class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration, GenerationMixin):
+class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -146,15 +188,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
-            1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size]`
-
-        Returns:
-
-        Examples:
-
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
@@ -339,11 +372,11 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
-        """
+        r"""
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-           pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width) or
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width) or
                 (batch_size, num_frames, num_channels, height, width)): Input images or videos to be processed.
             qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt to be fed to the Q-Former module.
