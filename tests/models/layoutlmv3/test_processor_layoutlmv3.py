@@ -23,12 +23,12 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTraine
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_vision_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
-if is_vision_available():
+if is_pytesseract_available():
     from PIL import Image
 
     from transformers import LayoutLMv3ImageProcessor

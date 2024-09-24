@@ -127,7 +127,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,

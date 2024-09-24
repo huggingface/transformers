@@ -28,12 +28,12 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_vision_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
-if is_vision_available():
+if is_pytesseract_available():
     from PIL import Image
 
     from transformers import LayoutLMv2ImageProcessor
