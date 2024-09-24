@@ -1331,7 +1331,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 
 class MllamaTextModel(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
-    base_model_prefix = "model"
+    base_model_prefix = "language_model.model"
 
     def __init__(self, config: MllamaTextConfig):
         super().__init__(config)
