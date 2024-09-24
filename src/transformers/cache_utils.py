@@ -587,10 +587,10 @@ class DynamicSlidingWindowCache(DynamicCache):
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`. Discard previous
         tokens according to the sliding window if needed.
 
-        Note: we always keep `sliding_window` tokens in the cache, instead of the `sliding_window - 1` tokens that
+        Note: we always keep `sliding_window` tokens in the cache if it is full, instead of the `sliding_window - 1` tokens that
         are strictly necesary. This allows to roll back one token in the past with `cache.crop(-1)` in contrastive search.
         Assisted decoding would need to roll back additional tokens, and is therefore not supported with this Cache class.
-        
+
         Parameters:
             key_states (`torch.Tensor`):
                 The new key states to cache.
