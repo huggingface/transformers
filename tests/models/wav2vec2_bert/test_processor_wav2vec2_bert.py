@@ -30,7 +30,6 @@ from ...test_processing_common import ProcessorTesterMixin
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
-# Copied from tests.models.wav2vec2.test_processor_wav2vec2.Wav2Vec2ProcessorTest with Wav2Vec2FeatureExtractor->SeamlessM4TFeatureExtractor, Wav2Vec2Processor->Wav2Vec2BertProcessor
 class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Wav2Vec2BertProcessor
 
@@ -45,7 +44,7 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "eos_token": "</s>",
         }
         feature_extractor_map = {
-            "feature_size": 1,
+            "feature_size": 80,
             "padding_value": 0.0,
             "sampling_rate": 16000,
             "return_attention_mask": False,
@@ -140,7 +139,6 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_padding_argument_not_ignored(self):
         # padding, or any other overlap arg between audio extractor and tokenizer
         # should be passed to both text and audio and not ignored
-
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
@@ -149,6 +147,7 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
 
         # padding = True should not raise an error and will if the audio processor popped its value to None
+        # processor(input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt")
         _ = processor(
             input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
         )
