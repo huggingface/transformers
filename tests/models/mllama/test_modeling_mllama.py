@@ -130,10 +130,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
 
-    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
-    def test_generate_compile_fullgraph(self):
-        pass
-
     @require_torch_sdpa
     @slow
     @is_flaky()
