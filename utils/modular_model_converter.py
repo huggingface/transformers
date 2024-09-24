@@ -309,7 +309,6 @@ class SuperTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-            code = self.python_module.code_for_node(node)
             if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
                 target = self.python_module.code_for_node(node.body[0].targets[0].target)
                 self.all_assign_target[target] = node
@@ -317,8 +316,6 @@ class SuperTransformer(cst.CSTTransformer):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
                 continue
-            comment_less_code = re.sub(r"#.*", "", code).strip()
-            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
 
         for stmt in existing_body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
@@ -337,8 +334,13 @@ class SuperTransformer(cst.CSTTransformer):
             code = self.python_module.code_for_node(node)
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if node not in deduplicated_new_body and "super().__init__" not in comment_less_code and comment_less_code not in existing_nodes:
+            if (
+                node not in deduplicated_new_body
+                and "super().__init__" not in comment_less_code
+                and comment_less_code not in existing_nodes
+            ):
                 if not m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
+                    # HACK here to fix the pos_init() that has to be last we kinda do this.
                     deduplicated_new_body = deduplicated_new_body[:-1] + [node] + deduplicated_new_body[-1:]
                     existing_nodes.add(comment_less_code)
         return deduplicated_new_body
