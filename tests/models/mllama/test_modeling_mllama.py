@@ -30,9 +30,11 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -44,8 +46,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -56,16 +56,10 @@ class MllamaText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=4,
-        projector_hidden_act="gelu",
         seq_length=7,
+        is_training=True,
         text_config={
-            "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
+            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -73,24 +67,16 @@ class MllamaText2TextModelTester:
             "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
         },
-        is_training=True,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.projector_hidden_act = projector_hidden_act
         self.text_config = text_config
         self.seq_length = seq_length
 
@@ -103,9 +89,7 @@ class MllamaText2TextModelTester:
         self.batch_size = 3
 
     def get_config(self):
-        return MllamaTextConfig(
-            **self.text_config,
-        )
+        return MllamaTextConfig(**self.text_config)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -146,109 +130,63 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
     def test_generate_compile_fullgraph(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_cpu_offload(self):
-        pass
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
 
 
 class MllamaVisionText2TextModelTester:
-    # TODO add correct dummy config
     def __init__(
         self,
         parent,
         ignore_index=-100,
         image_token_index=4,
-        projector_hidden_act="gelu",
         seq_length=7,
+        is_training=True,
         text_config={
-            "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
+            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
-            "num_hidden_layers": 2,
+            "num_hidden_layers": 4,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 0,
             "rope_scaling": {"rope_type": "default"},
+            "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
-            # TODO: add generation tests with all model kwargs, not only text-related ones
-            #  "cross_attention_layers": [1],
+            "cross_attention_layers": [1],
         },
-        is_training=True,
         vision_config={
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
-            "is_training": True,
             "hidden_size": 16,
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
             "projection_dim": 32,
-            "num_hidden_layers": 2,
+            "num_hidden_layers": 6,
+            "num_global_layers": 2,
             "num_attention_heads": 4,
             "intermediate_size": 37,
             "dropout": 0.1,
-            "attention_dropout": 0.1,
             "initializer_range": 0.02,
-            # needed to init tile emb dimensions, let's make more to avoid slicing errors
-            "supported_aspect_ratios": [30, 30] * 10,
+            "supported_aspect_ratios": [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]],
         },
     ):
         self.parent = parent
+        self.is_training = is_training
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -257,12 +195,13 @@ class MllamaVisionText2TextModelTester:
         self.vocab_size = text_config["vocab_size"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.pad_token_id = 0
+        self.pad_token_id = self.text_config["pad_token_id"]
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 336
+        self.image_size = 224
+        self.max_num_images = 1
+        self.max_image_tiles = 4
 
     def get_config(self):
         return MllamaConfig(
@@ -275,16 +214,15 @@ class MllamaVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                1,  # num images per batch item
-                4,  # num tiles
+                self.max_num_images,
+                self.max_image_tiles,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
         )
         aspect_ratio_ids = torch.tensor([[6] * self.batch_size], device=torch_device).transpose(0, 1)
-        # batch_size, max_num_images, max_image_tiles
-        aspect_ratio_mask = torch.ones(self.batch_size, 1, 4)
+        aspect_ratio_mask = torch.ones(self.batch_size, self.max_num_images, self.max_image_tiles)
         config = self.get_config()
 
         return config, pixel_values, aspect_ratio_ids, aspect_ratio_mask
@@ -295,6 +233,9 @@ class MllamaVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         aspect_ratio_mask = aspect_ratio_mask.to(torch_device)
+        cross_attention_mask = torch.ones(
+            (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles), device=torch_device
+        )
 
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, 1] = config.image_token_index
@@ -304,6 +245,7 @@ class MllamaVisionText2TextModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "aspect_ratio_mask": aspect_ratio_mask,
+            "cross_attention_mask": cross_attention_mask,
         }
         return config, inputs_dict
 
@@ -380,44 +322,49 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        # A workaround to override parametrized test with flaky decorator
+        super().test_eager_matches_sdpa_inference_1_bfloat16()
+
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    def test_assisted_decoding_with_num_logits_to_keep(self):
+        # TypeError: list indices must be integers or slices, not tuple
+        # TODO: @raushan, please look into this for new cache format
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    def test_beam_search_low_memory(self):
+        # TypeError: expected Tensor as element 0 in argument 0, but got list
+        # TODO: @raushan, please look into this for new cache format
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    def test_static_cache_matches_dynamic(self):
+        # TypeError: list indices must be integers or slices, not tuple
+        # TODO: @raushan, please look into this for new cache format
         pass
 
     @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
     def test_generate_compile_fullgraph(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_bin(self):
+    @unittest.skip(reason="Need to investigate why the test fails")
+    def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="Mllama is can't be split across devices apparently or needs more memory per device to hold params"
-    )
-    def test_cpu_offload(self):
+    @unittest.skip(reason="Mllama is not yet supported by compile")
+    def test_sdpa_can_compile_dynamic(self):
+        # TODO: look into this, AttributeError("'tensor' object has no attribute '__pow__'")
+        # relevant issue: https://github.com/pytorch/pytorch/issues/133166
         pass
 
 

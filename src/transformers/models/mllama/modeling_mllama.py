@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -443,8 +444,8 @@ class MllamaVisionEncoder(nn.Module):
                 )
             else:
                 layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
+                    hidden_state=hidden_states,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -893,7 +894,7 @@ class MllamaTextMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LlamaDecoder->MllamaSelfAttentionDecoder, Llama->MllamaText, LLAMA->MLLAMA_TEXT
+# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(nn.Module):
     def __init__(self, config: MllamaTextConfig, layer_idx: int):
         super().__init__()
@@ -905,20 +906,21 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
         self.input_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # Ignore copy
         self.layer_idx = layer_idx
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
-        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -956,7 +958,6 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
-            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -999,12 +1000,13 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         cross_attention_mask: torch.Tensor,
         attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> torch.Tensor:
+        position_embeddings: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1111,10 +1113,7 @@ MLLAMA_START_DOCSTRING = r"""
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
-    # gradient checkpointing is implemented but fails with testing,
-    # some of the layers has None gradient.
-    # related to https://github.com/huggingface/transformers/pull/27124
-    supports_gradient_checkpointing = False
+    supports_gradient_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",
         "MllamaCrossAttentionDecoderLayer",
@@ -1552,7 +1551,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         return causal_mask
 
 
-class MllamaForCausalLM(MllamaPreTrainedModel):
+class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
@@ -1780,8 +1779,23 @@ MLLAMA_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`MllamaImageProcessor.__call__`] for details ([]`MllamaProcessor`] uses
             [`MllamaImageProcessor`] for processing images).
-        aspect_ratio_mask: Optional[List[List[int]]] = None, # TODO
-        aspect_ratio_ids: Optional[torch.Tensor] = None, # TODO
+        aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):
+            Mask to avoid performing attention on padding tiles. Mask values selected in `[0, 1]`:
+
+            - 1 for tiles that are **not masked**,
+            - 0 for tiles that are **masked**.
+        aspect_ratio_ids (`torch.Tensor` of shape `(batch_size, max_num_images)`, *optional*):
+            Aspect ratio ids used to select the appropriate precomputed tile embeddings based on the aspect ratio of each input image.
+            These ids correspond to indices in the model's list of supported aspect ratios, offset by 1.
+
+            For example, if the model supports aspect ratios [[1, 1], [1, 2], [2, 1]]:
+            - An image with aspect ratio [1, 1] would have ID 1
+            - An image with aspect ratio [1, 2] would have ID 2
+            - An image with aspect ratio [2, 1] would have ID 3
+
+            The id 0 is reserved for padding (i.e., no image).
+
+            If an image has aspect ratio [1, 2], that means it was split into 2 tiles horizontally, and its `aspect_ratio_id` would be 2.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1802,8 +1816,16 @@ MLLAMA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        cross_attention_mask: Optional[torch.Tensor] = None, # TODO
-        cross_attention_states: Optional[torch.Tensor] = None, # TODO
+        cross_attention_mask (`torch.Tensor` of shape `(batch_size, seq_length, max_num_images, max_num_tiles)`, *optional*):
+            Cross-attention mask to control the interaction between text tokens and image tiles.
+            This 4D tensor defines which image tiles each text token should attend to.
+
+            For each text token (in seq_length):
+            - 1 indicates the token **should attend** to the corresponding image tile
+            - 0 indicates the token **should not attend** to the corresponding image tile
+        cross_attention_states (`torch.FloatTensor`, *optional*):
+            Output of the vision model, used for cross-attention. This tensor contains the processed image features that
+            the language model will attend to.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -1853,7 +1875,7 @@ MLLAMA_INPUTS_DOCSTRING = r"""
     """The MLLAMA model which consists of a vision backbone and a language model.""",
     MLLAMA_START_DOCSTRING,
 )
-class MllamaForConditionalGeneration(MllamaPreTrainedModel):
+class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1902,9 +1924,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        aspect_ratio_mask: Optional[List[List[int]]] = None,
+        aspect_ratio_mask: Optional[torch.Tensor] = None,
         aspect_ratio_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[List[List[List[int]]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         cross_attention_mask: Optional[torch.Tensor] = None,
         cross_attention_states: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,

@@ -16,7 +16,6 @@
 Processor class for Mllama.
 """
 
-# TODO: update all docs
 from typing import List, Optional, Union
 
 import numpy as np
@@ -202,15 +201,13 @@ class MllamaProcessor(ProcessorMixin):
         from transformers import MllamaProcessor
         from PIL import Image
 
-        # TODO: fill model_id
-        model_id = ""
-        processor = MllamaProcessor.from_pretrained(model_id)
+        processor = MllamaProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
 
         processor(
             images=your_pil_image,
             text=["<|image|>If I had to write a haiku for this one"],
             images_kwargs = {"size": {"height": 448, "width": 448}},
-            text_kwargs = {"padding": "left"},
+            text_kwargs = {"padding": "right"},
             common_kwargs = {"return_tensors": "pt"},
         )
         ```
@@ -271,6 +268,7 @@ class MllamaProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            TODO: add aspect_ratio_ids and aspect_ratio_mask and cross_attention_mask
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")

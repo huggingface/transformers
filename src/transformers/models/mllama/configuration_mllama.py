@@ -69,6 +69,8 @@ class MllamaVisionConfig(PretrainedConfig):
         supported_aspect_ratios (`List[List[int]]`, *optional*):
             List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
             are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -103,6 +105,7 @@ class MllamaVisionConfig(PretrainedConfig):
         max_num_tiles: int = 4,
         intermediate_layers_indices: Optional[List[int]] = None,
         supported_aspect_ratios: Optional[List[List[int]]] = None,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         if supported_aspect_ratios is None:
@@ -127,6 +130,7 @@ class MllamaVisionConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.attention_heads = num_attention_heads
         self.supported_aspect_ratios = supported_aspect_ratios
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
     @property
