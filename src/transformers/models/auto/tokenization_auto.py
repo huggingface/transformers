@@ -109,7 +109,10 @@ else:
             ("canine", ("CanineTokenizer", None)),
             (
                 "chameleon",
-                (None, "LlamaTokenizerFast" if is_tokenizers_available() else None),
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
             ),
             ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
