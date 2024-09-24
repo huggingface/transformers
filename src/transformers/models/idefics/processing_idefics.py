@@ -16,22 +16,22 @@
 Processor class for IDEFICS.
 """
 
-import sys
-import warnings
 from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+    _validate_images_text_input_order,
+)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
 
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 if is_torch_available():
     import torch
@@ -248,17 +248,17 @@ class IdeficsProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
-                either a single prompt or a batched list of prompts - see the detailed description immediately after
-                the end of the arguments doc section.
             images (`Union[PIL.Image, str, List[PIL.Image], List[str]]`):
                 either a single image or a batched list of images - can be passed in when text contains only text prompts,
                 in order to use the image-text-to-text behavior.
+            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+                either a single prompt or a batched list of prompts - see the detailed description immediately after
+                the end of the arguments doc section.
 
         Returns:
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
@@ -330,16 +330,9 @@ class IdeficsProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You need to specify either `text` or `images` and `text`.")
-        # for BC
-        if text is None:
-            # if the user didn't specify text=text in the call, we assume they want to use the old behavior
-            # with text (previously prompts) as a first argument
-            warnings.warn(
-                "The use of `text` as the first argument will be deprecated in the future. `images` is now the first argument."
-                "The first given argument will be considered as `prompts` in the old behavior.",
-            )
-            text = images
-            images = None
+        # check if images and text inputs are reversed for BC
+        images, text = _validate_images_text_input_order(images, text)
+
         if images is None:
             # assuming the user wants to use the old behavior with prompts as the only argument
             prompts = text
@@ -369,8 +362,6 @@ class IdeficsProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        # Temporary fix for "paddding_side" in init_kwargs
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
         add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)

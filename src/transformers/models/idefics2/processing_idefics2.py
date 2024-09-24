@@ -16,24 +16,23 @@
 Processor class for IDEFICS2.
 """
 
-import sys
-import warnings
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
+from ...processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
+from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 
 logger = logging.get_logger(__name__)
@@ -126,7 +125,7 @@ class Idefics2Processor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         Processes the input prompts and returns a BatchEncoding.
 
@@ -173,21 +172,7 @@ class Idefics2Processor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
         # check if images and text inputs are reversed for BC
-        if (
-            text is not None
-            and not isinstance(text[0], str)
-            or images is not None
-            and not (
-                is_image_or_image_url(images)
-                or is_image_or_image_url(images[0])
-                or (isinstance(images[0], list) and is_image_or_image_url(images[0][0]))
-            )
-        ):
-            warnings.warn(
-                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
-                "Images and text inputs will be swapped."
-            )
-            images, text = text, images
+        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,
