@@ -30,9 +30,11 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -133,6 +135,12 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
     def test_generate_compile_fullgraph(self):
         pass
+
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
 
 
 class MllamaVisionText2TextModelTester:
@@ -356,6 +364,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     def test_cpu_offload(self):
         pass
+
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
 
 
 @require_torch
