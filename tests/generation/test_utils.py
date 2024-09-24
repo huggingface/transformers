@@ -2069,6 +2069,7 @@ class GenerationTesterMixin:
                 "assistant_model": assistant_model,
             }
 
+            assistant_model.generation_config.assistant_confidence_threshold = None
             # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
             with_all_logits = model.generate(
                 input_ids, attention_mask=attention_mask, **generation_kwargs, **inputs_dict, num_logits_to_keep=0
