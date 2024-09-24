@@ -134,6 +134,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "initializer_range",
     ],
     "MllamaVisionConfig": [
+        "initializer_range",
         "supported_aspect_ratios",
     ],
 }
