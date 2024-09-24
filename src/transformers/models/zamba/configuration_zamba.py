@@ -127,6 +127,7 @@ class ZambaConfig(PretrainedConfig):
         intermediate_size=14848,
         num_hidden_layers=76,
         num_attention_heads=16,
+        attention_head_dim=None, 
         num_key_value_heads=None,
         n_mamba_heads=2,
         hidden_act="gelu",
@@ -160,6 +161,10 @@ class ZambaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        if attention_head_dim is None:
+            self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
+        else:
+            self.attention_head_dim = attention_head_dim
         self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
