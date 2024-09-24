@@ -99,7 +99,6 @@ class Wav2Vec2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
         # For backward compatibility
         if self._in_target_context_manager:
             return self.current_processor(

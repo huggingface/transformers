@@ -104,7 +104,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
-
         output_kwargs = self._merge_kwargs(
             Wav2Vec2BertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
