@@ -16,6 +16,8 @@ Generic utilities
 """
 
 import inspect
+import json
+import os
 import tempfile
 import warnings
 from collections import OrderedDict, UserDict
@@ -867,3 +869,31 @@ class LossKwargs(TypedDict, total=False):
     """
 
     num_items_in_batch: Optional[int]
+
+
+def is_timm_checkpoint(pretrained_model_name_or_path: str) -> bool:
+    from . import IMAGE_PROCESSOR_NAME
+
+    if os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
+        os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+    ):
+        # timm models don't have a preprocessor_config.json file saved out
+        return False
+
+    # pretrained_model_name_or_path is a file
+    if os.path.isfile(pretrained_model_name_or_path):
+        with open(pretrained_model_name_or_path, "r") as f:
+            config = json.load(f)
+        return "pretrained_cfg" in config
+
+    # pretrained_model_name_or_path is a directory with a config.json
+    if os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
+        os.path.join(pretrained_model_name_or_path, "config.json")
+    ):
+        with open(os.path.join(pretrained_model_name_or_path, "config.json"), "r") as f:
+            config = json.load(f)
+        return "pretrained_cfg" in config
+
+    if isinstance(pretrained_model_name_or_path, str):
+        return pretrained_model_name_or_path.startswith("hf-hub:") or pretrained_model_name_or_path.startswith("timm/")
+    return False

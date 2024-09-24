@@ -15,6 +15,9 @@
 
 """Configuration for Backbone models"""
 
+import os
+from typing import Any, Dict, Tuple, Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -30,21 +33,6 @@ class TimmWrapperConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        backbone (`str`, *optional*):
-            The timm checkpoint to load.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        features_only (`bool`, *optional*, defaults to `True`):
-            Whether to output only the features or also the logits.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use a pretrained backbone.
-        out_indices (`List[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). Will default to the last stage if unset.
-        freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
-            Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
 
     Example:
     ```python
@@ -63,21 +51,19 @@ class TimmWrapperConfig(PretrainedConfig):
 
     model_type = "timm_wrapper"
 
-    def __init__(
-        self,
-        backbone=None,
-        num_channels=3,
-        features_only=True,
-        use_pretrained_backbone=True,
-        out_indices=None,
-        freeze_batch_norm_2d=False,
-        **kwargs,
-    ):
+    def __init__(self, **kwargs):
+        self.model_name = kwargs.pop("pretrained_model_name", None)
         super().__init__(**kwargs)
-        self.backbone = backbone
-        self.num_channels = num_channels
-        self.features_only = features_only
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_wrapper = True
-        self.out_indices = out_indices if out_indices is not None else [-1]
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs):
+        kwargs["model_name"] = pretrained_model_name_or_path
+        return super().from_pretrained(pretrained_model_name_or_path=pretrained_model_name_or_path, **kwargs)
+
+    @classmethod
+    def get_config_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        config_dict, kwargs = super().get_config_dict(pretrained_model_name_or_path, **kwargs)
+        kwargs["model_name"] = pretrained_model_name_or_path
+        return config_dict, kwargs

@@ -295,6 +295,7 @@ class ImageProcessingMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+        image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -321,7 +322,7 @@ class ImageProcessingMixin(PushToHubMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+            image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -329,7 +330,7 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = pretrained_model_name_or_path
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
-            image_processor_file = IMAGE_PROCESSOR_NAME
+            image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_file = cached_file(
@@ -355,7 +356,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                    f" directory containing a {image_processor_filename} file"
                 )
 
         try:

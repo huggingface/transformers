@@ -17,11 +17,9 @@ import copy
 import inspect
 import unittest
 
-from transformers import AutoBackbone
 from transformers.testing_utils import require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
-from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
@@ -29,7 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import TimmWrapper, TimmWrapperConfig
+    from transformers import TimmWrapperConfig, TimmWrapperForImageClassification, TimmWrapperModel
 
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -38,10 +36,6 @@ class TimmWrapperModelTester:
     def __init__(
         self,
         parent,
-        out_indices=None,
-        out_features=None,
-        stage_names=None,
-        backbone="resnet18",
         batch_size=3,
         image_size=32,
         num_channels=3,
@@ -49,10 +43,6 @@ class TimmWrapperModelTester:
         use_pretrained_backbone=True,
     ):
         self.parent = parent
-        self.out_indices = out_indices if out_indices is not None else [4]
-        self.stage_names = stage_names
-        self.out_features = out_features
-        self.backbone = backbone
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
@@ -77,7 +67,7 @@ class TimmWrapperModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = TimmWrapper(config=config)
+        model = TimmWrapperModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -96,8 +86,8 @@ class TimmWrapperModelTester:
 
 @require_torch
 @require_timm
-class TimmWrapperModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TimmWrapper,) if is_torch_available() else ()
+class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (TimmWrapperModel, TimmWrapperForImageClassification) if is_torch_available() else ()
     test_resize_embeddings = False
     test_head_masking = False
     test_pruning = False
@@ -113,29 +103,6 @@ class TimmWrapperModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTester
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_timm_transformer_backbone_equivalence(self):
-        timm_checkpoint = "resnet18"
-        transformers_checkpoint = "microsoft/resnet-18"
-
-        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_wrapper=True)
-        transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint)
-
-        self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))
-        self.assertEqual(len(timm_model.stage_names), len(transformers_model.stage_names))
-        self.assertEqual(timm_model.channels, transformers_model.channels)
-        # Out indices are set to the last layer by default. For timm models, we don't know
-        # the number of layers in advance, so we set it to (-1,), whereas for transformers
-        # models, we set it to [len(stage_names) - 1] (kept for backward compatibility).
-        self.assertEqual(timm_model.out_indices, [-1])
-        self.assertEqual(transformers_model.out_indices, [len(timm_model.stage_names) - 1])
-
-        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_wrapper=True, out_indices=[1, 2, 3])
-        transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint, out_indices=[1, 2, 3])
-
-        self.assertEqual(timm_model.out_indices, transformers_model.out_indices)
-        self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))
-        self.assertEqual(timm_model.channels, transformers_model.channels)
 
     @unittest.skip(reason="TimmWrapper doesn't support feed forward chunking")
     def test_feed_forward_chunking(self):

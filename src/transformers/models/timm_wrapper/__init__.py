@@ -17,31 +17,33 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_timm_available
 
 
 _import_structure = {"configuration_timm_wrapper": ["TimmWrapperConfig"]}
 
 
 try:
-    if not is_torch_available():
+    if not is_torch_available() and not is_timm_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_timm_wrapper"] = ["TimmWrapper"]
+    _import_structure["modeling_timm_wrapper"] = ["TimmWrapperModel", "TimmWrapperForImageClassification"]
+    _import_structure["image_processing_timm_wrapper"] = ["TimmWrapperImageProcessor"]
 
 
 if TYPE_CHECKING:
     from .configuration_timm_wrapper import TimmWrapperConfig
 
     try:
-        if not is_torch_available():
+        if not is_torch_available() and not is_timm_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_timm_wrapper import TimmWrapper
+        from .modeling_timm_wrapper import TimmWrapperModel, TimmWrapperForImageClassification
+        from .image_processing_timm_wrapper import TimmWrapperImageProcessor
 
 else:
     import sys
