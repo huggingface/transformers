@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -1550,7 +1551,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         return causal_mask
 
 
-class MllamaForCausalLM(MllamaPreTrainedModel):
+class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
@@ -1874,7 +1875,7 @@ MLLAMA_INPUTS_DOCSTRING = r"""
     """The MLLAMA model which consists of a vision backbone and a language model.""",
     MLLAMA_START_DOCSTRING,
 )
-class MllamaForConditionalGeneration(MllamaPreTrainedModel):
+class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
