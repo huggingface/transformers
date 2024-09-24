@@ -29,6 +29,7 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
+from ...generation import GenerationMixin
 from ...utils import (
     logging,
     replace_return_docstrings,
@@ -218,7 +219,7 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
     pass
 
 
-class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
+class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration, GenerationMixin):
     def __init__(self, config: LlavaNextVideoConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.vision_resampler = LlavaNextVideoPooler(config)

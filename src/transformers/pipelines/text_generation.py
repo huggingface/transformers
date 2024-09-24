@@ -103,8 +103,8 @@ class TextGenerationPipeline(Pipeline):
             # It also defines both some preprocess_kwargs and generate_kwargs
             # which is why we cannot put them in their respective methods.
             prefix = None
-            if self.model.config.prefix is not None:
-                prefix = self.model.config.prefix
+            if self.prefix is not None:
+                prefix = self.prefix
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
                 "TransfoXLLMHeadModel",
@@ -316,7 +316,7 @@ class TextGenerationPipeline(Pipeline):
             if "max_new_tokens" in generate_kwargs:
                 new_tokens = generate_kwargs["max_new_tokens"]
             else:
-                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
+                new_tokens = generate_kwargs.get("max_length", self.generation_config.max_length) - cur_len
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -354,7 +354,7 @@ class TextGenerationPipeline(Pipeline):
                 and generate_kwargs["generation_config"].max_new_tokens is not None
             )
             if not has_max_new_tokens:
-                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.model.config.max_length
+                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.generation_config.max_length
                 generate_kwargs["max_length"] += prefix_length
             has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
                 "generation_config" in generate_kwargs
@@ -363,7 +363,10 @@ class TextGenerationPipeline(Pipeline):
             if not has_min_new_tokens and "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
 
-        # BS x SL
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":

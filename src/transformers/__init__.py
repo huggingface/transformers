@@ -70,6 +70,7 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
+        "tool",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -464,6 +465,7 @@ _import_structure = {
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
+    "models.granitemoe": ["GraniteMoeConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -572,6 +574,7 @@ _import_structure = {
         "MgpstrProcessor",
         "MgpstrTokenizer",
     ],
+    "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
@@ -2342,6 +2345,13 @@ else:
             "GranitePreTrainedModel",
         ]
     )
+    _import_structure["models.granitemoe"].extend(
+        [
+            "GraniteMoeForCausalLM",
+            "GraniteMoeModel",
+            "GraniteMoePreTrainedModel",
+        ]
+    )
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2664,6 +2674,12 @@ else:
             "MgpstrForSceneTextRecognition",
             "MgpstrModel",
             "MgpstrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mimi"].extend(
+        [
+            "MimiModel",
+            "MimiPreTrainedModel",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -4820,6 +4836,7 @@ if TYPE_CHECKING:
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
+        tool,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -5229,6 +5246,7 @@ if TYPE_CHECKING:
     )
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
+    from .models.granitemoe import GraniteMoeConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5343,6 +5361,9 @@ if TYPE_CHECKING:
         MgpstrConfig,
         MgpstrProcessor,
         MgpstrTokenizer,
+    )
+    from .models.mimi import (
+        MimiConfig,
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
@@ -6966,6 +6987,11 @@ if TYPE_CHECKING:
             GraniteModel,
             GranitePreTrainedModel,
         )
+        from .models.granitemoe import (
+            GraniteMoeForCausalLM,
+            GraniteMoeModel,
+            GraniteMoePreTrainedModel,
+        )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
@@ -7211,6 +7237,10 @@ if TYPE_CHECKING:
             MgpstrForSceneTextRecognition,
             MgpstrModel,
             MgpstrPreTrainedModel,
+        )
+        from .models.mimi import (
+            MimiModel,
+            MimiPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,
