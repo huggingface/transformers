@@ -2150,12 +2150,16 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             apply_delay_pattern_mask=True,
         )
         
+        # create blank user inputs - moshi needs a constant stream of user inputs
+        blank_input_values  = torch.zeros((inputs_embeds.shape[0], 1, int(self.config.sampling_rate / self.config.audio_encoder.frame_rate)), dtype=self.dtype, device=self.device)
+        blank_user_audio_codes = self.audio_encoder.encode(blank_input_values, num_quantizers=self.num_codebooks)[0]
+        
         # set delay pattern mask for the rest of the generation
         kwargs["delay_pattern_mask"] = delay_pattern_mask if delay_pattern_mask is not None else kwargs.get("delay_pattern_mask")
         
         self.generated_audio_codes = moshi_audio_codes
         
-        outputs = super().generate(inputs_embeds=inputs_embeds, input_ids=input_ids, generation_config=generation_config, **kwargs)
+        outputs = super().generate(inputs_embeds=inputs_embeds, input_ids=input_ids, generation_config=generation_config, blank_user_audio_codes=blank_user_audio_codes, **kwargs)
 
         # check if outputs is a dict or a Tensor (depending on unaccessed `generation_config.return_dict_in_generate`)
         if isinstance(outputs, torch.Tensor):
@@ -2163,8 +2167,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         else:
             output_text_ids = outputs.sequences
             
-        
-        # TODO: allow passing generation kwargs
         # we need to make a last generation with the latest generated tokens
         last_generated_audio_codes = self.depth_decoder.generate(
                 last_hidden_state=self.last_hidden_state.view(-1, 1, self.last_hidden_state.shape[-1]),
@@ -2203,6 +2205,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         use_cache=True,
         num_logits_to_keep=None,
         delay_pattern_mask=None,
+        blank_user_audio_codes: Optional[torch.FloatTensor] = None,
         **kwargs,
     ):
         # 1. Do usual operations done on LLMs like Gemma - because we pre-processed inputs, the first pass always has inputs_embeds
@@ -2289,7 +2292,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             self.generated_audio_codes = torch.cat([self.generated_audio_codes, generated_audio_codes], dim=2)
             
             # TODO: for now, we don't use blank user input ids !!
-            inputs_embeds, _, delay_pattern_mask = self._prepare_inputs_embeds_for_generation(input_ids, moshi_audio_codes=generated_audio_codes)
+            inputs_embeds, _, delay_pattern_mask = self._prepare_inputs_embeds_for_generation(input_ids, moshi_audio_codes=generated_audio_codes, user_audio_codes=blank_user_audio_codes)
             
             model_inputs["input_ids"] = None
             model_inputs["inputs_embeds"] = inputs_embeds
