@@ -1186,6 +1186,12 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        """
+        This function is used to fetch the first embedding layer to activate grads on inputs.
+        """
+        return self.patch_embedding
+
     def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
         batch_size, _, hidden_size = hidden_state.shape
         class_embedding = self.class_embedding.expand(batch_size, 1, hidden_size)
