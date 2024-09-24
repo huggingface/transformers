@@ -303,6 +303,8 @@ class SuperTransformer(cst.CSTTransformer):
     def update_body(self, existing_body, new_statements):
         """
         Helper method to update the body by removing duplicates before adding new statements.
+        `existing_body` is the body of the original method, the parent class
+        `new_statements` are the additional statements
         """
         deduplicated_new_body = []
         existing_nodes = set()
@@ -317,7 +319,7 @@ class SuperTransformer(cst.CSTTransformer):
                 continue
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            existing_nodes.add(comment_less_code)
+
         for stmt in existing_body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
                 target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
@@ -328,11 +330,17 @@ class SuperTransformer(cst.CSTTransformer):
                     stmt = self.all_assign_target[target]
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if comment_less_code not in existing_nodes or "super().__init__" in comment_less_code:
-                deduplicated_new_body.append(stmt)
-                existing_nodes.add(stmt)
-            else:
-                logger.warning(f"\nFound duplicate {self.python_module.code_for_node(stmt)}")
+            deduplicated_new_body.append(stmt)
+            existing_nodes.add(comment_less_code)
+
+        for node in new_statements:
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if node not in deduplicated_new_body and "super().__init__" not in comment_less_code and comment_less_code not in existing_nodes:
+                if not m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
+                    deduplicated_new_body = deduplicated_new_body[:-1] + [node] + deduplicated_new_body[-1:]
+                    existing_nodes.add(comment_less_code)
         return deduplicated_new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
@@ -345,6 +353,7 @@ class SuperTransformer(cst.CSTTransformer):
         if func_name in self.original_methods:
             parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
         new_body = []
+        has_super_call = False
         for idx, expr in enumerate(node.body):
             if m.matches(
                 expr,
@@ -355,6 +364,7 @@ class SuperTransformer(cst.CSTTransformer):
                 if idx != 0 and func_name == "__init__":
                     raise ValueError(f"The call to super() in {self.class_name} should be at the top of the init")
                 new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+                has_super_call = True
             elif m.matches(expr, DOCSTRING_NODE):
                 self.has_docstring = True
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
@@ -365,7 +375,7 @@ class SuperTransformer(cst.CSTTransformer):
                 else:
                     new_node = [expr]
                 new_body.extend(new_node)
-            elif not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])):
+            elif not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])) and not has_super_call:
                 new_body.append(expr)
         if not self.has_docstring and parent_has_docstring:
             new_body = [self.original_methods[func_name].body.body[0]] + new_body
@@ -745,7 +755,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["src/transformers/models/gemma2/modular_gemma2.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
