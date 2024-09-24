@@ -60,6 +60,7 @@ class CohereConfig(GemmaConfig):
         eos_token_id=255001,
         **super_kwargs,
     ):
+        super().__init__(self, **super_kwargs)
         self.use_qk_norm = use_qk_norm
         self.layer_norm_eps = layer_norm_eps
         self.rms_norm_eps = layer_norm_eps
@@ -75,7 +76,6 @@ class CohereConfig(GemmaConfig):
 
         self.logit_scale = logit_scale
 
-        super().__init__(self, **super_kwargs)
 
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
@@ -307,7 +307,7 @@ class CohereAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class CohereSdpaAttention(LlamaSdpaAttention):
+class CohereSdpaAttention(CohereAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -394,7 +394,7 @@ class CohereSdpaAttention(LlamaSdpaAttention):
         return attn_output, None, past_key_value
 
 
-class CohereFlashAttention2(LlamaFlashAttention2):
+class CohereFlashAttention2(CohereAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
