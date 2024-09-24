@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import _LazyModule
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -31,6 +31,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "set_module_8bit_tensor_to_device",
         "set_module_quantized_tensor_to_device",
+        "validate_bnb_backend_availability",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -98,6 +99,17 @@ _import_structure = {
     "quanto": ["replace_with_quanto_layers"],
 }
 
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["executorch"] = [
+        "TorchExportableModuleWithStaticCache",
+        "convert_and_export_with_cache",
+    ]
+
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
@@ -113,6 +125,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         set_module_8bit_tensor_to_device,
         set_module_quantized_tensor_to_device,
+        validate_bnb_backend_availability,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,
@@ -178,6 +191,15 @@ if TYPE_CHECKING:
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
+
 else:
     import sys
 

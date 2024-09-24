@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
@@ -720,7 +721,8 @@ GRANITE_INPUTS_DOCSTRING = r"""
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
             Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
             - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
             shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
@@ -833,14 +835,19 @@ class GraniteModel(GranitePreTrainedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(past_key_values, Cache):
             return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
-            )
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+            else:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                logger.warning_once(
+                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -967,9 +974,6 @@ class GraniteModel(GranitePreTrainedModel):
             )
 
         if attention_mask is not None and attention_mask.dim() == 4:
-            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
-            if attention_mask.max() != 0:
-                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
             causal_mask = torch.full(
@@ -1001,7 +1005,7 @@ class GraniteModel(GranitePreTrainedModel):
         return causal_mask
 
 
-class GraniteForCausalLM(GranitePreTrainedModel):
+class GraniteForCausalLM(GranitePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Granite

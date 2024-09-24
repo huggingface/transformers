@@ -34,10 +34,12 @@ from transformers.testing_utils import (
     is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
+    require_non_xpu,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torchaudio,
     slow,
     torch_device,
@@ -409,9 +411,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
-        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample, config=config)
         logits_processor_kwargs["temperature"] = 0.0
         return logits_processor_kwargs
 
@@ -497,19 +499,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def _get_input_ids_and_config(self, batch_size=3):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size=batch_size
-        input_ids = input_ids[:batch_size, :, :]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-
-        return config, input_ids, None
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -528,6 +517,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    def test_beam_search_output(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+
+        input_features = input_dict["input_features"]
+
+        # Perform beam search
+        output = model.generate(
+            input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True
+        )
+
+        # Check if beam_indices and sequences_scores are in the output
+        self.assertIn("beam_indices", output, "beam_indices not found in the output")
+        self.assertIn("sequences_scores", output, "sequences_scores not found in the output")
+
+        # Validate the shapes of the beam_indices and sequences_scores
+        self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
+        self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
     # training is not supported yet
     @unittest.skip(reason="Training is not supported yet")
@@ -1349,8 +1357,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         with self.assertRaisesRegex(
             ValueError,
-            f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-            f"is {max_new_tokens}. Thus, the combined length of "
+            f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+            f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
             f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
@@ -1675,6 +1683,63 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     use_cache=True,
                     past_key_values=past_key_values,
                 )
+
+    def test_labels_sequence_max_length_correct(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_correct_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            config.max_target_positions += 100
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            new_max_length = config.max_target_positions + 100
+            model.config.max_length = new_max_length
+            model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
+
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
 
 
 @require_torch
@@ -2100,6 +2165,65 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    def test_tiny_longform_timestamps_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(
+            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+        )
+        input_features = input_features.to(torch_device)
+
+        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
+
+        EXPECTED_TRANSCRIPT = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.5600000000000005),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.5600000000000005, 11.24),
+            },
+            {
+                "text": " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+                "timestamp": (11.24, 16.88),
+            },
+            {
+                "text": " before us, similarly drawn from eating and its results occur most readily to the mind.",
+                "timestamp": (16.88, 23.76),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and",
+                "timestamp": (23.76, 29.44),
+            },
+            {"text": " can discover in it but little of rocky ithaka.", "timestamp": (29.44, 33.72)},
+            {
+                "text": " Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite itals",
+                "timestamp": (33.72, 40.32),
+            },
+            {"text": " are as national as a jingo poem.", "timestamp": (40.32, 44.72)},
+            {
+                "text": " Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used",
+                "timestamp": (44.72, 50.4),
+            },
+            {"text": " to flash his teeth.", "timestamp": (50.4, 52.96)},
+            {
+                "text": " And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like",
+                "timestamp": (52.96, 58.68),
+            },
+            {"text": " a shampoo and a Turkish bath next man.", "timestamp": (58.68, 61.96)},
+        ]
+
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
+
+    @slow
     def test_large_timestamp_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
@@ -2269,7 +2393,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         inputs = inputs.to(torch_device)
-        generate_outputs = model.generate(**inputs, return_segments=True, return_token_timestamps=True)
+        generate_outputs = model.generate(
+            **inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True
+        )
 
         token_timestamps_shape = [
             [segment["token_timestamps"].shape for segment in segment_list]
@@ -2434,14 +2560,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features.to(torch_device)
 
         # task defaults to transcribe
-        sequences = model.generate(input_features)
+        sequences = model.generate(input_features, return_timestamps=True)
 
         transcription = processor.batch_decode(sequences)[0]
 
         assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
 
         # set task to translate
-        sequences = model.generate(input_features, task="translate")
+        sequences = model.generate(input_features, task="translate", return_timestamps=True)
         transcription = processor.batch_decode(sequences)[0]
 
         assert (
@@ -2488,6 +2614,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(prompt in text)
 
+    @require_non_xpu
     @slow
     @require_torch_gpu
     def test_speculative_decoding_distil(self):
@@ -3115,7 +3242,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_whisper_empty_longform(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3148,12 +3275,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 5,
             "language": "fr",
             "task": "transcribe",
+            "return_timestamps": True,
         }
 
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_whisper_empty_longform_multi_gpu(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
