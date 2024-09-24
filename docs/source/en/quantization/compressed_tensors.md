@@ -97,6 +97,10 @@ print(outputs)
 """
 
 ```
+
+The above shows a quick example for running generation using a `compressed-tensors`
+model. Currently, once loaded the model cannot be saved.
+
 ## Deep dive into a compressed-tensors model checkpoint
 
 In this example we will examine how the compressed-tensors model nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf is defined through its configuration entry and see how this translates to the loaded model representation. 
