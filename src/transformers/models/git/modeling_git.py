@@ -1191,7 +1191,7 @@ class GitModel(GitPreTrainedModel):
 
         >>> text = "this is an image of two cats"
 
-        >>> inputs = processor(text, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
