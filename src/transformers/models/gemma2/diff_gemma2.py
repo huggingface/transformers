@@ -33,6 +33,7 @@ from transformers.models.gemma.modeling_gemma import (
 )
 
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
 
@@ -453,9 +454,6 @@ class Gemma2Model(GemmaModel):
             target_length = attention_mask.shape[-1]
 
         if attention_mask is not None and attention_mask.dim() == 4:
-            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
-            if attention_mask.max() != 0:
-                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
             causal_mask = torch.full(
@@ -476,7 +474,7 @@ class Gemma2Model(GemmaModel):
         return causal_mask
 
 
-class Gemma2ForCausalLM(GemmaForCausalLM):
+class Gemma2ForCausalLM(GemmaForCausalLM, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
