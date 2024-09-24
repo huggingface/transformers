@@ -1966,10 +1966,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # priority: `chat_template` argument > `tokenizer.chat_template`
             if self.chat_template is not None:
                 chat_template = self.chat_template
-
             else:
                 raise ValueError(
-                    "Cannot use apply_chat_template() because tokenizer.chat_template is not set and no template "
+                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
                     "argument was passed! For information about writing templates and setting the "
                     "tokenizer.chat_template attribute, please see the documentation at "
                     "https://huggingface.co/docs/transformers/main/en/chat_templating"
@@ -3457,7 +3456,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
-        # The model's main input name, usually `input_ids`, has be passed for padding
+        # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
                 "You should supply an encoding or a list of encodings to this method "
