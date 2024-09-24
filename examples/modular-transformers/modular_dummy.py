@@ -1,14 +1,21 @@
+from math import log
 from typing import List, Optional, Tuple, Union
 
 import torch
 
-from transformers import Cache
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaModel
 
+from ...cache_utils import Cache
+
+
+def _pre_process_input(input_ids):
+    print(log(input_ids))
+    return input_ids
+
 
 # example where we need some deps and some functions
-class SuperModel(LlamaModel):
+class DummyModel(LlamaModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -22,8 +29,10 @@ class SuperModel(LlamaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        out = super().forward(
-            input_ids,
+        input_ids = _pre_process_input(input_ids)
+
+        return super().forward(
+            None,
             attention_mask,
             position_ids,
             past_key_values,
@@ -34,5 +43,3 @@ class SuperModel(LlamaModel):
             return_dict,
             cache_position,
         )
-        out.logits *= 2**4
-        return out
