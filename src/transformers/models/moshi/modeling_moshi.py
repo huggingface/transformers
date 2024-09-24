@@ -26,9 +26,8 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.configuration_utils import GenerationConfig, GenerationMode
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMode, ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList, StoppingCriteriaList,GenerationMixin
+
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -977,7 +976,7 @@ MOSHI_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-class MoshiDepthDecoder(MoshiPreTrainedModel):
+class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MoshiTransformerLayer`]
 
@@ -1598,7 +1597,7 @@ class MoshiModel(MoshiPreTrainedModel):
     MOSHI_START_DOCSTRING,
 )
 # Copied from transformers.models.musicgen.modeling_gemma.GemmaForCausalLM with GEMMA->MOSHI,Gemma->Moshi,gemma-7b->moshiko,google->kyutai, CausalLM->MoshiCausalLM
-class MoshiForCausalLM(MoshiPreTrainedModel):
+class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = None # Ignore copy
 
     def __init__(self, config):
@@ -1810,7 +1809,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel):
     "for speech-to-speech.",
     MOSHI_START_DOCSTRING,
 )
-class MoshiForConditionalGeneration(MoshiPreTrainedModel):
+class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     config_class = MoshiConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
