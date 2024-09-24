@@ -521,7 +521,7 @@ class ZambaSdpaAttention(ZambaAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        softmax_scale = 1 / (query_states.shape[-1] / 2) ** 0.5
+        softmax_scale = 1 / math.sqrt(self.head_dim / 2)
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
