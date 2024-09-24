@@ -820,6 +820,7 @@ class InverseChatTemplateTest(unittest.TestCase):
 """.strip()
         return tokenizer
 
+    @require_jinja
     def test_inverse_chat_template_save_load(self):
         # Pick a tokenizer with no chat template or reverse template
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -836,6 +837,7 @@ class InverseChatTemplateTest(unittest.TestCase):
             reloaded_tokenizer = AutoTokenizer.from_pretrained(str(tmp_dir / "tokenizer_with_inverse_template"))
             self.assertEqual(reloaded_tokenizer.inverse_template, "aaaa")
 
+    @require_jinja
     def test_simple_chat_inversion(self):
         tokenizer = self._get_tokenizer()
         chat = [
@@ -846,6 +848,7 @@ class InverseChatTemplateTest(unittest.TestCase):
         inverted_chat = tokenizer.apply_inverse_template(chat_str)
         self.assertEqual(chat, inverted_chat["messages"])
 
+    @require_jinja
     def test_chat_inversion_with_tool_calls(self):
         tokenizer = self._get_tokenizer()
         chat = [
@@ -870,6 +873,7 @@ class InverseChatTemplateTest(unittest.TestCase):
         inverted_chat = tokenizer.apply_inverse_template(chat_str)
         self.assertEqual(chat, inverted_chat["messages"])
 
+    @require_jinja
     def test_tool_extraction(self):
         tokenizer = self._get_tokenizer()
         chat = [
@@ -890,3 +894,4 @@ class InverseChatTemplateTest(unittest.TestCase):
         inverted_chat = tokenizer.apply_inverse_template(chat_str)
         self.assertEqual(inverted_chat["messages"], chat)
         self.assertEqual(inverted_chat["tools"], [get_json_schema(tool_fn)])
+        raise ValueError("Just checking this gets run!")
