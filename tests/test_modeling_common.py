@@ -791,7 +791,7 @@ class ModelTesterMixin:
                     ]
                     or not model_class.supports_gradient_checkpointing
                 ):
-                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class}.")
+                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
