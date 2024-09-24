@@ -767,7 +767,6 @@ _import_structure = {
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.timm_wrapper": ["TimmWrapperConfig"],
-    "models.timm_wrapper": ["TimmWrapperConfig"],
     "models.trocr": [
         "TrOCRConfig",
         "TrOCRProcessor",
@@ -1250,6 +1249,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+
+try:
+    if not is_torchvision_available() and not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_torchvision_and_timm_objects
+
+    _import_structure["utils.dummy_torchvision_and_timm_objects"] = [
+        name for name in dir(dummy_torchvision_and_timm_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
 
 # PyTorch-backed objects
 try:
@@ -3450,8 +3461,7 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.timm_wrapper"].extend(["TimmWrapper"])
-    _import_structure["models.timm_wrapper"].extend(["TimmWrapper"])
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperModel", "TimmWrapperForImageClassification"])
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -5633,7 +5643,6 @@ if TYPE_CHECKING:
     )
     from .models.timm_backbone import TimmBackboneConfig
     from .models.timm_wrapper import TimmWrapperConfig
-    from .models.timm_wrapper import TimmWrapperConfig
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
@@ -6122,6 +6131,14 @@ if TYPE_CHECKING:
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.vit import ViTImageProcessorFast
+
+    try:
+        if not is_torchvision_available() and not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_torchvision_and_timm_objects import *
+    else:
+        from .models.timm_wrapper import TimmWrapperImageProcessor
 
     # Modeling
     try:
@@ -7884,8 +7901,7 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.timm_wrapper import TimmWrapper
-        from .models.timm_wrapper import TimmWrapper
+        from .models.timm_wrapper import TimmWrapperForImageClassification, TimmWrapperModel
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,

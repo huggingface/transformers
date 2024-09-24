@@ -243,7 +243,6 @@ from . import (
     timesformer,
     timm_backbone,
     timm_wrapper,
-    timm_wrapper,
     trocr,
     tvp,
     udop,

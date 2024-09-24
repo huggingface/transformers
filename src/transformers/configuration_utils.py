@@ -37,6 +37,7 @@ from .utils import (
     download_url,
     extract_commit_hash,
     is_remote_url,
+    is_timm_checkpoint,
     is_torch_available,
     logging,
 )
@@ -541,7 +542,6 @@ class PretrainedConfig(PushToHubMixin):
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
-
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
@@ -679,6 +679,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
                 config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
+
+        if "model_type" not in config_dict and is_timm_checkpoint(resolved_config_file):
+            # timm models are not saved with the model_type in the config file
+            config_dict["model_type"] = "timm_wrapper"
+
         return config_dict, kwargs
 
     @classmethod
