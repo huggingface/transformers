@@ -2282,7 +2282,6 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
             if hasattr(epoch_iterator, "set_epoch"):
@@ -2312,8 +2311,6 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
-                total_batched_samples += 1
-
                 if self.args.include_num_input_tokens_seen:
                     main_input_name = getattr(self.model, "main_input_name", "input_ids")
                     if main_input_name not in inputs:
