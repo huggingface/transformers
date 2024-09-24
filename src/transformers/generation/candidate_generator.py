@@ -19,8 +19,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import numpy as np
 import torch
 
+from transformers.generation.configuration_utils import AssistantConfig
+
 from ..cache_utils import DynamicCache
-from ..models.auto.tokenization_auto import AutoTokenizer
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
@@ -284,14 +285,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             model as well.
         inputs_tensor (`torch.Tensor`, *optional*):
             The model input tensor. In encoder-decoder models, this is the encoder input.
-        assistant_tokenizer (`AutoTokenizer`, *optional*):
-            The tokenizer used for the assistant model.
-        target_tokenizer (`AutoTokenizer`, *optional*):
-            The tokenizer used for the target model.
-        target_lookbehind (int, *optional*):
-            The number of tokens to look behind in the target model.
-        assistant_lookbehind (int, *optional*):
-            The number of tokens to look behind in the assistant model.
+        assistant_config (`AssistantConfig`, *optional*):
+            The config for assisted generation with different tokenizers.
     """
 
     def __init__(
@@ -302,18 +297,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
-        assistant_tokenizer: Optional[AutoTokenizer] = None,
-        target_tokenizer: Optional[AutoTokenizer] = None,
-        target_lookbehind: Optional[int] = 20,
-        assistant_lookbehind: Optional[int] = 2,
+        assistant_config: Optional[AssistantConfig] = None,
     ):
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
 
-        self.assistant_tokenizer = assistant_tokenizer
-        self.target_tokenizer = target_tokenizer
-        self.target_lookbehind = target_lookbehind
-        self.assistant_lookbehind = assistant_lookbehind
-
+        self.assistant_config = assistant_config
         self.prev_tokens = None
         self.prev_assistant_ids = None
 
@@ -421,8 +409,17 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return dest_ids.to(input_ids.device)
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        target_lookbehind = 10
+        assistant_lookbehind = 10
+        max_new_tokens = int(self.num_assistant_tokens)
+        if max_new_tokens == 0:
+            return input_ids, None
+
         input_ids = input_ids.to(self.assistant_model.device)
-        convert_kwargs = {"source_tokenizer": self.target_tokenizer, "destination_tokenizer": self.assistant_tokenizer}
+        convert_kwargs = {
+            "source_tokenizer": self.assistant_config.target_tokenizer,
+            "destination_tokenizer": self.assistant_config.assistant_tokenizer,
+        }
         remove_from_pkv = 0
 
         if self.prev_tokens is None:
@@ -432,8 +429,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_cur_len = assistant_input_ids.shape[-1]
         else:
             # input_ids contains all target prompt input ids and some new target input ids
-            if self.prev_target_ids.shape[1] > self.target_lookbehind:
-                start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
+            if self.prev_target_ids.shape[1] > target_lookbehind:
+                start_index_in_target_window = self.prev_target_ids.shape[1] - target_lookbehind
 
                 new_assistant_ids = self.convert_token_ids(
                     input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -473,11 +470,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
             new_cur_len = assistant_input_ids.shape[-1]
 
-        max_new_tokens = int(self.num_assistant_tokens)
-
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
-        if max_new_tokens == 0:
-            return input_ids, None
 
         # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
         # (which implicitly contains the number of accepted candidates from the previous round)
@@ -507,26 +500,26 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
 
         num_prev_assistant = self.prev_assistant_ids.shape[1]
-        start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
+        start_assistant_look_index = num_prev_assistant - assistant_lookbehind
 
         new_target_ids_from_window = self.convert_token_ids(
             assistant_output.sequences[:, start_assistant_look_index:],
-            source_tokenizer=self.assistant_tokenizer,
-            destination_tokenizer=self.target_tokenizer,
+            source_tokenizer=self.assistant_config.assistant_tokenizer,
+            destination_tokenizer=self.assistant_config.target_tokenizer,
         )
         target_prompt_use_length = new_target_ids_from_window.shape[1]
 
         target_prompt_use = input_ids[:, -target_prompt_use_length:]
 
-        _, tar_new_tokens_only, _ = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
+        _, target_new_tokens_only, _ = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
             target_prompt_use, new_target_ids_from_window
         )
 
         new_target_ids = input_ids
 
-        if tar_new_tokens_only is not None:
-            if tar_new_tokens_only.shape[1] > 0:
-                new_target_ids = torch.cat([new_target_ids, tar_new_tokens_only], dim=-1)
+        if target_new_tokens_only is not None:
+            if target_new_tokens_only.shape[1] > 0:
+                new_target_ids = torch.cat([new_target_ids, target_new_tokens_only], dim=-1)
         else:
             # edge case: in case of no intersection between prompt and new_target_ids
             new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
