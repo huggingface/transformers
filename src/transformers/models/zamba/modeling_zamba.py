@@ -560,8 +560,6 @@ class ZambaMambaMixer(nn.Module):
     - Added multi-head: the output of `self.in_proj` is split into `self.n_mamba_heads` heads, and each head
     undergoes an independent forward pass, identical to the original `MambaMixer`, up until the pre-activations of
     `self.out_proj`. The pre-activations, coming from different mamba heads, are then concatenated and fed into `self.out_proj`.
-    - Added `attention_mask` for batched inference: this tensor multiplies input and output of the convolution layer, setting
-    to zero embeddings associated with `attention_mask == 0` thus preventing the layer to attend to such tokens.
     """
 
     def __init__(self, config: ZambaConfig, layer_idx):
