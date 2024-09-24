@@ -478,7 +478,7 @@ class BlipPreTrainedModel(PreTrainedModel):
             if hasattr(self.config, "vision_config"):
                 factor = self.config.vision_config.initializer_range
             nn.init.trunc_normal_(
-                module.position_embedding,
+                module.position_embeddings,
                 mean=0.0,
                 std=factor,
             )

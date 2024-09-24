@@ -344,7 +344,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, InstructBlipVideoVisionEmbeddings):
             if hasattr(self.config, "vision_config") and not isinstance(self.config, InstructBlipVideoVisionConfig):
                 factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
 
         elif isinstance(module, nn.LayerNorm):
