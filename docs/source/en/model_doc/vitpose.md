@@ -114,22 +114,22 @@ for pose_result in pose_results:
         x, y, score = keypoint
         print(f"coordinate : [{x}, {y}], score : {score}")
 
-def draw_points(pose_kpt_color, kpts, img):
+def draw_points(pose_kpt_color, kpts, img, kpt_score_thr, radius, show_keypoint_weight):
     if pose_kpt_color is not None:
-    assert len(pose_kpt_color) == len(kpts)
+        assert len(pose_kpt_color) == len(kpts)
     for kid, kpt in enumerate(kpts):
         x_coord, y_coord, kpt_score = int(kpt[0]), int(kpt[1]), kpt[2]
         if kpt_score > kpt_score_thr:
             color = tuple(int(c) for c in pose_kpt_color[kid])
             if show_keypoint_weight:
-                img_copy = img.copy()
-                cv2.circle(img_copy, (int(x_coord), int(y_coord)), radius, color, -1)
+                cv2.circle(img, (int(x_coord), int(y_coord)), radius, color, -1)
                 transparency = max(0, min(1, kpt_score))
-                cv2.addWeighted(img_copy, transparency, img, 1 - transparency, 0, dst=img)
+                cv2.addWeighted(img, transparency, img, 1 - transparency, 0, dst=img)
             else:
                 cv2.circle(img, (int(x_coord), int(y_coord)), radius, color, -1)
 
-def draw_links(skeleton, pose_link_color, img):
+def draw_links(skeleton, pose_link_color, kpts, img, kpt_score_thr, thickness, show_keypoint_weight):
+    img_h, img_w, _ = img.shape
     if skeleton is not None and pose_link_color is not None:
         assert len(pose_link_color) == len(skeleton)
         for sk_id, sk in enumerate(skeleton):
@@ -149,7 +149,6 @@ def draw_links(skeleton, pose_link_color, img):
             ):
                 color = tuple(int(c) for c in pose_link_color[sk_id])
                 if show_keypoint_weight:
-                    img_copy = img.copy()
                     X = (pos1[0], pos2[0])
                     Y = (pos1[1], pos2[1])
                     mX = np.mean(X)
@@ -160,9 +159,9 @@ def draw_links(skeleton, pose_link_color, img):
                     polygon = cv2.ellipse2Poly(
                         (int(mX), int(mY)), (int(length / 2), int(stickwidth)), int(angle), 0, 360, 1
                     )
-                    cv2.fillConvexPoly(img_copy, polygon, color)
+                    cv2.fillConvexPoly(img, polygon, color)
                     transparency = max(0, min(1, 0.5 * (kpts[sk[0], 2] + kpts[sk[1], 2])))
-                    cv2.addWeighted(img_copy, transparency, img, 1 - transparency, 0, dst=img)
+                    cv2.addWeighted(img, transparency, img, 1 - transparency, 0, dst=img)
                 else:
                     cv2.line(img, pos1, pos2, color, thickness=thickness)
 
@@ -203,17 +202,14 @@ def visualize_keypoints(
     Returns:
         `numpy.ndarray`: Image with drawn keypoints and links.
     """
-    img = img.copy()
-    img_h, img_w, _ = img.shape
-
     for kpts in pose_result:
         kpts = np.array(kpts, copy=False)
 
         # draw each point on image
-        draw_points(pose_kpt_color, kpts, img)
+        draw_points(pose_kpt_color, kpts, img, kpt_score_thr, radius, show_keypoint_weight)
 
         # draw links
-        draw_links(skeleton, pose_link_color, img)
+        draw_links(skeleton, pose_link_color, kpts, img, kpt_score_thr, thickness, show_keypoint_weight)
 
     return img
 
@@ -272,13 +268,14 @@ pose_results = [result["keypoints"] for result in pose_results]
 
 result = visualize_keypoints(
     np.array(image),
-    pose_results,
+    pose_result,
     skeleton=skeleton,
     kpt_score_thr=0.3,
     pose_kpt_color=pose_kpt_color,
     pose_link_color=pose_link_color,
     radius=4,
     thickness=1,
+    show_keypoint_weight=False,
 )
 
 pose_image = Image.fromarray(result)

@@ -630,7 +630,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
             centers[i, :] = center
             scales[i, :] = scale
 
-        preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps, centers, scales, kernel=kernel_size)
+        preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps.numpy(), centers, scales, kernel=kernel_size)
 
         all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
         all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
