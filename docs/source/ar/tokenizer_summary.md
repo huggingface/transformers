@@ -204,8 +204,7 @@ detokenizer for Neural Text Processing (Kudo et al.، 2018)](https://arxiv.org/p
 كتدفق بيانات خام، وبالتالي يشمل المسافة في مجموعة الأحرف التي سيتم استخدامها. ثم يستخدم خوارزمية BPE أو unigram
 لبناء المفردات المناسبة.
 
-يستخدم [`XLNetTokenizer`] SentencePiece على سبيل المثال، وهو أيضًا سبب تضمين
-تم تضمين حرف `"▁"` في المفردات. فك التشفير باستخدام SentencePiece سهل للغاية نظرًا لأنه يمكن دائمًا دمج الرموز واستبدال `"▁"` بمسافة.
+يستخدم [`XLNetTokenizer`] SentencePiece على سبيل المثال، وهو أيضًا سبب تضمين تم تضمين حرف `"▁"` في المفردات. عملية فك التشفير باستخدام SentencePiece سهلة للغاية نظرًا لأنه يمكن دائمًا دمج الرموز معًا واستبدال `"▁"` بمسافة.
 
 تستخدم جميع نماذج المحولات في المكتبة التي تستخدم SentencePiece بالاقتران مع unigram. أمثلة على النماذج
 باستخدام SentencePiece هي [ALBERT](model_doc/albert)، [XLNet](model_doc/xlnet)، [Marian](model_doc/marian)، و [T5](model_doc/t5).
