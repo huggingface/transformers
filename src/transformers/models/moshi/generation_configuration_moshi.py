@@ -48,7 +48,7 @@ class MoshiGenerationConfig(GenerationConfig):
             # TODO(YL): kwargs
 
         """
-        super.__init__(**kwargs)
+        super().__init__(**kwargs)
         if depth_decoder_config is None:
             depth_decoder_config = {}
             logger.info("depth_decoder_config is None. initializing the semantic model with default values.")

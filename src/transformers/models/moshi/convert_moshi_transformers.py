@@ -19,7 +19,10 @@ import argparse
 import safetensors
 import torch
 
+from transformers.models.moshi.generation_configuration_moshi import MoshiGenerationConfig
+
 from transformers import (
+    GenerationConfig,
     MoshiConfig,
     MoshiForConditionalGeneration,
     MimiModel, # initial audio encoder
@@ -207,6 +210,23 @@ def convert_checkpoint(
         config = MoshiConfig.from_audio_encoder_config(audio_encoder_config)
 
     model = MoshiForConditionalGeneration(config)
+    
+    depth_decoder_generation_config = GenerationConfig(
+        do_sample=True, temperature=0.8, top_k=250, min_length = config.num_codebooks + 1,
+max_length=config.num_codebooks + 1
+    )
+    
+    # TODO: do we need  MoshiGenerationConfig? 
+    # generation_config = MoshiGenerationConfig.from_depth_decoder_config(depth_decoder_config=depth_decoder_generation_config, 
+    #                                                                     do_sample=True,
+    #                                                                     temp=0.7,
+    #                                                                     top_k=25)
+    
+    generation_config = GenerationConfig(do_sample=True, temp=0.7, top_k=25)
+    generation_config.depth_decoder_config = depth_decoder_generation_config.to_diff_dict()
+    
+    
+    model.generation_config = generation_config
 
     # feature_extractor = EncodecFeatureExtractor(
     #     feature_size=config.audio_channels,
