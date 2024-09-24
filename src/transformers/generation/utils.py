@@ -1803,9 +1803,6 @@ class GenerationMixin:
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model)
-        if assistant_model is not None:
-            # this flag allow us set the confidence stopping criteria for assistant model generation.
-            assistant_model.generation_config.is_assistant = True
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
