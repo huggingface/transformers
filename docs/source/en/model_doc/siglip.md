@@ -210,10 +210,6 @@ Below is an expected speedup diagram that compares inference time between the na
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## SiglipTokenizerFast
-
-[[autodoc]] SiglipTokenizerFast
-
 ## SiglipImageProcessor
 
 [[autodoc]] SiglipImageProcessor

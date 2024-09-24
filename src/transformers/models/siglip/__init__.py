@@ -46,8 +46,6 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
-else:
-    _import_structure["tokenization_siglip_fast"] = ["SiglipTokenizerFast"]
 
 
 try:
@@ -94,9 +92,6 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
-    else:
-        from .tokenization_siglip_fast import SiglipTokenizerFast
-
     try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()
