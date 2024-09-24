@@ -2377,7 +2377,7 @@ class Trainer:
                 )
 
                 if (
-                    total_batched_samples % args.gradient_accumulation_steps == 0
+                    (step + 1) % args.gradient_accumulation_steps == 0
                     or
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     is_last_step_and_steps_less_than_grad_acc
