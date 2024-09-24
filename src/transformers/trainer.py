@@ -1271,7 +1271,9 @@ class Trainer:
                     # we only pass `optim_args` which can be passed by the user.
                     additional_optim_kwargs = optim_args
                 elif "ademamix" in args.optim:
-                    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.44.0"):
+                    if is_bitsandbytes_available() and version.parse(
+                        importlib.metadata.version("bitsandbytes")
+                    ) < version.parse("0.44.0"):
                         raise ValueError(
                             "The AdEMAMix optimizer is not supported by your current version of `bitsandbytes`. "
                             "Please install `bitsandbytes` >= 0.44.0."
