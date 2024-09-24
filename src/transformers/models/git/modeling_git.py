@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...file_utils import ModelOutput
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1190,7 +1191,7 @@ class GitModel(GitPreTrainedModel):
 
         >>> text = "this is an image of two cats"
 
-        >>> inputs = processor(text, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1324,7 +1325,7 @@ class GitModel(GitPreTrainedModel):
 @add_start_docstrings(
     """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
 )
-class GitForCausalLM(GitPreTrainedModel):
+class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output.weight"]
 
     def __init__(self, config):

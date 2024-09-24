@@ -190,26 +190,6 @@ class GenerationTesterMixin:
         }
         return beam_kwargs
 
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
-
     def _greedy_generate(
         self,
         model,
@@ -2098,6 +2078,15 @@ class GenerationTesterMixin:
                 input_ids, attention_mask=attention_mask, **inputs_dict, **generation_kwargs
             )
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
+
+    @pytest.mark.generate
+    def test_inherits_generation_mixin(self):
+        """
+        Tests that the model class directly inherits `GenerationMixin`, as opposed to relying on `PreTrainedModel`
+        to inherit it.
+        """
+        for model_class in self.all_generative_model_classes:
+            self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
