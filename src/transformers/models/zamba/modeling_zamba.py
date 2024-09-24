@@ -28,6 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -1425,7 +1426,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
-class ZambaForCausalLM(ZambaPreTrainedModel):
+class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ZambaConfig):
