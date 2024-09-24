@@ -411,7 +411,6 @@ class GenerationMixin:
                     "writing code, see Llama for an example implementation. If you're a user, please report this "
                     "issue on GitHub."
                 )
-                raise ValueError()  # for dbg purposes
             else:
                 attention_mask = causal_mask_creation_function(
                     attention_mask,
