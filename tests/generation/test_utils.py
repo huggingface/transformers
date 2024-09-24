@@ -1726,7 +1726,10 @@ class GenerationTesterMixin:
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            if getattr(config, "sliding_window", None) is not None:
+                inputs["past_key_values"] = DynamicSlidingWindowCache(config.sliding_window, outputs_cached.past_key_values)
+            else:
+                inputs["past_key_values"] = outputs_cached.past_key_values
             new_attention_len = outputs_cached.sequences.shape[-1]
             if config.is_encoder_decoder:
                 inputs["decoder_input_ids"] = outputs_cached.sequences
