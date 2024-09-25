@@ -137,6 +137,13 @@ SPECIAL_CASES_TO_ALLOW = {
         "attn_layer_offset",
         "attn_layer_period",
     ],
+    "MllamaTextConfig": [
+        "initializer_range",
+    ],
+    "MllamaVisionConfig": [
+        "initializer_range",
+        "supported_aspect_ratios",
+    ],
 }
 
 
