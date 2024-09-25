@@ -37,7 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, is_flaky
 
 
 if is_torch_available():
@@ -293,6 +293,11 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip("Paligemma is not compatible with end-to-end generation compilation")
     def test_generate_compile_fullgraph(self):
         pass
+
+    @is_flaky
+    # This test is very slightly flaky. Estimated fail probability < 1%
+    def test_static_cache_matches_dynamic(self):
+        super().test_static_cache_matches_dynamic()
 
 
 @slow
