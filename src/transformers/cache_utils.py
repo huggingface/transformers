@@ -986,16 +986,16 @@ class SinkCache(Cache):
 
         # If the cache is full, we need to shift the cache
         if (seq_length := self.get_seq_length(layer_idx)) > self.window_length:
-
             # Shifting cache
-            keys_to_keep = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens :
-            ]
+            keys_to_keep = self.key_cache[layer_idx][:, :, -self.window_length + self.num_sink_tokens :]
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    seq_length - self.window_length, key_states.dtype, self._cos_cache[: seq_length], self._sin_cache[: seq_length]
+                    seq_length - self.window_length,
+                    key_states.dtype,
+                    self._cos_cache[:seq_length],
+                    self._sin_cache[:seq_length],
                 )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
@@ -1011,9 +1011,7 @@ class SinkCache(Cache):
             self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep], dim=-2)
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
-            values_to_keep = self.value_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens :
-            ]
+            values_to_keep = self.value_cache[layer_idx][:, :, -self.window_length + self.num_sink_tokens :]
             self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep], dim=-2)
 
         return key_cache_to_return, value_cache_to_return
