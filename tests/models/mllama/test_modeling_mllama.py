@@ -32,6 +32,7 @@ from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -373,8 +374,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.base_model_checkpoint = "Llama-3.2-11B-Vision"  # TODO: change it to final checkpoint
-        self.instruct_model_checkpoint = "Llama-3.2-11B-Vision-Instruct"
+        self.base_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision"
+        self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
         gc.collect()
@@ -383,6 +384,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    @require_read_token
     def test_11b_model_integration_generate(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -418,6 +420,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    @require_read_token
     def test_11b_model_integration_generate_text_only(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -449,6 +452,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    @require_read_token
     def test_11b_model_integration_forward(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -481,6 +485,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    @require_read_token
     def test_11b_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
@@ -527,6 +532,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
+    @require_read_token
     def test_11b_model_integration_multi_image_generate(self):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
