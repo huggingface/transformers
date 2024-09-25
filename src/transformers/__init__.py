@@ -577,6 +577,10 @@ _import_structure = {
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
+    "models.mllama": [
+        "MllamaConfig",
+        "MllamaProcessor",
+    ],
     "models.mluke": [],
     "models.mobilebert": [
         "MobileBertConfig",
@@ -1199,6 +1203,7 @@ else:
     )
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
+    _import_structure["models.mllama"].extend(["MllamaImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
@@ -2702,6 +2707,16 @@ else:
             "MixtralForTokenClassification",
             "MixtralModel",
             "MixtralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mllama"].extend(
+        [
+            "MllamaForCausalLM",
+            "MllamaForConditionalGeneration",
+            "MllamaPreTrainedModel",
+            "MllamaProcessor",
+            "MllamaTextModel",
+            "MllamaVisionModel",
         ]
     )
     _import_structure["models.mobilebert"].extend(
@@ -5377,6 +5392,10 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
+    from .models.mllama import (
+        MllamaConfig,
+        MllamaProcessor,
+    )
     from .models.mobilebert import (
         MobileBertConfig,
         MobileBertTokenizer,
@@ -6037,6 +6056,7 @@ if TYPE_CHECKING:
             MaskFormerFeatureExtractor,
             MaskFormerImageProcessor,
         )
+        from .models.mllama import MllamaImageProcessor
         from .models.mobilenet_v1 import (
             MobileNetV1FeatureExtractor,
             MobileNetV1ImageProcessor,
@@ -7269,6 +7289,14 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
+        )
+        from .models.mllama import (
+            MllamaForCausalLM,
+            MllamaForConditionalGeneration,
+            MllamaPreTrainedModel,
+            MllamaProcessor,
+            MllamaTextModel,
+            MllamaVisionModel,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
