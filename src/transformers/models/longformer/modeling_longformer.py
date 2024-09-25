@@ -589,7 +589,7 @@ class LongformerSelfAttention(nn.Module):
         )
 
         # compute local attention probs from global attention keys and contact over window dim
-        if is_global_attn == True:
+        if is_global_attn is not None and is_global_attn:
             # compute global attn indices required through out forward fn
             (
                 max_num_global_attn_indices,
