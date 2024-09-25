@@ -125,14 +125,15 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
 
-    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
-    def test_generate_compile_fullgraph(self):
-        pass
+    # @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
+    # def test_generate_compile_fullgraph(self):
+    #     pass
 
     @require_torch_sdpa
     @slow
@@ -275,6 +276,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     test_head_masking = False
     test_torchscript = False
 
+
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
@@ -335,37 +337,37 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         # A workaround to override parametrized test with flaky decorator
         super().test_eager_matches_sdpa_inference_1_bfloat16()
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
-    def test_assisted_decoding_with_num_logits_to_keep(self):
-        # TypeError: list indices must be integers or slices, not tuple
-        # TODO: @raushan, please look into this for new cache format
-        pass
+    # @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    # def test_assisted_decoding_with_num_logits_to_keep(self):
+    #     # TypeError: list indices must be integers or slices, not tuple
+    #     # TODO: @raushan, please look into this for new cache format
+    #     pass
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
-    def test_beam_search_low_memory(self):
-        # TypeError: expected Tensor as element 0 in argument 0, but got list
-        # TODO: @raushan, please look into this for new cache format
-        pass
+    # @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    # def test_beam_search_low_memory(self):
+    #     # TypeError: expected Tensor as element 0 in argument 0, but got list
+    #     # TODO: @raushan, please look into this for new cache format
+    #     pass
 
-    @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
-    def test_static_cache_matches_dynamic(self):
-        # TypeError: list indices must be integers or slices, not tuple
-        # TODO: @raushan, please look into this for new cache format
-        pass
+    # @unittest.skip(reason="Updated DynamicCache with empty lists need to be fixed")
+    # def test_static_cache_matches_dynamic(self):
+    #     # TypeError: list indices must be integers or slices, not tuple
+    #     # TODO: @raushan, please look into this for new cache format
+    #     pass
 
-    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
-    def test_generate_compile_fullgraph(self):
-        pass
+    # @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
+    # def test_generate_compile_fullgraph(self):
+    #     pass
 
-    @unittest.skip(reason="Need to investigate why the test fails")
-    def test_model_parallelism(self):
-        pass
+    # @unittest.skip(reason="Need to investigate why the test fails")
+    # def test_model_parallelism(self):
+    #     pass
 
-    @unittest.skip(reason="Mllama is not yet supported by compile")
-    def test_sdpa_can_compile_dynamic(self):
-        # TODO: look into this, AttributeError("'tensor' object has no attribute '__pow__'")
-        # relevant issue: https://github.com/pytorch/pytorch/issues/133166
-        pass
+    # @unittest.skip(reason="Mllama is not yet supported by compile")
+    # def test_sdpa_can_compile_dynamic(self):
+    #     # TODO: look into this, AttributeError("'tensor' object has no attribute '__pow__'")
+    #     # relevant issue: https://github.com/pytorch/pytorch/issues/133166
+    #     pass
 
 
 @require_torch

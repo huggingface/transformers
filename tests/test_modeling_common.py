@@ -4042,6 +4042,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        torch.compiler.reset()
         compute_capability = torch.cuda.get_device_capability()
         major, _ = compute_capability
 
@@ -4087,6 +4088,7 @@ class ModelTesterMixin:
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
+        torch.compiler.reset()
         if "cuda" in torch_device:
             compute_capability = torch.cuda.get_device_capability()
             major, _ = compute_capability
@@ -4681,7 +4683,6 @@ class ModelTesterMixin:
             self.skipTest(
                 reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
             )
-
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} does not support static cache")
@@ -4716,7 +4717,7 @@ class ModelTesterMixin:
     def test_torch_compile(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
+        torch.compiler.reset()
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
