@@ -635,7 +635,7 @@ class MllamaTextCrossSdpaAttention(MllamaTextCrossAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         key_states = self.k_norm(key_states)
-        
+
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
         if query_states.device.type == "cuda" and attention_mask is not None:
