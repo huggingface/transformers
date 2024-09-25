@@ -18,30 +18,54 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The mllama model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Llama 3.2-Vision collection of multimodal large language models (LLMs) is a collection of pretrained and instruction-tuned image reasoning generative models in 11B and 90B sizes (text \+ images in / text out). The Llama 3.2-Vision instruction-tuned models are optimized for visual recognition, image reasoning, captioning, and answering general questions about an image.
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+**Model Architecture:** Llama 3.2-Vision is built on top of Llama 3.1 text-only model, which is an auto-regressive language model that uses an optimized transformer architecture. The tuned versions use supervised fine-tuning (SFT) and reinforcement learning with human feedback (RLHF) to align with human preferences for helpfulness and safety. To support image recognition tasks, the Llama 3.2-Vision model uses a separately trained vision adapter that integrates with the pre-trained Llama 3.1 language model. The adapter consists of a series of cross-attention layers that feed image encoder representations into the core LLM.
 
 ## Usage Tips
 
-- For text-only generation use `MllamaForCausalLM` to avoid loading vision tower.
-- For text-only or image+text cases use `MllamaForConditionalGeneration`.
+- For image+text and text inputs use `MllamaForConditionalGeneration`.
+- For text-only inputs use `MllamaForCausalLM` for generation to avoid loading vision tower.
 - Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images across samples and to a maximum number of tiles within each image.
 - The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted.
 - The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor.
 
 ## Usage Example
 
+#### Instruct model
 ```python
+import requests
+import torch
+from PIL import Image
+from transformers import MllamaForConditionalGeneration, AutoProcessor
 
+model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+processor = AutoProcessor.from_pretrained(model_id)
+
+messages = [
+    [
+        {
+            "role": "user", 
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": "What does the image show?"}
+            ]
+        }
+    ],
+]
+text = processor.apply_chat_template(messages, add_generation_prompt=True)
+
+url = "https://llava-vl.github.io/static/images/view.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+inputs = processor(text=text, images=image, return_tensors="pt").to(model.device)
+output = model.generate(**inputs, max_new_tokens=25)
+print(processor.decode(output[0]))
+```
+
+#### Base model
+```python
 import requests
 import torch
 from PIL import Image
