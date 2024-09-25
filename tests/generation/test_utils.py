@@ -398,7 +398,7 @@ class GenerationTesterMixin:
         return output_generate
 
     @pytest.mark.generate
-    def test_greedy_generate_foo(self):
+    def test_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             main_input = inputs_dict[self.input_name]
@@ -412,7 +412,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
 
     @pytest.mark.generate
-    def test_greedy_generate_dict_outputs_foo(self):  # <----------------------------- fix me
+    def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             main_input = inputs_dict[self.input_name]
@@ -445,7 +445,8 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason="This model doesn't support caching")
@@ -456,8 +457,6 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
                 inputs_dict=inputs_dict,
                 output_scores=True,
                 output_logits=True,
@@ -470,9 +469,9 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
 
-            self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
+            self._check_outputs(output_generate, main_input, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_sample_generate(self):
