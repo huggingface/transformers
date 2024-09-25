@@ -24,6 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn import functional as F
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from ..cache_utils import (
     Cache,
@@ -687,7 +688,9 @@ class GenerationMixin:
         inputs_tensor: torch.Tensor,
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
-        assistant_config: AssistantConfig,
+        target_tokenizer: AutoTokenizer,
+        assistant_tokenizer: AutoTokenizer,
+        # assistant_config: AssistantConfig,
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
@@ -696,7 +699,7 @@ class GenerationMixin:
         different_tokenizers = (
             all(
                 v is not None
-                for v in (assistant_model, assistant_config.target_tokenizer, assistant_config.assistant_tokenizer)
+                for v in (assistant_model, target_tokenizer, assistant_tokenizer)
             )
             and self.config.vocab_size != assistant_model.config.vocab_size
         )
@@ -716,7 +719,9 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
-                assistant_config=assistant_config,
+                # assistant_config=assistant_config,
+                target_tokenizer=target_tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -1159,7 +1164,7 @@ class GenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
-    def _validate_assistant(self, assistant_model, assistant_config):
+    def _validate_assistant(self, assistant_model, assistant_tokenizer):
         if assistant_model is None:
             return
 
@@ -1175,7 +1180,7 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if assistant_config is None and self.config.vocab_size != assistant_model.config.vocab_size:
+        if assistant_tokenizer is None and self.config.vocab_size != assistant_model.config.vocab_size:
             raise ValueError("Make sure the main and assistant model use the same tokenizer")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
@@ -1801,10 +1806,12 @@ class GenerationMixin:
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-        assistant_config = generation_config.assistant_config
-        self._validate_assistant(assistant_model, assistant_config)
+    
+        assistant_config = generation_config.assistant_config if hasattr(generation_config, "assistant_config") else None
+        self._validate_assistant(assistant_model, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -1982,7 +1989,9 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
-                assistant_config=assistant_config,
+                assistant_tokenizer=assistant_tokenizer,
+                target_tokenizer=tokenizer,
+                # assistant_config=assistant_config, 
                 model_kwargs=model_kwargs,
             )
 

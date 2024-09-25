@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from transformers.generation.configuration_utils import AssistantConfig
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -297,14 +298,20 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
-        assistant_config: Optional[AssistantConfig] = None,
+        # assistant_config: Optional[AssistantConfig] = None,
+        assistant_tokenizer: Optional[AutoTokenizer] = None,
+        target_tokenizer: Optional[AutoTokenizer] = None,
     ):
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
 
-        self.assistant_config = assistant_config
+        self.assistant_tokenizer = assistant_tokenizer
+        self.target_tokenizer = target_tokenizer
+        # self.assistant_config = assistant_config
         self.prev_tokens = None
         self.prev_assistant_ids = None
-
+        self.target_lookbehind = 20
+        self.assistant_lookbehind = 20
+        
     @staticmethod
     def _get_longest_diag_dict(inp, nonzero_idx):
         """
@@ -409,22 +416,22 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return dest_ids.to(input_ids.device)
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
-        target_lookbehind = 10
-        assistant_lookbehind = 10
         max_new_tokens = int(self.num_assistant_tokens)
         if max_new_tokens == 0:
             return input_ids, None
 
         input_ids = input_ids.to(self.assistant_model.device)
         convert_kwargs = {
-            "source_tokenizer": self.assistant_config.target_tokenizer,
-            "destination_tokenizer": self.assistant_config.assistant_tokenizer,
+            # "source_tokenizer": self.assistant_config.target_tokenizer,
+            # "destination_tokenizer": self.assistant_config.assistant_tokenizer,
+            "source_tokenizer": self.target_tokenizer,
+            "destination_tokenizer": self.assistant_tokenizer,
         }
         remove_from_pkv = 0
 
         if self.prev_tokens is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
-            start_index_in_target_window = self.prev_target_ids.shape[1] - target_lookbehind
+            start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
             new_assistant_ids = self.convert_token_ids(
                 input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -488,15 +495,20 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.assistant_kwargs.pop("attention_mask", None)
 
+        # assistant_config = self.generation_config.__dict__.pop("assistant_config", None)
+        # assert assistant_config is not None, "Assistant config is required for AssistedCandidateGeneratorDifferentTokenizers"
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
-
+        # self.generation_config.assistant_config = assistant_config
+        
         num_prev_assistant = self.prev_assistant_ids.shape[1]
-        start_assistant_look_index = num_prev_assistant - assistant_lookbehind
+        start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_token_ids(
             assistant_output.sequences[:, start_assistant_look_index:],
-            source_tokenizer=self.assistant_config.assistant_tokenizer,
-            destination_tokenizer=self.assistant_config.target_tokenizer,
+            # source_tokenizer=self.assistant_config.assistant_tokenizer,
+            # destination_tokenizer=self.assistant_config.target_tokenizer,
+            source_tokenizer=self.assistant_tokenizer,
+            destination_tokenizer=self.target_tokenizer,
         )
         target_prompt_use_length = new_target_ids_from_window.shape[1]
 

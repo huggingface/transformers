@@ -460,6 +460,9 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
 
+        # self.target_tokenizer = kwargs.pop("target_tokenizer", None)
+        # self.assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)
+        
         assistant_config = kwargs.pop("assistant_config", None)
         if assistant_config is None:
             self.assistant_config = None
@@ -1161,8 +1164,6 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
-        if "assistant_config" in output:
-            del output["assistant_config"]
             
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
