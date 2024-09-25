@@ -6587,6 +6587,20 @@ class OlmoePreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OmDetTurboForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OmDetTurboPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class OneFormerForUniversalSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
