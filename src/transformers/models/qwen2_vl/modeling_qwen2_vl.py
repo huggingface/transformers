@@ -1785,7 +1785,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-        if cache_position[0] != 0:
+        if cache_position and cache_position[0] != 0:
             pixel_values = None
             pixel_values_videos = None
 
