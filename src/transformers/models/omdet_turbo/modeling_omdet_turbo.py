@@ -1663,9 +1663,6 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         self.encoder = OmDetTurboHybridEncoder(config)
         self.decoder = OmDetTurboDecoder(config)
         self.num_queries = config.num_queries
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.use_return_dict = config.use_return_dict
 
         self.language_cache_class = OmDetTurboLRUCache(config.cache_size)
         self.language_cache_prompt = OmDetTurboLRUCache(config.cache_size)
