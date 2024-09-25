@@ -128,7 +128,7 @@ class DeepseekV2Config(PretrainedConfig):
         n_routed_experts=2,
      #   ep_size=1,
         routed_scaling_factor=1.0,
-        kv_lora_rank=512,
+        kv_lora_rank=16,
         q_lora_rank=1536,
         qk_rope_head_dim=64,
         v_head_dim=128,

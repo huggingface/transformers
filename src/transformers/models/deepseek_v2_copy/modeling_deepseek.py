@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch DeepSeek model."""
-
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -74,15 +73,11 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DeepseekV2Config"
-torch.manual_seed(42)
 
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-    gate_logits: torch.Tensor,
-    num_experts: torch.Tensor = None,
-    top_k=2,
-    attention_mask: Optional[torch.Tensor] = None,
+    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2,attention_mask: Optional[torch.Tensor] = None
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -109,9 +104,7 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat(
-            [layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0
-        )
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
@@ -127,24 +120,20 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (
-            batch_size * sequence_length
-        )
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-            .expand(
-                (num_hidden_layers, batch_size, sequence_length, top_k, num_experts)
-            )
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
             .reshape(-1, top_k, num_experts)
             .to(compute_device)
         )
 
         # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(
-            expert_mask.float() * expert_attention_mask, dim=0
-        ) / torch.sum(expert_attention_mask, dim=0)
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
@@ -155,31 +144,15 @@ def load_balancing_loss_func(
         )
 
         # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(
-            routing_weights * router_per_expert_attention_mask, dim=0
-        ) / torch.sum(router_per_expert_attention_mask, dim=0)
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    x = overall_loss * num_experts
-    return x
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(
-        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
-    )
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
+    return overall_loss * num_experts
 
 
 class DeepseekV2RMSNorm(nn.Module):
-    # TODO: no diff confirmed
     def __init__(self, hidden_size, eps=1e-6):
         """
         DeepseekV2RMSNorm is equivalent to T5LayerNorm
@@ -200,30 +173,23 @@ ALL_LAYERNORM_LAYERS.append(DeepseekV2RMSNorm)
 
 
 class DeepseekV2RotaryEmbedding(nn.Module):
-    # TODO: copied from Persimmon
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
-        )
+
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings,
-            device=self.inv_freq.device,
-            dtype=torch.get_default_dtype(),
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
-        self.max_seq_len_cached = None
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.outer(t, self.inv_freq.to(t.device))
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -233,7 +199,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.max_seq_len_cached is None or seq_len > self.max_seq_len_cached:
+        if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
@@ -246,23 +212,13 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 class DeepseekV2LinearScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
     """DeepseekV2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    # TODO: copied from Persimmon
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-    ):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
         t = t / self.scaling_factor
 
         freqs = torch.outer(t, self.inv_freq)
@@ -276,15 +232,8 @@ class DeepseekV2LinearScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
 class DeepseekV2DynamicNTKScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
     """DeepseekV2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    # TODO: copied from Persimmon
     def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-    ):
+        self, dim,max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -292,18 +241,11 @@ class DeepseekV2DynamicNTKScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
         self.max_seq_len_cached = seq_len
 
         if seq_len > self.max_position_embeddings:
-            base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings)
-                - (self.scaling_factor - 1)
-            ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (
-                base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
-            )
+            base = self.base * ((self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / ( base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -313,31 +255,19 @@ class DeepseekV2DynamicNTKScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
 
 
 # Inverse dim formula to find dim based on number of rotations
-def yarn_find_correction_dim(
-    num_rotations, dim, base=10000, max_position_embeddings=2048
-):
-    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (
-        2 * math.log(base)
-    )
+def yarn_find_correction_dim(num_rotations, dim, base=10000, max_position_embeddings=2048):
+    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
 
 # Find dim range bounds based on rotations
-def yarn_find_correction_range(
-    low_rot, high_rot, dim, base=10000, max_position_embeddings=2048
-):
-    low = math.floor(
-        yarn_find_correction_dim(low_rot, dim, base, max_position_embeddings)
-    )
-    high = math.ceil(
-        yarn_find_correction_dim(high_rot, dim, base, max_position_embeddings)
-    )
+def yarn_find_correction_range(low_rot, high_rot, dim, base=10000, max_position_embeddings=2048):
+    low = math.floor(yarn_find_correction_dim(low_rot, dim, base, max_position_embeddings))
+    high = math.ceil(yarn_find_correction_dim(high_rot, dim, base, max_position_embeddings))
     return max(low, 0), min(high, dim - 1)  # Clamp values just in case
 
 
 def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
+    return 1.0 if scale <= 1 else 0.1 * mscale * math.log(scale) + 1.0
 
 
 def yarn_linear_ramp_mask(min, max, dim):
@@ -350,7 +280,6 @@ def yarn_linear_ramp_mask(min, max, dim):
 
 
 class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
-    # TODO: DIFF NEW added
     def __init__(
         self,
         dim,
@@ -376,26 +305,11 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
         self.max_seq_len_cached = seq_len
         dim = self.dim
 
-        freq_extra = 1.0 / (
-            self.base
-            ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
-        )
-        freq_inter = 1.0 / (
-            self.scaling_factor
-            * self.base
-            ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
-        )
+        freq_extra = 1.0 / (self.base** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
+        freq_inter = 1.0 / (self.scaling_factor* self.base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
 
-        low, high = yarn_find_correction_range(
-            self.beta_fast,
-            self.beta_slow,
-            dim,
-            self.base,
-            self.original_max_position_embeddings,
-        )
-        inv_freq_mask = 1.0 - yarn_linear_ramp_mask(low, high, dim // 2).to(
-            device=device, dtype=torch.float32
-        )
+        low, high = yarn_find_correction_range( self.beta_fast, self.beta_slow, dim, self.base, self.original_max_position_embeddings)
+        inv_freq_mask = 1.0 - yarn_linear_ramp_mask(low, high, dim // 2).to(device=device, dtype=torch.float32)
         inv_freq = freq_inter * (1 - inv_freq_mask) + freq_extra * inv_freq_mask
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -403,23 +317,15 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
 
         freqs = torch.outer(t, inv_freq)
 
-        _mscale = float(
-            yarn_get_mscale(self.scaling_factor, self.mscale)
-            / yarn_get_mscale(self.scaling_factor, self.mscale_all_dim)
-        )
+        _mscale = float(yarn_get_mscale(self.scaling_factor, self.mscale) / yarn_get_mscale(self.scaling_factor, self.mscale_all_dim))
 
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer(
-            "cos_cached", (emb.cos() * _mscale).to(dtype), persistent=False
-        )
-        self.register_buffer(
-            "sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False
-        )
+        self.register_buffer("cos_cached", (emb.cos() * _mscale).to(dtype), persistent=False)
+        self.register_buffer("sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
-    # TODO: no diff
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
@@ -428,7 +334,6 @@ def rotate_half(x):
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
-    # TODO: diff
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -457,14 +362,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 class DeepseekV2MLP(nn.Module):
-    # TODO: diff new addeda
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = (
-            config.intermediate_size if intermediate_size is None else intermediate_size
-        )
+        self.intermediate_size = (config.intermediate_size if intermediate_size is None else intermediate_size)
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -476,7 +378,6 @@ class DeepseekV2MLP(nn.Module):
 
 
 class MoEGate(nn.Module):
-    # TODO: diff
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -504,67 +405,35 @@ class MoEGate(nn.Module):
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, hidden_states):
-        batch_size, seq_len, h = hidden_states.shape
-        ### compute gating score
-        hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(
-            hidden_states.type(torch.float32), self.weight.type(torch.float32), None
-        )
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
 
         ### select top-k experts
-        # routing_weights, selected_experts
-        top_k_gates = logits.softmax(dim=-1, dtype=torch.float32)
-        top_k_logits, top_k_indices = torch.topk(
-            top_k_gates, k=self.top_k, dim=-1, sorted=False
-        ) #TODO: before: top_k_gates.topk(self.top_k, dim=1) 
+        if self.topk_method == "greedy":
+            routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1, sorted=False)
+        elif self.topk_method == "group_limited_greedy":
+            group_scores = routing_weights.view(batch_size * sequence_length, self.n_group, -1).max(dim=-1).values
+            topk_group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False).indices
+            group_mask = F.one_hot(topk_group_idx, num_classes=self.n_group).sum(dim=1).bool()
+            group_mask = group_mask.unsqueeze(-1).expand(-1, -1, self.n_routed_experts // self.n_group).reshape(batch_size * sequence_length, -1)
+            
+            masked_routing_weights = routing_weights.masked_fill(~group_mask, 0.0)
+            routing_weights, selected_experts = torch.topk(masked_routing_weights, k=self.top_k, dim=-1, sorted=False)
+            sorted_routing_weights, sorted_selected_experts = torch.topk(masked_routing_weights, k=self.top_k, dim=-1, sorted=True)
 
         ### norm gate to sum 1
-        # if self.top_k > 1 and self.norm_topk_prob:
-        #     top_k_logits /= top_k_logits.sum(dim=-1, keepdim=True)
-        # else:
-        top_k_logits = top_k_logits * self.routed_scaling_factor
+        if self.top_k > 1 and self.norm_topk_prob:
+            denominator = routing_weights.sum(dim=-1, keepdim=True) + 1e-20
+            routing_weights = routing_weights / denominator
+        else:
+            routing_weights = routing_weights * self.routed_scaling_factor
 
-        ### expert-level top_k_logits auxiliary loss
-        # always compute aux loss based on the naive greedy topk method
-        topk_idx_for_aux_loss = top_k_indices.view(batch_size, -1)
-
-        scores_for_seq_aux = top_k_gates.view(batch_size, seq_len, -1)
-        final_hidden_states = torch.zeros(
-            batch_size, self.n_routed_experts, device=hidden_states.device
-        )
-        final_hidden_states.scatter_add_(
-            1,
-            topk_idx_for_aux_loss,
-            torch.ones(batch_size, seq_len * self.top_k, device=hidden_states.device),
-        ).div_(seq_len * self.top_k / self.n_routed_experts)
-
-        return top_k_indices, top_k_logits, logits
-
-
-class AddAuxiliaryLoss(torch.autograd.Function):
-    # TODO: diff
-    """
-    The trick function of adding auxiliary (aux) loss,
-    which includes the gradient of the aux loss during backpropagation.
-    """
-
-    @staticmethod
-    def forward(ctx, x, loss):
-        assert loss.numel() == 1
-        ctx.dtype = loss.dtype
-        ctx.required_aux_loss = loss.requires_grad
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        grad_loss = None
-        if ctx.required_aux_loss:
-            grad_loss = torch.ones(1, dtype=ctx.dtype, device=grad_output.device)
-        return grad_output, grad_loss
-
+        return selected_experts, routing_weights, router_logits
 
 class DeepseekV2MoE(nn.Module):
-    # TODO: diff
     """
     A mixed expert module containing shared experts.
     """
@@ -572,7 +441,7 @@ class DeepseekV2MoE(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.num_experts_per_tok = config.num_experts_per_tok
+        self.top_k = config.num_experts_per_tok
         self.experts_per_rank = config.n_routed_experts
         self.experts = nn.ModuleList(
             [
@@ -588,121 +457,38 @@ class DeepseekV2MoE(nn.Module):
             )
 
     def forward(self, hidden_states):
-        identity = hidden_states  # Same as Mixtral
-        orig_shape = hidden_states.shape
+        identity = hidden_states
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
 
-        # Get topk indices (selected_experts) and weights (routing_weights) from gate
         selected_experts, routing_weights, router_logits = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_dim)
 
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])  # Flatten
+        routing_weights = routing_weights.to(torch.float32)
 
-        # Apply MoE inference (computation on experts)
-        final_hidden_states = self.moe_infer(hidden_states, selected_experts, routing_weights).view(*orig_shape)
-
-        # Add shared experts to the final hidden states
-        final_hidden_states += self.shared_experts(identity)
-
-        return final_hidden_states, router_logits
-
-    @torch.no_grad()
-    def moe_infer(self, hidden_states, selected_experts, routing_weights):
-        """
-        This method processes the hidden states through the experts using the selected experts.
-        """
-        # Create a count of tokens per expert
-        counts = selected_experts.new_zeros((selected_experts.shape[0], len(self.experts)))
-        counts.scatter_(1, selected_experts, 1)
-        tokens_per_expert = counts.sum(dim=0)
-        
-        # Sort tokens by expert index
-        sorted_indices = selected_experts.view(-1).argsort()
-        sorted_hidden_states = hidden_states[sorted_indices // selected_experts.shape[1]]
-        tokens_per_expert = tokens_per_expert.cpu().numpy()
-
-        outputs = []
-        start_idx = 0
-        # Process each expert
-        for i, num_tokens in enumerate(tokens_per_expert):
-            end_idx = start_idx + num_tokens
-            if num_tokens == 0:
-                continue
-            expert = self.experts[i]
-            tokens_for_this_expert = sorted_hidden_states[start_idx:end_idx]
-            expert_out = expert(tokens_for_this_expert)
-            outputs.append(expert_out)
-            start_idx = end_idx
-
-        # Combine expert outputs
-        expert_outputs = torch.cat(outputs, dim=0) if len(outputs) else sorted_hidden_states.new_empty(0)
-        reordered_hidden_states = torch.empty_like(expert_outputs)
-        reordered_hidden_states[sorted_indices] = expert_outputs
-
-        # Weighted sum of expert outputs using routing weights
-        final_output = (
-            reordered_hidden_states.view(*selected_experts.shape, -1)
-            .type(routing_weights.dtype)
-            .mul_(routing_weights.unsqueeze(dim=-1))
-            .sum(dim=1)
-            .type(reordered_hidden_states.dtype)
+        final_hidden_states2 = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=torch.float32, device=hidden_states.device
         )
 
-        return final_output
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.experts_per_rank).permute(2, 1, 0)
 
-    def forward2(self, hiddedn_states):
-        identity = hiddedn_states
-        orig_shape = hiddedn_states.shape
-        topk_idx, topk_weight, router_logits = self.gate(hiddedn_states)
-
-        hiddedn_states = hiddedn_states.view(-1, hiddedn_states.shape[-1])
-        # flat_topk_idx = topk_idx.view(-1)
-        # if self.training:
-        #     layer_input = layer_input.repeat_interleave(self.num_experts_per_tok, dim=0)
-        #     y = torch.empty_like(layer_input)
-        #     for i, expert in enumerate(self.experts):
-        #         y[flat_topk_idx == i] = expert(layer_input[flat_topk_idx == i])
-        #     y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
-        #     y = y.to(layer_input.dtype).view(*orig_shape)
-        # # aux_loss_test = load_balancing_loss_func(gates, len(self.experts), self.num_experts_per_tok)
-        # # y = AddAuxiliaryLoss.apply(y, aux_loss)
-        # else:
-        y = self.moe_infer(hiddedn_states, topk_idx, topk_weight).view(*orig_shape)
-        # if self.config.n_shared_experts is not None:
-        y = y + self.shared_experts(identity)
-        return y, router_logits
-
-    @torch.no_grad()
-    def moe_infer2(self, x, topk_ids, topk_weight):
-        
-        cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
-        cnts.scatter_(1, topk_ids, 1)
-        tokens_per_expert = cnts.sum(dim=0)
-        idxs = topk_ids.view(-1).argsort()
-        sorted_tokens = x[idxs // topk_ids.shape[1]]
-        tokens_per_expert = tokens_per_expert.cpu().numpy()
-
-        outputs = []
-        start_idx = 0
-        for i, num_tokens in enumerate(tokens_per_expert):
-            end_idx = start_idx + num_tokens
+        for expert_idx, num_tokens in enumerate(self.experts_per_rank):
             if num_tokens == 0:
                 continue
-            expert = self.experts[i]
-            tokens_for_this_expert = sorted_tokens[start_idx:end_idx]
-            expert_out = expert(tokens_for_this_expert)
-            outputs.append(expert_out)
-            start_idx = end_idx
+            
+            expert_layer = self.experts[expert_idx]
+            idx, top_x = torch.where(expert_mask[expert_idx])
+            tokens_for_this_expert = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(tokens_for_this_expert) * routing_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.float32))
 
-        outs = torch.cat(outputs, dim=0) if len(outputs) else sorted_tokens.new_empty(0)
-        new_x = torch.empty_like(outs)
-        new_x[idxs] = outs
-        final_out = (
-            new_x.view(*topk_ids.shape, -1)
-            .type(topk_weight.dtype)
-            .mul_(topk_weight.unsqueeze(dim=-1))
-            .sum(dim=1)
-            .type(new_x.dtype)
-        )
-        return final_out
+        
+        final_hidden_states = final_hidden_states2.reshape(batch_size, sequence_length, hidden_dim) 
+
+        if self.config.n_shared_experts is not None:
+            final_hidden_states = final_hidden_states + self.shared_experts(identity)
+
+        return final_hidden_states.to(torch.bfloat16), router_logits
+
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
@@ -818,11 +604,7 @@ class DeepseekV2Attention(nn.Module):
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return (
-            tensor.view(bsz, seq_len, self.num_heads, self.v_head_dim)
-            .transpose(1, 2)
-            .contiguous()
-        )
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -853,24 +635,16 @@ class DeepseekV2Attention(nn.Module):
         # (9) kv_down_proj
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         # ER (17) decouple positionally encoded portion of kv
-        compressed_kv, k_pe = torch.split(
-            compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
-        )
+        compressed_kv, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
 
         # for much later
         k_pe = k_pe.view(bsz, q_len, 1, self.qk_rope_head_dim).transpose(1, 2)
 
         # (10) up_proj kv
-        kv = (
-            self.kv_b_proj(self.kv_a_layernorm(compressed_kv))
-            .view(bsz, q_len, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
-            .transpose(1, 2)
-        )
+        kv = (self.kv_b_proj(self.kv_a_layernorm(compressed_kv)).view(bsz, q_len, self.num_heads, self.qk_nope_head_dim + self.v_head_dim).transpose(1, 2))
 
         # decouple kes and values
-        k_non_pe, value_states = torch.split(
-            kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
-        )
+        k_non_pe, value_states = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         kv_seq_len = value_states.shape[-2]
 
@@ -959,7 +733,6 @@ class DeepseekV2Attention(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->DeepseekV2
 class DeepseekV2FlashAttention2(DeepseekV2Attention):
-    # TODO: diff
     """
     DeepseekV2 flash attention module. This module inherits from `DeepseekV2Attention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -997,22 +770,15 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        # if self.q_lora_rank is None:
-        q = self.q_proj(hidden_states)
-        # else:
-        #   q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q = q.view(bsz, q_len, self.num_heads, self.q_head_dim).transpose(1, 2)
-        q_non_pe, q_pe = torch.split(
-            q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
-        )
+        q_non_pe, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        compressed_kv, k_pe = torch.split(
-            compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
-        )
+        compressed_kv, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         k_pe = k_pe.view(bsz, q_len, 1, self.qk_rope_head_dim).transpose(1, 2)
         kv = (
             self.kv_b_proj(self.kv_a_layernorm(compressed_kv))
@@ -1020,12 +786,9 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
             .transpose(1, 2)
         )
 
-        k_non_pe, value_states = torch.split(
-            kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
-        )
+        k_non_pe, value_states = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         kv_seq_len = value_states.shape[-2]
-
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
@@ -1045,9 +808,7 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -1071,7 +832,7 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
             elif torch.is_autocast_enabled():
                 target_dtype = torch.get_autocast_gpu_dtype()
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.q_a_proj.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -1095,9 +856,7 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
         if self.q_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        attn_output = attn_output.reshape(
-            bsz, q_len, self.num_heads * self.v_head_dim
-        ).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.v_head_dim).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -1113,14 +872,11 @@ ATTENTION_CLASSES = {
 
 
 class DeepseekV2DecoderLayer(nn.Module):
-    # TODO: diff
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = ATTENTION_CLASSES[config._attn_implementation](
-            config=config, layer_idx=layer_idx
-        )
+        self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = (
             DeepseekV2MoE(config)
@@ -1131,12 +887,8 @@ class DeepseekV2DecoderLayer(nn.Module):
             )
             else DeepseekV2MLP(config)
         )
-        self.input_layernorm = DeepseekV2RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_attention_layernorm = DeepseekV2RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1151,7 +903,6 @@ class DeepseekV2DecoderLayer(nn.Module):
     ) -> Tuple[
         torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
     ]:
-        # TODO: no diff
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1173,7 +924,6 @@ class DeepseekV2DecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-        output_router_logits = True
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1182,6 +932,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -1338,11 +1089,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        torch.manual_seed(42)
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)  # if you are using multiple GPUs
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.hidden_size, self.padding_idx
         )
@@ -1379,8 +1125,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_router_logits = True
-        output_router_logits = True  # TODO Ita
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -1525,7 +1269,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
 
 
 class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
-    # TODO: no diff
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1535,7 +1278,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.num_experts = config.n_routed_experts
         self.num_experts_per_tok = config.num_experts_per_tok
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1600,23 +1342,12 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_router_logits = True
-        # (
-        #     output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        # )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1649,7 +1380,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
-        output_router_logits = True
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -1659,11 +1389,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.aux_loss_coef * aux_loss.to(
-                    loss.device
-                )  # make sure to reside in the same device
-
-        aux_loss = aux_loss * 0.0005
+                loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1687,6 +1413,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
+        output_router_logits=False,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -1741,6 +1468,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "output_router_logits": output_router_logits,
             }
         )
         return model_inputs
@@ -1809,9 +1537,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = (return_dict if return_dict is not None else self.config.use_return_dict)
 
         transformer_outputs = self.model(
             input_ids,
@@ -1840,11 +1566,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                ).to(
-                    logits.device  # TODO: diff skipped
-                )
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
 
@@ -1858,9 +1580,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1873,9 +1593,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(
-                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
-                )
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
