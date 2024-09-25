@@ -1683,10 +1683,13 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             )
         decoder_input_proj_list.append(
             nn.Sequential(
-                nn.Conv2d(config.decoder_in_channels[-1], config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.Conv2d(
+                    config.decoder_in_channels[-1], config.d_model, kernel_size=3, stride=2, padding=1, bias=False
+                ),
                 nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
             )
         )
+        num_backbone_outs = len(config.decoder_in_channels)
         for _ in range(config.num_feature_levels - num_backbone_outs - 1):
             decoder_input_proj_list.append(
                 nn.Sequential(
@@ -2744,5 +2747,4 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            denoising_meta_values=outputs.denoising_meta_values,
-        )
+            denoising_meta_values=out
