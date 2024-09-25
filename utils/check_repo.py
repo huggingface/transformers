@@ -82,6 +82,7 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics3VisionTransformer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
