@@ -60,9 +60,6 @@ if is_torch_available():
         MusicgenModel,
         set_seed,
     )
-    from transformers.generation import (
-        GenerateEncoderDecoderOutput,
-    )
 
 
 def _config_zero_init(config):

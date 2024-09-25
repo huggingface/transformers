@@ -61,9 +61,6 @@ if is_torch_available():
         MusicgenMelodyModel,
         set_seed,
     )
-    from transformers.generation import (
-        GenerateDecoderOnlyOutput,
-    )
 
 if is_torchaudio_available():
     from transformers import MusicgenMelodyProcessor
