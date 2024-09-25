@@ -77,6 +77,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("mllama", "MllamaProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
