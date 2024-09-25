@@ -154,6 +154,7 @@ from . import (
     mimi,
     mistral,
     mixtral,
+    mllama,
     mluke,
     mobilebert,
     mobilenet_v1,
