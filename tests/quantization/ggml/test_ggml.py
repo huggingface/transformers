@@ -72,6 +72,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_0_qwen2_moe_model_id = "Qwen1.5-MoE-A2.7B-Chat.Q4_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
     fp16_bloom_model_id = "bloom-560m.fp16.gguf"
+    q8_bloom_model_id = "bloom-560m.q8_0.gguf"
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
 
     example_text = "Hello"
@@ -393,6 +394,21 @@ class GgufIntegrationTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.bloom_model_id,
             gguf_file=self.fp16_bloom_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I just want to say that I am very"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_bloom_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.bloom_model_id, gguf_file=self.q8_bloom_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.bloom_model_id,
+            gguf_file=self.q8_bloom_model_id,
             device_map="auto",
             torch_dtype=torch.float16,
         )
