@@ -468,19 +468,18 @@ class Trainer:
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():
-                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+                from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
-                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
-                if model_type:
-                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel(model_type=model_type)
+                if isinstance(model, PreTrainedModel):
+                    # Patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model)
                 else:
                     logger.warning(
-                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                        "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
                     )
             else:
                 raise ImportError(
-                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.3.0 is not available. "
                     "Please install it with `pip install liger-kernel`"
                 )
 
@@ -2416,6 +2415,8 @@ class Trainer:
                                 grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm
+
+                    self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
                     self.optimizer.step()
 
@@ -4460,6 +4461,7 @@ class Trainer:
         commit_message: Optional[str] = "End of training",
         blocking: bool = True,
         token: Optional[str] = None,
+        revision: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -4472,6 +4474,8 @@ class Trainer:
                 Whether the function should return only when the `git push` has finished.
             token (`str`, *optional*, defaults to `None`):
                 Token with write permission to overwrite Trainer's original args.
+            revision (`str`, *optional*):
+                The git revision to commit from. Defaults to the head of the "main" branch.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4525,6 +4529,7 @@ class Trainer:
             token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=revision,
         )
 
     #

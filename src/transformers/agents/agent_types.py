@@ -234,7 +234,7 @@ class AgentAudio(AgentType, str):
             return self._path
 
 
-AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
+AGENT_TYPE_MAPPING = {"string": AgentText, "image": AgentImage, "audio": AgentAudio}
 INSTANCE_TYPE_MAPPING = {str: AgentText, ImageType: AgentImage}
 
 if is_torch_available():
