@@ -214,7 +214,7 @@ class Message:
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
                     f"Number of model failures: {self.n_model_failures}.\n"
                     f"The suite ran in {self.time}.\n"
-                    f"Try to ping @Yih-Dar SHIEH"
+                    f"Try to ping <@{os.environ['TEMP']}"
                 ),
                 "emoji": True,
             },
