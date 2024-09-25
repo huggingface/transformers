@@ -375,11 +375,11 @@ def write_model(
                     text_num_key_value_heads,
                     text_dim_per_head,
                 )
-            shards = [param.view(shard_heads, text_dim_per_head, text_dim) for param in current_parameter]
+            shards = [param.view(shard_heads, text_key_value_dim, text_dim) for param in current_parameter]
             current_parameter = torch.cat(shards, dim=concat_dim)
             if "cross_attn" not in new_key and "v_proj.weight" not in new_key:
                 current_parameter = permute_for_rope(current_parameter, heads, text_key_value_dim, text_dim)
-            state_dict[new_key] = current_parameter.reshape(heads * text_dim_per_head, text_dim)
+            state_dict[new_key] = current_parameter.reshape(heads * text_key_value_dim, text_dim)
 
         elif "vision_model" in new_key and re.search("(k|v|q)_proj", new_key):
             shards = [
