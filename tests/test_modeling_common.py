@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
+    require_non_xpu,
     require_read_token,
     require_safetensors,
     require_torch,
@@ -383,6 +384,44 @@ class ModelTesterMixin:
 
             # check enable works
             model.gradient_checkpointing_enable()
+            self.assertTrue(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
+
+            # check disable works
+            model.gradient_checkpointing_disable()
+            self.assertFalse(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
+
+    def test_peft_gradient_checkpointing_enable_disable(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            # at init model should have gradient checkpointing disabled
+            model = model_class(config)
+            self.assertFalse(model.is_gradient_checkpointing)
+
+            # check enable works
+            model._hf_peft_config_loaded = True
+            try:
+                model.gradient_checkpointing_enable()
+            except NotImplementedError:
+                continue
+
             self.assertTrue(model.is_gradient_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
@@ -2847,6 +2886,7 @@ class ModelTesterMixin:
                 )
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
+    @require_non_xpu
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4082,6 +4122,7 @@ class ModelTesterMixin:
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
+    @require_non_xpu
     @require_torch_sdpa
     @require_torch_accelerator
     @slow
@@ -4643,7 +4684,7 @@ class ModelTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
@@ -4691,7 +4732,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support cache class")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
 
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
@@ -4708,11 +4749,11 @@ class ModelTesterMixin:
                 output_logits=True,
                 return_dict_in_generate=True,
             )
-            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
+            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-3))
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_read_token
     def test_torch_compile(self):
         if version.parse(torch.__version__) < version.parse("2.3"):

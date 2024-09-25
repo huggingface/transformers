@@ -31,7 +31,7 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import HfFolder, ModelCard, create_branch, delete_repo, list_repo_commits, list_repo_files
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -66,10 +66,12 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
     require_safetensors,
+    require_schedulefree,
     require_sentencepiece,
     require_sigopt,
     require_tensorboard,
@@ -883,6 +885,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # will add more specific tests once there are some bugs to fix
 
+    @require_non_xpu
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
@@ -1343,22 +1346,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
-        # Test that the model code actually gets patched with Liger kernel
-        from liger_kernel.transformers.rms_norm import LigerRMSNorm
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
 
-        from transformers.models.llama import modeling_llama
+            from transformers.models.llama import modeling_llama
 
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_llama = LlamaForCausalLM(config)
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
 
-        args = TrainingArguments(
-            "./test",
-            use_liger_kernel=True,
-        )
-        Trainer(tiny_llama, args)
+            # Spot check that modeling code and model instance variables are not yet patched
+            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
-        # Check that one of the Llama model layers has been correctly patched with Liger kernel
-        self.assertEqual(modeling_llama.LlamaRMSNorm, LigerRMSNorm)
+            args = TrainingArguments(
+                "./test",
+                use_liger_kernel=True,
+            )
+            Trainer(tiny_llama, args)
+
+            # Spot check that modeling code and model instance variables are patched
+            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
     @require_torch_gpu
@@ -1436,6 +1445,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 logging_steps=5,
                 optim="grokadamw",
                 max_steps=20,
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_schedulefree
+    @require_torch_gpu
+    def test_schedulefree_adam(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-9,
+                logging_steps=5,
+                optim="schedule_free_adamw",
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -3168,6 +3198,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
+    @require_non_xpu
     @require_torch_non_multi_gpu
     @require_torchdynamo
     @require_torch_tensorrt_fx
@@ -3904,6 +3935,25 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
             model_card = ModelCard.load(repo_name)
             self.assertTrue("test-trainer-tags" in model_card.data.tags)
+
+    def test_push_to_hub_with_revision(self):
+        # Checks if `trainer.push_to_hub()` works correctly by adding revision
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-revision"),
+                push_to_hub=True,
+                hub_token=self._token,
+            )
+            branch = "v1.0"
+            create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
+            url = trainer.push_to_hub(revision=branch)
+
+            # Extract branch from the url
+            re_search = re.search(r"tree/([^/]+)/", url)
+            self.assertIsNotNone(re_search)
+
+            branch_name = re_search.groups()[0]
+            self.assertEqual(branch_name, branch)
 
 
 @require_torch

@@ -163,6 +163,7 @@ _deps = [
     "sacremoses",
     "safetensors>=0.4.1",
     "sagemaker>=2.31.0",
+    "schedulefree>=1.2.6",
     "scikit-learn",
     "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -180,7 +181,7 @@ _deps = [
     "timeout-decorator",
     "tiktoken",
     "timm<=0.9.16",
-    "tokenizers>=0.19,<0.20",
+    "tokenizers>=0.20,<0.21",
     "torch",
     "torchaudio",
     "torchvision",
@@ -191,6 +192,8 @@ _deps = [
     "urllib3<2.0.0",
     "uvicorn",
     "pytest-rich",
+    "libcst",
+    "rich",
 ]
 
 
@@ -344,7 +347,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["tf"]
