@@ -106,6 +106,7 @@ class Speech2TextModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        attn_implementation="eager"
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -131,6 +132,7 @@ class Speech2TextModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
@@ -171,6 +173,7 @@ class Speech2TextModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            attn_implementation=self.attn_implementation,
         )
 
     def prepare_config_and_inputs_for_common(self):
