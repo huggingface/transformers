@@ -181,7 +181,7 @@ _deps = [
     "timeout-decorator",
     "tiktoken",
     "timm<=0.9.16",
-    "tokenizers>=0.19,<0.20",
+    "tokenizers>=0.20,<0.21",
     "torch",
     "torchaudio",
     "torchvision",
