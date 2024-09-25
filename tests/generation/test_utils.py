@@ -190,26 +190,6 @@ class GenerationTesterMixin:
         }
         return beam_kwargs
 
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
-
     def _greedy_generate(
         self,
         model,
@@ -2089,6 +2069,7 @@ class GenerationTesterMixin:
                 "assistant_model": assistant_model,
             }
 
+            assistant_model.generation_config.assistant_confidence_threshold = None
             # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
             with_all_logits = model.generate(
                 input_ids, attention_mask=attention_mask, **generation_kwargs, **inputs_dict, num_logits_to_keep=0
@@ -3117,6 +3098,16 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 max_length=20,
             )
             self.assertEqual(len(warning_list), 0)
+
+    def test_default_assisted_generation(self):
+        # Initialize the GenerationConfig object
+        config = GenerationConfig()
+
+        # Check the default values
+        self.assertEqual(config.num_assistant_tokens, 20)
+        self.assertEqual(config.num_assistant_tokens_schedule, "constant")
+        self.assertEqual(config.assistant_confidence_threshold, 0.4)
+        self.assertEqual(config.is_assistant, False)
 
     def test_generated_length_assisted_generation(self):
         # PT-only test: TF doesn't support assisted decoding yet.

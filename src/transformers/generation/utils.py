@@ -953,7 +953,8 @@ class GenerationMixin:
         if generation_config._eos_token_tensor is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config._eos_token_tensor))
         if (
-            generation_config.assistant_confidence_threshold is not None
+            generation_config.is_assistant
+            and generation_config.assistant_confidence_threshold is not None
             and generation_config.assistant_confidence_threshold > 0
         ):
             criteria.append(
