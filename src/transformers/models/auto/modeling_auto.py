@@ -195,7 +195,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonModel"),
         ("phi", "PhiModel"),
         ("phi3", "Phi3Model"),
-        ("pixtral", "PixtralModel"),
+        ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
         ("prophetnet", "ProphetNetModel"),
