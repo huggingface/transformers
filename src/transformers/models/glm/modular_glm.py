@@ -221,3 +221,9 @@ class GlmAttention(Phi3Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+    
+
+
+GLM_ATTENTION_CLASSES = {
+"eager": GlmAttention,
+}
