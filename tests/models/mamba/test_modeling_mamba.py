@@ -444,7 +444,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             outputs.last_hidden_state.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
         )
-        self.assertEqual(outputs.last_hidden_state.dtype, torch.float16)
+        self.assertEqual(outputs.last_hidden_state.dtype, torch.float32)
         self.assertEqual(cache_params.conv_states.dtype, torch.float16)
         self.assertEqual(cache_params.ssm_states.dtype, torch.float16)
 
