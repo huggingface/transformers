@@ -407,7 +407,7 @@ class ModelTesterMixin:
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -541,7 +541,7 @@ class ModelTesterMixin:
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -597,7 +597,7 @@ class ModelTesterMixin:
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -4733,7 +4733,7 @@ class ModelTesterMixin:
         model.generation_config.max_new_tokens = 4
 
         model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        model.forward = torch.compile(model.forward, mode="reduce-overhead" )
 
         input_text = "Why dogs are cute?"
         input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)

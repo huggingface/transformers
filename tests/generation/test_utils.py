@@ -469,7 +469,7 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
@@ -605,7 +605,7 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
@@ -941,7 +941,7 @@ class GenerationTesterMixin:
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.is_decoder = True
 
             # test old generation output for backwards compatibility
@@ -968,7 +968,7 @@ class GenerationTesterMixin:
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
@@ -1007,7 +1007,7 @@ class GenerationTesterMixin:
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
 
@@ -1118,7 +1118,7 @@ class GenerationTesterMixin:
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
@@ -1191,7 +1191,7 @@ class GenerationTesterMixin:
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
@@ -1300,7 +1300,7 @@ class GenerationTesterMixin:
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
@@ -1482,7 +1482,7 @@ class GenerationTesterMixin:
 
             # If it doesn't support cache, pass the test
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
             if "use_cache" not in inputs:
@@ -1662,7 +1662,7 @@ class GenerationTesterMixin:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest(reason="This model doesn't support caching")
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:
             # 1. use cache (for obvious reasons)

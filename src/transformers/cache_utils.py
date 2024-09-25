@@ -441,8 +441,9 @@ class DynamicCache(Cache):
 
         self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
-            self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
+            if self.key_cache[idx] != []:
+                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
     def batch_split(self, full_batch_size: int, split_size: int, num_hidden_layers: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
@@ -462,9 +463,12 @@ class DynamicCache(Cache):
         `generation.utils`"""
         cache = cls(num_hidden_layers)
         for idx in range(len(splits[0])):
-            layer_keys = torch.cat([current.key_cache[idx] for current in splits], dim=0)
-            layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
-            cache.update(layer_keys, layer_values, idx)
+            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
+            value_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
+            if key_cache != []:
+                layer_keys = torch.cat(key_cache, dim=0)
+                layer_values = torch.cat(value_cache, dim=0)
+                cache.update(layer_keys, layer_values, idx)
         return cache
 
     def batch_repeat_interleave(self, repeats: int):
