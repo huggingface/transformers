@@ -29,7 +29,7 @@ class GlmConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=65024,
+        vocab_size=151552,
         hidden_size=4096,
         intermediate_size=13696,
         num_hidden_layers=40,
@@ -40,7 +40,7 @@ class GlmConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=131072,
         initializer_range=0.02,
-        rms_norm_eps=1e-5,
+        rms_norm_eps=0.00000015625,
         use_rms_norm=True,
         apply_residual_connection_post_layernorm=False,
         post_layer_norm=True,

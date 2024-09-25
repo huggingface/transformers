@@ -47,7 +47,7 @@ def convert_state_dict(original_state_dict: dict):
 
 def convert_config(original_config: dict):
     new_config = GlmConfig(
-        vocab_size=original_config.pop("vocab_size"),
+        vocab_size=original_config.pop("padded_vocab_size"),
         hidden_size=original_config.pop("hidden_size"),
         intermediate_size=original_config.pop("ffn_hidden_size"),
         num_hidden_layers=original_config.pop("num_hidden_layer"),
