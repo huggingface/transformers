@@ -466,7 +466,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         if pixel_values is not None:
             selected_image_feature = self._get_selected_image_features(
                 pixel_values=pixel_values,
-                vision_feature_layer=vision_feature_layer, vision_feature_select_strategy=vision_feature_select_strategy,
+                vision_feature_layer=vision_feature_layer, 
+                vision_feature_select_strategy=vision_feature_select_strategy,
             )
             image_features = self.multi_modal_projector(selected_image_feature)
 
