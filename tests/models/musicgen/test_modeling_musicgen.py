@@ -1389,22 +1389,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
-    def test_generate_without_input_ids(self):
-        config, _ = self.prepare_config_and_inputs_for_generate()
-
-        # if no bos token id => cannot generate from None
-        if config.bos_token_id is None:
-            self.skipTest(reason="bos_token_id is None")
-
-        for model_class in self.greedy_sample_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-
-            output_ids_generate = model.generate(
-                do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
-            )
-            self.assertIsNotNone(output_ids_generate)
-
     @require_torch_fp16
     @require_torch_accelerator  # not all operations are supported in fp16 on CPU
     def test_generate_fp16(self):
