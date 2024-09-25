@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
@@ -1173,7 +1174,7 @@ class OlmoeModel(OlmoePreTrainedModel):
         return causal_mask
 
 
-class OlmoeForCausalLM(OlmoePreTrainedModel):
+class OlmoeForCausalLM(OlmoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
