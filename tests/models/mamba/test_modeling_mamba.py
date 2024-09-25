@@ -421,6 +421,23 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_beam_sample_generate(self):
         pass
 
+    def test_dtype_mismatch_handled_in_cache(self):
+        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
+        model = MambaModel(config)
+        model.to(torch_device).to(torch.float16)
+        model.eval()
+
+        # Create cache with float32 dtype
+        cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
+
+        outputs = model(
+            input_ids,
+            cache_params=cache_params,
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+        # If code is correct, no error occurs and test passes
+
 
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
