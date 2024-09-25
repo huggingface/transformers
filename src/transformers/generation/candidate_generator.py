@@ -159,6 +159,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
         self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
+        # this flag allow us set the confidence stopping criteria for assistant model generation.
+        self.generation_config.is_assistant = True
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
