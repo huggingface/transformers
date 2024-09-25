@@ -167,6 +167,9 @@ class Idefics2Processor(ProcessorMixin):
 
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
+            return_tensors (`Union[str, TensorType]`, *optional*):
+                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
+                information.
 
         """
         if text is None and images is None:

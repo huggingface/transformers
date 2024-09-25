@@ -259,6 +259,9 @@ class IdeficsProcessor(ProcessorMixin):
             text (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
+                The type of tensors to return. Can be one of:
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
 
         Returns:
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
