@@ -18,20 +18,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Pixtral model was released by the Mistral AI team on [Vllm](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
-
+The Pixtral model was released by the Mistral AI team on [vLLM](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
 
 Tips:
 
-- Pixtral is a multimodal model, the main contribution is the 2d ROPE on the images, and support for arbitrary image size (the images are not padded together nor are they resized)
-- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders.
+- Pixtral is a multimodal model, taking images and text as input, and producing text as output.
+- This model follows the [Llava](llava) family, meaning image embeddings are placed instead of the `[IMG]` token placeholders. The model uses [`PixtralVisionModel`] for its vision encoder, and [`MistralForCausalLM`] for its language decoder.
+- The main contribution is the 2d ROPE (rotary postiion embeddings) on the images, and support for arbitrary image sizes (the images are not padded together nor are they resized).
 - The format for one or mulitple prompts is the following:
 ```
 "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
 ```
 Then, the processor will replace each `[IMG]` token with  a number of `[IMG]` token that depends on the height and the width of the image. Each *row* of the image is separated by a `[IMG_BREAK]` token, and each image is separated by a  `[IMG_END]` token.
 
-This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ)
+This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/vllm-project/vllm/pull/8377).
+
+## Usage
 
 Here is an example of how to run it:
 
@@ -83,9 +85,9 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 
 [[autodoc]] PixtralVisionConfig
 
-## PixtralModel
+## PixtralVisionModel
 
-[[autodoc]] PixtralModel
+[[autodoc]] PixtralVisionModel
     - forward
 
 ## PixtralImageProcessor

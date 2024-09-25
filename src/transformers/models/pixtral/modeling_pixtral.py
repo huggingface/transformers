@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Mistral and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,15 +48,13 @@ def position_ids_in_meshgrid(patch_embeds_list, max_width):
 class PixtralRotaryEmbedding(nn.Module):
     """
     The key with pixtral embedding is just that you have a frequency for each pixel positions.
-    If you have height x width pixels (or embedding pixels)
+    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
+    is given by indexing the pre_computed frequency on the width and height.
 
-    then the frequency used for ROPE is given by indexing the pre_computed frequency on the
-    width and height.
+    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
 
-    What you output is of dimension batch, height * width, dim with dim the embed dim.
-
-    This simply means that for each image hidden states, you are going to add
-    a corresponding positional embedding, based on it's index in the grid.
+    This simply means that for each image hidden state, you are going to add
+    a corresponding positional embedding, based on its index in the grid.
     """
 
     def __init__(self, config, device):
@@ -319,9 +317,7 @@ class PixtralTransformer(nn.Module):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
+                Embeddings which serve as input to the Transformer.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -392,17 +388,13 @@ PIXTRAL_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PixtralVisionConfig`] or [`PixtralVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
+        config ([`PixtralVisionConfig`]):
+            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    PIXTRAL_START_DOCSTRING,
-)
 class PixtralPreTrainedModel(PreTrainedModel):
     config_class = PixtralVisionConfig
     base_model_prefix = "model"
@@ -412,9 +404,6 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        # important: this ported version of Pixtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/pixtral should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -433,8 +422,9 @@ class PixtralPreTrainedModel(PreTrainedModel):
 
 PIXTRAL_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values: list of N_img images of variable sizes,
-                each of shape (C, H, W)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`]
+            for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -463,10 +453,10 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
 
 
 @add_start_docstrings(
-    """The PIXTRAL model which consists of a vision backbone and a language model.""",
+    "The bare Pixtral vision encoder outputting raw hidden-states without any specific head on top.",
     PIXTRAL_START_DOCSTRING,
 )
-class PixtralModel(PixtralPreTrainedModel):
+class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
     def __init__(self, config):
