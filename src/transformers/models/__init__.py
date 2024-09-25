@@ -174,6 +174,7 @@ from . import (
     nystromformer,
     olmo,
     olmoe,
+    omdet_turbo,
     oneformer,
     openai,
     opt,
