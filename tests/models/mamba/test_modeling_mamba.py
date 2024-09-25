@@ -430,13 +430,23 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # Create cache with float32 dtype
         cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
 
+        # If code is correct, no error occurs and test passes
         outputs = model(
             input_ids,
             cache_params=cache_params,
             use_cache=True,
             cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
-        # If code is correct, no error occurs and test passes
+
+        self.assertIsNotNone(outputs)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+        )
+        self.assertEqual(outputs.last_hidden_state.dtype, torch.float16)
+        self.assertEqual(cache_params.conv_states.dtype, torch.float32)
+        self.assertEqual(cache_params.ssm_states.dtype, torch.float32)
 
 
 @require_torch
