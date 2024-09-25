@@ -3115,9 +3115,7 @@ class GenerationMixin:
                     "legacy tuple format or `DynamicCache`"
                 )
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(
-                past_key_values,
-            )
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
         # Standard code path: use the `Cache.reorder_cache`
         else:
             past_key_values.reorder_cache(beam_idx)
