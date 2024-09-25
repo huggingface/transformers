@@ -348,7 +348,7 @@ def write_model(
                 current_parameter = permute_for_rope(current_parameter, heads, text_key_value_dim, text_dim)
             state_dict[new_key] = current_parameter.reshape(text_num_key_value_heads * text_dim_per_head, text_dim)
 
-        elif "vision_model" in new_key and re.search("(k|v|q)_proj.weight", new_key):
+        elif "vision_model" in new_key and re.search("(k|v|q)_proj", new_key):
             shards = [
                 param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim) for param in current_parameter
             ]
