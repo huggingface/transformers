@@ -224,6 +224,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
 |                           [MRA](model_doc/mra)                           |       ✅        |         ❌         |      ❌      |
+|                        [MSClap](model_doc/msclap)                        |       ✅        |         ❌         |      ❌      |
 |                           [MT5](model_doc/mt5)                           |       ✅        |         ✅         |      ✅      |
 |                      [MusicGen](model_doc/musicgen)                      |       ✅        |         ❌         |      ❌      |
 |               [MusicGen Melody](model_doc/musicgen_melody)               |       ✅        |         ❌         |      ❌      |
