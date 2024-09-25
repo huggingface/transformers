@@ -980,7 +980,7 @@ class SinkCache(Cache):
             # Growing cache
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-        
+
         key_cache_to_return = self.key_cache[layer_idx]
         value_cache_to_return = self.value_cache[layer_idx]
 
