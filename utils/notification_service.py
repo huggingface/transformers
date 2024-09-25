@@ -209,7 +209,7 @@ class Message:
         return {
             "type": "section",
             "text": {
-                "type": "plain_text",
+                "type": "mrkdwn",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
                     f"Number of model failures: {self.n_model_failures}.\n"
