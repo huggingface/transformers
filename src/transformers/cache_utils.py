@@ -1430,7 +1430,7 @@ class EncoderDecoderCache(Cache):
         # check if empty list because in case of static cache it will be a tensors and we can't check `if not torch.Tensor`
         if self.self_attention_cache.key_cache == []:
             return 0
-        if len(self.self_attention_cache.key_cache) > 1 and self.key_cache[layer_idx] == []:
+        if len(self.self_attention_cache.key_cache) > 1 and self.self_attention_cache.key_cache[layer_idx] == []:
             return 0
         return (self.self_attention_cache.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
