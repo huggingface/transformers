@@ -38,12 +38,16 @@ from ...utils import (
 from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    LlamaModel,
+    LlamaForCausalLM,
     apply_rotary_pos_emb,
     repeat_kv,
 )
 from ..phi3.modeling_phi3 import (
+    Phi3Config,
     Phi3MLP,
     Phi3Attention,
+    Phi3DecoderLayer
 )
 
 
@@ -54,62 +58,65 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-class GlmConfig(PretrainedConfig):
-    model_type = "gemma"
-    keys_to_ignore_at_inference = ["past_key_values"]
+class GlmConfig(Phi3Config):
+    model_type = "glm"
 
     def __init__(
         self,
+        # Phi3 args
         vocab_size=151552,
         hidden_size=4096,
         intermediate_size=13696,
         num_hidden_layers=40,
         num_attention_heads=32,
-
-
-        num_key_value_heads=2, # ??
-        head_dim=128,
-
-
+        num_key_value_heads=2,
+        resid_pdrop=0.0,
+        attention_dropout=0.0,
         hidden_act="silu",
-        rope_type="linear",
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        # pad_token_id=0,
-        # eos_token_id=1,
-        # bos_token_id=2,
-        # tie_word_embeddings=True,
+        tie_word_embeddings=False,
         rope_theta=10000.0,
+        rope_scaling={"rope_type": "linear", "factor": 1.,},
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
+        # Additionnal args
+        head_dim=128,
+        partial_rotary_factor=0.5,
         attention_bias=True,
-        attention_dropout=0.0,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.hidden_activation = hidden_activation
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
         super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            resid_pdrop=resid_pdrop,
+            attention_dropout=attention_dropout,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_theta=rope_theta,
+            rope_scaling=rope_scaling,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.head_dim = head_dim
+        self.partial_rotary_factor = partial_rotary_factor
+        self.attention_bias = attention_bias
+        del self.embd_pdrop
+        del self.original_max_mposition_embeddings
+        del self.sliding_window
 
 
 
@@ -227,3 +234,110 @@ class GlmAttention(Phi3Attention):
 GLM_ATTENTION_CLASSES = {
 "eager": GlmAttention,
 }
+
+
+class GlmDecoderLayer(Phi3DecoderLayer):
+
+    def __init__(self, config: GlmConfig, layer_idx: int):
+        super().__init__()
+
+        self.config = config
+        self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+
+        self.mlp = GlmMLP(config)
+        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
+        self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
+        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        attn_outputs, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings
+        )
+
+        hidden_states = residual + self.resid_attn_dropout(attn_outputs)
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + self.resid_mlp_dropout(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+    
+
+class GlmModel(LlamaModel):
+
+    def __init__(self, config: GlmConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GlmRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+
+class GlmForCausalLM(LlamaForCausalLM):
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmModel(config)
+        self.post_init()
