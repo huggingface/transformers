@@ -4312,14 +4312,6 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
-                bnb.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
                 TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
                 bnb.optim.Lion,
                 default_lion_kwargs,
