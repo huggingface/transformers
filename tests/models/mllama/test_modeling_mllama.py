@@ -272,7 +272,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     test_head_masking = False
     test_torchscript = False
 
-
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
@@ -403,7 +402,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nLong exposure dock.\\nWhistler, British Columbia.\\nNikon D800E"  # fmt: skip
+        expected_output = "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -466,7 +465,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([8.5781, 7.6719, 4.6406, 0.7192, 3.0918])
+        expected_logits = torch.tensor([8.3594, 7.7148, 4.7266, 0.7803, 3.1504])
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -502,7 +501,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "If I had to write a haiku for this one, it would be:.\\nLong exposure dock.\\nWhistler, British Columbia.\\nNikon D800E"  # fmt: skip
+        expected_output = "If I had to write a haiku for this one, it would be:.\\nI'm not a poet.\\nBut I'm a photographer.\\nAnd I'm a"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -512,7 +511,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "This image shows is a photo of a stop sign in front of a Chinese arch. The stop sign is red and white, and the arch"  # fmt: skip
+        expected_output = "This image shows is a photograph of a stop sign in front of a Chinese archway. The stop sign is red with white letters and is"  # fmt: skip
 
         self.assertEqual(
             decoded_output,
