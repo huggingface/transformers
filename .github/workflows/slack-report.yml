@@ -53,6 +53,7 @@ jobs:
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
+          TEMP: ${{ secrets[format('{0}_{1}', github.actor, 'SLACK_ID')] }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
