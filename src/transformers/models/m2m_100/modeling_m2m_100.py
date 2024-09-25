@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
@@ -1481,7 +1482,7 @@ class M2M100Model(M2M100PreTrainedModel):
 @add_start_docstrings(
     "The M2M100 Model with a language modeling head. Can be used for summarization.", M2M_100_START_DOCSTRING
 )
-class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
+class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 

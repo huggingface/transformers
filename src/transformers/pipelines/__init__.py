@@ -165,14 +165,14 @@ SUPPORTED_TASKS = {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
-        "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
+        "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "22aad52")}},
         "type": "multimodal",
     },
     "text-to-audio": {
         "impl": TextToAudioPipeline,
         "tf": (),
         "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
-        "default": {"model": {"pt": ("suno/bark-small", "645cfba")}},
+        "default": {"model": {"pt": ("suno/bark-small", "1dbd7a1")}},
         "type": "text",
     },
     "feature-extraction": {
@@ -181,8 +181,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert/distilbert-base-cased", "935ac13"),
-                "tf": ("distilbert/distilbert-base-cased", "935ac13"),
+                "pt": ("distilbert/distilbert-base-cased", "6ea8117"),
+                "tf": ("distilbert/distilbert-base-cased", "6ea8117"),
             }
         },
         "type": "multimodal",
@@ -193,8 +193,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
-                "tf": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "pt": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "714eb0f"),
+                "tf": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "714eb0f"),
             },
         },
         "type": "text",
@@ -205,8 +205,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
-                "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+                "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496"),
+                "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496"),
             },
         },
         "type": "text",
@@ -217,8 +217,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
-                "tf": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
+                "pt": ("distilbert/distilbert-base-cased-distilled-squad", "564e9b5"),
+                "tf": ("distilbert/distilbert-base-cased-distilled-squad", "564e9b5"),
             },
         },
         "type": "text",
@@ -229,8 +229,8 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
-                "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
-                "tf": ("google/tapas-base-finetuned-wtq", "69ceee2"),
+                "pt": ("google/tapas-base-finetuned-wtq", "e3dde19"),
+                "tf": ("google/tapas-base-finetuned-wtq", "e3dde19"),
             },
         },
         "type": "text",
@@ -240,7 +240,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "d0a1f6a")},
         },
         "type": "multimodal",
     },
@@ -249,7 +249,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
+            "model": {"pt": ("impira/layoutlm-document-qa", "beed3c4")},
         },
         "type": "multimodal",
     },
@@ -259,8 +259,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert/distilroberta-base", "ec58a5b"),
-                "tf": ("distilbert/distilroberta-base", "ec58a5b"),
+                "pt": ("distilbert/distilroberta-base", "fb53ab8"),
+                "tf": ("distilbert/distilroberta-base", "fb53ab8"),
             }
         },
         "type": "text",
@@ -270,7 +270,7 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("google-t5/t5-small", "d769bba")}
+            "model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("google-t5/t5-small", "df1b051")}
         },
         "type": "text",
     },
@@ -280,9 +280,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
-            ("en", "de"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
-            ("en", "ro"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+            ("en", "fr"): {"model": {"pt": ("google-t5/t5-base", "a9723ea"), "tf": ("google-t5/t5-base", "a9723ea")}},
+            ("en", "de"): {"model": {"pt": ("google-t5/t5-base", "a9723ea"), "tf": ("google-t5/t5-base", "a9723ea")}},
+            ("en", "ro"): {"model": {"pt": ("google-t5/t5-base", "a9723ea"), "tf": ("google-t5/t5-base", "a9723ea")}},
         },
         "type": "text",
     },
@@ -290,14 +290,14 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+        "default": {"model": {"pt": ("google-t5/t5-base", "a9723ea"), "tf": ("google-t5/t5-base", "a9723ea")}},
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("openai-community/gpt2", "6c0e608"), "tf": ("openai-community/gpt2", "6c0e608")}},
+        "default": {"model": {"pt": ("openai-community/gpt2", "607a30d"), "tf": ("openai-community/gpt2", "607a30d")}},
         "type": "text",
     },
     "zero-shot-classification": {
@@ -306,12 +306,12 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("facebook/bart-large-mnli", "c626438"),
-                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+                "pt": ("facebook/bart-large-mnli", "d7645e1"),
+                "tf": ("FacebookAI/roberta-large-mnli", "2a8f12d"),
             },
             "config": {
-                "pt": ("facebook/bart-large-mnli", "c626438"),
-                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+                "pt": ("facebook/bart-large-mnli", "d7645e1"),
+                "tf": ("FacebookAI/roberta-large-mnli", "2a8f12d"),
             },
         },
         "type": "text",
@@ -322,8 +322,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
-                "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+                "pt": ("openai/clip-vit-base-patch32", "3d74acf"),
+                "tf": ("openai/clip-vit-base-patch32", "3d74acf"),
             }
         },
         "type": "multimodal",
@@ -334,7 +334,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("laion/clap-htsat-fused", "973b6e5"),
+                "pt": ("laion/clap-htsat-fused", "cca9e28"),
             }
         },
         "type": "multimodal",
@@ -345,8 +345,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("google/vit-base-patch16-224", "5dca96d"),
-                "tf": ("google/vit-base-patch16-224", "5dca96d"),
+                "pt": ("google/vit-base-patch16-224", "3f49326"),
+                "tf": ("google/vit-base-patch16-224", "3f49326"),
             }
         },
         "type": "image",
@@ -367,7 +367,7 @@ SUPPORTED_TASKS = {
         "impl": ImageSegmentationPipeline,
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
-        "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "d53b52a")}},
         "type": "multimodal",
     },
     "image-to-text": {
@@ -376,8 +376,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
-                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "pt": ("ydshieh/vit-gpt2-coco-en", "5bebf1e"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "5bebf1e"),
             }
         },
         "type": "multimodal",
@@ -386,42 +386,42 @@ SUPPORTED_TASKS = {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50", "1d5f47b")}},
         "type": "multimodal",
     },
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "cbc355f")}},
         "type": "multimodal",
     },
     "depth-estimation": {
         "impl": DepthEstimationPipeline,
         "tf": (),
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
+        "default": {"model": {"pt": ("Intel/dpt-large", "bc15f29")}},
         "type": "image",
     },
     "video-classification": {
         "impl": VideoClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
+        "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "488eb9a")}},
         "type": "video",
     },
     "mask-generation": {
         "impl": MaskGenerationPipeline,
         "tf": (),
         "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("facebook/sam-vit-huge", "997b15")}},
+        "default": {"model": {"pt": ("facebook/sam-vit-huge", "87aecf0")}},
         "type": "multimodal",
     },
     "image-to-image": {
         "impl": ImageToImagePipeline,
         "tf": (),
         "pt": (AutoModelForImageToImage,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("caidas/swin2SR-classical-sr-x2-64", "4aaedcb")}},
+        "default": {"model": {"pt": ("caidas/swin2SR-classical-sr-x2-64", "cee1c92")}},
         "type": "image",
     },
 }
@@ -860,6 +860,7 @@ def pipeline(
             f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
+        hub_kwargs["revision"] = revision
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
