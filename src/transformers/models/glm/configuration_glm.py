@@ -29,7 +29,7 @@ class GlmConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
+        vocab_size=65024,
         hidden_size=4096,
         intermediate_size=13696,
         num_hidden_layers=40,
@@ -41,6 +41,9 @@ class GlmConfig(PretrainedConfig):
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
+        use_rms_norm=True,
+        apply_residual_connection_post_layernorm=False,
+        post_layer_norm=True,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -54,6 +57,7 @@ class GlmConfig(PretrainedConfig):
         head_dim=128,
         partial_rotary_factor=0.5,
         attention_bias=True,
+        linear_bias=False,
         **kwargs,
     ):
         super().__init__(
@@ -75,12 +79,15 @@ class GlmConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
+        self.use_rms_norm = use_rms_norm
+        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.post_layer_norm = post_layer_norm
         self.use_cache = use_cache
         self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.head_dim = head_dim
         self.partial_rotary_factor = partial_rotary_factor
         self.attention_bias = attention_bias
+        self.linear_bias = linear_bias
