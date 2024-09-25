@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import torch
 
 from ..cache_utils import DynamicCache
+from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 
@@ -107,6 +108,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
 
         # Set eos in assistant same as in target model
         self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
@@ -156,12 +158,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
-
-        # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
-        # greedily to maximize matches. Disables sampling-related flags to prevent warnings
-        self.generation_config.do_sample = False
-        for attr in ("temperature", "top_p", "min_p", "typical_p", "top_k", "epsilon_cutoff", "eta_cutoff"):
-            setattr(self.generation_config, attr, None)
+        self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
+        # this flag allow us set the confidence stopping criteria for assistant model generation.
+        self.generation_config.is_assistant = True
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
@@ -335,7 +334,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = torch.isin(chosen_ids, self.eos_token_id)
+                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
                     match_indices_eos = torch.nonzero(mask)
                     if match_indices_eos.numel() > 0:
                         first_eos_index = match_indices_eos[0].item()

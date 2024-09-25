@@ -369,6 +369,7 @@ class GitModelTester:
             attention_mask=None,
             pixel_values=pixel_values,
             do_sample=False,
+            min_length=20,
             max_length=20,
             num_beams=2,
             num_return_sequences=2,
@@ -449,6 +450,53 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        # GIT attention shape depends on image inputs, overwrite
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length + idx + image_length if not use_cache else 1
+            src_len = min_length + idx + image_length
+
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                tgt_len,
+                src_len,
+            )
+            # check attn size
+            self.assertListEqual(
+                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+            )
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        # GIT attention shape depends on image inputs, overwrite
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+
+        for idx, iter_hidden_states in enumerate(hidden_states):
+            seq_len = min_length + idx + image_length if not use_cache else 1
+            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            # check hidden size
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [expected_shape] * len(iter_hidden_states),
+            )
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/git-base"
@@ -468,7 +516,15 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_dola_decoding_sample(self):
         pass
 
 
