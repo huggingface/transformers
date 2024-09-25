@@ -288,24 +288,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_tied_weights_keys(self):
         pass
 
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
-
-        _ = inputs_dict.pop("attention_mask", None)
-        inputs_dict = {
-            k: v[:batch_size, ...]
-            for k, v in inputs_dict.items()
-            if "head_mask" not in k and isinstance(v, torch.Tensor)
-        }
-
-        # take max batch_size
-        sequence_length = input_ids.shape[-1]
-        input_ids = input_ids[: batch_size * config.num_codebooks, :]
-
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
-        return config, input_ids, attention_mask, inputs_dict
-
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
         return logits_processor_kwargs
@@ -1392,88 +1374,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             lm_heads = model.get_output_embeddings()
             self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
 
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
-
-        # take max batch_size
-        sequence_length = input_ids.shape[-1]
-        input_ids = input_ids[:batch_size, :]
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
-
-        return config, input_ids, attention_mask
-
-    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
-    # different modalities -> different shapes)
-    def _sample_generate(
-        self,
-        model,
-        input_ids,
-        attention_mask,
-        num_return_sequences,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        torch.manual_seed(0)
-        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
-        output_generate = model.generate(
-            input_ids,
-            do_sample=True,
-            num_beams=1,
-            max_new_tokens=self.max_new_tokens,
-            num_return_sequences=num_return_sequences,
-            output_scores=output_scores,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            remove_invalid_values=True,
-            **model_kwargs,
-        )
-
-        return output_generate
-
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
-    def test_sample_generate(self):
-        for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-
-            # check `generate()` and `sample()` are equal
-            output_generate = self._sample_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                num_return_sequences=1,
-            )
-            self.assertIsInstance(output_generate, torch.Tensor)
-
-    def test_sample_generate_dict_output(self):
-        for model_class in self.greedy_sample_model_classes:
-            # disable cache
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            config.use_cache = False
-            model = model_class(config).to(torch_device).eval()
-
-            output_generate = self._sample_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                num_return_sequences=3,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-
     def test_generate_without_input_ids(self):
-        config, _, _ = self._get_input_ids_and_config()
+        config, _ = self.prepare_config_and_inputs_for_generate()
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:

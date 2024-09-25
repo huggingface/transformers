@@ -463,7 +463,7 @@ class GenerationTesterMixin:
                 output_hidden_states=True,
                 output_attentions=self.has_attentions,
                 return_dict_in_generate=True,
-                use_cache=True,
+                use_cache=True,  # Enable cache
             )
 
             if model.config.is_encoder_decoder:
@@ -476,32 +476,26 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             model = model_class(config).to(torch_device).eval()
-            output_generate = self._sample_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_dict=inputs_dict,
-                num_return_sequences=1,
-            )
+            output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
 
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
 
     @pytest.mark.generate
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
                 inputs_dict=inputs_dict,
                 num_return_sequences=2,
                 output_scores=True,
@@ -518,45 +512,39 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=2)
+            self._check_outputs(output_generate, main_input, model.config, num_return_sequences=2)
 
     @pytest.mark.generate
     def test_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             model = model_class(config).to(torch_device).eval()
 
             beam_kwargs = self._get_beam_kwargs()
-            output_generate = self._beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_dict=inputs_dict,
-                beam_kwargs=beam_kwargs,
-            )
+            output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
 
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
 
     @pytest.mark.generate
     def test_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
             output_generate = self._beam_search_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
                 inputs_dict=inputs_dict,
                 beam_kwargs=beam_kwargs,
                 output_scores=True,
@@ -572,20 +560,20 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+                output_generate, main_input, model.config, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     @pytest.mark.generate
     def test_beam_search_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-            # enable cache
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            main_input = inputs_dict[self.input_name]
 
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason="This model doesn't support caching")
@@ -599,8 +587,6 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             output_generate = self._beam_search_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
                 inputs_dict=inputs_dict,
                 beam_kwargs=beam_kwargs,
                 output_scores=True,
@@ -608,16 +594,16 @@ class GenerationTesterMixin:
                 output_hidden_states=True,
                 output_attentions=self.has_attentions,
                 return_dict_in_generate=True,
-                use_cache=True,
+                use_cache=True,  # Enable cache
             )
 
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
 
             self._check_outputs(
-                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
+                output_generate, main_input, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     @require_accelerate
@@ -1007,7 +993,7 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
                 self.skipTest(reason="TODO: fix me")
 
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config(batch_size=1)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1019,23 +1005,19 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
 
             low_output = model.generate(
-                input_ids,
                 top_k=4,
                 penalty_alpha=0.6,
                 low_memory=True,
                 max_new_tokens=self.max_new_tokens,
-                attention_mask=attention_mask,
                 **inputs_dict,
                 use_cache=True,
             )
 
             high_output = model.generate(
-                input_ids,
                 top_k=4,
                 penalty_alpha=0.6,
                 low_memory=False,
                 max_new_tokens=self.max_new_tokens,
-                attention_mask=attention_mask,
                 **inputs_dict,
                 use_cache=True,
             )
@@ -1061,7 +1043,7 @@ class GenerationTesterMixin:
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
-            config, input_ids, _, _ = self._get_input_ids_and_config(batch_size=2)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             # batch_size=1 is ok, but batch_size>1 will cause non-identical output
 
             config.use_cache = True
@@ -1071,7 +1053,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
 
             low_output = model.generate(
-                input_ids,
+                **inputs_dict,
                 max_new_tokens=8,
                 num_beams=5,
                 early_stopping=True,
@@ -1080,7 +1062,7 @@ class GenerationTesterMixin:
             )
 
             high_output = model.generate(
-                input_ids,
+                **inputs_dict,
                 max_new_tokens=8,
                 num_beams=5,
                 early_stopping=True,
