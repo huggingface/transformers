@@ -16,10 +16,11 @@
 Processor class for Mllama.
 """
 
+from statistics import mean
 from typing import List, Optional, Union
 
 import numpy as np
-from statistics import mean 
+
 
 try:
     from typing import Unpack
@@ -300,7 +301,10 @@ class MllamaProcessor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
             if text is not None:
-                if not all(batch_img_per_prompt == n_images_in_images for batch_img_per_prompt in n_images_in_text) and len(text)>1:
+                if (
+                    not all(batch_img_per_prompt == n_images_in_images for batch_img_per_prompt in n_images_in_text)
+                    and len(text) > 1
+                ):
                     raise ValueError(
                         f"The number of images in each batch {n_images_in_text} should be the same  {n_images_in_images} should be the same. Yes, the model does not \
                         support having a different number of images per batch."
