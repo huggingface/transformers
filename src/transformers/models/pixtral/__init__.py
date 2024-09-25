@@ -29,7 +29,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pixtral"] = [
-        "PixtralModel",
+        "PixtralVisionModel",
         "PixtralPreTrainedModel",
     ]
 
@@ -53,8 +53,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pixtral import (
-            PixtralModel,
             PixtralPreTrainedModel,
+            PixtralVisionModel,
         )
 
     try:

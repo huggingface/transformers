@@ -255,7 +255,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [Phi3](model_doc/phi3)                          |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
-|                       [Pixtral](model_doc/pixtral)                       |       ❌        |         ❌         |      ❌      |
+|                       [Pixtral](model_doc/pixtral)                       |       ✅        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |
 |                    [PoolFormer](model_doc/poolformer)                    |       ✅        |         ❌         |      ❌      |
 |                     [Pop2Piano](model_doc/pop2piano)                     |       ✅        |         ❌         |      ❌      |
