@@ -1617,12 +1617,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
             self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
 
         # encoder head
-        self.enc_output = nn.Sequential(
+        self.encoder_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
-        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.encoder_score_head = nn.Linear(config.d_model, config.num_labels)
+        self.encoder_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -1835,10 +1835,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
 
-        output_memory = self.enc_output(memory)
+        output_memory = self.encoder_output(memory)
 
-        enc_outputs_class = self.enc_score_head(output_memory)
-        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
+        enc_outputs_class = self.encoder_score_head(output_memory)
+        enc_outputs_coord_logits = self.encoder_bbox_head(output_memory) + anchors
 
         _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
 
