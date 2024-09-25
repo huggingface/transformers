@@ -1437,7 +1437,9 @@ class GenerationTesterMixin:
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask") or torch.ones_like(input_ids)
+            attention_mask = inputs_dict.get("attention_mask")
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
 
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
@@ -1542,7 +1544,6 @@ class GenerationTesterMixin:
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
 
             # Ignore:
             # a) eos (to always output 20 tokens) and pad (so we don't try to infer the attn mask from the input_ids,
@@ -1562,6 +1563,8 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
+
+            input_ids = inputs_dict.pop("input_ids")
 
             # Traditional way of generating text
             outputs_from_ids = model.generate(
@@ -1614,8 +1617,6 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict["attention_mask"]
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
@@ -1624,9 +1625,11 @@ class GenerationTesterMixin:
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
 
+            input_ids = inputs_dict.pop("input_ids")
+
             model.config.use_cache = True
             model.config.is_decoder = True
-            batch_size, seq_length = input_ids.shape
+            batch_size = input_ids.shape[0]
             max_cache_len = 30
 
             # here we force to not stop at eos and go until max-length
@@ -1651,9 +1654,7 @@ class GenerationTesterMixin:
             num_hidden_layers = text_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs = model.generate(
-                inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs, **inputs_dict
-            )
+            outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length` in shape, not `max_length - embeds_length`
             cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
