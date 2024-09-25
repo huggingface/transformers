@@ -1694,13 +1694,14 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             )
         )
         num_backbone_outs = len(config.decoder_in_channels)
-        for _ in range(config.num_feature_levels - num_backbone_outs - 1):
-            decoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(config.d_model, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+        if config.num_feature_levels > num_backbone_outs + 1:
+            for _ in range(config.num_feature_levels - num_backbone_outs - 1):
+                decoder_input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(config.d_model, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                        nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                    )
                 )
-            )
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
         # decoder

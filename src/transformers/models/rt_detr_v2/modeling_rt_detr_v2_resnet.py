@@ -44,7 +44,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "RTDetrV2ResNetConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 
