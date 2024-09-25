@@ -111,6 +111,7 @@ class GenerationTesterMixin:
             "decoder_attention_mask",
             # we'll set cache use in each test differently
             "use_cache",
+            # model-specific exceptions should overload/overwrite this function
         ]
         filtered_inputs_dict = {
             k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
@@ -926,7 +927,7 @@ class GenerationTesterMixin:
             output_generate = self._contrastive_generate(
                 model=model,
                 inputs_dict=inputs_dict,
-                use_cache=True,
+                use_cache=True,  # Enable cache
             )
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
@@ -960,7 +961,7 @@ class GenerationTesterMixin:
                 output_hidden_states=True,
                 output_attentions=self.has_attentions,
                 return_dict_in_generate=True,
-                use_cache=True,
+                use_cache=True,  # Enable cache
             )
 
             if model.config.is_encoder_decoder:
