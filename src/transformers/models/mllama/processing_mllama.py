@@ -19,7 +19,7 @@ Processor class for Mllama.
 from typing import List, Optional, Union
 
 import numpy as np
-
+from statistics import mean 
 
 try:
     from typing import Unpack
@@ -299,10 +299,17 @@ class MllamaProcessor(ProcessorMixin):
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
-            if text is not None and not n_images_in_images == n_images_in_text:
-                raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
-                )
+            if text is not None:
+                if not all(batch_img_per_prompt == n_images_in_images for batch_img_per_prompt in n_images_in_text) and len(text)>1:
+                    raise ValueError(
+                        f"The number of images in each batch {n_images_in_text} should be the same  {n_images_in_images} should be the same. Yes, the model does not \
+                        support having a different number of images per batch."
+                    )
+                if int(mean(n_images_in_text)) != int(mean(n_images_in_images)):
+                    raise ValueError(
+                        f"The number of images in the text ({n_images_in_text}) should be the same as in the number of provided images ({n_images_in_images}) \
+                        should be the same."
+                    )
 
             image_features = self.image_processor(images, **images_kwargs)
             num_tiles = image_features.pop("num_tiles")
