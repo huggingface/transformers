@@ -248,8 +248,9 @@ class GlmMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=self.config.linear_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=self.config.linear_bias)
 
         self.activation_fn = ACT2FN[config.hidden_act]
 
@@ -303,8 +304,8 @@ class GlmAttention(nn.Module):
             )
 
         op_size = self.num_heads * self.head_dim + 2 * (self.num_key_value_heads * self.head_dim)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.qkv_proj = nn.Linear(self.hidden_size, op_size, bias=self.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.config.linear_bias)
+        self.qkv_proj = nn.Linear(self.hidden_size, op_size, bias=self.attention_bias or self.config.linear_bias)
 
     def forward(
         self,
@@ -634,11 +635,20 @@ class GlmDecoderLayer(nn.Module):
         self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.mlp = GlmMLP(config)
-        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = (
+            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            if config.use_rms_norm
+            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
-        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
+        self.post_attention_layernorm = (
+            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            if config.use_rms_norm
+            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
     def forward(
         self,
@@ -675,13 +685,12 @@ class GlmDecoderLayer(nn.Module):
                 into the model
         """
 
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states_after_norm = self.input_layernorm(hidden_states)
+        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
 
         # Self Attention
         attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
+            hidden_states=hidden_states_after_norm,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -693,9 +702,10 @@ class GlmDecoderLayer(nn.Module):
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs)
 
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states_after_norm = self.post_attention_layernorm(hidden_states)
+        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
+
+        hidden_states = self.mlp(hidden_states_after_norm)
         hidden_states = residual + self.resid_mlp_dropout(hidden_states)
 
         outputs = (hidden_states,)
@@ -853,9 +863,10 @@ class GlmModel(GlmPreTrainedModel):
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = norm_func(config.hidden_size, eps=config.rms_norm_eps) if config.post_layer_norm else nn.Identity()
         self.rotary_emb = GlmRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        norm_func = GlmRMSNorm if config.use_rms_norm else nn.LayerNorm
 
         # Initialize weights and apply final processing
         self.post_init()
