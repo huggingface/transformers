@@ -783,8 +783,12 @@ def multi_scale_deformable_attention_v2(
                 torch.int64
             )
 
-            # FIX ME? for rectangle input
-            sampling_coord = sampling_coord.clamp(0, height - 1)
+            # Separate clamping for x and y coordinates
+            sampling_coord_x = sampling_coord[..., 0].clamp(0, width - 1)
+            sampling_coord_y = sampling_coord[..., 1].clamp(0, height - 1)
+
+            # Combine the clamped coordinates
+            sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
             sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
             sampling_idx = (
                 torch.arange(sampling_coord.shape[0], device=value.device)
@@ -1210,8 +1214,8 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, RTDetrV2Model):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
+            nn.init.xavier_uniform_(module.encoder_score_head.weight)
+            nn.init.constant_(module.encoder_score_head.bias, bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)

@@ -603,7 +603,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
+                    if ("class_embed" in name and "bias" in name) or "encoder_score_head.bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
                         if not torch.allclose(param.data, bias_tensor, atol=1e-4):
                             failed_cases.append(
@@ -616,7 +616,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                         or "value_proj" in name
                         or "output_proj" in name
                         or "reference_points" in name
-                        or "enc_score_head.weight" in name
+                        or "encoder_score_head.weight" in name
                         or ("class_embed" in name and "weight" in name)
                         or name in backbone_params
                     ):
