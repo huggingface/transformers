@@ -886,26 +886,26 @@ class SinkCache(Cache):
         return rotated_key_states
 
     def _get_rerotation_cos_sin(
-        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+        self, offset: int, dtype: torch.dtype, cos: torch.Tensor, sin: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if key_states.shape[-2] not in self.cos_sin_rerotation_cache:
+        if offset not in self.cos_sin_rerotation_cache:
             # Upcast to float32 temporarily for better accuracy
             cos = cos.to(torch.float32)
             sin = sin.to(torch.float32)
 
             # Compute the cos and sin required for back- and forward-rotating to one position earlier in the sequence
-            original_cos = cos[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_cos = cos[self.num_sink_tokens : -key_states.shape[-2]]
-            original_sin = sin[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_sin = sin[self.num_sink_tokens : -key_states.shape[-2]]
+            original_cos = cos[self.num_sink_tokens + offset :]
+            shifted_cos = cos[self.num_sink_tokens : -offset]
+            original_sin = sin[self.num_sink_tokens + offset :]
+            shifted_sin = sin[self.num_sink_tokens : -offset]
             rerotation_cos = original_cos * shifted_cos + original_sin * shifted_sin
             rerotation_sin = -original_sin * shifted_cos + original_cos * shifted_sin
 
-            self.cos_sin_rerotation_cache[key_states.shape[-2]] = (
-                rerotation_cos.to(key_states.dtype).unsqueeze(0),
-                rerotation_sin.to(key_states.dtype).unsqueeze(0),
+            self.cos_sin_rerotation_cache[offset] = (
+                rerotation_cos.to(dtype).unsqueeze(0),
+                rerotation_sin.to(dtype).unsqueeze(0),
             )
-        return self.cos_sin_rerotation_cache[key_states.shape[-2]]
+        return self.cos_sin_rerotation_cache[offset]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
@@ -966,7 +966,7 @@ class SinkCache(Cache):
                 if self._cos_cache is None:
                     self._cos_cache = cos[0, ...]
                     self._sin_cache = sin[0, ...]
-                elif self._cos_cache.shape[0] < self.window_length:
+                elif self._cos_cache.shape[0] < self.window_length + key_states.shape[-2]:
                     self._cos_cache = torch.cat([self._cos_cache, cos[0, ...]], dim=0)
                     self._sin_cache = torch.cat([self._sin_cache, sin[0, ...]], dim=0)
 
@@ -976,21 +976,26 @@ class SinkCache(Cache):
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
 
-        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
+        else:
             # Growing cache
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+        
+        key_cache_to_return = self.key_cache[layer_idx]
+        value_cache_to_return = self.value_cache[layer_idx]
 
-        else:
+        # If the cache is full, we need to shift the cache
+        if (seq_length := self.get_seq_length(layer_idx)) > self.window_length:
+
             # Shifting cache
             keys_to_keep = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
+                :, :, -self.window_length + self.num_sink_tokens :
             ]
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    key_states, self._cos_cache[: self.window_length], self._sin_cache[: self.window_length]
+                    seq_length - self.window_length, key_states.dtype, self._cos_cache[: seq_length], self._sin_cache[: seq_length]
                 )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
@@ -1003,15 +1008,15 @@ class SinkCache(Cache):
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
             sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
-            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
+            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep], dim=-2)
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
             values_to_keep = self.value_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
+                :, :, -self.window_length + self.num_sink_tokens :
             ]
-            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep], dim=-2)
 
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        return key_cache_to_return, value_cache_to_return
 
 
 class StaticCache(Cache):
