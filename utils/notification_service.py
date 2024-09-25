@@ -216,7 +216,6 @@ class Message:
                     f"The suite ran in {self.time}.\n"
                     f"Try to ping <@{os.environ['TEMP']}>"
                 ),
-                "emoji": True,
             },
             "accessory": {
                 "type": "button",
