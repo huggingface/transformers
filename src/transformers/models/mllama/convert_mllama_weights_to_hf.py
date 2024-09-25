@@ -368,18 +368,18 @@ def write_model(
         # Post-process the current_parameter.
         if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
             if "q_proj" in new_key:
-                shard_heads, heads, text_key_value_dim = text_num_heads_per_shard, text_num_heads, text_dim
+                param_num_heads = text_num_heads
+                param_num_head_per_shard = text_num_heads_per_shard
+                param_dim = text_dim
             else:
-                shard_heads, heads, text_key_value_dim = (
-                    text_num_key_value_heads_per_shard,
-                    text_num_key_value_heads,
-                    text_dim_per_head,
-                )
-            shards = [param.view(shard_heads, text_dim_per_head, text_dim) for param in current_parameter]
+                param_num_heads = text_num_key_value_heads
+                param_num_head_per_shard = text_num_key_value_heads_per_shard
+                param_dim = text_key_value_dim
+            shards = [param.view(param_num_head_per_shard, text_dim_per_head, text_dim) for param in current_parameter]
             current_parameter = torch.cat(shards, dim=concat_dim)
             if "cross_attn" not in new_key and "v_proj.weight" not in new_key:
-                current_parameter = permute_for_rope(current_parameter, heads, text_key_value_dim, text_dim)
-            state_dict[new_key] = current_parameter.reshape(heads * text_dim_per_head, text_dim)
+                current_parameter = permute_for_rope(current_parameter, param_num_heads, param_dim, text_dim)
+            state_dict[new_key] = current_parameter.reshape(param_num_heads * text_dim_per_head, text_dim)
 
         elif "vision_model" in new_key and re.search("(k|v|q)_proj", new_key):
             shards = [
