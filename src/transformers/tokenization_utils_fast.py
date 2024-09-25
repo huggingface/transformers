@@ -189,7 +189,22 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
         ]
 
-        self._add_tokens(tokens_to_add)
+        if len(tokens_to_add) > 0:
+            tokens = []
+            special_tokens = self.all_special_tokens
+            for token in tokens_to_add:
+                is_special = (
+                    (token.special or str(token) in special_tokens)
+                    if isinstance(token, AddedToken)
+                    else str(token) in special_tokens
+                )
+                if isinstance(token, str):
+                    token = AddedToken(token, special=is_special)
+                else:
+                    token.special = is_special
+                tokens.append(token)
+            if tokens:
+                self.add_tokens(tokens)
 
     @property
     def is_fast(self) -> bool:
