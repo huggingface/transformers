@@ -338,7 +338,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             load_in_4bit=True,
         )
 
-        inputs = self.processor(self.prompt, self.image, return_tensors="pt")
+        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt")
 
         # verify inputs against original implementation
         filepath = hf_hub_download(
@@ -390,8 +390,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         cats_image = Image.open(requests.get(url, stream=True).raw)
 
         inputs = self.processor(
-            [self.prompt, self.prompt],
             images=[self.image, cats_image],
+            text=[self.prompt, self.prompt],
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
@@ -415,7 +415,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt_with_unk = "[INST] <image>\nWhat is shown in this <unk> image? [/INST]"
-        inputs = self.processor(prompt_with_unk, self.image, return_tensors="pt")
+        inputs = self.processor(images=self.image, text=prompt_with_unk, return_tensors="pt")
 
         # verify single forward pass
         inputs = inputs.to(torch_device)
@@ -445,7 +445,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+            images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
         ).to(torch_device)
         pixel_values = inputs["pixel_values"]
 
@@ -498,10 +498,10 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+            images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
         ).to(torch_device)
 
-        inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
+        inputs_single = self.processor(images=lowres_img, text=self.prompt, return_tensors="pt", padding=True).to(
             torch_device
         )
 
@@ -527,7 +527,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+            images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
         ).to(torch_device)
 
         # model is in eval mode by default so we should get pad on the left side
@@ -607,13 +607,13 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
-        inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs_expanded = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2356)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 17)
 
         # generate exactly 20 tokens
