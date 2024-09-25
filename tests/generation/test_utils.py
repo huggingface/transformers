@@ -1437,7 +1437,7 @@ class GenerationTesterMixin:
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict["attention_mask"]
+            attention_mask = inputs_dict.get("attention_mask") or torch.ones_like(input_ids)
 
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
