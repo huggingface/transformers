@@ -13,17 +13,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple
 import math
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache
-
 from ...configuration_utils import PretrainedConfig
-
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
@@ -33,13 +32,17 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     LlamaModel,
-    LlamaForCausalLM,
     apply_rotary_pos_emb,
     repeat_kv,
 )
 from ..phi3.modeling_phi3 import (
     Phi3MLP,
     Phi3DecoderLayer
+)
+from ..gemma.modeling_gemma import (
+    GemmaForCausalLM,
+    GemmaForSequenceClassification,
+    GemmaForTokenClassification,
 )
 
 
@@ -50,73 +53,11 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-# class GlmConfig(Phi3Config):
-#     model_type = "glm"
-
-#     def __init__(
-#         self,
-#         # Phi3 args
-#         vocab_size=151552,
-#         hidden_size=4096,
-#         intermediate_size=13696,
-#         num_hidden_layers=40,
-#         num_attention_heads=32,
-#         num_key_value_heads=2,
-#         resid_pdrop=0.0,
-#         attention_dropout=0.0,
-#         hidden_act="silu",
-#         max_position_embeddings=131072,
-#         initializer_range=0.02,
-#         rms_norm_eps=1e-5,
-#         use_cache=True,
-#         tie_word_embeddings=False,
-#         rope_theta=10000.0,
-#         rope_scaling={"rope_type": "linear", "factor": 1.,},
-#         pad_token_id=151329,
-#         eos_token_id=[151329, 151336, 151338],
-#         bos_token_id=None,
-#         # Additionnal args
-#         head_dim=128,
-#         partial_rotary_factor=0.5,
-#         attention_bias=True,
-#         **kwargs,
-#     ):
-#         super().__init__(
-#             vocab_size=vocab_size,
-#             hidden_size=hidden_size,
-#             intermediate_size=intermediate_size,
-#             num_hidden_layers=num_hidden_layers,
-#             num_attention_heads=num_attention_heads,
-#             num_key_value_heads=num_key_value_heads,
-#             resid_pdrop=resid_pdrop,
-#             attention_dropout=attention_dropout,
-#             hidden_act=hidden_act,
-#             max_position_embeddings=max_position_embeddings,
-#             initializer_range=initializer_range,
-#             rms_norm_eps=rms_norm_eps,
-#             use_cache=use_cache,
-#             tie_word_embeddings=tie_word_embeddings,
-#             rope_theta=rope_theta,
-#             rope_scaling=rope_scaling,
-#             pad_token_id=pad_token_id,
-#             bos_token_id=bos_token_id,
-#             eos_token_id=eos_token_id,
-#             **kwargs,
-#         )
-#         self.head_dim = head_dim
-#         self.partial_rotary_factor = partial_rotary_factor
-#         self.attention_bias = attention_bias
-#         del self.embd_pdrop
-#         del self.original_max_mposition_embeddings
-#         del self.sliding_window
-
-
 class GlmConfig(PretrainedConfig):
     model_type = "glm"
 
     def __init__(
         self,
-        # Phi3 args
         vocab_size=151552,
         hidden_size=4096,
         intermediate_size=13696,
@@ -136,7 +77,6 @@ class GlmConfig(PretrainedConfig):
         pad_token_id=151329,
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
-        # Additionnal args
         head_dim=128,
         partial_rotary_factor=0.5,
         attention_bias=True,
@@ -177,7 +117,6 @@ class GlmRMSNorm(LlamaRMSNorm):
     pass
 
 
-# Need config.rope_type: linear
 class GlmRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
@@ -392,7 +331,6 @@ class GlmFlashAttention2(GlmAttention):
         return attn_output, attn_weights, past_key_value
     
 
-
 class GlmSdpaAttention(GlmAttention):
     """
     GLM attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -438,7 +376,7 @@ class GlmSdpaAttention(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
@@ -546,6 +484,7 @@ class GlmDecoderLayer(Phi3DecoderLayer):
         attn_outputs, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -586,7 +525,23 @@ class GlmModel(LlamaModel):
         self.post_init()
 
 
-class GlmForCausalLM(LlamaForCausalLM):
+class GlmForCausalLM(GemmaForCausalLM):
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmModel(config)
+        self.post_init()
+
+
+class GlmForSequenceClassification(GemmaForSequenceClassification):
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmModel(config)
+        self.post_init()
+
+
+class GlmForTokenClassification(GemmaForTokenClassification):
 
     def __init__(self, config):
         super().__init__(config)
