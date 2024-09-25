@@ -958,6 +958,7 @@ _import_structure = {
         "AqlmConfig",
         "AwqConfig",
         "BitsAndBytesConfig",
+        "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
         "GPTQConfig",
@@ -2994,7 +2995,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
-    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
+    _import_structure["models.pixtral"].extend(["PixtralPreTrainedModel", "PixtralVisionModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -5802,6 +5803,7 @@ if TYPE_CHECKING:
         AqlmConfig,
         AwqConfig,
         BitsAndBytesConfig,
+        CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
         GPTQConfig,
@@ -7486,8 +7488,8 @@ if TYPE_CHECKING:
             Pix2StructVisionModel,
         )
         from .models.pixtral import (
-            PixtralModel,
             PixtralPreTrainedModel,
+            PixtralVisionModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,
