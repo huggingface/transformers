@@ -99,6 +99,7 @@ _deps = [
     "accelerate>=0.26.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
+    "blobfile",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -130,7 +131,7 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "nltk",
+    "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
     "numpy>=1.17",
     "onnxconverter-common",
@@ -162,6 +163,7 @@ _deps = [
     "sacremoses",
     "safetensors>=0.4.1",
     "sagemaker>=2.31.0",
+    "schedulefree>=1.2.6",
     "scikit-learn",
     "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -177,6 +179,7 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
+    "tiktoken",
     "timm<=0.9.16",
     "tokenizers>=0.20,<0.21",
     "torch",
@@ -189,6 +192,8 @@ _deps = [
     "urllib3<2.0.0",
     "uvicorn",
     "pytest-rich",
+    "libcst",
+    "rich",
 ]
 
 
@@ -311,6 +316,7 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord", "av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
+extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -341,7 +347,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["tf"]

@@ -38,6 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinov2 import Dinov2Config
@@ -71,42 +72,48 @@ class Dinov2Embeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
+
+        class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
-        height = height // self.config.patch_size
-        width = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + 0.1, width + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(dtype=torch.float32),
-            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         ).to(dtype=target_dtype)
-        if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
@@ -224,6 +231,47 @@ class Dinov2SelfAttention(nn.Module):
         return outputs
 
 
+class Dinov2SdpaSelfAttention(Dinov2SelfAttention):
+    def __init__(self, config: Dinov2Config) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "Dinov2Model is using Dinov2SdpaSelfAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states, head_mask=head_mask, output_attentions=output_attentions
+            )
+
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Dinov2
 class Dinov2SelfOutput(nn.Module):
     """
@@ -281,6 +329,13 @@ class Dinov2Attention(nn.Module):
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Dinov2
+class Dinov2SdpaAttention(Dinov2Attention):
+    def __init__(self, config: Dinov2Config) -> None:
+        super().__init__(config)
+        self.attention = Dinov2SdpaSelfAttention(config)
 
 
 class Dinov2LayerScale(nn.Module):
@@ -364,6 +419,12 @@ class Dinov2SwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
+DINOV2_ATTENTION_CLASSES = {
+    "eager": Dinov2Attention,
+    "sdpa": Dinov2SdpaAttention,
+}
+
+
 class Dinov2Layer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -371,7 +432,7 @@ class Dinov2Layer(nn.Module):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov2Attention(config)
+        self.attention = DINOV2_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -478,6 +539,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2SwiGLUFFN"]
+    _supports_sdpa = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

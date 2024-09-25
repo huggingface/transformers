@@ -161,6 +161,7 @@ from .utils import (
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_schedulefree_available,
     is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -467,19 +468,18 @@ class Trainer:
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():
-                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+                from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
-                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
-                if model_type:
-                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel(model_type=model_type)
+                if isinstance(model, PreTrainedModel):
+                    # Patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model)
                 else:
                     logger.warning(
-                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                        "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
                     )
             else:
                 raise ImportError(
-                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.3.0 is not available. "
                     "Please install it with `pip install liger-kernel`"
                 )
 
@@ -1274,7 +1274,7 @@ class Trainer:
                 optimizer_kwargs.update(additional_optim_kwargs)
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
+                raise ValueError("Trainer tried to instantiate bnb optimizer but `bitsandbytes` is not installed!")
             if is_bitsandbytes_available() and version.parse(
                 importlib.metadata.version("bitsandbytes")
             ) < version.parse("0.41.1"):
@@ -1488,6 +1488,36 @@ class Trainer:
 
             optimizer_cls = AdamW4bit
             optimizer_kwargs.update(adam_kwargs)
+        elif args.optim in [
+            OptimizerNames.SCHEDULE_FREE_ADAMW,
+            OptimizerNames.SCHEDULE_FREE_SGD,
+        ]:
+            if not is_schedulefree_available():
+                raise ImportError(
+                    "You need to install `schedulefree` in order to use schedulefree optimizers"
+                    " install it with `pip install schedulefree`"
+                )
+            if not is_accelerate_available("0.30.0"):
+                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
+            from schedulefree import AdamWScheduleFree, SGDScheduleFree
+
+            additional_optim_kwargs = {}
+            if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW:
+                optimizer_cls = AdamWScheduleFree
+                additional_optim_kwargs = adam_kwargs
+            elif args.optim == OptimizerNames.SCHEDULE_FREE_SGD:
+                optimizer_cls = SGDScheduleFree
+            else:
+                raise ValueError("Invalid schedulefree optimizer")
+            additional_optim_kwargs["weight_decay"] = args.weight_decay
+            additional_optim_kwargs["warmup_steps"] = args.warmup_steps
+            additional_optim_kwargs.update(
+                {
+                    "weight_lr_power": float(optim_args.get("weight_lr_power", 2.0)),
+                    "r": float(optim_args.get("r", 0.0)),
+                }
+            )
+            optimizer_kwargs.update(additional_optim_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1926,7 +1956,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
-        if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
+        if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train and not self.is_model_parallel:
             self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
@@ -2118,12 +2148,7 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            if args.gradient_checkpointing_kwargs is None:
-                gradient_checkpointing_kwargs = {}
-            else:
-                gradient_checkpointing_kwargs = args.gradient_checkpointing_kwargs
-
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
 
         model = self._wrap_model(self.model_wrapped)
 
@@ -2390,6 +2415,8 @@ class Trainer:
                                 grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm
+
+                    self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
                     self.optimizer.step()
 
@@ -3415,6 +3442,9 @@ class Trainer:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
+        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+            self.optimizer.train()
+
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
@@ -3965,6 +3995,8 @@ class Trainer:
         logger.info(f"  Batch size = {batch_size}")
 
         model.eval()
+        if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
+            self.optimizer.eval()
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
@@ -4429,6 +4461,7 @@ class Trainer:
         commit_message: Optional[str] = "End of training",
         blocking: bool = True,
         token: Optional[str] = None,
+        revision: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -4441,6 +4474,8 @@ class Trainer:
                 Whether the function should return only when the `git push` has finished.
             token (`str`, *optional*, defaults to `None`):
                 Token with write permission to overwrite Trainer's original args.
+            revision (`str`, *optional*):
+                The git revision to commit from. Defaults to the head of the "main" branch.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4494,6 +4529,7 @@ class Trainer:
             token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=revision,
         )
 
     #
@@ -4578,6 +4614,8 @@ class Trainer:
             inputs_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
+        if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
+            self.optimizer.eval()
 
         if args.past_index >= 0:
             self._past = None
@@ -4827,10 +4865,15 @@ class Trainer:
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
             raise ValueError(f"{wrapper} can't be used with `save_only_model` along with `load_best_model_at_end`.")
 
-        # `auto_find_batch_size` isn't yet supported with DeepSpeed/FSDP
-        if (self.is_deepspeed_enabled or self.is_fsdp_enabled) and self.args.auto_find_batch_size:
-            wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
-            raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
+        # `auto_find_batch_size` isn't supported yet with DeepSpeed Zero-3
+        if (
+            self.is_deepspeed_enabled
+            and self.accelerator.state.deepspeed_plugin.zero_stage == 3
+            and self.args.auto_find_batch_size
+        ):
+            raise ValueError(
+                "`auto_find_batch_size` isn't supported yet with DeepSpeed Zero-3. Please consider using Zero-2, Zero-1, or FSDP"
+            )
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
