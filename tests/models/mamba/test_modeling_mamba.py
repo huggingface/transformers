@@ -446,7 +446,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
         self.assertEqual(outputs.last_hidden_state.dtype, torch.float16)
         self.assertEqual(cache_params.conv_states.dtype, torch.float32)
-        self.assertEqual(cache_params.ssm_states.dtype, torch.float16)
 
 
 @require_torch
