@@ -243,6 +243,7 @@ class MllamaVisionText2TextModelTester:
             "attention_mask": attention_mask,
             "aspect_ratio_mask": aspect_ratio_mask,
             "cross_attention_mask": cross_attention_mask,
+            "use_cache":True,
         }
         return config, inputs_dict
 
