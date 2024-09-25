@@ -63,6 +63,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
     is_bs4_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_decord_available,
@@ -1197,6 +1198,13 @@ def require_quanto(test_case):
     Decorator for quanto dependency
     """
     return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
+
+
+def require_compressed_tensors(test_case):
+    """
+    Decorator for compressed_tensors dependency
+    """
+    return unittest.skipUnless(is_compressed_tensors_available(), "test requires compressed_tensors")(test_case)
 
 
 def require_fbgemm_gpu(test_case):
