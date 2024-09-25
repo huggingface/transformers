@@ -2994,7 +2994,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
-    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
+    _import_structure["models.pixtral"].extend(["PixtralVisionModel", "PixtralPreTrainedModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -7486,8 +7486,8 @@ if TYPE_CHECKING:
             Pix2StructVisionModel,
         )
         from .models.pixtral import (
-            PixtralModel,
             PixtralPreTrainedModel,
+            PixtralVisionModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,
