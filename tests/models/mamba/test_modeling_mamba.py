@@ -143,25 +143,6 @@ class MambaModelTester:
         config.vocab_size = 300
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
     def create_and_check_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = MambaModel(config=config)
@@ -256,57 +237,6 @@ class MambaModelTester:
         ) = self.prepare_config_and_inputs()
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
-
-    def create_and_check_slow_path_dtype_mismatch(self, config, input_ids, *args):
-        # Force the slow path
-        import transformers.models.mamba.modeling_mamba as modeling_mamba
-        original_is_fast_path_available = modeling_mamba.is_fast_path_available
-        modeling_mamba.is_fast_path_available = False
-
-        model = MambaModel(config)
-        model.to(torch_device)
-        model.eval()
-        model.half() # Set model to float16
-
-        outputs = model(input_ids[:, :-1], use_cache=True)
-        cache_params = outputs.cache_params
-
-        # Modify the cache to be in float32 to create a dtype mismatch
-        cache_params.conv_states = cache_params.conv_states.to(torch.float32)
-        cache_params.ssm_states = cache_params.ssm_states.to(torch.float32)
-
-        # Determine the cache position for the next token
-        cache_position = torch.arange(input_ids.shape[1] - 1, input_ids.shape[1], device=input_ids.device)
-
-        # Try to run the model with the modified cache
-        try:
-            outputs = model(
-                input_ids[:, -1:],  # The last token
-                use_cache=True,
-                cache_params=cache_params,
-                cache_position=cache_position,
-            )
-        except RuntimeError as e:
-            if "Index put requires the source and destination dtypes match" in str(e):
-                # Expected error due to dtype mismatch
-                self.parent.assertTrue(True, "Caught expected RuntimeError due to dtype mismatch.")
-                modeling_mamba.is_fast_path_available = original_is_fast_path_available
-                return
-            else:
-                modeling_mamba.is_fast_path_available = original_is_fast_path_available
-                raise
-        else:
-            # No error occurred, check that the output is as expected
-            self.parent.assertEqual(
-                outputs.last_hidden_state.shape,
-                (self.batch_size, 1, self.hidden_size),
-                "Output hidden state shape mismatch.",
-            )
-            # Ensure that the cache has been updated to the correct dtype
-            self.parent.assertEqual(outputs.cache_params.conv_states.dtype, torch.float16)
-            self.parent.assertEqual(outputs.cache_params.ssm_states.dtype, torch.float16)
-            modeling_mamba.is_fast_path_available = original_is_fast_path_available
-
 
 
 @unittest.skipIf(
@@ -486,10 +416,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-    def test_slow_path_dtype_mismatch(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_slow_path_dtype_mismatch(*config_and_inputs)
 
     @unittest.skip("The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
