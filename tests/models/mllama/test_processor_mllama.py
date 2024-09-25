@@ -30,7 +30,7 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "Llama-3.2-11B-Vision-Instruct"  # TODO: change
+        self.checkpoint = "hf-internal-testing/mllama-11b"  # TODO: change
         self.processor = MllamaProcessor.from_pretrained(self.checkpoint)
         self.image1 = Image.new("RGB", (224, 220))
         self.image2 = Image.new("RGB", (512, 128))
