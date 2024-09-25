@@ -251,7 +251,7 @@ class MllamaVisionText2TextModelTester:
             "attention_mask": attention_mask,
             "aspect_ratio_mask": aspect_ratio_mask,
             "cross_attention_mask": cross_attention_mask,
-            "use_cache":True,
+            "use_cache": True,
         }
         return config, inputs_dict
 
@@ -361,7 +361,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         # relevant issue: https://github.com/pytorch/pytorch/issues/133166
         pass
 
-    @unittest.skip(reason="The test itself is broken") # TODO @zucchini-nlp
+    @unittest.skip(reason="The test itself is broken")  # TODO @zucchini-nlp
     def test_generate_with_quant_cache(self):
         pass
 

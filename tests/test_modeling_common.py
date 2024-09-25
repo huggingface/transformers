@@ -4774,7 +4774,7 @@ class ModelTesterMixin:
         model.generation_config.max_new_tokens = 4
 
         model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead" )
+        model.forward = torch.compile(model.forward, mode="reduce-overhead")
 
         input_text = "Why dogs are cute?"
         input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
