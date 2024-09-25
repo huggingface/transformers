@@ -155,14 +155,18 @@ class OptimizerNames(ExplicitEnum):
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     ADAMW_TORCH_4BIT = "adamw_torch_4bit"
+    ADEMAMIX = "ademamix"
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    ADEMAMIX_8BIT = "ademamix_8bit"
     LION_8BIT = "lion_8bit"
     LION = "lion_32bit"
     PAGED_ADAMW = "paged_adamw_32bit"
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_ADEMAMIX = "paged_ademamix_32bit"
+    PAGED_ADEMAMIX_8BIT = "paged_ademamix_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
@@ -618,7 +622,7 @@ class TrainingArguments:
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
         optim_args (`str`, *optional*):
-            Optional arguments that are supplied to AnyPrecisionAdamW.
+            Optional arguments that are supplied to optimizers such as AnyPrecisionAdamW, AdEMAMix, and GaLore.
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
