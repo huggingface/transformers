@@ -4397,7 +4397,7 @@ def _split_model_inputs(
     bool_data = {k: model_input[k] for k in bool_keys}
     # encoder_outputs is a ModelOutput object and should be split by its own
     if "encoder_outputs" in model_input:
-        encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size)
+        encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size, config.get_text_config())
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
         ]
