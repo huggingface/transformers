@@ -1852,9 +1852,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         super().__init__(config.get_text_config())
         self.text_config = config.get_text_config()
         self.vocab_size = self.text_config.vocab_size
-        self.model = MllamaTextModel._from_config(
-            self.text_config, attn_implementation=config._attn_implementation
-        )
+        self.model = MllamaTextModel._from_config(self.text_config, attn_implementation=config._attn_implementation)
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()

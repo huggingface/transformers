@@ -128,26 +128,16 @@ def pre_compute_positional_embedding(embedding):
     hidden_size = shapes[-1]
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_num_tiles)
     max_aspect_ratio_id = len(supported_aspect_ratios)  # we keep 0 index for padding
-    if len(shapes) == 2:  # tile embedding does not have patches
-        num_patches = 1
-        precomputed_embeddings = torch.zeros(
-            max_aspect_ratio_id + 1,
-            max_num_tiles,
-            num_patches,
-            hidden_size,
-            device=embedding.device,
-            dtype=embedding.dtype,
-        )
-    else:
-        num_patches = shapes[1]
-        precomputed_embeddings = torch.zeros(
-            max_aspect_ratio_id + 1,
-            max_num_tiles,
-            num_patches,
-            hidden_size,
-            device=embedding.device,
-            dtype=embedding.dtype,
-        )
+    # tile embedding does not have patches
+    num_patches = 1 if len(shapes) == 2 else shapes[1]
+    precomputed_embeddings = torch.zeros(
+        max_aspect_ratio_id + 1,
+        max_num_tiles,
+        num_patches,
+        hidden_size,
+        device=embedding.device,
+        dtype=embedding.dtype,
+    )
 
     for i, (height, width) in enumerate(supported_aspect_ratios):
         aspect_ratio_id = i + 1  # we keep 0 index for padding
@@ -162,19 +152,7 @@ def is_param_different_across_shards(key):
     Return `True` if the parameter is different across checkpoint shards
     and needs to be concatenated.
     """
-    patterns = [
-        r"vision_model.patch_embedding.weight",
-        r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.(q|k|v|o)_proj.weight",
-        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc1.(weight|bias)",
-        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",  # fc2 bias is shared across shards
-        r"multi_modal_projector.(weight|bias)",
-        r"language_model.model.embed_tokens.weight",
-        r"language_model.lm_head.weight",
-        r"language_model.model.layers.(\d+).self_attn.(q|k|v|o)_proj.weight",
-        r"language_model.model.layers.(\d+).cross_attn.(q|k|v|o)_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.(up|down|gate)_proj.weight",
-        r"language_model.model.learnable_embedding.weight",
-    ]
+    patterns = [r"vision_model.patch_embedding.weight",r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.(q|k|v|o)_proj.weight",r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc1.(weight|bias)",r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",  r"multi_modal_projector.(weight|bias)",r"language_model.model.embed_tokens.weight",r"language_model.lm_head.weight",r"language_model.model.layers.(\d+).self_attn.(q|k|v|o)_proj.weight",r"language_model.model.layers.(\d+).cross_attn.(q|k|v|o)_proj.weight",r"language_model.model.layers.(\d+).mlp.(up|down|gate)_proj.weight",r"language_model.model.learnable_embedding.weight"]  # fmt: skip
     return any(re.search(pattern, key) for pattern in patterns)
 
 
@@ -182,13 +160,7 @@ def get_concat_dim(key):
     """
     Return the dimension to concatenate the weights on.
     """
-    concat_dim_1 = [
-        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",
-        r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",
-        r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",
-        r"language_model.model.layers.(\d+).self_attn.o_proj.weight",
-        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
-    ]
+    concat_dim_1 = [r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",r"language_model.model.layers.(\d+).self_attn.o_proj.weight",r"language_model.model.layers.(\d+).mlp.down_proj.weight"]  # fmt: off
     if any(re.search(pattern, key) for pattern in concat_dim_1):
         return 1
     return 0
@@ -361,47 +333,26 @@ def write_model(
         concat_dim = get_concat_dim(new_key)
 
         # Post-process the current_parameter.
-        if "q_proj.weight" in new_key and "language_model" in new_key:
-            current_parameter = torch.cat(
-                [param.view(text_num_heads_per_shard, text_dim_per_head, text_dim) for param in current_parameter],
-                dim=concat_dim,
-            )
-            if "cross_attn" not in new_key:
-                current_parameter = permute_for_rope(current_parameter, text_num_heads, text_dim, text_dim)
-            state_dict[new_key] = current_parameter.reshape(text_num_heads * text_dim_per_head, text_dim)
-
-        elif "k_proj.weight" in new_key and "language_model" in new_key:
-            current_parameter = torch.cat(
-                [
-                    param.view(text_num_key_value_heads_per_shard, text_dim_per_head, text_dim)
-                    for param in current_parameter
-                ],
-                dim=concat_dim,
-            )
-            if "cross_attn" not in new_key:
-                current_parameter = permute_for_rope(
-                    current_parameter, text_num_key_value_heads, text_key_value_dim, text_dim
+        if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
+            if "q_proj" in new_key:
+                shard_heads, heads, text_key_value_dim = text_num_heads_per_shard, text_num_heads, text_dim
+            else:
+                shard_heads, heads, text_key_value_dim = (
+                    text_num_key_value_heads_per_shard,
+                    text_dim_per_head,
+                    text_dim_per_head,
                 )
+            shards = [param.view(shard_heads, text_dim_per_head, text_dim) for param in current_parameter]
+            current_parameter = torch.cat(shards, dim=concat_dim)
+            if "cross_attn" not in new_key and "v_proj.weight" not in new_key:
+                current_parameter = permute_for_rope(current_parameter, heads, text_key_value_dim, text_dim)
             state_dict[new_key] = current_parameter.reshape(text_num_key_value_heads * text_dim_per_head, text_dim)
 
-        elif "v_proj.weight" in new_key and "language_model" in new_key:
-            current_parameter = torch.cat(
-                [
-                    param.view(text_num_key_value_heads_per_shard, text_dim_per_head, text_dim)
-                    for param in current_parameter
-                ],
-                dim=concat_dim,
-            )
-            state_dict[new_key] = current_parameter.reshape(text_num_key_value_heads * text_dim_per_head, text_dim)
-
-        elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
-            param = torch.cat(
-                [
-                    param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim)
-                    for param in current_parameter
-                ],
-                dim=concat_dim,
-            )
+        elif "vision_model" in new_key and re.search("(k|v|q)_proj.weight", new_key):
+            shards = [
+                param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim) for param in current_parameter
+            ]
+            param = torch.cat(shards, dim=concat_dim)
             state_dict[new_key] = param.reshape(vision_num_heads * vision_dim_per_head, vision_dim)
 
         elif new_key == "vision_model.patch_embedding.weight":

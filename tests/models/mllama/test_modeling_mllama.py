@@ -272,7 +272,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     test_head_masking = False
     test_torchscript = False
 
-
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
