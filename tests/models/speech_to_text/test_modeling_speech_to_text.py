@@ -285,7 +285,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     input_name = "input_features"
 
     def _get_input_ids_and_config(self, batch_size=2):
-        config, input_ids, attention_mask = GenerationTesterMixin._get_input_ids_and_config(self)
+        config, input_ids, attention_mask, inputs_dict = GenerationTesterMixin._get_input_ids_and_config(self)
 
         # `input_ids` is actually `input_features` which is a 3D tensor.
         # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
@@ -294,7 +294,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             sequence_length = input_ids.shape[1]
             attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
 
-        return config, input_ids, attention_mask
+        return config, input_ids, attention_mask, inputs_dict
 
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
@@ -631,27 +631,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     @unittest.skip
     def test_generate_without_input_ids(self):
         pass
-
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        input_ids = input_ids[:, :, 0]
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape[:2]
