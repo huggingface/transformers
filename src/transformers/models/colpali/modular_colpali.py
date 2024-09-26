@@ -101,8 +101,9 @@ class ColPaliModelOutput(ModelOutput):
     It was introduced in the paper [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449).
 
     Resources:
-    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 🌎
-    - The training codebase for ColPali can be found [here](https://github.com/illuin-tech/colpali). 🌎
+    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
+    - The code for training ColPali and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
+    - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
 
     Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
     """
@@ -166,8 +167,6 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
     ) -> ColPaliModelOutput:
         r"""
