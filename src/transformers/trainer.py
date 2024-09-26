@@ -405,12 +405,16 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         
-        if self.args.data_seed is not None: 
-            generator = torch.Generator()
+
+        generator = torch.Generator()
+        if self.args.data_seed is not None:
+            # TODO change min version of accelerate
+            if self.args.accelerator_config.use_seedable_sampler and is_accelerate_available(min_version="0.34.0"):
+                raise RuntimeError("data_seed requires accelerate >= 0.34.0, please install the latest version of accelerate")
             generator.manual_seed(self.args.data_seed)
-            self.data_sampler_generator = generator
         else: 
-            self.data_sampler_generator = None
+            generator.manual_seed(self.args.seed)
+        self.data_sampler_generator = generator
 
         self.hp_name = None
         self.deepspeed = None
