@@ -280,6 +280,18 @@ class MllamaProcessorTest(unittest.TestCase):
             "This is a test sentence.<|image|>",
             "In this other sentence we try some good things<|image|>",
         ]
+        with self.assertRaises(ValueError):
+            self.processor(text=text, images=None, padding=True)
+
+        text = [
+            "This is a test sentence.<|image|>",
+            "In this other sentence we try some good things<|image|>",
+        ]
+        images = [[self.image1], [self.image2]]
         inputs = self.processor(text=text, images=None, padding=True)
-        self.assertIsNotNone(inputs["input_ids"])
+
+
+        images = [[self.image1, self.image2], []]
+        with self.assertRaises(ValueError):
+            self.processor(text=text, images=None, padding=True)
 
