@@ -11,9 +11,10 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
 STATE_DICT_MAPPING = {
-    "transformer.": "model.",
     "transformer.output_layer.": "lm_head.",
-    ".embedding.": ".embed_tokens.",
+    "transformer.": "model.",
+    ".embedding.word_embeddings": ".embed_tokens.",
+    ".encoder.norm.": ".norm.",
     ".encoder.layers.": ".layers.",
     "final_layernorm.": "norm.",
     "rotary_pos_embed.": "rotary_emb.",
@@ -71,6 +72,10 @@ def convert_state_dict(original_state_dict: dict):
     new_dict = {}
 
     for key, value in original_state_dict.items():
+        # Should not be part of the state dict
+        if "rotary_pos_emb.inv_freq" in key:
+            continue
+
         new_key = key
         for old, new in STATE_DICT_MAPPING.items():
             new_key = new_key.replace(old, new)
