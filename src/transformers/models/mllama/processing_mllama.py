@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Processor class for Mllama.
-"""
 
-from statistics import mean
+"""Processor class for Mllama."""
+
 from typing import List, Optional, Union
 
 import numpy as np
@@ -301,18 +299,13 @@ class MllamaProcessor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
             if text is not None:
-                if (
-                    not all(batch_img_per_prompt == n_images_in_images for batch_img_per_prompt in n_images_in_text)
-                    and len(text) > 1
-                ):
+                if any(n_images_in_text == 0) and not all(n_images_in_text == 0):
                     raise ValueError(
-                        f"The number of images in each batch {n_images_in_text} should be the same  {n_images_in_images} should be the same. Yes, the model does not \
-                        support having a different number of images per batch."
+                        "If a batch of text is provided, there should be either no images or at least one image per sample"
                     )
-                if int(mean(n_images_in_text)) != int(mean(n_images_in_images)):
+                if sum(n_images_in_images) != sum(n_images_in_images):
                     raise ValueError(
-                        f"The number of images in the text ({n_images_in_text}) should be the same as in the number of provided images ({n_images_in_images}) \
-                        should be the same."
+                        f"The number of image token ({n_images_in_text}) should be the same as in the number of provided images ({n_images_in_images})"
                     )
 
             image_features = self.image_processor(images, **images_kwargs)
