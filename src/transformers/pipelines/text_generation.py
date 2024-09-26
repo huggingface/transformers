@@ -173,21 +173,16 @@ class TextGenerationPipeline(Pipeline):
         forward_params = generate_kwargs
 
         postprocess_params = {}
-        if return_type is not None and (
-            return_text is not None or return_full_text is not None or return_tensors is not None
-        ):
-            raise ValueError(
-                "`return_type` is mutually exclusive with `return_text`, `return_full_text`, and `return_tensors`"
-            )
-        if return_tensors is not None:
-            if return_text or return_full_text:
-                raise ValueError("`return_text` and `return_full_text` are mutually exclusive with `return_tensors`")
+        if return_full_text is not None and return_type is None:
+            if return_text is not None:
+                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
+            if return_tensors is not None:
+                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
+            return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+        if return_tensors is not None and return_type is None:
+            if return_text is not None:
+                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
             return_type = ReturnType.TENSORS
-        elif return_full_text and return_type is None:
-            return_type = ReturnType.FULL_TEXT
-        elif (return_text or return_full_text is not None) and return_type is None:
-            # Explicitly setting return_full_text = False is caught here, and results in ReturnType.NEW_TEXT
-            return_type = ReturnType.NEW_TEXT
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
@@ -230,11 +225,11 @@ class TextGenerationPipeline(Pipeline):
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
-            return_text (`bool`, *optional*, defaults to `True`):
+            return_text (`bool`, *optional*):
                 Returns the decoded texts in the outputs.
             return_full_text (`bool`, *optional*, defaults to `True`):
-                Returns the full text, including the prompt and the decoded output. This option
-                overrides `return_text`.
+                If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
+                specified at the same time as `return_text`.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
