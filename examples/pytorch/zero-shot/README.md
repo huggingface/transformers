@@ -71,7 +71,7 @@ python run_zero_shot_object_detection.py \
 `--eval_do_concat_batches false` is required for correct evaluation of detection models;  
 `--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes.
 
-The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-10k-steps.. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-10k-steps. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
  - changing freeze policy of image backbone and text backbone
  - changing image size parameters (`--shortest_edge`/`--longest_edge`)
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
@@ -96,11 +96,13 @@ Above table is tested on following device.
 - GPU type: NVIDIA TITAN RTX
 - PyTorch version (GPU): 2.2.2
 
+However, currently multi-GPU evaluation is not working due to [flatten issue](https://github.com/huggingface/transformers/pull/33561) try to use `accelerate` as default.
+
 ## PyTorch version, no Trainer
 
 Based on the script [`run_zero_shot_object_detection_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_zero_shot_object_detection.py).
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. However, currently multi-GPU evaluation is not working due to following [issue](https://github.com/Lightning-AI/torchmetrics/issues/2477).
+The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
 
 First, run:
 
