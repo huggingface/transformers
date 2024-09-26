@@ -28,21 +28,20 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from ..phi3.modeling_phi3 import (
-    Phi3RMSNorm,
-    Phi3RotaryEmbedding,
-    Phi3MLP,
-    Phi3DecoderLayer,
-    apply_rotary_pos_emb,
-    repeat_kv,
-)
-from ..llama.modeling_llama import (
-    LlamaModel,
-)
 from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
+)
+from ..llama.modeling_llama import (
+    LlamaModel,
+)
+from ..phi3.modeling_phi3 import (
+    Phi3MLP,
+    Phi3RMSNorm,
+    Phi3RotaryEmbedding,
+    apply_rotary_pos_emb,
+    repeat_kv,
 )
 
 
@@ -115,7 +114,6 @@ class GlmConfig(PretrainedConfig):
         self.linear_bias = linear_bias
 
 
-
 class GlmRMSNorm(Phi3RMSNorm):
     pass
 
@@ -133,7 +131,6 @@ class GlmMLP(Phi3MLP):
 
 
 class GlmAttention(nn.Module):
-
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -227,7 +224,7 @@ class GlmAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-    
+
 
 class GlmFlashAttention2(GlmAttention):
     """
@@ -255,7 +252,6 @@ class GlmFlashAttention2(GlmAttention):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -336,7 +332,7 @@ class GlmFlashAttention2(GlmAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-    
+
 
 class GlmSdpaAttention(GlmAttention):
     """
@@ -423,7 +419,7 @@ class GlmSdpaAttention(GlmAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
-    
+
 
 GLM_ATTENTION_CLASSES = {
     "eager": GlmAttention,
@@ -433,7 +429,6 @@ GLM_ATTENTION_CLASSES = {
 
 
 class GlmDecoderLayer(nn.Module):
-
     def __init__(self, config: GlmConfig, layer_idx: int):
         super().__init__()
 
@@ -442,12 +437,19 @@ class GlmDecoderLayer(nn.Module):
         self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.mlp = GlmMLP(config)
-        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_rms_norm else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = (
+            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            if config.use_rms_norm
+            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
-        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_rms_norm else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.post_attention_layernorm = (
+            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            if config.use_rms_norm
+            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
 
     def forward(
         self,
@@ -496,7 +498,7 @@ class GlmDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings
+            position_embeddings=position_embeddings,
         )
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs)
@@ -519,15 +521,20 @@ class GlmDecoderLayer(nn.Module):
 
 
 class GlmModel(LlamaModel):
-
     def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_rms_norm else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        norm = (
+            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            if config.use_rms_norm
+            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        )
         self.norm = norm if config.post_layer_norm else nn.Identity()
-        self.rotary_emb = GlmRotaryEmbedding(dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta)
+        self.rotary_emb = GlmRotaryEmbedding(
+            dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
+        )
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -535,7 +542,6 @@ class GlmModel(LlamaModel):
 
 
 class GlmForCausalLM(GemmaForCausalLM):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmModel(config)
@@ -543,7 +549,6 @@ class GlmForCausalLM(GemmaForCausalLM):
 
 
 class GlmForSequenceClassification(GemmaForSequenceClassification):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmModel(config)
@@ -551,7 +556,6 @@ class GlmForSequenceClassification(GemmaForSequenceClassification):
 
 
 class GlmForTokenClassification(GemmaForTokenClassification):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmModel(config)
