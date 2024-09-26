@@ -422,7 +422,6 @@ class MoEGate(nn.Module):
             
             masked_routing_weights = routing_weights.masked_fill(~group_mask, 0.0)
             routing_weights, selected_experts = torch.topk(masked_routing_weights, k=self.top_k, dim=-1, sorted=False)
-            sorted_routing_weights, sorted_selected_experts = torch.topk(masked_routing_weights, k=self.top_k, dim=-1, sorted=True)
 
         ### norm gate to sum 1
         if self.top_k > 1 and self.norm_topk_prob:
@@ -466,7 +465,7 @@ class DeepseekV2MoE(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=torch.float32, device=hidden_states.device
+            (batch_size * sequence_length, hidden_dim), dtype=torch.bfloat16, device=hidden_states.device
         )
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.experts_per_rank).permute(2, 1, 0)
 
@@ -475,7 +474,7 @@ class DeepseekV2MoE(nn.Module):
             idx, top_x = torch.where(expert_mask[expert_idx])
             tokens_for_this_expert = hidden_states[None, top_x].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(tokens_for_this_expert) * routing_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.float32))
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.bfloat16))
 
         
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)

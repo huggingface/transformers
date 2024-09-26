@@ -42,9 +42,9 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
+from transformers.models.persimmon.modeling_persimmon import PersimmonRMSNorm
 from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding, \
-    PersimmonLinearScalingRotaryEmbedding, PersimmonDynamicNTKScalingRotaryEmbedding, PERSIMMON_INPUTS_DOCSTRING, \
+    PersimmonLinearScalingRotaryEmbedding, PersimmonDynamicNTKScalingRotaryEmbedding, Persimmon_INPUTS_DOCSTRING, \
     PersimmonForCausalLM, apply_rotary_pos_emb, rotate_half, PersimmonPreTrainedModel
 from transformers.pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
@@ -200,7 +200,6 @@ class DeepseekV2Config(PretrainedConfig):
         num_key_value_heads=32,
         n_shared_experts=None,
         n_routed_experts=None,
-        ep_size=1,
         routed_scaling_factor=1.0,
         qk_rope_head_dim=64,
         v_head_dim=128,
@@ -277,12 +276,11 @@ class DeepseekV2Config(PretrainedConfig):
             **kwargs,
         )
 
-class DeepseekV2RMSNorm(LlamaRMSNorm):
+class DeepseekV2RMSNorm(PersimmonRMSNorm):
     pass
 
 ALL_LAYERNORM_LAYERS.append(DeepseekV2RMSNorm)
 
-# copy entire class
 #TODO: confirm OK to skip this change: self.max_seq_len_cached = None, dtype=torch.int64).type_as(self.inv_freq == dtype=self.inv_freq.dtype
 class DeepseekV2RotaryEmbedding(PersimmonRotaryEmbedding):
     pass
@@ -292,8 +290,10 @@ class DeepseekV2LinearScalingRotaryEmbedding(PersimmonLinearScalingRotaryEmbeddi
     pass
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->DeepseekV2
 class DeepseekV2DynamicNTKScalingRotaryEmbedding(PersimmonDynamicNTKScalingRotaryEmbedding):
     pass
+
 
 
 # Inverse dim formula to find dim based on number of rotations
@@ -380,12 +380,12 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
         self.register_buffer("sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False)
 
 
-# Copied from transformers.models.persimmon.modeling_persimmon.rotate_hal
+# Copied from transformers.models.Persimmon.modeling_Persimmon.rotate_hal
 def rotate_half(rotate_half):
     pass
 
 
-# Copied from transformers.models.persimmon.modeling_persimmon.apply_rotary_pos_emb
+# Copied from transformers.models.Persimmon.modeling_Persimmon.apply_rotary_pos_emb
 def apply_rotary_pos_emb(apply_rotary_pos_emb):
     pass
 
@@ -554,40 +554,8 @@ class DeepseekV2MoE(nn.Module):
             final_hidden_states = final_hidden_states + self.shared_experts(identity)
         return final_hidden_states
 
-    @torch.no_grad()
-    def moe_infer(self, x, topk_ids, topk_weight):
-        cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
-        cnts.scatter_(1, topk_ids, 1)
-        tokens_per_expert = cnts.sum(dim=0)
-        idxs = topk_ids.view(-1).argsort()
-        sorted_tokens = x[idxs // topk_ids.shape[1]]
 
-        outputs = []
-        start_idx = 0
-        for expert_idx, num_tokens in enumerate(tokens_per_expert):
-            end_idx = start_idx + num_tokens
-            if num_tokens == 0:
-                continue
-            expert_layer = self.experts[expert_idx]
-            tokens_for_this_expert = sorted_tokens[start_idx:end_idx]
-            expert_out = expert_layer(tokens_for_this_expert)
-            outputs.append(expert_out)
-            start_idx = end_idx
-
-        outs = torch.cat(outputs, dim=0) if len(outputs) else sorted_tokens.new_empty(0)
-
-        new_x = torch.empty_like(outs)
-        new_x[idxs] = outs
-        final_hidden_states = (
-            new_x.view(*topk_ids.shape, -1)
-            .type(topk_weight.dtype)
-            .mul_(topk_weight.unsqueeze(dim=-1))
-            .sum(dim=1)
-            .type(new_x.dtype)
-        )
-        return final_hidden_states
-
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
+# Copied from transformers.models.Persimmon.modeling_Persimmon.PersimmonAttention with Persimmon->DeepseekV2
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -647,7 +615,7 @@ class DeepseekV2Attention(nn.Module):
             mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
             scaling_factor = self.config.rope_scaling["factor"]
             if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                mscale = get_mscale(scaling_factor, mscale_all_dim)
                 self.softmax_scale = self.softmax_scale * mscale * mscale
 
     def _init_rope(self):
@@ -947,7 +915,7 @@ ATTENTION_CLASSES = {
     "flash_attention_2": DeepseekV2FlashAttention2,
 }
 
-class DeepseekV2DecoderLayer(nn.Module):
+class DeepseekV2DecoderLayer(PersimmonDecoderLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -965,73 +933,11 @@ class DeepseekV2DecoderLayer(nn.Module):
         )
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.dropout = lambda x: x
 
 
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-#same as persimmon but without cache_position
-DeepseekV2_INPUTS_DOCSTRING = PERSIMMON_INPUTS_DOCSTRING[:PERSIMMON_INPUTS_DOCSTRING.index('cache_position')].rstrip()
+#same as Persimmon but without cache_position
+DeepseekV2_INPUTS_DOCSTRING = Persimmon_INPUTS_DOCSTRING[:Persimmon_INPUTS_DOCSTRING.index('cache_position')].rstrip()
 
 
 @add_start_docstrings(
