@@ -101,6 +101,8 @@ def convert_config(original_config: dict):
         head_dim=original_config.pop("kv_channels"),
         attention_bias=original_config.pop("add_qkv_bias"),
         linear_bias=original_config.pop("add_bias_linear"),
+        eos_token_id=original_config.pop("eos_token_id"),
+        pad_token_id=original_config["pad_token_id"],
     )
     print(f'Unused config keys: {original_config.keys(),}')
     return new_config
