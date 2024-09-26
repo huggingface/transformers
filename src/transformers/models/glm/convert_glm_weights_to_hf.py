@@ -84,7 +84,7 @@ def convert_config(original_config: dict):
         vocab_size=original_config.pop("padded_vocab_size"),
         hidden_size=original_config.pop("hidden_size"),
         intermediate_size=original_config.pop("ffn_hidden_size"),
-        num_hidden_layers=original_config.pop("num_hidden_layer"),
+        num_hidden_layers=original_config.pop("num_layers"),
         num_attention_heads=num_attention_heads,
         num_key_value_heads=num_attention_heads
         if not original_config.pop("multi_query_attention")
