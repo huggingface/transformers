@@ -967,8 +967,8 @@ class SinkCache(Cache):
                     self._cos_cache = cos[0, ...]
                     self._sin_cache = sin[0, ...]
                 elif self._cos_cache.shape[0] < self.window_length + key_states.shape[-2]:
-                    self._cos_cache = torch.cat([self._cos_cache, cos[0, ...]], dim=0)
-                    self._sin_cache = torch.cat([self._sin_cache, sin[0, ...]], dim=0)
+                    self._cos_cache = torch.cat([self._cos_cache[: self.window_length], cos[0, ...]], dim=0)
+                    self._sin_cache = torch.cat([self._sin_cache[: self.window_length], sin[0, ...]], dim=0)
 
         # [bsz, num_heads, seq_len, head_dim]
         if len(self.key_cache) <= layer_idx:
