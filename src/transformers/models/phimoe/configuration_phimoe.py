@@ -16,20 +16,16 @@
 """PyTorch Phi-MoE model."""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-PHIMOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/Phi-3.5-MoE-instruct": "https://huggingface.co/microsoft/Phi-3.5-MoE-instruct/resolve/main/config.json",
-}
-
-
-class PhiMoEConfig(PretrainedConfig):
+class PhimoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PhiMoEModel`]. It is used to instantiate a Phi-MoE
+    This is the configuration class to store the configuration of a [`PhimoeModel`]. It is used to instantiate a Phi-moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
     [microsoft/Phi-3.5-MoE-instruct](https://huggingface.co/microsoft/Phi-3.5-MoE-instruct).
@@ -37,8 +33,8 @@ class PhiMoEConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 32064):
-            Vocabulary size of the PhiMoE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PhiMoEModel`]
+            Vocabulary size of the Phimoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PhimoeModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 6400):
@@ -50,7 +46,7 @@ class PhiMoEConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
@@ -101,12 +97,13 @@ class PhiMoEConfig(PretrainedConfig):
         input_jitter_noise (`float`, *optional*, defaults to 0.0): Input jitter noise
         attention_bias (`bool`, *optional*, defaults to `False`): Attention bias
         lm_head_bias (`bool`, *optional*, defaults to `False`): LM head bias
+    Example:
     ```python
-    >>> from transformers import PhiMoEModel, PhiMoEConfig
+    >>> from transformers import PhimoeModel, PhimoeConfig
     >>> # Initializing a Phi-3 style configuration
-    >>> configuration = PhiMoEConfig.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+    >>> configuration = PhimoeConfig.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
     >>> # Initializing a model from the configuration
-    >>> model = PhiMoEModel(configuration)
+    >>> model = PhimoeModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
@@ -174,7 +171,23 @@ class PhiMoEConfig(PretrainedConfig):
         self.input_jitter_noise = input_jitter_noise
 
         self.rope_scaling = rope_scaling
-        self._rope_scaling_validation()
+        if isinstance(self.rope_scaling, dict):
+            if "rope_type" not in self.rope_scaling:
+                self.rope_scaling["rope_type"] = self.rope_scaling.get("type", None)
+            if "original_max_position_embeddings" in self.rope_scaling:
+                self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
+            rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
+            rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
+            if not isinstance(rope_scaling_short_mscale, (int, float)):
+                raise ValueError(
+                    f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
+                )
+            if not isinstance(rope_scaling_long_mscale, (int, float)):
+                raise ValueError(
+                    f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}"
+                )
+
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -183,54 +196,3 @@ class PhiMoEConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 6:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with three fields, `type`, `short_factor`, `long_factor`, "
-                f"`short_mscale`, `long_mscale` and `original_max_position_embeddings`, got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
-        rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
-        rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
-        original_max_position_embeddings = self.rope_scaling.get("original_max_position_embeddings", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
-        if not (
-            isinstance(rope_scaling_short_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
-            )
-        if not len(rope_scaling_short_factor) == self.hidden_size // self.num_attention_heads // 2:
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_short_factor)}"
-            )
-        if not (
-            isinstance(rope_scaling_long_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
-            )
-        if not len(rope_scaling_long_factor) == self.hidden_size // self.num_attention_heads // 2:
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
-            )
-        if not isinstance(rope_scaling_short_mscale, (int, float)):
-            raise ValueError(f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}")
-        if not isinstance(rope_scaling_long_mscale, (int, float)):
-            raise ValueError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
-        if not isinstance(original_max_position_embeddings, int):
-            raise ValueError(
-                f"`rope_scaling`'s original_max_position_embeddings field must be an integer, got {original_max_position_embeddings}"
-            )

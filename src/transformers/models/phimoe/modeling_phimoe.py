@@ -13,15 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PyTorch PhiMoE model."""
+"""PyTorch Phimoe model."""
 
-import inspect
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -37,25 +34,22 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
-from .configuration_phimoe import PhiMoEConfig
+from .configuration_phimoe import PhimoeConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -68,7 +62,7 @@ if is_torch_fx_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PhiMoEConfig"
+_CONFIG_FOR_DOC = "PhimoeConfig"
 
 
 # Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
@@ -125,6 +119,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     return causal_mask
 
 
+# Copied from transformers.models.jetmoe.modeling_jetmoe.load_balancing_loss_func
 def load_balancing_loss_func(
     gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
 ) -> float:
@@ -137,7 +132,7 @@ def load_balancing_loss_func(
         gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
-        attention_mask (`torch.Tensor`, None):
+        attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
         num_experts (`int`, *optional*):
@@ -198,20 +193,16 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
-class PhiMoERotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+class PhimoeRotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        dim,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        rope_type="default",
+        config: Optional[PhimoeConfig] = None,
+    ):
         super().__init__()
 
         self.dim = dim
@@ -224,6 +215,11 @@ class PhiMoERotaryEmbedding(nn.Module):
         self._set_cos_sin_cache(
             seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
+        if config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
@@ -291,8 +287,10 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
+
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
@@ -331,13 +329,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class PhiMoEAttention(nn.Module):
+class PhimoeAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: PhiMoEConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: PhimoeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -373,7 +371,7 @@ class PhiMoEAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.config.attention_bias)
 
         if getattr(config, "rope_scaling", None) is None:
-            self.rotary_emb = PhiMoERotaryEmbedding(
+            self.rotary_emb = PhimoeRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -397,12 +395,7 @@ class PhiMoEAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -422,12 +415,11 @@ class PhiMoEAttention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # repeat k/v heads if n_kv_heads < n_heads
@@ -442,13 +434,9 @@ class PhiMoEAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-
-            attn_weights = attn_weights + attention_mask
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -472,21 +460,13 @@ class PhiMoEAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class PhiMoEFlashAttention2(PhiMoEAttention):
+# copied from transformers.models.mixtral.modeling_mixtral.MixtralFlashAttention2 with Mixtral->Phimoe
+class PhimoeFlashAttention2(PhimoeAttention):
     """
-    PhiMoE flash attention module. This module inherits from `PhiMoEAttention` as the weights of the module stays
+    Phimoe flash attention module. This module inherits from `PhimoeAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
@@ -496,15 +476,8 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,
+        cache_position: Optional[torch.LongTensor] = None,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -526,22 +499,13 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item() + 1)
+        rotary_seq_len = (
+            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
+        )
+
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -569,7 +533,7 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
                     attention_mask = attention_mask[:, slicing_tokens:]
                     attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
 
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # repeat k/v heads if n_kv_heads < n_heads
@@ -605,14 +569,16 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=getattr(self.config, "sliding_window", None),
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -623,156 +589,16 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-        use_sliding_windows=False,
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
-                Whether to activate sliding window attention.
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
 
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            if not use_sliding_windows:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, 0),
-                )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, 0),
-                )
-
-        return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
-
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
-
-
-class PhiMoESdpaAttention(PhiMoEAttention):
+# copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Phimoe
+class PhimoeSdpaAttention(PhimoeAttention):
     """
-    PhiMoE attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `PhiMoEAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Phimoe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `PhimoeAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from PhiMoEAttention.forward
+    # Adapted from PhimoeAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -781,11 +607,12 @@ class PhiMoESdpaAttention(PhiMoEAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "PhiMoEModel is using PhiMoESdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "PhimoeModel is using PhimoeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -815,17 +642,15 @@ class PhiMoESdpaAttention(PhiMoEAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+        causal_mask = attention_mask
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -834,14 +659,18 @@ class PhiMoESdpaAttention(PhiMoEAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -853,14 +682,15 @@ class PhiMoESdpaAttention(PhiMoEAttention):
 
 
 PHIMOE_ATTENTION_CLASSES = {
-    "eager": PhiMoEAttention,
-    "flash_attention_2": PhiMoEFlashAttention2,
-    "sdpa": PhiMoESdpaAttention,
+    "eager": PhimoeAttention,
+    "flash_attention_2": PhimoeFlashAttention2,
+    "sdpa": PhimoeSdpaAttention,
 }
 
 
-class PhiMoEBlockSparseTop2MLP(nn.Module):
-    def __init__(self, config: PhiMoEConfig):
+# copied from transformers.models.mixtral.modeling_mixtral.MixtralBlockSparseTop2MLP with Mixtral->Phimoe
+class PhimoeBlockSparseTop2MLP(nn.Module):
+    def __init__(self, config: PhimoeConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
@@ -877,15 +707,7 @@ class PhiMoEBlockSparseTop2MLP(nn.Module):
         return current_hidden_states
 
 
-class PhiMoEBLockSparseTop2MLP(PhiMoEBlockSparseTop2MLP):
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "PhiMoEBLockSparseTop2MLP is deprecated by PhiMoEBlockSparseTop2MLP and will be removed in v4.40."
-        )
-        super().__init__(*args, **kwargs)
-
-
-class mp(torch.autograd.Function):
+class MultiplierProcessor(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
@@ -895,6 +717,20 @@ class mp(torch.autograd.Function):
         masked_gates: torch.Tensor,
         mask_for_one: torch.Tensor,
     ):
+        """
+        Forward pass for the custom autograd function.
+
+        Args:
+            ctx: Context object to save information for backward computation.
+            scores (torch.Tensor): Input scores tensor.
+            multiplier (torch.Tensor): Multiplier tensor.
+            selected_experts (torch.Tensor): Tensor of selected experts.
+            masked_gates (torch.Tensor): Masked gates tensor.
+            mask_for_one (torch.Tensor): Mask for one tensor.
+
+        Returns:
+            torch.Tensor: Result of the forward pass.
+        """
         ctx.save_for_backward(multiplier, selected_experts, masked_gates)
         return multiplier * mask_for_one
 
@@ -903,19 +739,29 @@ class mp(torch.autograd.Function):
         ctx,
         grad_at_output: torch.Tensor,
     ):
+        """
+        Backward pass for the custom autograd function.
+
+        Args:
+            ctx: Context object with saved tensors from the forward pass.
+            grad_at_output (torch.Tensor): Gradient at the output.
+
+        Returns:
+            Tuple[torch.Tensor, None, None, None, None]: Gradients for the inputs.
+        """
         multiplier, selected_experts, masked_gates = ctx.saved_tensors
 
         grad_at_output = grad_at_output * multiplier
 
-        grad_at_scores_expaned = masked_gates * grad_at_output.mul(-1)
-        grad_at_scores_expaned.scatter_add_(
+        grad_at_scores_expanded = masked_gates * grad_at_output.mul(-1)
+        grad_at_scores_expanded.scatter_add_(
             dim=-1,
             index=selected_experts,
             src=grad_at_output,
         )
 
         return (
-            grad_at_scores_expaned,
+            grad_at_scores_expanded,
             None,
             None,
             None,
@@ -924,17 +770,29 @@ class mp(torch.autograd.Function):
 
 
 def sparsemixer(scores, top_k, jitter_eps, training):
+    """
+    Sparse mixer function to select top-k experts and compute multipliers.
+
+    Args:
+        scores (torch.Tensor): Input scores tensor.
+        top_k (int): Number of top experts to select.
+        jitter_eps (float): Jitter epsilon for numerical stability.
+        training (bool): Flag indicating if the model is in training mode.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Multiplier and selected experts tensors.
+    """
     assert top_k == 2
 
-    ################ first expert ################
+    # first expert
 
     with torch.no_grad():
-        # compute mask for sparsity
+        # Compute mask for sparsity
         mask_logits_threshold, max_ind = scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
         mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
 
-    # apply mask
+    # Apply mask
     masked_gates = scores.masked_fill(mask_logits_threshold, float("-inf"))
     if training:
         selected_experts = (
@@ -944,25 +802,25 @@ def sparsemixer(scores, top_k, jitter_eps, training):
             )
             .max(dim=-1)[1]
             .unsqueeze(-1)
-        )  # gumbel sampling, more robust than than the multinomial method
+        )  # Gumbel sampling, more robust than the multinomial method
     else:
         selected_experts = max_ind
 
-    # compute scores for gradients
+    # Compute scores for gradients
     masked_gates = torch.softmax(masked_gates, dim=-1)
     multiplier_o = masked_gates.gather(dim=-1, index=selected_experts)
 
     if training:
-        # compute midpoint mask
+        # Compute midpoint mask
         max_scores, max_ind = masked_gates.max(dim=-1, keepdim=True)
         mask_for_one = torch.logical_or(
             selected_experts == max_ind,
-            torch.rand_like(max_scores) > 0.75,  # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
+            torch.rand_like(max_scores) > 0.75,  # Heun's third-order method
         )
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one = torch.add(0.3333, mask_for_one, alpha=0.6667).type_as(masked_gates)
 
-        multiplier = mp.apply(
+        multiplier = MultiplierProcessor.apply(
             scores,
             multiplier_o,
             selected_experts,
@@ -972,7 +830,7 @@ def sparsemixer(scores, top_k, jitter_eps, training):
     else:
         multiplier = multiplier_o
 
-    # masked out first expert
+    # Masked out first expert
     masked_scores = torch.scatter(
         scores,
         -1,
@@ -980,12 +838,12 @@ def sparsemixer(scores, top_k, jitter_eps, training):
         float("-inf"),
     )
     with torch.no_grad():
-        # compute mask for sparsity
+        # Compute mask for sparsity
         mask_logits_threshold, max_ind = masked_scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
         mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
 
-    # apply mask
+    # Apply mask
     masked_gates_top2 = masked_scores.masked_fill(mask_logits_threshold, float("-inf"))
     if training:
         selected_experts_top2 = (
@@ -997,25 +855,24 @@ def sparsemixer(scores, top_k, jitter_eps, training):
             )
             .max(dim=-1)[1]
             .unsqueeze(-1)
-        )  # gumbel sampling, more robust than than the multinomial method
+        )  # Gumbel sampling, more robust than the multinomial method
     else:
         selected_experts_top2 = max_ind
-    # compute scores for gradients
+    # Compute scores for gradients
     masked_gates_top2 = torch.softmax(masked_gates_top2, dim=-1)
     multiplier_top2_o = masked_gates_top2.gather(dim=-1, index=selected_experts_top2)
 
     if training:
-        # compute midpoint mask
+        # Compute midpoint mask
         max_scores, max_ind = masked_gates_top2.max(dim=-1, keepdim=True)
         mask_for_one_top2 = torch.logical_or(
             selected_experts_top2 == max_ind,
-            torch.rand_like(max_scores).uniform_()
-            > 0.75,  # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
+            torch.rand_like(max_scores).uniform_() > 0.75,  # Heun's third-order method
         )
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one_top2 = torch.add(0.3333, mask_for_one_top2, alpha=0.6667).type_as(masked_gates_top2)
 
-        multiplier_top2 = mp.apply(
+        multiplier_top2 = MultiplierProcessor.apply(
             scores,
             multiplier_top2_o,
             selected_experts_top2,
@@ -1034,7 +891,7 @@ def sparsemixer(scores, top_k, jitter_eps, training):
     )
 
 
-class PhiMoESparseMoeBlock(nn.Module):
+class PhimoeSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -1055,7 +912,7 @@ class PhiMoESparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([PhiMoEBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([PhimoeBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
         # Jitter parameters
         self.router_jitter_noise = config.router_jitter_noise
@@ -1094,15 +951,11 @@ class PhiMoESparseMoeBlock(nn.Module):
             if top_x.shape[0] == 0:
                 continue
 
-            # in torch it is faster to index using lists than torch tensors
-            top_x_list = top_x.tolist()
-            idx_list = idx.tolist()
-
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
@@ -1111,14 +964,14 @@ class PhiMoESparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class PhiMoEDecoderLayer(nn.Module):
-    def __init__(self, config: PhiMoEConfig, layer_idx: int):
+class PhimoeDecoderLayer(nn.Module):
+    def __init__(self, config: PhimoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = PHIMOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.block_sparse_moe = PhiMoESparseMoeBlock(config)
+        self.block_sparse_moe = PhimoeSparseMoeBlock(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
         self.post_attention_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
@@ -1136,10 +989,6 @@ class PhiMoEDecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1155,6 +1004,11 @@ class PhiMoEDecoderLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
         """
 
         residual = hidden_states
@@ -1169,6 +1023,7 @@ class PhiMoEDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            cache_position=cache_position,
         )
         hidden_states = residual + hidden_states
 
@@ -1200,7 +1055,7 @@ PHIMOE_START_DOCSTRING = r"""
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
     Parameters:
-        config ([`PhiMoEConfig`]):
+        config ([`PhimoeConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1208,14 +1063,15 @@ PHIMOE_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare PhiMoE Model outputting raw hidden-states without any specific head on top.",
+    "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-class PhiMoEPreTrainedModel(PreTrainedModel):
-    config_class = PhiMoEConfig
+# copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
+class PhimoePreTrainedModel(PreTrainedModel):
+    config_class = PhimoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PhiMoEDecoderLayer"]
+    _no_split_modules = ["PhimoeDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1238,33 +1094,44 @@ PHIMOE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
+
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
+
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
             [What are attention masks?](../glossary#attention-mask)
+
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
+
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
+
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
+
             [What are position IDs?](../glossary#position-ids)
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
             `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
@@ -1286,28 +1153,32 @@ PHIMOE_INPUTS_DOCSTRING = r"""
             should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
 @add_start_docstrings(
-    "The bare PhiMoE Model outputting raw hidden-states without any specific head on top.",
+    "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-class PhiMoEModel(PhiMoEPreTrainedModel):
+class PhimoeModel(PhimoePreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiMoEDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhimoeDecoderLayer`]
     Args:
-        config: PhiMoEConfig
+        config: PhimoeConfig
     """
 
-    def __init__(self, config: PhiMoEConfig):
+    def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [PhiMoEDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [PhimoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
@@ -1322,14 +1193,13 @@ class PhiMoEModel(PhiMoEPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Ignore copy
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1391,7 +1261,7 @@ class PhiMoEModel(PhiMoEPreTrainedModel):
             if is_padding_right:
                 raise ValueError(
                     "You are attempting to perform batched generation with padding_side='right'"
-                    " this may lead to unexpected behaviour for Flash Attention version of PhiMoE. Make sure to "
+                    " this may lead to unexpected behaviour for Flash Attention version of Phimoe. Make sure to "
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
 
@@ -1439,6 +1309,7 @@ class PhiMoEModel(PhiMoEPreTrainedModel):
                     output_attentions,
                     output_router_logits,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1449,6 +1320,7 @@ class PhiMoEModel(PhiMoEPreTrainedModel):
                     output_attentions=output_attentions,
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1487,12 +1359,12 @@ class PhiMoEModel(PhiMoEPreTrainedModel):
         )
 
 
-class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
+class PhimoeForCausalLM(PhimoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = PhiMoEModel(config)
+        self.model = PhimoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
         self.router_aux_loss_coef = config.router_aux_loss_coef
@@ -1552,9 +1424,9 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
         Returns:
         Example:
         ```python
-        >>> from transformers import AutoTokenizer, PhiMoEForCausalLM
-        >>> model = PhiMoEForCausalLM.from_pretrained("microsoft/Phi-3.5-moe-instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-moe-instruct")
+        >>> from transformers import AutoTokenizer, PhimoeForCausalLM
+        >>> model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
         >>> # Generate
@@ -1566,10 +1438,10 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
             use_cache
             and self.config.rope_scaling
             and cache_position is not None
-            and cache_position[0] == self.config.rope_scaling["original_max_position_embeddings"]
+            and cache_position[0] == self.config.original_max_position_embeddings
         ):
             logger.warning(
-                f"If you are not using the generate method, you may encounter nonsensical outputs after the {self.config.rope_scaling['original_max_position_embeddings']}th token, as the KV cache needs to be recomputed."
+                f"If you are not using the generate method, you may encounter nonsensical outputs after the {self.config.original_max_position_embeddings}th token, as the KV cache needs to be recomputed."
             )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1639,6 +1511,7 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
             router_logits=outputs.router_logits,
         )
 
+    # copied from transformers.models.phi3.modeling_phi3.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1648,6 +1521,7 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
@@ -1655,10 +1529,10 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
         if (
             past_key_values
             and self.config.rope_scaling
-            and input_ids.shape[1] >= self.config.rope_scaling["original_max_position_embeddings"] + 1
+            and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]
-            if past_length <= self.config.rope_scaling["original_max_position_embeddings"]:
+            if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1708,6 +1582,10 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1731,8 +1609,8 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The PhiMoE Model transformer with a sequence classification head on top (linear layer).
-    [`PhiMoEForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    The Phimoe Model transformer with a sequence classification head on top (linear layer).
+    [`PhimoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
@@ -1742,11 +1620,13 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
     """,
     PHIMOE_START_DOCSTRING,
 )
-class PhiMoEForSequenceClassification(PhiMoEPreTrainedModel):
+
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE
+class PhimoeForSequenceClassification(PhimoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = PhiMoEModel(config)
+        self.model = PhimoeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1761,10 +1641,10 @@ class PhiMoEForSequenceClassification(PhiMoEPreTrainedModel):
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1774,7 +1654,7 @@ class PhiMoEForSequenceClassification(PhiMoEPreTrainedModel):
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, transformers.,
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """

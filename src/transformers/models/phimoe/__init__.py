@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_phimoe": ["PhiMoEConfig"],
+    "configuration_phimoe": ["PhimoeConfig"],
 }
 
 try:
@@ -35,15 +35,15 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_phimoe"] = [
-        "PhiMoEPreTrainedModel",
-        "PhiMoEModel",
-        "PhiMoEForCausalLM",
-        "PhiMoEForSequenceClassification",
+        "PhimoePreTrainedModel",
+        "PhimoeModel",
+        "PhimoeForCausalLM",
+        "PhimoeForSequenceClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_phimoe import PhiMoEConfig
+    from .configuration_phimoe import PhimoeConfig
 
     try:
         if not is_torch_available():
@@ -52,10 +52,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_phimoe import (
-            PhiMoEForCausalLM,
-            PhiMoEForSequenceClassification,
-            PhiMoEModel,
-            PhiMoEPreTrainedModel,
+            PhimoeForCausalLM,
+            PhimoeForSequenceClassification,
+            PhimoeModel,
+            PhimoePreTrainedModel,
         )
 
 

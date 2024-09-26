@@ -91,27 +91,27 @@ output = pipe(messages, **generation_args)
 print(output[0]['generated_text'])
 ```
 
-## PhiMoEConfig
+## PhimoeConfig
 
-[[autodoc]] PhiMoEConfig
+[[autodoc]] PhimoeConfig
 
 <frameworkcontent>
 <pt>
 
-## PhiMoEModel
+## PhimoeModel
 
-[[autodoc]] PhiMoEModel
+[[autodoc]] PhimoeModel
     - forward
 
-## PhiMoEForCausalLM
+## PhimoeForCausalLM
 
-[[autodoc]] PhiMoEForCausalLM
+[[autodoc]] PhimoeForCausalLM
     - forward
     - generate
 
-## PhiMoEForSequenceClassification
+## PhimoeForSequenceClassification
 
-[[autodoc]] PhiMoEForSequenceClassification
+[[autodoc]] PhimoeForSequenceClassification
     - forward
 
 </pt>

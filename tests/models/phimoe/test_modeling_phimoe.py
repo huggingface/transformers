@@ -20,7 +20,7 @@ from typing import List
 
 from parameterized import parameterized
 
-from transformers import PhiMoEConfig, StaticCache, is_torch_available, set_seed
+from transformers import PhimoeConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -38,15 +38,15 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        PhiMoEForCausalLM,
-        PhiMoEForSequenceClassification,
-        PhiMoEModel,
+        PhimoeForCausalLM,
+        PhimoeForSequenceClassification,
+        PhimoeModel,
     )
 
     end_of_text_token = 32000
 
-    class PhiMoEMiniWithStaticCache(torch.nn.Module):
-        def __init__(self, model: PhiMoEForCausalLM, batch_size: int, max_seq_len: int):
+    class PhimoeMiniWithStaticCache(torch.nn.Module):
+        def __init__(self, model: PhimoeForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
             self.cache = StaticCache(
@@ -69,8 +69,8 @@ if is_torch_available():
             ).logits
 
         @staticmethod
-        def generate(model: PhiMoEForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
-            model = PhiMoEMiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
+        def generate(model: PhimoeForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
+            model = PhimoeMiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
 
             response_tokens = []
 
@@ -93,7 +93,7 @@ if is_torch_available():
             return response_tokens
 
 
-class PhiMoEModelTester:
+class PhimoeModelTester:
     def __init__(
         self,
         parent,
@@ -173,7 +173,7 @@ class PhiMoEModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return PhiMoEConfig(
+        return PhimoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -193,18 +193,18 @@ class PhiMoEModelTester:
             original_max_position_embeddings=self.original_max_position_embeddings,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Phimoe
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = PhiMoEModel(config=config)
+        model = PhimoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Phimoe
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -218,7 +218,7 @@ class PhiMoEModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = PhiMoEModel(config)
+        model = PhimoeModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -235,7 +235,7 @@ class PhiMoEModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Phimoe
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -248,13 +248,13 @@ class PhiMoEModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = PhiMoEForCausalLM(config=config)
+        model = PhimoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Phimoe
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -269,7 +269,7 @@ class PhiMoEModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = PhiMoEForCausalLM(config=config)
+        model = PhimoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -334,17 +334,17 @@ class PhiMoEModelTester:
 
 
 @require_torch
-class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PhiMoEModel, PhiMoEForCausalLM, PhiMoEForSequenceClassification) if is_torch_available() else ()
+        (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (PhiMoEForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (PhimoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": PhiMoEModel,
-            "text-classification": PhiMoEForSequenceClassification,
-            "text-generation": PhiMoEForCausalLM,
-            "zero-shot": PhiMoEForSequenceClassification,
+            "feature-extraction": PhimoeModel,
+            "text-classification": PhimoeForSequenceClassification,
+            "text-generation": PhimoeForCausalLM,
+            "zero-shot": PhimoeForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -359,10 +359,10 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     ):
         return True
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phimoe
     def setUp(self):
-        self.model_tester = PhiMoEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PhiMoEConfig, hidden_size=37)
+        self.model_tester = PhimoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PhimoeConfig, hidden_size=37)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):
@@ -373,20 +373,20 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->PhiMoE,llama->phimoe
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->Phimoe,llama->phimoe
     def test_phimoe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = PhiMoEForSequenceClassification(config)
+        model = PhimoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->PhiMoE,llama->phimoe
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->Phimoe,llama->phimoe
     def test_phimoe_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -394,13 +394,13 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = PhiMoEForSequenceClassification(config)
+        model = PhimoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->PhiMoE,llama->phimoe
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->Phimoe,llama->phimoe
     def test_phimoe_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -410,7 +410,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = PhiMoEForSequenceClassification(config)
+        model = PhimoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -423,7 +423,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = PhiMoEModel(config)
+        original_model = PhimoeModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -439,7 +439,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "long_mscale": 1.243163121016122,
             "original_max_position_embeddings": 4096,
         }
-        scaled_model = PhiMoEModel(config)
+        scaled_model = PhimoeModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -462,7 +462,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "original_max_position_embeddings": 4096,
         }
         input_tensor = ids_tensor([1, 4090], config.vocab_size)
-        model = PhiMoEForCausalLM(config)
+        model = PhimoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
         generation_args_short = {
@@ -496,7 +496,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 @slow
 @require_torch
-class PhiMoEIntegrationTest(unittest.TestCase):
+class PhimoeIntegrationTest(unittest.TestCase):
     def test_model_phimoe_instruct_logits(self):
         input_ids = {
             "input_ids": torch.tensor(
@@ -504,7 +504,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiMoEForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct").to(torch_device)
+        model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -521,7 +521,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
 
     def test_phimoe_instruct_generation(self):
-        model = PhiMoEForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+        model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
 
         messages = [
@@ -543,7 +543,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
     def test_phimoe_instruct_with_static_cache(self):
-        model = PhiMoEForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+        model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
 
         messages = [
@@ -555,7 +555,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = PhiMoEMiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs, 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 

@@ -7053,28 +7053,28 @@ class Phi3PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class PhiMoEForCausalLM(metaclass=DummyObject):
+class PhimoeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PhiMoEForSequenceClassification(metaclass=DummyObject):
+class PhimoeForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PhiMoEModel(metaclass=DummyObject):
+class PhimoeModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PhiMoEPreTrainedModel(metaclass=DummyObject):
+class PhimoePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
