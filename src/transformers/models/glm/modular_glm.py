@@ -526,12 +526,14 @@ class GlmModel(LlamaModel):
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        norm = (
-            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_rms_norm
-            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        )
-        self.norm = norm if config.post_layer_norm else nn.Identity()
+        if config.post_layer_norm:
+            self.norm = (
+                GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+                if config.use_rms_norm
+                else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+            )
+        else:
+            self.norm = nn.Identity()
         self.rotary_emb = GlmRotaryEmbedding(
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
