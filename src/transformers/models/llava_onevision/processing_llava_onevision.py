@@ -17,23 +17,19 @@ Processor class for LLaVa-Onevision.
 """
 
 import math
-import sys
+import os
 from typing import Iterable, List, Union
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ..auto import AutoImageProcessor
+
+
+logger = logging.get_logger(__name__)
 
 
 class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
@@ -51,11 +47,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     r"""
     Constructs a LLaVa-Onevision processor which wraps a LLaVa-Onevision video processor, LLaVa-NeXT image processor and a LLaMa tokenizer into a single processor.
 
-    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaNextImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaOnevisionImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaOnevisionVideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`LlavaNextImageProcessor`], *optional*):
+        image_processor ([`LlavaOnevisionImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -96,7 +92,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         chat_template=None,
         image_token="<image>",
         video_token="<video>",
-        **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
+        **kwargs,
     ):
         self.num_image_tokens = num_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
@@ -108,8 +104,9 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
         videos: VideoInput = None,
-        **kwargs,
+        **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -272,3 +269,46 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    # override to save video-config in a separate config file
+    def save_pretrained(self, save_directory, **kwargs):
+        if os.path.isfile(save_directory):
+            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
+        os.makedirs(save_directory, exist_ok=True)
+        video_processor_path = os.path.join(save_directory, "video_processor")
+        self.video_processor.save_pretrained(video_processor_path)
+
+        video_processor_present = "video_processor" in self.attributes
+        if video_processor_present:
+            self.attributes.remove("video_processor")
+
+        outputs = super().save_pretrained(save_directory, **kwargs)
+
+        if video_processor_present:
+            self.attributes += ["video_processor"]
+        return outputs
+
+    # override to load video-config from a separate config file
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
+        if isinstance(processor, tuple):
+            processor = processor[0]
+
+        try:
+            video_processor = AutoImageProcessor.from_pretrained(
+                pretrained_model_name_or_path, subfolder="video_processor"
+            )
+            processor.video_processor = video_processor
+        except EnvironmentError:
+            # this means users are using prev version of saved processor where we had only one preprocessor_config.json
+            # for loading back that should work and load a LlavaOnevisionVideoProcessor class
+            logger.info(
+                "You are loading `LlavaOnevisionProcessor` but the indicated `path` doesn't contain a folder called "
+                "`video_processor`. It is strongly recommended to load and save the processor again so the video processor is saved "
+                "in a separate config."
+            )
+
+        return processor

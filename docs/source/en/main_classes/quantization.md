@@ -61,6 +61,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] FbgemmFp8Config
 
+## CompressedTensorsConfig
+
+[[autodoc]] CompressedTensorsConfig
+
 ## TorchAoConfig
 
 [[autodoc]] TorchAoConfig
@@ -68,4 +72,3 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## BitNetConfig
 
 [[autodoc]] BitNetConfig
-

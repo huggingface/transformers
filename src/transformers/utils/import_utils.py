@@ -142,6 +142,7 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quanto_available = _is_package_available("quanto")
+_compressed_tensors_available = _is_package_available("compressed_tensors")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -849,15 +850,29 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+@lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available():
+    if not is_torch_available() or not _bitsandbytes_available:
         return False
 
-    # bitsandbytes throws an error if cuda is not available
-    # let's avoid that by adding a simple check
     import torch
 
-    return _bitsandbytes_available and torch.cuda.is_available()
+    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+    # so those versions of the library are practically only available when CUDA is too.
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        return torch.cuda.is_available()
+
+    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
+    return True
+
+
+def is_bitsandbytes_multi_backend_available() -> bool:
+    if not is_bitsandbytes_available():
+        return False
+
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
 
 
 def is_flash_attn_2_available():
@@ -947,6 +962,10 @@ def is_auto_awq_available():
 
 def is_quanto_available():
     return _quanto_available
+
+
+def is_compressed_tensors_available():
+    return _compressed_tensors_available
 
 
 def is_auto_gptq_available():
@@ -1187,7 +1206,7 @@ def is_liger_kernel_available():
     if not _liger_kernel_available:
         return False
 
-    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
 # docstyle-ignore
@@ -1924,7 +1943,7 @@ def create_import_structure_from_path(module_path):
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name)) as f:
+        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix

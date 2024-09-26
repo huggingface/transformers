@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -40,7 +41,7 @@ _CONFIG_FOR_DOC = "VipLlavaConfig"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VipLlava
+# Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->VipLlava
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for VipLlava causal language model (or autoregressive) outputs.
@@ -67,11 +68,9 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -79,7 +78,7 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class VipLlavaMultiModalProjector(nn.Module):
@@ -242,7 +241,7 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
-class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
+class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -554,6 +553,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def prepare_inputs_for_generation(

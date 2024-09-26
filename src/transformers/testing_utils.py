@@ -61,7 +61,9 @@ from .utils import (
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_decord_available,
@@ -224,6 +226,17 @@ _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
+def get_device_count():
+    import torch
+
+    if is_torch_xpu_available():
+        num_devices = torch.xpu.device_count()
+    else:
+        num_devices = torch.cuda.device_count()
+
+    return num_devices
+
+
 def is_pt_tf_cross_test(test_case):
     """
     Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
@@ -329,6 +342,29 @@ def tooslow(test_case):
 
     """
     return unittest.skip(reason="test is too slow")(test_case)
+
+
+def skip_if_not_implemented(test_func):
+    @functools.wraps(test_func)
+    def wrapper(*args, **kwargs):
+        try:
+            return test_func(*args, **kwargs)
+        except NotImplementedError as e:
+            raise unittest.SkipTest(f"Test skipped due to NotImplementedError: {e}")
+
+    return wrapper
+
+
+def apply_skip_if_not_implemented(cls):
+    """
+    Class decorator to apply @skip_if_not_implemented to all test methods.
+    """
+    for attr_name in dir(cls):
+        if attr_name.startswith("test_"):
+            attr = getattr(cls, attr_name)
+            if callable(attr):
+                setattr(cls, attr_name, skip_if_not_implemented(attr))
+    return cls
 
 
 def custom_tokenizers(test_case):
@@ -738,9 +774,9 @@ def require_torch_multi_gpu(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    import torch
+    device_count = get_device_count()
 
-    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -849,6 +885,13 @@ def require_torch_xpu(test_case):
     return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
 
+def require_non_xpu(test_case):
+    """
+    Decorator marking a test that should be skipped for XPU.
+    """
+    return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
 def require_torch_multi_xpu(test_case):
     """
     Decorator marking a test that requires a multi-XPU setup (in PyTorch). These tests are skipped on a machine without
@@ -938,6 +981,15 @@ def require_torch_tensorrt_fx(test_case):
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
+
+
+def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
+    """
+    Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
+    """
+    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
+        return test_case
+    return require_torch_gpu(test_case)
 
 
 def require_torch_accelerator(test_case):
@@ -1146,6 +1198,13 @@ def require_quanto(test_case):
     Decorator for quanto dependency
     """
     return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
+
+
+def require_compressed_tensors(test_case):
+    """
+    Decorator for compressed_tensors dependency
+    """
+    return unittest.skipUnless(is_compressed_tensors_available(), "test requires compressed_tensors")(test_case)
 
 
 def require_fbgemm_gpu(test_case):
@@ -2136,7 +2195,7 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
-    elif isinstance(obj, (np.int32, np.float32)):
+    elif isinstance(obj, (np.int32, np.float32, np.float16)):
         return nested_simplify(obj.item(), decimals)
     else:
         raise Exception(f"Not supported: {type(obj)}")
