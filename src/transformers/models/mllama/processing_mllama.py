@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Processor class for Mllama.
-"""
 
-from statistics import mean
+"""Processor class for Mllama."""
+
 from typing import List, Optional, Union
 
 import numpy as np
@@ -296,25 +294,27 @@ class MllamaProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
+        n_images_in_images = [0]
         if images is not None:
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
-            if text is not None:
-                if (
-                    not all(batch_img_per_prompt == n_images_in_images for batch_img_per_prompt in n_images_in_text)
-                    and len(text) > 1
-                ):
+        if text is not None:
+            if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
+                batch_img == 0 for batch_img in n_images_in_text
+            ):
+                raise ValueError(
+                    "If a batch of text is provided, there should be either no images or at least one image per sample"
+                )
+            if sum(n_images_in_images) != sum(n_images_in_text):
+                if images is None:
+                    raise ValueError("No image were provided, but there are image tokens in the prompt")
+                else:
                     raise ValueError(
-                        f"The number of images in each batch {n_images_in_text} should be the same  {n_images_in_images} should be the same. Yes, the model does not \
-                        support having a different number of images per batch."
-                    )
-                if int(mean(n_images_in_text)) != int(mean(n_images_in_images)):
-                    raise ValueError(
-                        f"The number of images in the text ({n_images_in_text}) should be the same as in the number of provided images ({n_images_in_images}) \
-                        should be the same."
+                        f"The number of image token ({sum(n_images_in_images)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
                     )
 
+        if images is not None:
             image_features = self.image_processor(images, **images_kwargs)
             num_tiles = image_features.pop("num_tiles")
             data.update(image_features)
