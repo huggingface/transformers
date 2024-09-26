@@ -28,16 +28,16 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from ..llama.modeling_llama import (
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    LlamaModel,
+from ..phi3.modeling_phi3 import (
+    Phi3RMSNorm,
+    Phi3RotaryEmbedding,
+    Phi3MLP,
+    Phi3DecoderLayer,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from ..phi3.modeling_phi3 import (
-    Phi3MLP,
-    Phi3DecoderLayer
+from ..llama.modeling_llama import (
+    LlamaModel,
 )
 from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
@@ -76,12 +76,10 @@ class GlmConfig(PretrainedConfig):
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
-        rope_scaling={"rope_type": "linear", "factor": 1.,},
         pad_token_id=151329,
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         head_dim=128,
-        partial_rotary_factor=0.5,
         attention_bias=True,
         linear_bias=False,
         **kwargs,
@@ -112,19 +110,17 @@ class GlmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.head_dim = head_dim
-        self.partial_rotary_factor = partial_rotary_factor
         self.attention_bias = attention_bias
         self.linear_bias = linear_bias
 
 
 
-class GlmRMSNorm(LlamaRMSNorm):
+class GlmRMSNorm(Phi3RMSNorm):
     pass
 
 
-class GlmRotaryEmbedding(LlamaRotaryEmbedding):
+class GlmRotaryEmbedding(Phi3RotaryEmbedding):
     pass
 
 
@@ -436,7 +432,7 @@ GLM_ATTENTION_CLASSES = {
 }
 
 
-class GlmDecoderLayer(Phi3DecoderLayer):
+class GlmDecoderLayer(nn.Module):
 
     def __init__(self, config: GlmConfig, layer_idx: int):
         super().__init__()
@@ -529,9 +525,9 @@ class GlmModel(LlamaModel):
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        norm_func = GlmRMSNorm if config.use_rms_norm else nn.LayerNorm
-        self.norm = norm_func(config.hidden_size, eps=config.rms_norm_eps) if config.post_layer_norm else nn.Identity()
-        self.rotary_emb = GlmRotaryEmbedding(config=config)
+        norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_rms_norm else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = norm if config.post_layer_norm else nn.Identity()
+        self.rotary_emb = GlmRotaryEmbedding(dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
