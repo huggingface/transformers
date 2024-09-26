@@ -218,6 +218,7 @@ class PipelineTesterMixin:
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
         # `run_pipeline_test`.
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
+
         for tokenizer_name in tokenizer_names:
             for processor_name in processor_names:
                 if self.is_pipeline_test_to_skip(
