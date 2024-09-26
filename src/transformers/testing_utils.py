@@ -31,18 +31,14 @@ import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import fields
 from functools import wraps
-from inspect import isclass
 from io import StringIO
 from pathlib import Path
-from textwrap import dedent
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union, get_args
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
 import urllib3
-from huggingface_hub.inference._generated import types as inference_specs
 
 from transformers import logging as transformers_logging
 
@@ -2614,87 +2610,3 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
-
-
-def get_arg_names_from_hub_spec(hub_spec, first_level=True):
-    # This util is used in pipeline tests, to verify that a pipeline's documented arguments
-    # match the Hub specification for that task
-    arg_names = []
-    for field in fields(hub_spec):
-        # First, recurse into nested fields
-        if first_level and isclass(field.type) and issubclass(field.type, inference_specs.BaseInferenceType):
-            arg_names.extend(get_arg_names_from_hub_spec(field.type, first_level=False))
-            continue
-        # Next, catch nested fields that are part of a Union[], which is usually caused by Optional[]
-        for param_type in get_args(field.type):
-            if first_level and isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
-                arg_names.extend(
-                    get_arg_names_from_hub_spec(param_type, first_level=False)
-                )  # Recurse into nested fields
-                break
-        else:
-            # Finally, this line triggers if it's not a nested field
-            arg_names.append(field.name)
-    return arg_names
-
-
-def parse_google_format_docstring_by_indentation(docstring):
-    # This util is used in pipeline tests, to extract the argument names from a google-format docstring
-    # to compare them against the Hub specification for that task
-    docstring = dedent(docstring)
-    lines_by_indent = [
-        (len(line) - len(line.lstrip()), line.strip()) for line in docstring.split("\n") if line.strip()
-    ]
-    args_lineno = None
-    args_indent = None
-    args_end = None
-    for lineno, (indent, line) in enumerate(lines_by_indent):
-        if line == "Args:":
-            args_lineno = lineno
-            args_indent = indent
-            continue
-        elif args_lineno is not None and indent == args_indent:
-            args_end = lineno
-            break
-    if args_lineno is None:
-        raise ValueError("No args block to parse!")
-    elif args_end is None:
-        args_block = lines_by_indent[args_lineno + 1 :]
-    else:
-        args_block = lines_by_indent[args_lineno + 1 : args_end]
-    outer_indent_level = min(line[0] for line in args_block)
-    outer_lines = [line for line in args_block if line[0] == outer_indent_level]
-    arg_names = [re.match(r"(\w+)\W", line[1]).group(1) for line in outer_lines]
-    return arg_names
-
-
-def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
-    docstring = inspect.getdoc(pipeline_class.__call__).strip()
-    docstring_args = set(parse_google_format_docstring_by_indentation(docstring))
-    js_args = set(get_arg_names_from_hub_spec(hub_spec))
-
-    # Special casing: We allow the name of this arg to differ
-    js_generate_args = [js_arg for js_arg in js_args if js_arg.startswith("generate")]
-    docstring_generate_args = [
-        docstring_arg for docstring_arg in docstring_args if docstring_arg.startswith("generate")
-    ]
-    if (
-        len(js_generate_args) == 1
-        and len(docstring_generate_args) == 1
-        and js_generate_args != docstring_generate_args
-    ):
-        js_args.remove(js_generate_args[0])
-        docstring_args.remove(docstring_generate_args[0])
-
-    if js_args != docstring_args:
-        error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]
-        matching_args = js_args & docstring_args
-        huggingface_js_only = js_args - docstring_args
-        transformers_only = docstring_args - js_args
-        if matching_args:
-            error.append(f"Matching args: {matching_args}")
-        if huggingface_js_only:
-            error.append(f"Huggingface.js only: {huggingface_js_only}")
-        if transformers_only:
-            error.append(f"Transformers only: {transformers_only}")
-        raise ValueError("\n".join(error))
