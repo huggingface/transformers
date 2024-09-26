@@ -188,7 +188,6 @@ class PipelineTesterMixin:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
 
-
     def run_model_pipeline_tests(
         self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype="float32"
     ):
@@ -348,8 +347,6 @@ class PipelineTesterMixin:
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
-
-
 
     @is_pipeline_test
     def test_pipeline_audio_classification(self):
