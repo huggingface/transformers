@@ -96,6 +96,10 @@ pipeline_test_mapping = {
     "zero-shot-object-detection": {"test": ZeroShotObjectDetectionPipelineTests},
 }
 
+task_to_pipeline_and_spec_mapping = {
+    "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
+}
+
 for task, task_info in pipeline_test_mapping.items():
     test = task_info["test"]
     task_info["mapping"] = {
@@ -179,6 +183,11 @@ class PipelineTesterMixin:
             self.run_model_pipeline_tests(
                 task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype
             )
+
+        if task in task_to_pipeline_and_spec_mapping:
+            pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
+            compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
+
 
     def run_model_pipeline_tests(
         self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype="float32"
@@ -340,10 +349,11 @@ class PipelineTesterMixin:
 
         run_batch_test(pipeline, examples)
 
+
+
     @is_pipeline_test
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
-        compare_pipeline_args_to_hub_spec(AudioClassificationPipeline, AudioClassificationInput)
 
     @is_pipeline_test
     @require_torch
