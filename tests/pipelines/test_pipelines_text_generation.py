@@ -436,6 +436,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
             )
 
         with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_text=True)
+        with self.assertRaises(ValueError):
             outputs = text_generator("test", return_full_text=True, return_tensors=True)
         with self.assertRaises(ValueError):
             outputs = text_generator("test", return_text=True, return_tensors=True)
