@@ -47,15 +47,10 @@ class GlmConfig(PretrainedConfig):
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
-        rope_scaling={
-            "rope_type": "linear",
-            "factor": 1.0,
-        },
         pad_token_id=151329,
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         head_dim=128,
-        partial_rotary_factor=0.5,
         attention_bias=True,
         linear_bias=False,
         **kwargs,
@@ -86,8 +81,6 @@ class GlmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.head_dim = head_dim
-        self.partial_rotary_factor = partial_rotary_factor
         self.attention_bias = attention_bias
         self.linear_bias = linear_bias
