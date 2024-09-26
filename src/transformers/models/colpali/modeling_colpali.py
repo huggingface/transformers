@@ -604,18 +604,45 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ColPaliOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, *args, **kwargs) -> torch.Tensor:
-        # Delete output_hidden_states from kwargs
-        kwargs.pop("output_hidden_states", None)
-
-        outputs = self.model(*args, output_hidden_states=True, **kwargs)  # (batch_size, sequence_length, hidden_size)
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
+    ) -> torch.Tensor:
+        outputs = self.model(
+            input_ids,
+            pixel_values,
+            attention_mask,
+            position_ids,
+            past_key_values,
+            token_type_ids,
+            cache_position,
+            inputs_embeds,
+            labels,
+            use_cache,
+            output_attentions,
+            num_logits_to_keep,
+            output_hidden_states=True,
+        )
         last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         proj = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
-        proj = proj * kwargs["attention_mask"].unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        proj = proj * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return proj
 
