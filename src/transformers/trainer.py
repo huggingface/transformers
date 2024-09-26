@@ -2371,7 +2371,7 @@ class Trainer:
 
                 is_last_step = (step + 1) == steps_in_epoch
 
-                if ((step + 1) % args.gradient_accumulation_steps == 0 or is_last_step):
+                if (step + 1) % args.gradient_accumulation_steps == 0 or is_last_step:
                     # `is_last_step` case is not covered in accelerate, explicitly enable sync gradients to True.
                     if is_last_step:
                         self.accelerator.gradient_state._set_sync_gradients(True)
