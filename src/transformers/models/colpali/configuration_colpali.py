@@ -27,8 +27,8 @@ from ..paligemma import (
 
 class ColPaliConfig(PaliGemmaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ColPaliModel`]. It is used to instantiate an
-    ColPaliModel according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
+    ColPaliForRetrieval according to the specified arguments, defining the model architecture.
 
     The ColPali config is stricly equivalent to the PaliGemma config, but with a different model type.
 

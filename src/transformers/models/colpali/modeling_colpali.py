@@ -66,7 +66,7 @@ class ColPaliModelOutput(ModelOutput):
     Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
     """
 )
-class ColPaliModel(PaliGemmaPreTrainedModel):
+class ColPaliForRetrieval(PaliGemmaPreTrainedModel):
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
 
     def __init__(self, config: PaliGemmaConfig):
@@ -125,8 +125,6 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
     ) -> ColPaliModelOutput:
         r"""

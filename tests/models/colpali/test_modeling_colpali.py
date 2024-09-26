@@ -20,7 +20,7 @@ import pytest
 import torch
 from PIL import Image
 
-from transformers.models.colpali import ColPaliModel, ColPaliProcessor
+from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
 from transformers.models.colpali.processing_colpali import get_torch_device
 
 
@@ -30,13 +30,13 @@ def colpali_model_path() -> str:
 
 
 @pytest.fixture(scope="module")
-def colpali_from_pretrained(colpali_model_path: str) -> Generator[ColPaliModel, None, None]:
+def colpali_from_pretrained(colpali_model_path: str) -> Generator[ColPaliForRetrieval, None, None]:
     device = get_torch_device("auto")
     print(f"Device used: {device}")
 
     yield cast(
-        ColPaliModel,
-        ColPaliModel.from_pretrained(
+        ColPaliForRetrieval,
+        ColPaliForRetrieval.from_pretrained(
             colpali_model_path,
             torch_dtype=torch.bfloat16,
             device_map="cpu",
@@ -50,13 +50,13 @@ def processor() -> Generator[ColPaliProcessor, None, None]:
 
 
 @pytest.mark.slow
-def test_load_colpali_from_pretrained(colpali_from_pretrained: ColPaliModel):
-    assert isinstance(colpali_from_pretrained, ColPaliModel)
+def test_load_colpali_from_pretrained(colpali_from_pretrained: ColPaliForRetrieval):
+    assert isinstance(colpali_from_pretrained, ColPaliForRetrieval)
 
 
 @pytest.mark.slow
 def test_colpali_forward_images(
-    colpali_from_pretrained: ColPaliModel,
+    colpali_from_pretrained: ColPaliForRetrieval,
     processor: ColPaliProcessor,
 ):
     # Create a batch of dummy images
@@ -82,7 +82,7 @@ def test_colpali_forward_images(
 
 @pytest.mark.slow
 def test_colpali_forward_queries(
-    colpali_from_pretrained: ColPaliModel,
+    colpali_from_pretrained: ColPaliForRetrieval,
     processor: ColPaliProcessor,
 ):
     queries = [

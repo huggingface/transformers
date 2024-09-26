@@ -41,7 +41,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] ColPaliProcessor
 
-## ColPaliModel
+## ColPaliForRetrieval
 
-[[autodoc]] ColPaliModel
+[[autodoc]] ColPaliForRetrieval
     - forward
