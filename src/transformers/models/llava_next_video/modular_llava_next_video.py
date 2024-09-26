@@ -484,17 +484,31 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         # TODO: @raushan retain only the new behavior after v4.47
         else:
             if image_features is not None:
-                special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                )
-                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+                n_image_features = image_features.shape[0]
+                if n_image_tokens == n_image_features:
+                    special_image_mask = (
+                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+                else:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
             if video_features is not None:
-                special_image_mask = (
-                    (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                )
-                video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_features = video_features.shape[0]
+                if n_video_tokens == n_video_features:
+                    special_image_mask = (
+                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+                else:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
