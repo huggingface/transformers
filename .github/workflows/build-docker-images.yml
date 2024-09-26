@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - build_py39_docker
+      - flex_attn_example
   repository_dispatch:
   workflow_call:
     inputs:
