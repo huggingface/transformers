@@ -1608,10 +1608,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
-        warnings.warn(
-            "The `clean_up_tokenization_spaces` argument will soon be deprecated. It currently defaults to False if not passed.",
-            FutureWarning,
-        )
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
