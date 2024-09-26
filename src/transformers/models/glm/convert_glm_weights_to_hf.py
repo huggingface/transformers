@@ -13,7 +13,7 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 STATE_DICT_MAPPING = {
     "transformer.output_layer.": "lm_head.",
     "transformer.": "model.",
-    ".embedding.word_embeddings": ".embed_tokens.",
+    ".embedding.word_embeddings.": ".embed_tokens.",
     ".encoder.norm.": ".norm.",
     ".encoder.layers.": ".layers.",
     "final_layernorm.": "norm.",
