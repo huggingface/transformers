@@ -98,17 +98,37 @@ class ColPaliOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
-COLPALI_START_DOCSTRING = r"""
+@add_start_docstrings(
+    """
     ColPali is a PaliGemma variant to produce multi-vector representations from images.
     It was introduced in the paper [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449).
 
-    ### Resources
+    Resources:
     - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 🌎
     - The training codebase for ColPali can be found [here](https://github.com/illuin-tech/colpali). 🌎
-"""
 
-COLPALI_INPUTS_DOCSTRING = r"""
-    Args:
+    Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
+    """
+)
+class ColPaliModel(PaliGemmaPreTrainedModel):
+    main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
+
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__(config=config)
+
+        model = PaliGemmaForConditionalGeneration(config=config)
+        if model.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"model.language_model.{k}" for k in model.language_model._tied_weights_keys]
+        self.model = model
+
+        self.dim = 128
+        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.dim)
+
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(
+        """
+        Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -133,30 +153,8 @@ COLPALI_INPUTS_DOCSTRING = r"""
             information on the default strategy.
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-"""
-
-
-@add_start_docstrings(
-    COLPALI_START_DOCSTRING,
-    "Adapter from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.",
-)
-class ColPaliModel(PaliGemmaPreTrainedModel):
-    main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
-
-    def __init__(self, config: PaliGemmaConfig):
-        super().__init__(config=config)
-
-        model = PaliGemmaForConditionalGeneration(config=config)
-        if model.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in model.language_model._tied_weights_keys]
-        self.model = model
-
-        self.dim = 128
-        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.dim)
-
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
+        """
+    )
     @replace_return_docstrings(output_type=ColPaliOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
