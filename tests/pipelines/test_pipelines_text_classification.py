@@ -21,7 +21,6 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
-    compare_pipeline_args_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -32,7 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from huggingface_hub.inference._generated.types import TextClassificationInput
 
 from .test_pipelines_common import ANY
 
@@ -236,7 +234,3 @@ class TextClassificationPipelineTests(unittest.TestCase):
             [{"label": ANY(str), "score": ANY(float)}],
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
-
-    def test_hub_spec_compliance(self):
-        compare_pipeline_args_to_hub_spec(TextClassificationPipeline, TextClassificationInput)
-        raise ValueError("Checking if test actually running in CI")

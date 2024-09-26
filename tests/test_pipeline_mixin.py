@@ -20,7 +20,11 @@ import random
 import unittest
 from pathlib import Path
 
+from huggingface_hub.inference._generated.types import AudioClassificationInput
+
+from transformers.pipelines import AudioClassificationPipeline
 from transformers.testing_utils import (
+    compare_pipeline_args_to_hub_spec,
     is_pipeline_test,
     require_decord,
     require_pytesseract,
@@ -339,6 +343,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
+        compare_pipeline_args_to_hub_spec(AudioClassificationPipeline, AudioClassificationInput)
 
     @is_pipeline_test
     @require_torch

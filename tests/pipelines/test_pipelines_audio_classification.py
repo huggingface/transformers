@@ -15,12 +15,10 @@
 import unittest
 
 import numpy as np
-from huggingface_hub.inference._generated.types import AudioClassificationInput
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
-    compare_pipeline_args_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -110,10 +108,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         audio_dict = {"array": np.ones((8000,)), "sampling_rate": audio_classifier.feature_extractor.sampling_rate}
         output = audio_classifier(audio_dict, top_k=4)
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
-
-    def test_hub_spec_compliance(self):
-        compare_pipeline_args_to_hub_spec(AudioClassificationPipeline, AudioClassificationInput)
-        raise ValueError("Checking if test actually running in CI")
 
     @require_torch
     @slow
