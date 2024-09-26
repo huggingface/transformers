@@ -108,6 +108,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
 
         # Set eos in assistant same as in target model
         self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
@@ -157,12 +158,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
-
-        # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
-        # greedily to maximize matches. Disables sampling-related flags to prevent warnings
-        self.generation_config.do_sample = False
-        for attr in ("temperature", "top_p", "min_p", "typical_p", "top_k", "epsilon_cutoff", "eta_cutoff"):
-            setattr(self.generation_config, attr, None)
+        self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
+        # this flag allow us set the confidence stopping criteria for assistant model generation.
+        self.generation_config.is_assistant = True
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
@@ -400,12 +398,15 @@ def _crop_past_key_values(model, past_key_values, max_length):
         past_key_values.crop(max_length)
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
+            if past_key_values[idx] != ([], []):
+                new_past.append(
+                    (
+                        past_key_values[idx][0][:, :, :max_length, :],
+                        past_key_values[idx][1][:, :, :max_length, :],
+                    )
                 )
-            )
+            else:
+                new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
         past_key_values = tuple(new_past)
     return past_key_values
 

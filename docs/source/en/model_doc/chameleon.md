@@ -78,7 +78,7 @@ url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(prompt, image, return_tensors="pt").to(model.device)
+inputs = processor(prompt, image, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
@@ -128,7 +128,17 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
+
+<Tip>
+
+bitsandbytes is being refactored to support multiple backends beyond CUDA. Currently, ROCm (AMD GPU) and Intel CPU implementations are mature, with Intel XPU in progress and Apple Silicon support expected by Q4/Q1. For installation instructions and the latest backend updates, visit [this link](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend).
+
+We value your feedback to help identify bugs before the full release! Check out [these docs](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends) for more details and feedback links.
+
+</Tip>
+
+Simply change the snippet above with:
 
 ```python
 from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig

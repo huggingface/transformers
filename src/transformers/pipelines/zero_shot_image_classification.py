@@ -86,12 +86,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 - An image loaded in PIL directly
 
             candidate_labels (`List[str]`):
-                The candidate labels for this image
+                The candidate labels for this image. They will be formatted using *hypothesis_template*.
 
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
-                The sentence used in cunjunction with *candidate_labels* to attempt the image classification by
-                replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
-                logits_per_image
+                The format used in conjunction with *candidate_labels* to attempt the image classification by
+                replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
+                already formatted.
 
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
@@ -101,11 +101,11 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 Additional dictionary of keyword arguments passed along to the tokenizer.
 
         Return:
-            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
+            A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
-
-            - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
-            - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
+            - **label** (`str`) -- One of the suggested *candidate_labels*.
+            - **score** (`float`) -- The score attributed by the model to that label. It is a value between
+                0 and 1, computed as the `softmax` of `logits_per_image`.
         """
         return super().__call__(images, **kwargs)
 
