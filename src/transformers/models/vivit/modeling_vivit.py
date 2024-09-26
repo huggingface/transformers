@@ -226,6 +226,38 @@ class VivitSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Vivit
+class VivitSdpaSelfAttention(VivitSelfAttention):
+    def __init__(self, config: VivitConfig) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vivit
 class VivitSelfOutput(nn.Module):
     """
@@ -285,6 +317,13 @@ class VivitAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Vivit
+class VivitSdpaAttention(VivitAttention):
+    def __init__(self, config: VivitConfig) -> None:
+        super().__init__(config)
+        self.attention = VivitSdpaSelfAttention(config)
+
+
 class VivitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -319,6 +358,12 @@ class VivitOutput(nn.Module):
         return hidden_states
 
 
+VIVIT_ATTENTION_CLASSES = {
+    "eager": VivitAttention,
+    "sdpa": VivitSdpaAttention,
+}
+
+
 class VivitLayer(nn.Module):
     """This corresponds to the EncoderBlock class in the scenic/vivit implementation."""
 
@@ -326,7 +371,7 @@ class VivitLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = VivitAttention(config)
+        self.attention = VIVIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = VivitIntermediate(config)
         self.output = VivitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -435,6 +480,7 @@ class VivitPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
