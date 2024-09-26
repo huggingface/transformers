@@ -4,7 +4,12 @@ name: Slow CI Reminder
 on:
   pull_request_target:
     paths:
-      - '**.py'
+      - "src/transformers/models/*/*.py"
+      - "src/transformers/generation/*.py"
+      - "src/transformers/pipelines/*.py"
+      - "tests/models/*/*.py"
+      - "tests/generation/*/*.py"
+      - "tests/pipelines/*/*.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
