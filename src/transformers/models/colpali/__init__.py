@@ -41,10 +41,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_colpali import (
-            ColPaliModel,
-            ColPaliPreTrainedModel,
-        )
+        from .modeling_colpali import ColPaliModel
         from .processing_colpali import ColPaliProcessor
 
 
