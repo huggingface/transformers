@@ -139,7 +139,7 @@ def convert_glm_model(input_dir, output_dir):
     original_state_dict = merge_safetensors(input_dir)
     new_dict = convert_state_dict(original_state_dict)
     with torch.device("meta"):
-        model = GlmForCausalLM.from_config(config)
+        model = GlmForCausalLM(config)
     model.load_state_dict(new_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
 
