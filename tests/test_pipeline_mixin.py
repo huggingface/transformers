@@ -190,7 +190,6 @@ class PipelineTesterMixin:
             self.run_model_pipeline_tests(
                 task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype
             )
-
         if task in task_to_pipeline_and_spec_mapping:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
@@ -219,7 +218,6 @@ class PipelineTesterMixin:
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
         # `run_pipeline_test`.
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
-
         for tokenizer_name in tokenizer_names:
             for processor_name in processor_names:
                 if self.is_pipeline_test_to_skip(
