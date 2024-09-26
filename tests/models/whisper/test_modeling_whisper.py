@@ -34,10 +34,12 @@ from transformers.testing_utils import (
     is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
+    require_non_xpu,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torchaudio,
     slow,
     torch_device,
@@ -409,9 +411,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
-        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample, config=config)
         logits_processor_kwargs["temperature"] = 0.0
         return logits_processor_kwargs
 
@@ -496,19 +498,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
-
-    def _get_input_ids_and_config(self, batch_size=3):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size=batch_size
-        input_ids = input_ids[:batch_size, :, :]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-
-        return config, input_ids, None
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -878,26 +867,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip
     def test_generate_without_input_ids(self):
         pass
-
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + generation_config.decoder_start_token_id
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, mel, seq_length = input_ids.shape
@@ -2625,6 +2594,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(prompt in text)
 
+    @require_non_xpu
     @slow
     @require_torch_gpu
     def test_speculative_decoding_distil(self):
@@ -3252,7 +3222,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_whisper_empty_longform(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3291,7 +3261,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_whisper_empty_longform_multi_gpu(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3903,13 +3873,6 @@ class WhisperStandaloneDecoderModelTester:
         inputs_dict["input_ids"][:, -1] = self.pad_token_id
 
         return config, inputs_dict
-
-    def prepare_config_and_inputs_for_decoder(self):
-        config, input_features = self.prepare_config_and_inputs()
-        input_ids = input_features["input_ids"]
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-
-        return (config, input_ids, encoder_hidden_states)
 
     def create_and_check_decoder_model_past(self, config, input_ids):
         config.use_cache = True
