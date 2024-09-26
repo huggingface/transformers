@@ -295,6 +295,7 @@ def evaluation_loop(
 
         metric.update(predictions, target)
 
+    metric.to(accelerator.device)
     metrics = metric.compute()
 
     # Replace list of per class metrics with separate metric for each class
@@ -635,7 +636,7 @@ def main():
         processor=processor,
         id2label=id2label,
         label2id=label2id,
-        random_text_prompt=True,
+        random_text_prompt=False,
     )
 
     with accelerator.main_process_first():
