@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
@@ -375,6 +376,7 @@ class PhimoeAttention(nn.Module):
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
+                config=self.config,
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
@@ -1359,7 +1361,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         )
 
 
-class PhimoeForCausalLM(PhimoePreTrainedModel):
+class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
