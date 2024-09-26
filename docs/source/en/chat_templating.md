@@ -196,7 +196,7 @@ Not all models require generation prompts. Some models, like LLaMA, don't have a
 special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
 effect that `add_generation_prompt` has will depend on the template being used.
 
-## What does "continue_last_message" do?
+## What does "continue_final_message" do?
 
 When passing a list of messages to `apply_chat_template` or `TextGenerationPipeline`, you can choose
 to format the chat so the model will continue the final message in the chat instead of starting a new one. This is done
@@ -211,7 +211,7 @@ chat = [
     {"role": "assistant", "content": '{"name": "'},
 ]
 
-formatted_chat = tokenizer.apply_chat_template(chat, tokenize=True, return_dict=True, continue_last_message=True)
+formatted_chat = tokenizer.apply_chat_template(chat, tokenize=True, return_dict=True, continue_final_message=True)
 model.generate(**formatted_chat)
 ```
 
@@ -219,7 +219,7 @@ The model will generate text that continues the JSON string, rather than startin
 can be very useful for improving the accuracy of the model's instruction-following when you know how you want
 it to start its replies.
 
-Because `add_generation_prompt` adds the tokens that start a new message, and `continue_last_message` removes any
+Because `add_generation_prompt` adds the tokens that start a new message, and `continue_final_message` removes any
 end-of-message tokens from the final message, it does not make sense to use them together. As a result, you'll
 get an error if you try!
 
@@ -228,7 +228,7 @@ get an error if you try!
 The default behaviour of `TextGenerationPipeline` is to set `add_generation_prompt=True` so that it starts a new
 message. However, if the final message in the input chat has the "assistant" role, it will assume that this message is 
 a prefill and switch to `continue_final_message=True` instead, because most models do not support multiple 
-consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_last_message` 
+consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_final_message` 
 argument when calling the pipeline.
 
 </Tip>
@@ -441,6 +441,12 @@ tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
+<Tip warning={true}>
+
+If you're familiar with the OpenAI API, you should pay attention to an important difference here - the `tool_call` is
+a dict, but in the OpenAI API it's a JSON string. Passing a string may cause errors or strange model behaviour!
+
+</Tip>
 
 Now that we've added the tool call to the conversation, we can call the function and append the result to the
 conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
@@ -610,21 +616,64 @@ than the JSON schemas used for tools, no helper functions are necessary.
 Here's an example of a RAG template in action:
 
 ```python
-document1 = {
-    "title": "The Moon: Our Age-Old Foe",
-    "contents": "Man has always dreamed of destroying the moon. In this essay, I shall..."
-}
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-document2 = {
-    "title": "The Sun: Our Age-Old Friend",
-    "contents": "Although often underappreciated, the sun provides several notable benefits..."
-}
+# Load the model and tokenizer
+model_id = "CohereForAI/c4ai-command-r-v01-4bit"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+device = model.device # Get the device the model is loaded on
 
-model_input = tokenizer.apply_chat_template(
-    messages,
-    documents=[document1, document2]
-)
+# Define conversation input
+conversation = [
+    {"role": "user", "content": "What has Man always dreamed of?"}
+]
+
+# Define documents for retrieval-based generation
+documents = [
+    {
+        "title": "The Moon: Our Age-Old Foe", 
+        "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
+    },
+    {
+        "title": "The Sun: Our Age-Old Friend",
+        "text": "Although often underappreciated, the sun provides several notable benefits..."
+    }
+]
+
+# Tokenize conversation and documents using a RAG template, returning PyTorch tensors.
+input_ids = tokenizer.apply_chat_template(
+    conversation=conversation,
+    documents=documents,
+    chat_template="rag",
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt").to(device)
+
+# Generate a response 
+gen_tokens = model.generate(
+    input_ids,
+    max_new_tokens=100,
+    do_sample=True,
+    temperature=0.3,
+    )
+
+# Decode and print the generated text along with generation prompt
+gen_text = tokenizer.decode(gen_tokens[0])
+print(gen_text)
 ```
+
+<Tip>
+
+The `documents` input for retrieval-augmented generation is not widely supported, and many models have chat templates which simply ignore this input.
+
+To verify if a model supports the `documents` input, you can read its model card, or `print(tokenizer.chat_template)` to see if the `documents` key is used anywhere.
+
+One model class that does support it, though, is Cohere's [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024), through their `rag` chat template. You can see additional examples of grounded generation using this feature in their model cards.
+
+</Tip>
+
+
 
 ## Advanced: How do chat templates work?
 
