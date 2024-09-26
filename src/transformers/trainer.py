@@ -402,7 +402,7 @@ class Trainer:
                     " summary statistics should be returned by the function."
                 )
         if args.eval_strategy is not None and args.eval_strategy != 'no' and eval_dataset is None:
-            raise ValueError("Trainer: evaluation requires an eval_dataset.")
+            raise  ValueError("Trainer: evaluation requires an eval_dataset.")
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
