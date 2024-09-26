@@ -113,6 +113,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     def test_hub_spec_compliance(self):
         compare_pipeline_args_to_hub_spec(AudioClassificationPipeline, AudioClassificationInput)
+        raise ValueError("Checking if test actually running in CI")
 
     @require_torch
     @slow
