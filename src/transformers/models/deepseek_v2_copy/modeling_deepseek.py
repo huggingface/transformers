@@ -443,6 +443,7 @@ class DeepseekV2MoE(nn.Module):
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.experts_per_rank = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
         self.experts = nn.ModuleList(
             [
                 DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)
@@ -457,24 +458,19 @@ class DeepseekV2MoE(nn.Module):
             )
 
     def forward(self, hidden_states):
+      
         identity = hidden_states
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
         selected_experts, routing_weights, router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        routing_weights = routing_weights.to(torch.float32)
-
-        final_hidden_states2 = torch.zeros(
+        final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim), dtype=torch.float32, device=hidden_states.device
         )
-
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.experts_per_rank).permute(2, 1, 0)
 
-        for expert_idx, num_tokens in enumerate(self.experts_per_rank):
-            if num_tokens == 0:
-                continue
-            
+        for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
             tokens_for_this_expert = hidden_states[None, top_x].reshape(-1, hidden_dim)
@@ -482,12 +478,12 @@ class DeepseekV2MoE(nn.Module):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.float32))
 
         
-        final_hidden_states = final_hidden_states2.reshape(batch_size, sequence_length, hidden_dim) 
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
         if self.config.n_shared_experts is not None:
             final_hidden_states = final_hidden_states + self.shared_experts(identity)
 
-        return final_hidden_states.to(torch.bfloat16), router_logits
+        return final_hidden_states.to(hidden_states.dtype), router_logits
 
 
 
