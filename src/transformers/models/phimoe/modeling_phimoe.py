@@ -388,6 +388,7 @@ class PhimoeAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    # copied from transformers.models.mixtral.modeling_mixtral.MixtralAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -774,6 +775,7 @@ class MultiplierProcessor(torch.autograd.Function):
 def sparsemixer(scores, top_k, jitter_eps, training):
     """
     Sparse mixer function to select top-k experts and compute multipliers.
+    Based on the paper: https://arxiv.org/pdf/2409.12136
 
     Args:
         scores (torch.Tensor): Input scores tensor.
@@ -979,6 +981,7 @@ class PhimoeDecoderLayer(nn.Module):
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
         )
 
+    # copied from transformers.models.mixtral.modeling_mixtral.MixtralDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
