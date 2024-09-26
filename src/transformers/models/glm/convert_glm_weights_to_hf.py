@@ -91,7 +91,7 @@ def convert_config(original_config: dict):
         else original_config.pop("multi_query_group_num"),
         resid_pdrop=original_config.pop("hidden_dropout"),
         attention_dropout=original_config.pop("attention_dropout"),
-        max_position_embeddings=original_config.pop("max_position_embeddings"),
+        max_position_embeddings=original_config.pop("seq_length"),
         initializer_range=original_config.pop("initializer_range"),
         rms_norm_eps=original_config.pop("layernorm_epsilon"),
         rope_theta=10000.0 * original_config.pop("rope_ratio"),
