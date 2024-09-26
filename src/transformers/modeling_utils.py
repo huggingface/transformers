@@ -1647,6 +1647,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
         for base in cls.__bases__:
+            if not hasattr(base, "can_generate"):
+                continue
             if "PreTrainedModel" not in str(base) and base.can_generate():
                 return True
         # BC: Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
