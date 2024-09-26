@@ -186,7 +186,7 @@ If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further 
 
 If you have access to an Ampere or newer hardware you can use bf16 for mixed precision training and evaluation. While 
 bf16 has a worse precision than fp16, it has a much bigger dynamic range. In fp16 the biggest number you can have 
-is `65535` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
+is `65504` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
 is about the same as fp32 - because both have 8-bits used for the numerical range.
 
 You can enable BF16 in the 🤗 Trainer with:
