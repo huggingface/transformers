@@ -24,21 +24,49 @@ from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import (
     AddedToken,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType
 
 
 logger = logging.getLogger(__name__)
 
 IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+
+
+# Copied from transformers.models.paligemma.processing_paligemma.PaliGemmaTextKwargs
+class PaliGemmaTextKwargs(TextKwargs):
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+
+
+# Copied from transformers.models.paligemma.processing_paligemma.PaliGemmaImagesKwargs
+class PaliGemmaImagesKwargs(ImagesKwargs):
+    do_convert_rgb: Optional[bool]
+
+
+# Copied from transformers.models.paligemma.processing_paligemma.PaliGemmaProcessorKwargs
+class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: PaliGemmaTextKwargs
+    images_kwargs: PaliGemmaImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
 
 
 # Copied from transformers.models.paligemma.processing_paligemma.is_url
