@@ -83,7 +83,7 @@ def get_torch_device(device: str = "auto") -> str:
 
 
 @dataclass
-class ColPaliOutput(ModelOutput):
+class ColPaliModelOutput(ModelOutput):
     """
     Base class for ColPali embeddings output.
 
@@ -93,7 +93,6 @@ class ColPaliOutput(ModelOutput):
     """
 
     embeddings: torch.Tensor
-    loss: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -153,7 +152,7 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
             - 0 indicates the head is **masked**.
         """
     )
-    @replace_return_docstrings(output_type=ColPaliOutput, config_class="ColPaliConfig")
+    @replace_return_docstrings(output_type=ColPaliModelOutput, config_class="ColPaliConfig")
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -170,7 +169,10 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
-    ) -> torch.Tensor:
+    ) -> ColPaliModelOutput:
+        r"""
+        Returns:
+        """
         outputs = self.model(
             input_ids,
             pixel_values,
@@ -194,7 +196,7 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
 
         proj = proj * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return proj
+        return ColPaliModelOutput(embeddings=proj)
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()
