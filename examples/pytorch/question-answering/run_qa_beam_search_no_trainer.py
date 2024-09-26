@@ -879,7 +879,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     accelerator.save_state(f"step_{completed_steps}")
 
             if completed_steps >= args.max_train_steps:

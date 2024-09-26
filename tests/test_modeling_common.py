@@ -4824,6 +4824,27 @@ class ModelTesterMixin:
         self.assertTrue(record_time < 0.15 * graph_warmup_time)
         self.assertTrue(opt_time < record_time)
 
+    def test_forward_with_num_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            batch_size, sequence_length = inputs["input_ids"].shape
+            vocab_size = config.vocab_size
+            model = model_class(config).to(device=torch_device).eval()
+
+            # num_logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, num_logits_to_keep=0).logits
+            last_token_logits = model(**inputs, num_logits_to_keep=1).logits
+
+            # Assert all shapes are correct
+            self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))
+            self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
+
+            # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
+            self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+
 
 global_rng = random.Random()
 

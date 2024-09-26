@@ -142,6 +142,7 @@ _quanto_available = _is_package_available("quanto")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
+_uroman_available = _is_package_available("uroman")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
@@ -177,6 +178,7 @@ _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
+_liger_kernel_available = _is_package_available("liger_kernel")
 
 
 _torch_version = "N/A"
@@ -1106,6 +1108,10 @@ def is_phonemizer_available():
     return _phonemizer_available
 
 
+def is_uroman_available():
+    return _uroman_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -1162,6 +1168,13 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_liger_kernel_available():
+    if not _liger_kernel_available:
+        return False
+
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
 
 
 # docstyle-ignore
@@ -1375,6 +1388,11 @@ PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
 `pip install phonemizer`. Please note that you may need to restart your runtime after installation.
 """
+# docstyle-ignore
+UROMAN_IMPORT_ERROR = """
+{0} requires the uroman library but it was not found in your environment. You can install it with pip:
+`pip install uroman`. Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -1515,6 +1533,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
+        ("uroman", (is_uroman_available, UROMAN_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
         ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
