@@ -66,7 +66,6 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
-    AssistantConfig,
     GenerationConfig,
     GenerationMode,
 )
@@ -690,7 +689,6 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         target_tokenizer: AutoTokenizer,
         assistant_tokenizer: AutoTokenizer,
-        # assistant_config: AssistantConfig,
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
@@ -719,7 +717,6 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
-                # assistant_config=assistant_config,
                 target_tokenizer=target_tokenizer,
                 assistant_tokenizer=assistant_tokenizer,
             )
@@ -1718,6 +1715,8 @@ class GenerationMixin:
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        target_tokenizer: Optional[AutoTokenizer] = None,
+        assistant_tokenizer: Optional[AutoTokenizer] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1806,11 +1805,8 @@ class GenerationMixin:
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-    
-        assistant_config = generation_config.assistant_config if hasattr(generation_config, "assistant_config") else None
         self._validate_assistant(assistant_model, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
@@ -1990,8 +1986,7 @@ class GenerationMixin:
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
                 assistant_tokenizer=assistant_tokenizer,
-                target_tokenizer=tokenizer,
-                # assistant_config=assistant_config, 
+                target_tokenizer=target_tokenizer,
                 model_kwargs=model_kwargs,
             )
 
