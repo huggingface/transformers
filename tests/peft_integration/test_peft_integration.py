@@ -510,7 +510,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                         peft_config=peft_config,
                         low_cpu_mem_usage=True,
                     )
-                    # after lodaing, no meta device should be remaining
+                    # after loading, no meta device should be remaining
                     self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
                 else:
                     err_msg = r"The version of PEFT you are using does not support `low_cpu_mem_usage` yet"
