@@ -3,7 +3,7 @@ import json
 import os
 
 import torch
-from safetensors.torch import load_file as safe_load_file
+from safetensors.torch import save_file, load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 
 from transformers import AutoTokenizer, GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
@@ -58,11 +58,13 @@ def merge_safetensors(input_dir: str):
     all_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
     all_files = sorted(all_files, key=lambda x: int(x.split("-", 2)[1]))
 
-    output_path = os.path.join(input_dir, "consolidated.safetensors")
-    with open(output_path, "wb") as f_out:
-        for filepath in all_files:
-            with open(filepath, "rb") as f_in:
-                f_out.write(f_in.read())
+    all_weights = {}
+    for file in all_files:
+        tensors = load_file(file)
+        all_weights.update(tensors)
+    
+    return all_weights
+    
 
 
 def convert_state_dict(original_state_dict: dict):
@@ -104,7 +106,7 @@ def convert_config(original_config: dict):
         attention_bias=original_config.pop("add_qkv_bias"),
         linear_bias=original_config.pop("add_bias_linear"),
         eos_token_id=original_config.pop("eos_token_id"),
-        pad_token_id=original_config["pad_token_id"],
+        pad_token_id=original_config.pop("pad_token_id"),
     )
     print(f"Unused config keys: {original_config.keys(),}")
     return new_config
@@ -134,8 +136,7 @@ def convert_glm_model(input_dir, output_dir):
     config.save_pretrained(output_dir)
 
     # Load and convert weights
-    merge_safetensors(input_dir)
-    original_state_dict = safe_load_file(os.path.join(input_dir, "consolidated.safetensors"))
+    original_state_dict = merge_safetensors(input_dir)
     new_dict = convert_state_dict(original_state_dict)
     with torch.device("meta"):
         model = GlmForCausalLM.from_config(config)
