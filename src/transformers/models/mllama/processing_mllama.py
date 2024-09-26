@@ -300,14 +300,19 @@ class MllamaProcessor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
         if text is not None:
-            if any(batch_img == 0 for batch_img in n_images_in_text) and not all(batch_img == 0 for batch_img in n_images_in_text):
+            if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
+                batch_img == 0 for batch_img in n_images_in_text
+            ):
                 raise ValueError(
                     "If a batch of text is provided, there should be either no images or at least one image per sample"
                 )
             if sum(n_images_in_images) != sum(n_images_in_text):
-                raise ValueError(
-                    f"The number of image token ({sum(n_images_in_images)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
-                )
+                if images is None:
+                    raise ValueError("No image were provided, but there are image tokens in the prompt")
+                else:
+                    raise ValueError(
+                        f"The number of image token ({sum(n_images_in_images)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
+                    )
 
         if images is not None:
             image_features = self.image_processor(images, **images_kwargs)

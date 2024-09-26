@@ -15,10 +15,12 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import MllamaProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
-import numpy as np
+
 
 if is_vision_available():
     from PIL import Image
@@ -288,10 +290,8 @@ class MllamaProcessorTest(unittest.TestCase):
             "In this other sentence we try some good things<|image|>",
         ]
         images = [[self.image1], [self.image2]]
-        inputs = self.processor(text=text, images=None, padding=True)
-
+        inputs = self.processor(text=text, images=images, padding=True)
 
         images = [[self.image1, self.image2], []]
         with self.assertRaises(ValueError):
             self.processor(text=text, images=None, padding=True)
-
