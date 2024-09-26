@@ -1,18 +1,3 @@
-# coding=utf-8
-# Copyright 2024 NetEase, Inc. and the HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -135,8 +120,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
         mask = 3 << (2 * i)
         unpacked[start:end] = (packed & mask) >> (2 * i)
 
-    unpacked = unpacked.to(dtype) - 1
-    return unpacked.to(dtype)
+    return unpacked.to(dtype) - 1
 
 
 class BitLinear(nn.Module):
@@ -165,7 +149,7 @@ class BitLinear(nn.Module):
             self.bias = None
 
     @torch.compile
-    def activation_quant(self, x, num_bits=8):
+    def activation_quant(self, input, num_bits=8):
         """
         Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
@@ -179,26 +163,26 @@ class BitLinear(nn.Module):
         --------
         result : torch.Tensor
             Quantized activation tensor, with values mapped to an `int8` range.
-        s : torch.Tensor
+        scale : torch.Tensor
             The per-channel scaling factors used to quantize the tensor.
         """
         Qn = -(2 ** (num_bits - 1))
         Qp = 2 ** (num_bits - 1) - 1
-        s = Qp / x.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
-        result = (x * s).round().clamp(Qn, Qp)
-        return result.to(torch.int8), s
+        scale = Qp / input.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
+        result = (input * scale).round().clamp(Qn, Qp)
+        return result.to(torch.int8), scale
 
     @torch.compile
-    def post_quant_process(self, input, si, sw):
-        out = input / (si * sw)
+    def post_quant_process(self, input, input_scale, weight_scale):
+        out = input / (input_scale * weight_scale)
         return out
 
-    def forward(self, x):
+    def forward(self, input):
         w = self.weight
         w_quant = unpack_weights(w, dtype=self.dtype)
-        x_quant, x_scale = self.activation_quant(x)
-        y = F.linear(x_quant.to(self.dtype), w_quant)
-        y = self.post_quant_process(y, self.weight_scale, x_scale)
+        input_quant, input_scale = self.activation_quant(input)
+        y = F.linear(input_quant.to(self.dtype), w_quant)
+        y = self.post_quant_process(y, self.weight_scale, input_scale)
         if self.bias is not None:
             y += self.bias.view(1, -1).expand_as(y)
         return y

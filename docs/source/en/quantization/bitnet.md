@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # BitNet
 
-[BitNet](https://arxiv.org/abs/2402.17764) replaces traditional Linear layers in Multi-Head Attention and Feed-Forward Networks with specialized layers called BitLinear with ternary (or binary in the older version) precision. The BitLinear layers introduce in this notebook quantize the weights using ternary precision (with values of -1, 0, and 1) and quantize the activations to 8-bit precision.
+[BitNet](https://arxiv.org/abs/2402.17764) replaces traditional Linear layers in Multi-Head Attention and Feed-Forward Networks with specialized layers called BitLinear with ternary (or binary in the older version) precision. The BitLinear layers introduced here quantize the weights using ternary precision (with values of -1, 0, and 1) and quantize the activations to 8-bit precision.
 
 
 <figure style="text-align: center;">
@@ -52,7 +52,7 @@ $$
 X_{dequantized} = X_q * scale_x
 $$
 
-To learn more about how we trained, and fine-tuned bitnet models checkout the blogpost [here](https://)
+To learn more about how we trained, and fine-tuned bitnet models checkout the blogpost [here](https://huggingface.co/blog/1_58_llm_extreme_quantization)
 
 ## Load a BitNet Model from the Hub
 BitNet models can't be quantized on the fly—they need to be pre-trained or fine-tuned with the quantization applied (it's a Quantization aware training technique). Once trained, these models are already quantized and available as packed versions on the hub.
@@ -69,3 +69,7 @@ model = AutoModelForCausalLM.from_pretrained(path, device_map="auto")
 If you're looking to pre-train or fine-tune your own 1.58-bit model using Nanotron, check out this [PR](https://github.com/huggingface/nanotron/pull/180), all you need to get started is there !
 
 For fine-tuning, you'll need to convert the model from Hugging Face format to Nanotron format (which has some differences). You can find the conversion steps in this [PR](https://github.com/huggingface/nanotron/pull/174).
+
+## Kernels
+
+In our initial version, we chose to use `@torch.compile` to unpack the weights and perform the forward pass. It’s very straightforward to implement and delivers significant speed improvements. We plan to integrate additional optimized kernels in future versions.
