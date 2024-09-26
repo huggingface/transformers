@@ -23,7 +23,7 @@ from numpy import load
 from transformers import (
     AutoTokenizer,
     ColPaliConfig,
-    ColPaliModel,
+    ColPaliForRetrieval,
     ColPaliProcessor,
     GemmaTokenizer,
     GemmaTokenizerFast,
@@ -255,13 +255,15 @@ def convert_colpali_checkpoint(
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
 
-        model = ColPaliModel(config).to(device).eval()
+        model = ColPaliForRetrieval(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
 
     else:
         processor = ColPaliProcessor.from_pretrained(pytorch_dump_folder_path)
-        model = ColPaliModel.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa").to(device).eval()
+        model = (
+            ColPaliForRetrieval.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa").to(device).eval()
+        )
     model.config.text_config._attn_implementation = "sdpa"
 
     # model expansion to get random embeds of image tokens

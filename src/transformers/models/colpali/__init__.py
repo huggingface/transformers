@@ -26,7 +26,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_colpali"] = [
-        "ColPaliModel",
+        "ColPaliForRetrieval",
         "ColPaliPreTrainedModel",
     ]
     _import_structure["processing_colpali"] = ["ColPaliProcessor"]
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_colpali import ColPaliModel
+        from .modeling_colpali import ColPaliForRetrieval
         from .processing_colpali import ColPaliProcessor
 
 

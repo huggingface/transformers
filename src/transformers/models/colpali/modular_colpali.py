@@ -45,8 +45,8 @@ logger = logging.get_logger(__name__)
 
 class ColPaliConfig(PaliGemmaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ColPaliModel`]. It is used to instantiate an
-    ColPaliModel according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
+    ColPaliForRetrieval according to the specified arguments, defining the model architecture.
 
     The ColPali config is stricly equivalent to the PaliGemma config, but with a different model type.
 
@@ -108,7 +108,7 @@ class ColPaliModelOutput(ModelOutput):
     Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
     """
 )
-class ColPaliModel(PaliGemmaPreTrainedModel):
+class ColPaliForRetrieval(PaliGemmaPreTrainedModel):
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
 
     def __init__(self, config: PaliGemmaConfig):

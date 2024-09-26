@@ -2202,7 +2202,7 @@ class CoherePreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ColPaliModel(metaclass=DummyObject):
+class ColPaliForRetrieval(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

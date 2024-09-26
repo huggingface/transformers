@@ -1760,7 +1760,7 @@ else:
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
     _import_structure["models.colpali"].extend(
         [
-            "ColPaliModel",
+            "ColPaliForRetrieval",
             "ColPaliProcessor",
         ]
     )
@@ -6627,7 +6627,7 @@ if TYPE_CHECKING:
             CoherePreTrainedModel,
         )
         from .models.colpali import (
-            ColPaliModel,
+            ColPaliForRetrieval,
             ColPaliProcessor,
         )
         from .models.conditional_detr import (
