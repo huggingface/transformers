@@ -55,8 +55,16 @@ class ColPaliOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    COLPALI_START_DOCSTRING,
-    "Adapter from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.",
+    """
+    ColPali is a PaliGemma variant to produce multi-vector representations from images.
+    It was introduced in the paper [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449).
+
+    Resources:
+    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 🌎
+    - The training codebase for ColPali can be found [here](https://github.com/illuin-tech/colpali). 🌎
+
+    Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
+    """
 )
 class ColPaliModel(PaliGemmaPreTrainedModel):
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
@@ -74,7 +82,35 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(
+        """
+        Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
+            [`SiglipImageProcessor`] for processing images). If none, ColPali will only process text (query embeddings).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        """
+    )
     @replace_return_docstrings(output_type=ColPaliOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
