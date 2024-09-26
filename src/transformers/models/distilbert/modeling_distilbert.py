@@ -395,7 +395,7 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
         # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
         # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
         # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and mask is not None:
+        if self.require_contiguous_qkv and q.device.type == "cuda" and mask is not None:
             q = q.contiguous()
             k = k.contiguous()
             v = v.contiguous()
