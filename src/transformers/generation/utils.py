@@ -24,6 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn import functional as F
+
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from ..cache_utils import (
@@ -695,10 +696,7 @@ class GenerationMixin:
         Returns the candidate generator to be used in `assisted_generation`
         """
         different_tokenizers = (
-            all(
-                v is not None
-                for v in (assistant_model, target_tokenizer, assistant_tokenizer)
-            )
+            all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
             and self.config.vocab_size != assistant_model.config.vocab_size
         )
 

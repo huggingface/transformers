@@ -306,7 +306,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.prev_assistant_ids = None
         self.target_lookbehind = 10
         self.assistant_lookbehind = 10
-        
+
     @staticmethod
     def _get_longest_diag_dict(inp, nonzero_idx):
         """
@@ -422,17 +422,14 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         }
         remove_from_pkv = 0
 
-        # Since re-encoding the tokens may result in tokenization discrepancies, we use 2 look behind values 
-        # (one for each conversion) which mark where to start looking for the overlap between the 
+        # Since re-encoding the tokens may result in tokenization discrepancies, we use 2 look behind values
+        # (one for each conversion) which mark where to start looking for the overlap between the
         # source and target encodings, to ensure the new tokens include the correct prompt suffix.
-        
         if self.prev_tokens is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
-            new_assistant_ids = self.convert_token_ids(
-                input_ids[:, start_index_in_target_window:], **convert_kwargs
-            )
+            new_assistant_ids = self.convert_token_ids(input_ids[:, start_index_in_target_window:], **convert_kwargs)
             prompt_use_length = new_assistant_ids.shape[1]
             prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
@@ -462,7 +459,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         else:
             assistant_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
             self.prev_target_ids = input_ids
-            
+
         self.prev_assistant_ids = assistant_input_ids
         new_cur_len = assistant_input_ids.shape[-1]
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
@@ -491,9 +488,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         }
 
         self.assistant_kwargs.pop("attention_mask", None)
-        
+
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
-        
+
         num_prev_assistant = self.prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 

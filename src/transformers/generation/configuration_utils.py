@@ -21,8 +21,6 @@ import warnings
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
-from transformers.models.auto.tokenization_auto import AutoTokenizer
-
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
 from ..utils import (
@@ -1154,7 +1152,7 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
-            
+
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
 
