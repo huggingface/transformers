@@ -103,7 +103,8 @@ pipeline_test_mapping = {
 }
 
 task_to_pipeline_and_spec_mapping = {
-    # This dict is used to verify pipeline signatures against the matching task spec in the HF Hub
+    # Adding a task to this list will cause its pipeline input signature to be checked against the corresponding
+    # task spec in the HF Hub
     "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
 }
 
