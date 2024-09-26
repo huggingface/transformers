@@ -58,7 +58,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-# Copied from transformers.models.phi3.modeling_phi3._prepare_4d_causal_attention_mask_with_cache_position with Phi3->Mistral
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -102,14 +101,15 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         causal_mask = attention_mask
     else:
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         if config.sliding_window is not None:
             if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > config.sliding_window:
-                exclude_mask.bitwise_or_(
-                    torch.arange(target_length, device=device)
-                    <= (cache_position.reshape(-1, 1) - config.sliding_window)
+                # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
+                sliding_attend_mask = torch.arange(target_length, device=device) <= (
+                    cache_position.reshape(-1, 1) - config.sliding_window
                 )
-        causal_mask *= exclude_mask
+                diagonal_attend_mask |= sliding_attend_mask
+        causal_mask *= diagonal_attend_mask
         causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit

@@ -610,6 +610,11 @@ class Phi3IntegrationTest(unittest.TestCase):
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
     def test_phi3_mini_4k_sliding_window(self):
+        """
+        This tests that Phi3 doesn't deteriorate in quality for long context generations. Since Phi3 has
+        sliding window attention, the test is tailored so that (context + max_new_tokens > sliding_window).
+        See #33586 for more
+        """
         model = Phi3ForCausalLM.from_pretrained(
             "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
         )
@@ -691,6 +696,5 @@ class Phi3IntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = [
             '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised with wine, lardons, mushrooms, and garlic. It is a hearty and flavorful dish that is often served with potatoes or rice.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a traditional French beef stew that'
         ]
-        print(output_text)
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
