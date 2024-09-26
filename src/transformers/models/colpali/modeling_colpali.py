@@ -111,7 +111,7 @@ class ColPaliModel(PaliGemmaPreTrainedModel):
             - 0 indicates the head is **masked**.
         """
     )
-    @replace_return_docstrings(output_type=ColPaliOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ColPaliOutput, config_class="ColPaliConfig")
     def forward(
         self,
         input_ids: torch.LongTensor,
