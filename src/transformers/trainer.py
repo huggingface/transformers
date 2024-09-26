@@ -404,6 +404,14 @@ class Trainer:
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+        
+        if self.args.data_seed is not None: 
+            generator = torch.Generator()
+            generator.manual_seed(self.args.data_seed)
+            self.data_sampler_generator = generator
+        else: 
+            self.data_sampler_generator = None
+
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -892,7 +900,7 @@ class Trainer:
             )
 
         else:
-            return RandomSampler(self.train_dataset)
+            return RandomSampler(self.train_dataset, generator=self.data_sampler_generator)       
 
     def get_train_dataloader(self) -> DataLoader:
         """
