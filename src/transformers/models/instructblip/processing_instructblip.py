@@ -123,7 +123,7 @@ class InstructBlipProcessor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # we have to concatenate lists - so we keep track of return_tensors here
-            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors")
+            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
             _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
             output_kwargs["text_kwargs"]["return_tensors"] = return_tensors
             # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
