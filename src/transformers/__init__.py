@@ -502,6 +502,7 @@ _import_structure = {
         "Kosmos2Config",
         "Kosmos2Processor",
     ],
+    "models.glm": ["GlmConfig"],
     "models.layoutlm": [
         "LayoutLMConfig",
         "LayoutLMTokenizer",
@@ -2547,6 +2548,16 @@ else:
             "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.glm"].extend(
+        [
+            "GlmForCausalLM",
+            "GlmForQuestionAnswering",
+            "GlmForSequenceClassification",
+            "GlmForTokenClassification",
+            "GlmModel",
+            "GlmPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -5266,6 +5277,7 @@ if TYPE_CHECKING:
         GitProcessor,
         GitVisionConfig,
     )
+    from .models.glm import GlmConfig
     from .models.glpn import GLPNConfig
     from .models.gpt2 import (
         GPT2Config,
@@ -6976,6 +6988,13 @@ if TYPE_CHECKING:
             GitModel,
             GitPreTrainedModel,
             GitVisionModel,
+        )
+        from .models.glm import (
+            GlmForCausalLM,
+            GlmForSequenceClassification,
+            GlmForTokenClassification,
+            GlmModel,
+            GlmPreTrainedModel,
         )
         from .models.glpn import (
             GLPNForDepthEstimation,
