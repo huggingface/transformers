@@ -106,7 +106,7 @@ class Speech2TextModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
-        attn_implementation="eager"
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size

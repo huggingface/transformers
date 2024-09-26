@@ -94,7 +94,7 @@ class TFSpeech2TextModelTester:
         pad_token_id=1,
         bos_token_id=0,
         scale_embedding=False,
-        attn_implementation="eager"
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
