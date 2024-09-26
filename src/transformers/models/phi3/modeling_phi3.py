@@ -56,6 +56,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/Phi-3-mini-4k-instruct"
 _CONFIG_FOR_DOC = "Phi3Config"
 
+
 # Copied from transformers.models.mistral.modeling_mistral._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Phi3
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
