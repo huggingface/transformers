@@ -86,13 +86,14 @@ def convert_config(original_config: dict):
         intermediate_size=original_config.pop("ffn_hidden_size"),
         num_hidden_layers=original_config.pop("num_layers"),
         num_attention_heads=num_attention_heads,
-        num_key_value_heads=num_attention_heads
-        if not original_config.pop("multi_query_attention")
-        else original_config.pop("multi_query_group_num"),
+        num_key_value_heads=(
+            num_attention_heads
+            if not original_config.pop("multi_query_attention")
+            else original_config.pop("multi_query_group_num")
+        ),
         resid_pdrop=original_config.pop("hidden_dropout"),
         attention_dropout=original_config.pop("attention_dropout"),
         max_position_embeddings=original_config.pop("seq_length"),
-        initializer_range=original_config.pop("initializer_range"),
         rms_norm_eps=original_config.pop("layernorm_epsilon"),
         rope_theta=10000.0 * original_config.pop("rope_ratio"),
         use_rms_norm=original_config.pop("rmsnorm"),
