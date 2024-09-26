@@ -17,6 +17,7 @@
 import inspect
 import json
 import tempfile
+from typing import Optional
 
 import numpy as np
 
@@ -86,15 +87,21 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    def prepare_text_inputs(self, batch_size=None):
-        if batch_size is not None and batch_size > 1:
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is not None:
+            if batch_size < 1:
+                raise ValueError("batch_size must be greater than 0")
+            elif batch_size == 1:
+                return ["lower newer"]
             return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
         return "lower newer"
 
     @require_vision
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of PIL images for testing"""
-        if batch_size:
+        if batch_size is not None:
+            if batch_size < 1:
+                raise ValueError("batch_size must be greater than 0")
             return prepare_image_inputs() * batch_size
         return prepare_image_inputs()
 
