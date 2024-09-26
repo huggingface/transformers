@@ -723,7 +723,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if isinstance(past_key_values, HybridCache):
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
 
@@ -899,7 +899,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
+                target_length=past_key_values.get_max_cache_shape(),
                 dtype=dtype,
                 device=device,
                 min_dtype=min_dtype,
