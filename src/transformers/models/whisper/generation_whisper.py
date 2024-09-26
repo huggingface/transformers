@@ -511,6 +511,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
+        org_gen_config_output_attention = bool(generation_config.output_attentions)
         return_dict_in_generate = self._set_return_outputs(
             return_dict_in_generate=return_dict_in_generate,
             return_token_timestamps=return_token_timestamps,
@@ -710,6 +711,14 @@ class WhisperGenerationMixin(GenerationMixin):
                     idx=i,
                     return_token_timestamps=return_token_timestamps,
                 )
+                if not org_gen_config_output_attention:
+                    for s in segments:
+                        if "encoder_attentions" in s["result"].keys():
+                            del s["result"]["encoder_attentions"]
+                        if "decoder_attentions" in s["result"].keys():
+                            del s["result"]["decoder_attentions"]
+                        if "cross_attentions" in s["result"].keys():
+                            del s["result"]["cross_attentions"]
 
                 current_segments[prev_i] += segments
 
