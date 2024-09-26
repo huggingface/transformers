@@ -1399,6 +1399,18 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
+            # If we have gone beyond the current cache length, we need to crop the input attention mask.
+            total_length = attention_mask.shape[1]
+            # XXX: It seems that Cache.get_seq_length() will be deprecated and replaced by cache_position, but
+            # it is NOT consistent with cache_position
+            cur_cache_length = past_key_values.get_seq_length()
+            if (
+                cur_cache_length is not None
+                and attention_mask is not None
+                and total_length > cur_cache_length + input_ids.shape[1]
+            ):
+                attention_mask = attention_mask[:, -cur_cache_length - input_ids.shape[1] :]
+
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
