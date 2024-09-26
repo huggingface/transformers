@@ -2697,4 +2697,4 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
             error.append(f"Huggingface.js only: {huggingface_js_only}")
         if transformers_only:
             error.append(f"Transformers only: {transformers_only}")
-    raise ValueError("\n".join(error))
+        raise ValueError("\n".join(error))
