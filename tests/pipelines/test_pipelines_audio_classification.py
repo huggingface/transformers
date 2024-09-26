@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import unittest
+from dataclasses import fields
 
 import numpy as np
+from huggingface_hub.inference._generated.types import AudioClassificationOutputElement
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
-from dataclasses import fields
-from huggingface_hub.inference._generated.types import AudioClassificationOutputElement
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
