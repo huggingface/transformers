@@ -86,9 +86,16 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
+    def prepare_text_inputs(self, batch_size=None):
+        if batch_size is not None and batch_size > 1:
+            return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
+        return "lower newer"
+
     @require_vision
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
+        if batch_size:
+            return prepare_image_inputs() * batch_size
         return prepare_image_inputs()
 
     @require_vision
@@ -148,7 +155,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
@@ -170,7 +177,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
@@ -184,7 +191,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
@@ -203,7 +210,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
@@ -216,7 +223,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -238,8 +245,8 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -263,7 +270,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer"]
+        input_str = [self.prepare_text_inputs()]
         image_input = self.prepare_image_inputs()
         with self.assertRaises(ValueError):
             _ = processor(
@@ -281,7 +288,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -303,7 +310,7 @@ class ProcessorTesterMixin:
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -326,7 +333,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         with self.assertRaises(ValueError):
