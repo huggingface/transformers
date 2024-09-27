@@ -14,27 +14,27 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BioGPT
+# BioGPT [[biogpt]]
 
-## 개요
+## 개요 [[overview]]
 
-BioGPT 모델은 Renqian Luo, Liai Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon, Tie-Yan Liu에 의해 제안된 [BioGPT: 생물의학 텍스트 생성 및 마이닝을 위한 생성형 사전 학습된 트랜스포머](https://academic.oup.com/bib/advance-article/doi/10.1093/bib/bbac409/6713511?guestAccessKey=a66d9b5d-4f83-4017-bb52-405815c907b9) 모델입니다. BioGPT는 생물의학 텍스트 생성 및 마이닝을 위한 도메인 특화 생성형 사전 학습된 트랜스포머 언어 모델로, 트랜스포머 언어 모델 구조를 따르며, 1,500만 개의 PubMed 초록을 이용해 처음부터 학습되었습니다.
+BioGPT는 Renqian Luo, Liai Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon, Tie-Yan Liu에 의해 [BioGPT: generative pre-trained transformer for biomedical text generation and mining](https://academic.oup.com/bib/advance-article/doi/10.1093/bib/bbac409/6713511?guestAccessKey=a66d9b5d-4f83-4017-bb52-405815c907b9) 에서 제안된 모델입니다. BioGPT는 생물의학 텍스트 생성과 마이닝을 위해 도메인에 특화된 생성형 사전 학습 트랜스포머 언어 모델입니다. BioGPT는 트랜스포머 언어 모델 구조를 따르며, 1,500만 개의 PubMed 초록을 이용해 처음부터 학습되었습니다.
 
 논문의 초록은 다음과 같습니다:
 
-*생물의학 분야에서 사전 학습된 언어 모델은 일반 자연어 처리 분야에서의 성공에 영감을 받아 점점 더 많은 주목을 받고 있습니다. 일반 언어 분야에서 사전 학습된 언어 모델의 두 주요 가지인 BERT(및 그 변형)와 GPT(및 그 변형) 중 첫 번째는 BioBERT와 PubMedBERT 같은 생물의학 분야에서 광범위하게 연구되었습니다. 이들은 다양한 판별 기반 생물의학 작업에서 큰 성공을 거두었지만, 생성 능력의 부족은 그들의 적용 범위를 제한했습니다. 본 논문에서는 대규모 생물의학 문헌을 사전 학습한 도메인 특화 생성형 트랜스포머 언어 모델인 BioGPT를 제안합니다. 우리는 6개의 생물의학 자연어 처리 작업에서 BioGPT를 평가한 결과, 대부분의 작업에서 이전 모델보다 우수한 성능을 보였습니다. 특히, BC5CDR, KD-DTI, DDI 끝-끝 관계 추출 작업에서 각각 44.98%, 38.42%, 40.76%의 F1 점수를 기록하였으며, PubMedQA에서 78.2%의 정확도를 달성해 새로운 기록을 세웠습니다. 또한 텍스트 생성에 대한 사례 연구는 생물의학 용어에 대한 유창한 설명을 생성하는 데 있어 BioGPT의 장점을 더욱 입증했습니다.*
+*생물의학 분야에서 사전 학습된 언어 모델은 일반 자연어 처리 분야에서의 성공에 영감을 받아 점점 더 많은 주목을 받고 있습니다. 일반 언어 분야에서 사전 학습된 언어 모델의 두 가지 주요 계통인 BERT(및 그 변형)와 GPT(및 그 변형) 중 첫 번째는 생물의학 분야에서 BioBERT와 PubMedBERT와 같이 광범위하게 연구되었습니다. 이들은 다양한 분류 기반의 생물의학 작업에서 큰 성공을 거두었지만, 생성 능력의 부족은 그들의 적용 범위를 제한했습니다. 본 논문에서는 대규모 생물의학 문헌을 사전 학습한 도메인 특화 생성형 트랜스포머 언어 모델인 BioGPT를 제안합니다. 우리는 6개의 생물의학 자연어 처리 작업에서 BioGPT를 평가한 결과, 대부분의 작업에서 이전 모델보다 우수한 성능을 보였습니다. 특히, BC5CDR, KD-DTI, DDI 엔드-투-엔드 관계 추출 작업에서 각각 44.98%, 38.42%, 40.76%의 F1 점수를 기록하였으며, PubMedQA에서 78.2%의 정확도를 달성해 새로운 기록을 세웠습니다. 또한 텍스트 생성에 대한 사례 연구는 생물의학 용어에 대한 유창한 설명을 생성하는 데 있어 BioGPT의 장점을 더욱 입증했습니다.*
 
 이 모델은 [kamalkraj](https://huggingface.co/kamalkraj)에 의해 기여되었습니다. 원본 코드는 [여기](https://github.com/microsoft/BioGPT)에서 찾을 수 있습니다.
 
-## 사용 팁
+## 사용 팁 [[usage-tips]]
 
-- BioGPT는 절대적 위치 임베딩을 사용하므로, 입력을 왼쪽이 아닌 **오른쪽에서 패딩**하는 것이 권장됩니다.
-- BioGPT는 인과적 언어 모델링(CLM) 목표로 학습되었기 때문에, 다음 토큰을 예측하는 데 강력한 성능을 보입니다. 이 기능을 활용하여 BioGPT는 구문적으로 일관된 텍스트를 생성할 수 있으며, 예시 스크립트 `run_generation.py`에서 이를 확인할 수 있습니다.
-- 이 모델은 `past_key_values`(PyTorch 용)를 입력으로 받을 수 있는데, 이는 이전에 계산된 키/값 주의 쌍입니다. 이 값을 사용하면 텍스트 생성 중 이미 계산된 값을 다시 계산하지 않도록 할 수 있습니다. PyTorch에서 `past_key_values` 인수는 BioGptForCausalLM.forward() 메서드에서 자세히 설명되어 있습니다.
+- BioGPT는 절대적 위치 임베딩(absolute position embedding)을 사용하므로, 입력을 왼쪽이 아닌 오른쪽에서 패딩하는 것이 권장됩니다.
+- BioGPT는 인과적 언어 모델링(Casual Langague Modeling, CLM) 목표로 학습되었기 때문에, 다음 토큰을 예측하는 데 강력한 성능을 보입니다. 이 기능을 활용하여 BioGPT는 구문적으로 일관된 텍스트를 생성할 수 있으며, 예시 스크립트 `run_generation.py`에서 이를 확인할 수 있습니다.
+- 이 모델은 `past_key_values`(PyTorch 용)를 입력으로 받을 수 있는데, 이는 이전에 계산된 키/값 어텐션 쌍입니다. 이 값을 사용하면 텍스트 생성 중 이미 계산된 값을 다시 계산하지 않도록 할 수 있습니다. PyTorch에서 `past_key_values` 인수는 BioGptForCausalLM.forward() 메서드에서 자세히 설명되어 있습니다.
 
-### Scaled Dot Product Attention(SDPA) 사용
+### Scaled Dot Product Attention(SDPA) 사용 [[using-scaled-dot-product-attention-sdpa]]
 
-PyTorch는 `torch.nn.functional`의 일부로 **스케일된 점곱 어텐션(SDPA)** 연산자를 기본 제공하며, 이 함수는 입력과 사용 중인 하드웨어에 따라 여러 구현을 적용할 수 있습니다. 자세한 내용은 [공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 또는 [GPU 추론 페이지](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)를 참조하세요.
+PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA) 연산자를 기본적으로 포함합니다. 이 함수는 입력과 사용 중인 하드웨어에 따라 여러 구현을 적용할 수 있습니다. 자세한 내용은 [공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 페이지를 참조하세요.
 
 `torch>=2.1.1`에서 구현이 가능한 경우 SDPA는 기본적으로 사용되며, `attn_implementation="sdpa"`를 `from_pretrained()`에서 설정하여 SDPA 사용을 명시적으로 요청할 수 있습니다.
 
@@ -70,40 +70,40 @@ NVIDIA GeForce RTX 2060-8GB, PyTorch 2.3.1, Ubuntu 20.04 환경에서 `float16` 
 | 50          | 4          | 128     | True    | True    | True     | 0.186                        | 0.178                       | 4.289       | 816.478        | 816.478      | 0.000         |
 
 
-## 리소스
+## 리소스 [[resources]]
 
 - [인과적 언어 모델링 작업 가이드](../tasks/language_modeling)
 
-## BioGptConfig
+## BioGptConfig [[transformers.BioGptConfig]]
 
 [[autodoc]] BioGptConfig
 
 
-## BioGptTokenizer
+## BioGptTokenizer [[transformers.BioGptTokenizer]]
 
 [[autodoc]] BioGptTokenizer
     - save_vocabulary
 
 
-## BioGptModel
+## BioGptModel [[transformers.BioGptModel]]
 
 [[autodoc]] BioGptModel
     - forward
 
 
-## BioGptForCausalLM
+## BioGptForCausalLM [[transformers.BioGptForCausalLM]]
 
 [[autodoc]] BioGptForCausalLM
     - forward
 
 
-## BioGptForTokenClassification
+## BioGptForTokenClassification [[transformers.BioGptForTokenClassification]]
 
 [[autodoc]] BioGptForTokenClassification
     - forward
 
 
-## BioGptForSequenceClassification
+## BioGptForSequenceClassification [[transformers.BioGptForSequenceClassification]]
 
 [[autodoc]] BioGptForSequenceClassification
     - forward
