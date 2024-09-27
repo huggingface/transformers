@@ -142,7 +142,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=False,
+            return_dict=None,
             num_logits_to_keep=num_logits_to_keep,
         )
         last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)

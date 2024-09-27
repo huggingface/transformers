@@ -21,25 +21,17 @@ import torch
 from PIL import Image
 
 from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
-from transformers.models.colpali.processing_colpali import get_torch_device
+from transformers.models.colpali.modeling_colpali import ColPaliModelOutput
 
 
 @pytest.fixture(scope="module")
-def colpali_model_path() -> str:
-    return "vidore/colpali-v1.2"
-
-
-@pytest.fixture(scope="module")
-def colpali_from_pretrained(colpali_model_path: str) -> Generator[ColPaliForRetrieval, None, None]:
-    device = get_torch_device("auto")
-    print(f"Device used: {device}")
-
+def colpali_from_pretrained() -> Generator[ColPaliForRetrieval, None, None]:
     yield cast(
         ColPaliForRetrieval,
         ColPaliForRetrieval.from_pretrained(
-            colpali_model_path,
+            "checkpoints/colpali/",
             torch_dtype=torch.bfloat16,
-            device_map="cpu",
+            device_map="auto",
         ),
     )
 
@@ -70,14 +62,15 @@ def test_colpali_forward_images(
 
     # Forward pass
     with torch.no_grad():
-        outputs = colpali_from_pretrained(**batch_images)
+        outputs = colpali_from_pretrained(**batch_images, return_dict=True)
 
     # Assertions
-    assert isinstance(outputs, torch.Tensor)
-    assert outputs.dim() == 3
-    batch_size, n_visual_tokens, emb_dim = outputs.shape
+    assert isinstance(outputs, ColPaliModelOutput)
+    assert isinstance(outputs.embeddings, torch.Tensor)
+    assert outputs.embeddings.dim() == 3
+    batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
     assert batch_size == len(images)
-    assert emb_dim == colpali_from_pretrained.dim
+    assert embedding_dim == colpali_from_pretrained.embedding_dim
 
 
 @pytest.mark.slow
@@ -95,11 +88,12 @@ def test_colpali_forward_queries(
 
     # Forward pass
     with torch.no_grad():
-        outputs = colpali_from_pretrained(**batch_queries)
+        outputs = colpali_from_pretrained(**batch_queries, return_dict=True)
 
     # Assertions
-    assert isinstance(outputs, torch.Tensor)
-    assert outputs.dim() == 3
-    batch_size, n_query_tokens, emb_dim = outputs.shape
+    assert isinstance(outputs, ColPaliModelOutput)
+    assert isinstance(outputs.embeddings, torch.Tensor)
+    assert outputs.embeddings.dim() == 3
+    batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
     assert batch_size == len(queries)
-    assert emb_dim == colpali_from_pretrained.dim
+    assert embedding_dim == colpali_from_pretrained.embedding_dim
