@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GGUF and interaction with Transformers
+# GGUF and interaction with Transformers [[gguf-and-interaction-with-transformers]]
 
 The GGUF file format is used to store models for inference with [GGML](https://github.com/ggerganov/ggml) and other 
 libraries that depend on it, like the very popular [llama.cpp](https://github.com/ggerganov/llama.cpp) or 
@@ -28,7 +28,7 @@ attributes, the tokenizer vocabulary and other attributes, as well as all tensor
 files come in different formats according to the quantization type of the file. We briefly go over some of them
 [here](https://huggingface.co/docs/hub/en/gguf#quantization-types).
 
-## Support within Transformers
+## Support within Transformers [[support-within-transformers]]
 
 We have added the ability to load `gguf` files within `transformers` in order to offer further training/fine-tuning
 capabilities to gguf models, before converting back those models to `gguf` to use within the `ggml` ecosystem. When
@@ -40,7 +40,7 @@ loading a model, we first dequantize it to fp32, before loading the weights to b
 
 For now, here are the supported model architectures and quantization types:
 
-### Supported quantization types
+### Supported quantization types [[supported-quantization-types]]
 
 The initial supported quantization types are decided according to the popular quantized files that have been shared
 on the Hub.
@@ -71,7 +71,7 @@ on the Hub.
 > [!NOTE]
 > To support gguf dequantization, `gguf>=0.10.0` installation is required.
 
-### Supported model architectures
+### Supported model architectures [[supported-model-architectures]]
 
 For now the supported model architectures are the architectures that have been very popular on the Hub, namely:
 
@@ -82,7 +82,7 @@ For now the supported model architectures are the architectures that have been v
 - Phi3
 - Bloom
 
-## Example usage
+## Example usage [[example-usage]]
 
 In order to load `gguf` files in `transformers`, you should specify the `gguf_file` argument to the `from_pretrained`
 methods of both tokenizers and models. Here is how one would load a tokenizer and a model, which can be loaded
