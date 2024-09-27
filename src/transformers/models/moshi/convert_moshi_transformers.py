@@ -18,7 +18,7 @@ import argparse
 
 import safetensors
 import torch
-
+import warnings
 
 from transformers import (
     GenerationConfig,
@@ -26,12 +26,68 @@ from transformers import (
     MoshiForConditionalGeneration,
     MimiModel, # initial audio encoder
     logging,
+    PreTrainedTokenizerFast,
+    AutoFeatureExtractor,
 )
-# EncodecFeatureExtractor, #TODO(YL): add it here and as AutoFeatureExtractor
+from transformers.convert_slow_tokenizer import SpmConverter, import_protobuf, Converter, _get_prepend_scheme
+from transformers.utils import requires_backends
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.mimi")
+
+
+class MoshiConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+        tokenizer = self.converted()
+
+        self.tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=tokenizer,
+            chat_template=None,
+            unk_token="<unk>",
+            model_input_names=["input_ids", "attention_mask"],
+            model_max_length=model_max_length,
+            clean_up_tokenization_spaces=False,
+        )
+        
+    def normalizer(self, proto):
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        _normalizers = [
+            normalizers.Replace(" ", "▁"),
+        ]
+        if not precompiled_charsmap:
+            return normalizers.Sequence(_normalizers)
+        else:
+            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
 
 
 def assert_param_count(model_1, model_2):
@@ -128,6 +184,9 @@ def _convert_model(
     # permute for sliced rotary
     def permute(w, n_heads, dim1=hidden_size, dim2=hidden_size):
         return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    
+    def permute_flexible_linears(w, num_linears, n_heads, dim1=hidden_size, dim2=hidden_size):
+        return w.view(num_linears, n_heads, dim1 // n_heads // 2, 2, dim2).transpose(2, 3).reshape(num_linears, dim1, dim2)
 
     for k, v in list(state_dict.items()):
         if "audio_encoder" not in k:
@@ -144,22 +203,27 @@ def _convert_model(
             if "in_proj_weight" in new_k:
                 # split qkv into query key and value
                 mixed_qkv = state_dict.pop(k)
-                qkv_dim = mixed_qkv.size(0) // 3
-
-                query_layer = mixed_qkv[:qkv_dim]
-                key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
-                value_layer = mixed_qkv[qkv_dim * 2 :]
                 if "depth_decoder" in new_k:
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = query_layer.view(config.num_codebooks, -1, query_layer.shape[-1])
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = key_layer.view(config.num_codebooks, -1, key_layer.shape[-1])
-                    state_dict[new_k.replace("in_proj_weight", "v_proj.weight")] = value_layer.view(config.num_codebooks, -1, value_layer.shape[-1])
+                    mixed_qkv = mixed_qkv.view(config.num_codebooks, -1, mixed_qkv.shape[-1])
+                    
+                    qkv_dim = mixed_qkv.size(1) // 3
+
+                    query_layer = mixed_qkv[:, :qkv_dim]
+                    key_layer = mixed_qkv[:, qkv_dim : qkv_dim * 2]
+                    value_layer = mixed_qkv[:, qkv_dim * 2 :]
+                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = query_layer # permute_flexible_linears(query_layer, config.num_codebooks, depth_num_heads, depth_hidden_size, depth_hidden_size)
+                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = key_layer # permute_flexible_linears(key_layer, config.num_codebooks, depth_num_key_value_heads, depth_key_value_head_dim, depth_hidden_size)
                 else:
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = permute(
-                        query_layer, num_heads, hidden_size, hidden_size)
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = permute(
-                        key_layer, num_key_value_heads, dim1=key_value_head_dim, dim2=hidden_size
-                    )
-                    state_dict[new_k.replace("in_proj_weight", "v_proj.weight")] = value_layer
+                    qkv_dim = mixed_qkv.size(0) // 3
+
+                    query_layer = mixed_qkv[:qkv_dim]
+                    key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
+                    value_layer = mixed_qkv[qkv_dim * 2 :]
+                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = permute(query_layer, num_heads, hidden_size, hidden_size)
+                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = permute(key_layer, num_key_value_heads, key_value_head_dim, hidden_size)
+
+
+                state_dict[new_k.replace("in_proj_weight", "v_proj.weight")] = value_layer
             elif "o_proj" in new_k and "depth_decoder" in new_k:
                 output_layer = state_dict.pop(k)
                 state_dict[new_k] = output_layer.view(config.num_codebooks, -1, output_layer.shape[-1])
@@ -200,7 +264,7 @@ def convert_checkpoint(
     """
     device = _grab_best_device()
     
-    mimi_model = MimiModel.from_pretrained(mimi_repo_id)
+    mimi_model = MimiModel.from_pretrained(mimi_repo_id, torch_dtype=torch.bfloat16)
 
     if config_path is not None:
         config = MoshiConfig.from_pretrained(config_path)
@@ -208,25 +272,19 @@ def convert_checkpoint(
         audio_encoder_config = mimi_model.config
         config = MoshiConfig.from_audio_encoder_config(audio_encoder_config)
 
-    model = MoshiForConditionalGeneration(config)
+    model = MoshiForConditionalGeneration(config).to(torch.bfloat16)
     
     depth_decoder_generation_config = GenerationConfig(
         do_sample=True, temperature=0.8, top_k=250, min_length = config.num_codebooks + 1,
-max_length=config.num_codebooks + 1
+max_length=config.num_codebooks + 1, cache_implementation="sliding_window",
     )
 
     
-    generation_config = GenerationConfig(do_sample=True, temp=0.7, top_k=25)
+    generation_config = GenerationConfig(do_sample=True, temp=0.7, top_k=25, cache_implementation="sliding_window", pad_token_id=config.audio_vocab_size, bos_token_id=config.audio_vocab_size)
     generation_config.depth_decoder_config = depth_decoder_generation_config.to_diff_dict()
     
     
     model.generation_config = generation_config
-
-    # feature_extractor = EncodecFeatureExtractor(
-    #     feature_size=config.audio_channels,
-    #     sampling_rate=config.sampling_rate,
-    # )
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = safetensors.torch.load_file(checkpoint_path)
     if "best_state" in original_checkpoint:
@@ -237,20 +295,18 @@ max_length=config.num_codebooks + 1
     original_checkpoint.update({f"audio_encoder.{key}": value for (key, value) in audio_checkpoint.items()})
     
     model = _convert_model(original_checkpoint, model, convert_list, device, config)
-    
-    # TODO: set generation config
 
     model.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
         print("Pushing to the hub...")
-        # feature_extractor.push_to_hub(repo_id)
-        model.push_to_hub(repo_id, private=True)
+        model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
+    parser.add_argument("--tokenizer_vocab_path", required=False, default=None, type=str, help="Path to original tokenizer vocab file")
     parser.add_argument("--mimi_repo_id", required=True, default=None, type=str, help="Repository id to HF Mimi.")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
@@ -259,8 +315,52 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
+    parser.add_argument(
+        "--test_tokenizer", default=None, type=bool, help="Test the tokenizer on hard sentences."
+    )
 
     args = parser.parse_args()
+    
+    # convert tokenizer
+    if args.tokenizer_vocab_path:        
+        tokenizer = MoshiConverter(args.tokenizer_vocab_path).tokenizer
+        
+        tokenizer.save_pretrained(args.pytorch_dump_folder_path)
+                        
+        if args.test_tokenizer:
+            import sentencepiece
+            from datasets import load_dataset
+            import tqdm
+            
+            original_tokenizer = sentencepiece.SentencePieceProcessor(args.tokenizer_vocab_path)
+            dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
+            for item in tqdm.tqdm(dataset["validation"]):
+                string = item["code"]                
+                encoded1 = tokenizer.encode(string)
+                encoded2 = original_tokenizer.encode(string)
+
+                decoded1 = tokenizer.decode(encoded1)
+                decoded2 = original_tokenizer.decode(encoded1)
+
+                if decoded1 != decoded2:
+                    raise ValueError("Hint: the following tokenization.decode diff were obtained for HF tokenizer vs original:\n "
+                    f"elements in HF: {set(decoded1)-set(decoded2)} \nvs\n "
+                    f"elements in original: {set(decoded2)-set(decoded1)} \n\n{string}")
+            
+
+        if args.push_to_hub:
+            print("Pushing the tokenizer to the hub...")
+            tokenizer.push_to_hub(args.push_to_hub)
+        
+    # upload feature extractor
+    feature_extractor = AutoFeatureExtractor.from_pretrained(args.mimi_repo_id)
+    feature_extractor.save_pretrained(args.pytorch_dump_folder_path)
+
+    if args.push_to_hub:
+        print("Pushing the feature extractor to the hub...")
+        feature_extractor.push_to_hub(args.push_to_hub)
+
+    
     convert_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
