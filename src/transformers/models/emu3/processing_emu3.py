@@ -29,7 +29,7 @@ class Emu3TextKwargs(TextKwargs, total=False):
 
 
 class Emu3ImageKwargs(TextKwargs, total=False):
-    ration: str
+    ratio: str
     image_area: int
 
 
@@ -67,6 +67,7 @@ class Emu3Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
+    valid_kwargs = ["image_seq_length", "image_token"]
     image_processor_class = "Emu3ImageProcessor"
 
     def __init__(
@@ -140,8 +141,8 @@ class Emu3Processor(ProcessorMixin):
             **kwargs,
         )
         return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
-        # ratio = output_kwargs["images_kwargs"].pop("ratio", None)
-        # image_area = output_kwargs["images_kwargs"].pop("image_area", None)
+        ratio = output_kwargs["images_kwargs"].pop("ratio", None)
+        image_area = output_kwargs["images_kwargs"].pop("image_area", None)
 
         if return_for_image_generation and images is not None:
             raise ValueError("You should not provide `images` when `return_for_image_generation=True`")

@@ -1029,7 +1029,7 @@ class Emu3VQVAEResnetBlock(nn.Module):
         hidden_states = self.conv2(hidden_states)
 
         if self.in_channels != self.out_channels:
-            hidden_states = self.nin_shortcut(hidden_states)
+            residual = self.nin_shortcut(residual)
 
         return residual + hidden_states
 
@@ -1051,7 +1051,7 @@ class Emu3VQVAEAttnBlock(nn.Module):
         self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
         self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_states, quant_channels):
+    def forward(self, hidden_states, quant_channels = None):
         norm_args = () if self.quant_channels is None else (quant_channels,)
 
         residual = hidden_states
@@ -1170,7 +1170,7 @@ class Emu3VQVAEEncoder(nn.Module):
                 if len(self.down[i_level].attn) > 0:
                     hidden_states = self.down[i_level].attn[i_block](hidden_states)
             if i_level != self.num_resolutions - 1:
-                hidden_states.append(self.down[i_level].downsample(hidden_states))
+                hidden_states = self.down[i_level].downsample(hidden_states)
 
         # middle
         hidden_states = self.mid.block_1(hidden_states)
@@ -1645,7 +1645,7 @@ class Emu3Model(Emu3PreTrainedModel):
                 The tensors corresponding to the input images.
         """
         batch_size = pixel_values.shape[0]
-        _, _, image_toks = self.vqmodel.encode(pixel_values)
+        image_toks = self.vqmodel.encode(pixel_values)
         bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks

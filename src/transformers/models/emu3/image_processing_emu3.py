@@ -238,7 +238,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    factor=self.spatial_factor,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
@@ -353,7 +353,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
         pixel_values = []
         for image in images:
-            patches, image_grid_thw = self._preprocess(
+            image = self._preprocess(
                 image,
                 do_resize=do_resize,
                 resample=resample,
@@ -366,11 +366,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 do_convert_rgb=do_convert_rgb,
                 input_data_format=input_data_format,
             )
-            pixel_values.extend(patches)
+            pixel_values.extend(image)
         pixel_values = np.array(pixel_values)
-        data = {"pixel_values": pixel_values}
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
     def postprocess(
         self,
