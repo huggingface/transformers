@@ -2622,12 +2622,10 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
     for field in fields(hub_spec):
         if field.default is MISSING and field.name not in output:
             missing_keys.append(field.name)
-            raise KeyError(f"Pipeline output is missing mandatory field in Hub spec: {field.name}")
 
     for output_key in output:
         if output_key not in all_field_names:
             unexpected_keys.append(output_key)
-            raise KeyError(f"Pipeline output contains field not present in Hub spec: {output_key}")
 
     if missing_keys or unexpected_keys:
         error = ["Pipeline output does not match Hub spec!"]
@@ -2636,5 +2634,5 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
         if missing_keys:
             error.append(f"Missing mandatory keys in pipeline output: {missing_keys}")
         if unexpected_keys:
-            error.append(f"Keys in pipeline output that do not exist in Hub spec: {unexpected_keys}")
+            error.append(f"Keys in pipeline output that are not in Hub spec: {unexpected_keys}")
         raise KeyError("\n".join(error))
