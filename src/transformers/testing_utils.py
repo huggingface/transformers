@@ -31,6 +31,7 @@ import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
 from pathlib import Path
@@ -2610,3 +2611,14 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+
+def compare_pipeline_output_to_hub_spec(output, hub_spec):
+    for field in fields(hub_spec):
+        if field.default is MISSING and field.name not in output:
+            raise KeyError(f"Pipeline output is missing mandatory field in Hub spec: {field.name}")
+
+    all_field_names = {field.name for field in fields(hub_spec)}
+    for output_key in output:
+        if output_key not in all_field_names:
+            raise KeyError(f"Pipeline output contains field not present in Hub spec: {output_key}")
