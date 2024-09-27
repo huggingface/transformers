@@ -35,7 +35,7 @@ This model was contributed by [Molbap](https://huggingface.co/Molbap).
 ```python
 prompt = "What is on the flower?"
 answer = "a bee"
-inputs = processor(text=prompt, images=raw_image, suffix=answer, return_tensors="pt")
+inputs = processor(images=raw_image, text=prompt, suffix=answer, return_tensors="pt")
 ```
 
 ## Usage Example
@@ -77,7 +77,7 @@ snow_image = Image.open(
     ).raw
 )
 
-inputs = processor(text=prompt, images=[[snow_image, stop_sign_image]], return_tensors="pt")
+inputs = processor(images=[[snow_image, stop_sign_image]], text=prompt, return_tensors="pt")
 
 output = model.generate(**inputs, max_new_tokens=20)
 print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
