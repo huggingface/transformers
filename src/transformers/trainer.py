@@ -468,19 +468,18 @@ class Trainer:
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():
-                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+                from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
-                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
-                if model_type:
-                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel(model_type=model_type)
+                if isinstance(model, PreTrainedModel):
+                    # Patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model)
                 else:
                     logger.warning(
-                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                        "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
                     )
             else:
                 raise ImportError(
-                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.3.0 is not available. "
                     "Please install it with `pip install liger-kernel`"
                 )
 
@@ -1238,6 +1237,10 @@ class Trainer:
             OptimizerNames.ADAMW_8BIT,
             OptimizerNames.PAGED_ADAMW,
             OptimizerNames.PAGED_ADAMW_8BIT,
+            OptimizerNames.ADEMAMIX,
+            OptimizerNames.ADEMAMIX_8BIT,
+            OptimizerNames.PAGED_ADEMAMIX,
+            OptimizerNames.PAGED_ADEMAMIX_8BIT,
             OptimizerNames.LION,
             OptimizerNames.LION_8BIT,
             OptimizerNames.PAGED_LION,
@@ -1267,6 +1270,33 @@ class Trainer:
                     # Above we pass all `adam_kwargs` to the optimizer, here
                     # we only pass `optim_args` which can be passed by the user.
                     additional_optim_kwargs = optim_args
+                elif "ademamix" in args.optim:
+                    if is_bitsandbytes_available() and version.parse(
+                        importlib.metadata.version("bitsandbytes")
+                    ) < version.parse("0.44.0"):
+                        raise ValueError(
+                            "The AdEMAMix optimizer is not supported by your current version of `bitsandbytes`. "
+                            "Please install `bitsandbytes` >= 0.44.0."
+                        )
+
+                    from bitsandbytes.optim import AdEMAMix
+
+                    optimizer_cls = AdEMAMix
+                    additional_optim_kwargs = {
+                        "betas": (
+                            float(optim_args.get("beta1", args.adam_beta1)),
+                            float(optim_args.get("beta2", args.adam_beta2)),
+                            float(optim_args.get("beta3", 0.9999)),
+                        ),
+                        "alpha": float(optim_args.get("alpha", 5.0)),
+                        "eps": float(optim_args.get("eps", args.adam_epsilon)),
+                    }
+
+                    if "t_alpha" in optim_args:
+                        additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
+
+                    if "t_beta3" in optim_args:
+                        additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
 
                 bnb_kwargs = {"optim_bits": optim_bits}
                 if "rmsprop" not in args.optim:
@@ -2363,13 +2393,13 @@ class Trainer:
                     and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
                 ):
                     # if loss is nan or inf simply add the average of previous logged losses
-                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
                     if tr_loss.device != tr_loss_step.device:
                         raise ValueError(
                             f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
                         )
-                    tr_loss += tr_loss_step
+                    tr_loss = tr_loss + tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
@@ -2416,6 +2446,8 @@ class Trainer:
                                 grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm
+
+                    self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
                     self.optimizer.step()
 
@@ -4460,6 +4492,7 @@ class Trainer:
         commit_message: Optional[str] = "End of training",
         blocking: bool = True,
         token: Optional[str] = None,
+        revision: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -4472,6 +4505,8 @@ class Trainer:
                 Whether the function should return only when the `git push` has finished.
             token (`str`, *optional*, defaults to `None`):
                 Token with write permission to overwrite Trainer's original args.
+            revision (`str`, *optional*):
+                The git revision to commit from. Defaults to the head of the "main" branch.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4525,6 +4560,7 @@ class Trainer:
             token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=revision,
         )
 
     #
