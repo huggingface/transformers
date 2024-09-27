@@ -2015,7 +2015,7 @@ class ModelTesterMixin:
                 model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Test multivariate resizing.
-            model.resize_token_embeddings(model_vocab_size + 10, multivariate_resizing=True)
+            model.resize_token_embeddings(model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             # Check that added embeddings mean is close to the old embeddings mean
             if is_deepspeed_zero3_enabled():
