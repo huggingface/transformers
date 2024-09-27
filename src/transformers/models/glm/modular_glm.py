@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 TThe GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,6 +57,7 @@ class GlmConfig(GemmaConfig):
     linear_bias (`bool`, *optional*, defaults to `False`):
         Whether to use a bias in the MLP layers, as well as the query, key, value and output projection layers during self-attention.
     """
+
     model_type = "glm"
 
     def __init__(

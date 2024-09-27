@@ -3,7 +3,7 @@ import json
 import os
 
 import torch
-from safetensors.torch import save_file, load_file
+from safetensors.torch import load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 
 from transformers import AutoTokenizer, GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
@@ -62,9 +62,8 @@ def merge_safetensors(input_dir: str):
     for file in all_files:
         tensors = load_file(file)
         all_weights.update(tensors)
-    
+
     return all_weights
-    
 
 
 def convert_state_dict(original_state_dict: dict):

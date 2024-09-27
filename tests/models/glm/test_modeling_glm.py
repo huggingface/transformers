@@ -14,21 +14,15 @@
 # limitations under the License.
 """Testing suite for the PyTorch Glm model."""
 
-import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
-    require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -412,9 +406,9 @@ class GlmIntegrationTest(unittest.TestCase):
     def test_model_9b_fp16(self):
         model_id = "THUDM/glm-4-9b"
         EXPECTED_TEXTS = [
-            'Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the',
-            'Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.'
-            ]
+            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
             torch_device
@@ -432,8 +426,8 @@ class GlmIntegrationTest(unittest.TestCase):
         model_id = "THUDM/glm-4-9b"
 
         EXPECTED_TEXTS = [
-            'Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the',
-            'Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.'
+            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
