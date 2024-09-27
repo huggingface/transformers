@@ -196,16 +196,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             self.conv_states += [
                 torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
             ]
-            self.ssm_states += [
-                torch.zeros(
-                    batch_size,
-                    self.n_mamba_heads,
-                    intermediate_size // self.n_mamba_heads,
-                    ssm_state_size,
-                    device=device,
-                    dtype=dtype,
-                )
-            ]
+            cache_shape = (batch_size, self.n_mamba_heads, intermediate_size // self.n_mamba_heads, ssm_state_size)
+            self.ssm_states += [torch.zeros(cache_shape, device=device, dtype=dtype)]
             if self.layers_block_type[i] == "hybrid":
                 self.transformer_layers.append(i)
 
