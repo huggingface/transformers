@@ -1452,58 +1452,7 @@ def create_new_model_like(
         )
 
 
-def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(config_file=args.config_file, path_to_repo=args.path_to_repo)
 
-
-class AddNewModelLikeCommand(BaseTransformersCLICommand):
-    @staticmethod
-    def register_subcommand(parser: ArgumentParser):
-        add_new_model_like_parser = parser.add_parser("add-new-model-like")
-        add_new_model_like_parser.add_argument(
-            "--config_file", type=str, help="A file with all the information for this model creation."
-        )
-        add_new_model_like_parser.add_argument(
-            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
-        )
-        add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
-
-    def __init__(self, config_file=None, path_to_repo=None, *args):
-        if config_file is not None:
-            with open(config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            self.old_model_type = config["old_model_type"]
-            self.model_patterns = ModelPatterns(**config["new_model_patterns"])
-            self.add_copied_from = config.get("add_copied_from", True)
-            self.frameworks = config.get("frameworks", get_default_frameworks())
-            self.old_checkpoint = config.get("old_checkpoint", None)
-        else:
-            (
-                self.old_model_type,
-                self.model_patterns,
-                self.add_copied_from,
-                self.frameworks,
-                self.old_checkpoint,
-            ) = get_user_input()
-
-        self.path_to_repo = path_to_repo
-
-    def run(self):
-        if self.path_to_repo is not None:
-            # Adapt constants
-            global TRANSFORMERS_PATH
-            global REPO_PATH
-
-            REPO_PATH = Path(self.path_to_repo)
-            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
-
-        create_new_model_like(
-            model_type=self.old_model_type,
-            new_model_patterns=self.model_patterns,
-            add_copied_from=self.add_copied_from,
-            frameworks=self.frameworks,
-            old_checkpoint=self.old_checkpoint,
-        )
 
 
 def get_user_field(
@@ -1618,11 +1567,6 @@ def get_user_input():
 
 
     old_model_info = retrieve_info_for_model(old_model_type)
-    old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
-    old_image_processor_class = old_model_info["model_patterns"].image_processor_class
-    old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
-    old_processor_class = old_model_info["model_patterns"].processor_class
-    old_frameworks = old_model_info["frameworks"]
 
     old_checkpoint = None
     if len(old_model_info["model_patterns"].checkpoint) == 0:
@@ -1655,52 +1599,6 @@ def get_user_input():
         "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/FacebookAI/roberta-base): "
     )
 
-    old_processing_classes = [
-        c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
-        if c is not None
-    ]
-    old_processing_classes = ", ".join(old_processing_classes)
-    keep_processing = get_user_field(
-        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes}) (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
-    if keep_processing:
-        image_processor_class = old_image_processor_class
-        feature_extractor_class = old_feature_extractor_class
-        processor_class = old_processor_class
-        tokenizer_class = old_tokenizer_class
-    else:
-        if old_tokenizer_class is not None:
-            tokenizer_class = get_user_field(
-                "What will be the name of the tokenizer class for this model? ",
-                default_value=f"{model_camel_cased}Tokenizer",
-            )
-        else:
-            tokenizer_class = None
-        if old_image_processor_class is not None:
-            image_processor_class = get_user_field(
-                "What will be the name of the image processor class for this model? ",
-                default_value=f"{model_camel_cased}ImageProcessor",
-            )
-        else:
-            image_processor_class = None
-        if old_feature_extractor_class is not None:
-            feature_extractor_class = get_user_field(
-                "What will be the name of the feature extractor class for this model? ",
-                default_value=f"{model_camel_cased}FeatureExtractor",
-            )
-        else:
-            feature_extractor_class = None
-        if old_processor_class is not None:
-            processor_class = get_user_field(
-                "What will be the name of the processor class for this model? ",
-                default_value=f"{model_camel_cased}Processor",
-            )
-        else:
-            processor_class = None
-
     model_patterns = ModelPatterns(
         model_name,
         checkpoint,
@@ -1715,27 +1613,61 @@ def get_user_input():
         processor_class=processor_class,
     )
 
-    add_copied_from = get_user_field(
-        "Should we add # Copied from statements when creating the new modeling file (yes/no)? ",
-        convert_to=convert_to_bool,
-        default_value="yes",
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-    )
-
-    all_frameworks = get_user_field(
-        "Should we add a version of your new model in all the frameworks implemented by"
-        f" {old_model_type} ({old_frameworks}) (yes/no)? ",
-        convert_to=convert_to_bool,
-        default_value="yes",
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-    )
-    if all_frameworks:
-        frameworks = None
-    else:
-        frameworks = get_user_field(
-            "Please enter the list of framworks you want (pt, tf, flax) separated by spaces",
-            is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
-        )
-        frameworks = list(set(frameworks.split(" ")))
-
     return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint)
+
+
+
+
+def add_new_model_command_factory(args: Namespace):
+    return AddNewModelCommand(config_file=args.config_file, path_to_repo=args.path_to_repo)
+
+
+class AddNewModelCommand(BaseTransformersCLICommand):
+    @staticmethod
+    def register_subcommand(parser: ArgumentParser):
+        add_new_model_like_parser = parser.add_parser("add-new-model-like")
+        add_new_model_like_parser.add_argument(
+            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
+        )
+        add_new_model_like_parser.set_defaults(func=add_new_model_command_factory)
+
+    def __init__(self, config_file=None, path_to_repo=None, *args):
+        (
+            self.old_model_type,
+            self.model_patterns,
+            self.add_copied_from,
+            self.frameworks,
+            self.old_checkpoint,
+        ) = get_user_input()
+
+        self.path_to_repo = path_to_repo
+
+    def run(self):
+        if self.path_to_repo is not None:
+            # Adapt constants
+            global TRANSFORMERS_PATH
+            global REPO_PATH
+
+            REPO_PATH = Path(self.path_to_repo)
+            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
+
+        create_new_model_like(
+            model_type=self.old_model_type,
+            new_model_patterns=self.model_patterns,
+            add_copied_from=self.add_copied_from,
+            frameworks=self.frameworks,
+            old_checkpoint=self.old_checkpoint,
+        )
+
+
+
+if __name__ == "__main__":
+    # Example parameters (adjust these to suit your test cases)
+    config_file_path = "path_to_your_config.json"
+    repo_path = "."
+
+    # Initialize the command with the test parameters
+    command = AddNewModelCommand(config_file=config_file_path, path_to_repo=repo_path)
+
+    # Run the command
+    command.run()
