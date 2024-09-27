@@ -237,8 +237,8 @@
     title: BERTology
   - local: perplexity
     title: حيرة النماذج ذات الطول الثابت
-  # - local: pipeline_webserver
-  #   title: خطوط الأنابيب للاستدلال على خادم الويب
+  - local: pipeline_webserver
+    title: خطوط الأنابيب للاستدلال على خادم الويب
   # - local: model_memory_anatomy
   #   title: تشريح تدريب النموذج
   # - local: llm_tutorial_optimization
