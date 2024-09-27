@@ -103,7 +103,6 @@ def convert_config(original_config: dict):
         rms_norm_eps=original_config.pop("layernorm_epsilon"),
         rope_theta=10000.0 * original_config.pop("rope_ratio", 1),
         use_rms_norm=original_config.pop("rmsnorm"),
-        apply_residual_connection_post_layernorm=original_config.pop("apply_residual_connection_post_layernorm"),
         post_layer_norm=original_config.pop("post_layer_norm"),
         use_cache=original_config.pop("use_cache"),
         head_dim=original_config.pop("kv_channels"),
