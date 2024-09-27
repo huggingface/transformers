@@ -223,13 +223,13 @@ class TextGenerationPipeline(Pipeline):
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
                 the model's chat template will be used to format them before passing them to the model.
             return_tensors (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
+                Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
-            return_text (`bool`, *optional*, defaults to `True`):
-                Whether or not to return the decoded texts in the outputs.
+            return_text (`bool`, *optional*):
+                Returns the decoded texts in the outputs.
             return_full_text (`bool`, *optional*, defaults to `True`):
-                If set to `False` only added text is returned, otherwise the full text is returned. Only meaningful if
-                *return_text* is set to True.
+                If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
+                specified at the same time as `return_text`.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
