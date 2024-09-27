@@ -366,7 +366,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("codegen", "CodeGen"),
         ("cohere", "Cohere"),
         ("colpali", "ColPali"),
-        ("colpali", "ColPali"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
         ("convnext", "ConvNeXT"),
