@@ -2806,7 +2806,6 @@ else:
             "MoshiForConditionalGeneration",
             "MoshiModel",
             "MoshiPreTrainedModel",
-            "MoshiProcessor",
         ]
     )
     _import_structure["models.musicgen_melody"].extend(
@@ -7310,7 +7309,6 @@ if TYPE_CHECKING:
             MoshiForConditionalGeneration,
             MoshiModel,
             MoshiPreTrainedModel,
-            MoshiProcessor,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
