@@ -728,9 +728,10 @@ def get_arg_names_from_hub_spec(hub_spec, first_level=True):
     return arg_names
 
 
-def parse_google_format_docstring_by_indentation(docstring):
+def parse_args_from_docstring_by_indentation(docstring):
     # This util is used in pipeline tests, to extract the argument names from a google-format docstring
-    # to compare them against the Hub specification for that task
+    # to compare them against the Hub specification for that task. It uses indentation levels as a primary
+    # source of truth, so these have to be correct!
     docstring = dedent(docstring)
     lines_by_indent = [
         (len(line) - len(line.lstrip()), line.strip()) for line in docstring.split("\n") if line.strip()
@@ -760,11 +761,11 @@ def parse_google_format_docstring_by_indentation(docstring):
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
-    docstring_args = set(parse_google_format_docstring_by_indentation(docstring))
+    docstring_args = set(parse_args_from_docstring_by_indentation(docstring))
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
 
     # Special casing: We allow the name of this arg to differ
-    js_generate_args = [js_arg for js_arg in js_args if js_arg.startswith("generate")]
+    js_generate_args = [js_arg for js_arg in hub_args if js_arg.startswith("generate")]
     docstring_generate_args = [
         docstring_arg for docstring_arg in docstring_args if docstring_arg.startswith("generate")
     ]
@@ -773,18 +774,18 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
         and len(docstring_generate_args) == 1
         and js_generate_args != docstring_generate_args
     ):
-        js_args.remove(js_generate_args[0])
+        hub_args.remove(js_generate_args[0])
         docstring_args.remove(docstring_generate_args[0])
 
-    if js_args != docstring_args:
+    if hub_args != docstring_args:
         error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]
-        matching_args = js_args & docstring_args
-        huggingface_js_only = js_args - docstring_args
-        transformers_only = docstring_args - js_args
+        matching_args = hub_args & docstring_args
+        huggingface_hub_only = hub_args - docstring_args
+        transformers_only = docstring_args - hub_args
         if matching_args:
             error.append(f"Matching args: {matching_args}")
-        if huggingface_js_only:
-            error.append(f"Huggingface.js only: {huggingface_js_only}")
+        if huggingface_hub_only:
+            error.append(f"Huggingface Hub only: {huggingface_hub_only}")
         if transformers_only:
             error.append(f"Transformers only: {transformers_only}")
         raise ValueError("\n".join(error))
