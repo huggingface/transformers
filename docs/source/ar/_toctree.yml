@@ -235,8 +235,8 @@
     title: الحشو والتقليم
   - local: bertology
     title: BERTology
-  # - local: perplexity
-  #   title: حيرة النماذج ذات الطول الثابت
+  - local: perplexity
+    title: حيرة النماذج ذات الطول الثابت
   # - local: pipeline_webserver
   #   title: خطوط الأنابيب للاستدلال على خادم الويب
   # - local: model_memory_anatomy
