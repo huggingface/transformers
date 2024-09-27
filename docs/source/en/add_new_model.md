@@ -905,7 +905,7 @@ We can split the model architecture possibilities in four sections:
 - Hub-first release
 
 Let's dive into each of these and see how we (the transformers team) can help you contribute your architecture and get
-your architecture to be very simply used by all members of the community.
+your architecture to be very easily used by all members of the community.
 
 ### Day-0 integration
 
@@ -944,7 +944,7 @@ at our [open issues tagged with "New model"](https://github.com/huggingface/tran
 We recommend you try your hand at a heavily requested model as this will multiply the impact of your contribution.
 We'll be there to help you in case that's your first contribution 🤗.
 
-### Hub-first release
+### Code-on-Hub release
 
 Finally, transformers has a "remote-code" possibility, in which contributions are not made within the toolkit, but on
 the Hub. This can be particularly interesting for groups that are using `transformers` as a backbone for their project,
