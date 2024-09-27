@@ -15,14 +15,10 @@
 """Testing suite for the PyTorch Moshi model."""
 
 import copy
-import inspect
 import math
-import tempfile
 import unittest
 
 import numpy as np
-from parameterized import parameterized
-from pytest import mark
 
 from transformers import (
     MoshiConfig,
@@ -30,20 +26,14 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_torch_gpu,
-    require_torch_sdpa,
-    slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -51,11 +41,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoFeatureExtractor,
+        AutoTokenizer,
         MoshiForCausalLM,
         MoshiForConditionalGeneration,
         MoshiModel,
-        AutoFeatureExtractor,
-        set_seed,
     )
 
 
@@ -89,7 +79,7 @@ class MoshiDecoderTester:
         pad_token_id=99,
         bos_token_id=99,
         num_codebooks=4,
-        audio_encoder_type="mimi"
+        audio_encoder_type="mimi",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -108,16 +98,15 @@ class MoshiDecoderTester:
         self.bos_token_id = bos_token_id
         self.num_codebooks = num_codebooks
         self.audio_encoder_type = audio_encoder_type
-        
 
     def prepare_config_and_inputs(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
         input_ids = ids_tensor([batch_size, self.seq_length], self.vocab_size)
         config = self.get_config()
-        
+
         attention_mask = input_ids.ne(config.pad_token_id)
 
-        inputs_dict = {"input_ids": input_ids, "attention_mask":attention_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
     def get_config(self):
@@ -132,7 +121,7 @@ class MoshiDecoderTester:
             bos_token_id=self.bos_token_id,
             num_codebooks=self.num_codebooks,
             tie_word_embeddings=False,
-            audio_encoder={"model_type":self.audio_encoder_type},
+            audio_encoder={"model_type": self.audio_encoder_type},
         )
         return config
 
@@ -161,11 +150,16 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = MoshiDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MoshiConfig, hidden_size=16, audio_encoder={"model_type":self.model_tester.audio_encoder_type})
+        self.config_tester = ConfigTester(
+            self,
+            config_class=MoshiConfig,
+            hidden_size=16,
+            audio_encoder={"model_type": self.model_tester.audio_encoder_type},
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
-        
+
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -174,7 +168,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
         attention_mask = inputs_dict.pop("attention_mask").to(torch_device)
-        
+
         return config, input_ids, attention_mask, inputs_dict
 
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
@@ -316,7 +310,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return inputs_dict
 
 
-
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
     """Produces a series of 'bip bip' sounds at a given frequency."""
     timesteps = np.arange(int(duration * sample_rate)) / sample_rate
@@ -342,10 +335,9 @@ class MoshiIntegrationTests(unittest.TestCase):
     @cached_property
     def feature_extractor(self):
         return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshiko")
-    
+
     @cached_property
     def tokenizer(self):
         return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
-    
-    # TODO: also test moshika
 
+    # TODO: also test moshika

@@ -1000,7 +1000,6 @@ class MimiTransformerModel(nn.Module):
             )
             use_cache = False
 
-
         if use_cache and not isinstance(past_key_values, Cache):
             if past_key_values is None:
                 past_key_values = DynamicCache()

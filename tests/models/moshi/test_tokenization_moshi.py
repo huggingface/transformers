@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import pickle
 import shutil
 import tempfile
 import unittest
 
-from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -28,14 +26,10 @@ from transformers import (
     AutoTokenizer,
     PreTrainedTokenizerFast,
 )
-from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
-    require_jinja,
-    require_read_token,
     require_sentencepiece,
-    require_tiktoken,
     require_tokenizers,
     require_torch,
     slow,
@@ -176,7 +170,6 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -209,12 +202,12 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
-
     def test_load_tokenizer_with_model_file_only(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             hf_hub_download(repo_id="huggyllama/llama-7b", filename="tokenizer.model", local_dir=tmp_dir)
             tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir)
             self.assertEqual(tokenizer_fast.encode("This is a test"), [1, 910, 338, 263, 1243])
+
 
 @require_torch
 @require_sentencepiece
@@ -317,7 +310,6 @@ class MoshiIntegrationTest(unittest.TestCase):
         self.assertEqual(rust_tokenizer.encode(""), [1])
 
         self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
-
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
@@ -481,6 +473,7 @@ class MoshiIntegrationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
 
+
 @require_sentencepiece
 @require_tokenizers
 class CommonSpmIntegrationTests(unittest.TestCase):
@@ -497,7 +490,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(tokens, EXPECTED_TOKENS)
-
 
         input_ids = fast_tokenizer.encode(input_text)
         with self.subTest("test fast edge case fast"):

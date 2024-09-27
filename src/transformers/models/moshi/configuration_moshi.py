@@ -22,7 +22,6 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-
 class MoshiConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
@@ -53,7 +52,7 @@ class MoshiConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.        
+            The base period of the RoPE embeddings.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
@@ -78,7 +77,7 @@ class MoshiConfig(PretrainedConfig):
         depth_num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the depth decoder block.
         depth_max_position_embeddings (`int`, *optional*, defaults to 8):
-            The maximum sequence length that the depth decoder model might ever be used with. Typically, set this to the 
+            The maximum sequence length that the depth decoder model might ever be used with. Typically, set this to the
             number of codebooks.
         depth_ffn_dim (`int`, *optional*, defaults to 5632):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the depth decoder block. Must be even.
@@ -134,13 +133,14 @@ class MoshiConfig(PretrainedConfig):
     is_composition = True
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(self,
+    def __init__(
+        self,
         vocab_size=32000,
         hidden_size=4096,
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
-        audio_vocab_size=None, # TODO
+        audio_vocab_size=None,  # TODO
         max_position_embeddings=3000,
         rope_theta=10000.0,
         hidden_act="silu",
@@ -161,7 +161,8 @@ class MoshiConfig(PretrainedConfig):
         depth_num_key_value_heads=None,
         depth_sliding_window=8,
         tie_word_embeddings=False,
-        **kwargs):
+        **kwargs,
+    ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -181,7 +182,6 @@ class MoshiConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
 
-
         self.depth_hidden_size = depth_hidden_size
         self.depth_num_hidden_layers = depth_num_hidden_layers
         self.depth_max_position_embeddings = depth_max_position_embeddings
@@ -190,19 +190,23 @@ class MoshiConfig(PretrainedConfig):
             raise ValueError(f"`depth_ffn_dim={depth_ffn_dim}` must be even.")
         self.depth_ffn_dim = depth_ffn_dim
         self.depth_head_dim = depth_head_dim or depth_hidden_size // depth_num_attention_heads
-        self.depth_num_key_value_heads = depth_num_key_value_heads if depth_num_key_value_heads is not None else depth_num_attention_heads
+        self.depth_num_key_value_heads = (
+            depth_num_key_value_heads if depth_num_key_value_heads is not None else depth_num_attention_heads
+        )
         self.depth_sliding_window = depth_sliding_window
 
         audio_encoder_config = kwargs.pop("audio_encoder", {})
         audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")
 
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-        
+
         if self.num_codebooks > self.audio_encoder.num_codebooks:
-            raise ValueError(f"`num_codebooks={num_codebooks}` is greater than the maximum number of codebooks that the audio encoder can deal with ({self.audio_encoder.num_codebooks}). Please lower it.")
-        
+            raise ValueError(
+                f"`num_codebooks={num_codebooks}` is greater than the maximum number of codebooks that the audio encoder can deal with ({self.audio_encoder.num_codebooks}). Please lower it."
+            )
+
         self.audio_vocab_size = self.audio_encoder.codebook_size if audio_vocab_size is None else audio_vocab_size
-        
+
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
     @property
@@ -217,11 +221,11 @@ class MoshiConfig(PretrainedConfig):
     ):
         r"""
         Instantiate a [`MoshiConfig`] (or a derived class) from an audio encoder configuration.
-    
+
         Returns:
             [`MoshiConfig`]: An instance of a configuration object
         """
-    
+
         return cls(
             audio_encoder=audio_encoder_config.to_dict(),
             **kwargs,

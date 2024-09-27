@@ -762,7 +762,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             for i in range(n_iter):
                 _ = model(inputs_dict["input_values"].to(torch_device))
 
-
     @is_flaky()
     def test_batching_equivalence(self):
         super().test_batching_equivalence()

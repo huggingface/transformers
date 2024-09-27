@@ -5393,6 +5393,9 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.moshi import (
+        MoshiConfig,
+    )
     from .models.mpnet import (
         MPNetConfig,
         MPNetTokenizer,
@@ -5403,9 +5406,6 @@ if TYPE_CHECKING:
     from .models.musicgen import (
         MusicgenConfig,
         MusicgenDecoderConfig,
-    )
-    from .models.moshi import (
-        MoshiConfig,
     )
     from .models.musicgen_melody import (
         MusicgenMelodyConfig,
@@ -7305,6 +7305,13 @@ if TYPE_CHECKING:
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
         )
+        from .models.moshi import (
+            MoshiForCausalLM,
+            MoshiForConditionalGeneration,
+            MoshiModel,
+            MoshiPreTrainedModel,
+            MoshiProcessor,
+        )
         from .models.mpnet import (
             MPNetForMaskedLM,
             MPNetForMultipleChoice,
@@ -7346,13 +7353,6 @@ if TYPE_CHECKING:
             MusicgenModel,
             MusicgenPreTrainedModel,
             MusicgenProcessor,
-        )
-        from .models.moshi import (
-            MoshiForCausalLM,
-            MoshiForConditionalGeneration,
-            MoshiModel,
-            MoshiPreTrainedModel,
-            MoshiProcessor,
         )
         from .models.musicgen_melody import (
             MusicgenMelodyForCausalLM,
