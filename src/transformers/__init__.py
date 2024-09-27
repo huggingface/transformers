@@ -3461,7 +3461,7 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.timm_wrapper"].extend(["TimmWrapperModel", "TimmWrapperForImageClassification"])
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperForImageClassification", "TimmWrapperModel"])
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
