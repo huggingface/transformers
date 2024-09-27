@@ -2030,9 +2030,9 @@ class ModelTesterMixin:
             if output_embeds.bias is not None:
                 if is_deepspeed_zero3_enabled():
                     with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
-                        assert output_embeds.bias.data[-10:, :] == torch.tensor([0 for _ in range(10)])
+                        assert output_embeds.bias.data[-10:] == torch.tensor([0 for _ in range(10)])
                 else:
-                    assert output_embeds.bias.data[-10:, :] == torch.tensor([0 for _ in range(10)])
+                    assert output_embeds.bias.data[-10:] == torch.tensor([0 for _ in range(10)])
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
