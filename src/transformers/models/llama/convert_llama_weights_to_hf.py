@@ -399,25 +399,17 @@ class Llama3Converter(TikTokenConverter):
     def __init__(self, vocab_file, special_tokens=None, instruct=False, model_max_length=None, **kwargs):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
-        # TODO: update
-        chat_template = (
-            "{% set loop_messages = messages %}"
-            "{% for message in loop_messages %}"
-            "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
-            "{% if loop.index0 == 0 %}"
-            "{% set content = bos_token + content %}"
-            "{% endif %}"
-            "{{ content }}"
-            "{% endfor %}"
-            "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-        )
 
         # Add chat_template only if instruct is True.
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
         if instruct:
-            additional_kwargs["chat_template"] = chat_template
+            # Guidance from Meta: apply 3.2 changes to 3.1 as well
+            # TODO: 3 should be different (no tool calling)
+            from transformers import AutoTokenizer
+            t = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
+            additional_kwargs["chat_template"] = t.chat_template
 
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
