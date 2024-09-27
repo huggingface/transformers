@@ -27,7 +27,7 @@ pip install transformers datasets accelerate nvidia-ml-py3
 >>> ds.set_format("pt")
 ```
 
-لطباعة إحصائيات الملخص لاستخدام وحدة GPU وتشغيل التدريب مع [`Trainer`]، نحدد دالتين مساعدتين:
+لطباعة إحصائيات موجزة لاستخدام وحدة GPU وتشغيل التدريب مع [`Trainer`]، نقوم بتعريف دالتين مساعدتين:
 
 ```py
 >>> from pynvml import *
