@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -107,6 +107,19 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "bloom": {
+        "token_embd.weight": "transformer.word_embeddings.weight",
+        "token_embd_norm": "transformer.word_embeddings_layernorm",
+        "blk": "transformer.h",
+        "ffn_up": "mlp.dense_h_to_4h",
+        "ffn_down": "mlp.dense_4h_to_h",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_qkv": "self_attention.query_key_value",
+        "attn_output": "self_attention.dense",
+        "output.weight": "lm_head.weight",
+        "output_norm": "transformer.ln_f",
+    },
 }
 
 
@@ -182,6 +195,13 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
+    },
+    "bloom": {
+        "block_count": "n_layer",
+        "embedding_length": "hidden_size",
+        "attention.head_count": "n_head",
+        "vocab_size": "vocab_size",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
     },
 }
 
@@ -492,11 +512,24 @@ class GGUFPhi3Converter(LlamaConverter):
         return tokenizer
 
 
+class GGUFBloomConverter(GPT2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+        tokenizer = super().converted(vocab, merges)
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
+    "bloom": GGUFBloomConverter,
 }
 
 
