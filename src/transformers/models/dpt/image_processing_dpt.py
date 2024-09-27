@@ -485,12 +485,11 @@ class DPTImageProcessor(BaseImageProcessor):
             outputs ([`DepthEstimatorOutput`]):
                 Raw outputs of the model.
             target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size (height,
-                width) of each image in the batch. If left to None, predictions will not be resized.
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[TensorType]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image as
-            predicted by the model.
+            `List[TensorType]`: A list of tensors representing the processed depth predictions.
         """
         requires_backends(self, "torch")
 

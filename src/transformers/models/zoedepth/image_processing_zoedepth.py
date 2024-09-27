@@ -479,8 +479,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 
         Returns:
-            `List[TensorType]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL
-            image as predicted by the model.
+            `List[TensorType]`: A list of tensors representing the processed depth predictions.
         """
         requires_backends(self, "torch")
 
