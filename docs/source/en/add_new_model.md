@@ -916,10 +916,13 @@ transformers.
 If you plan on having a transformers-first release, this is a great option: we run CI ahead of time, ensure the
 documentation is clear, and we aim to optimize your model as much as possible (providing quantization, optimizing it
 with Flash-Attention/SDPA, optimizing the KV cache, etc). 
-We can also lend you a hand in adding the model, reviewing it early, and help you make sure the `transformers` API works as expected!
+
+We can also lend you a hand in adding the model, reviewing it early, and help you make sure the `transformers` 
+API works as expected!
 
 If this is the path you wish to go with, we ask for you to reach out in advance, especially if the architecture is 
-particularly novel (at least a few days, but a few weeks will enable the absolute best integration). 
+particularly novel (at least a few days, but a few weeks will enable the absolute best integration). In order to reach
+out, please contact transformers@huggingface.co 🤗.
 
 ### Same-week integration
 
