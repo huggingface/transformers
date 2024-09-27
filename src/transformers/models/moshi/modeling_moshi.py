@@ -305,7 +305,25 @@ class MoshiFlexibleLinear(nn.Module):
         # Multiple layers case:
         # use einsum to batch the operations (batch_size, num_layers, input_size) -> (batch_size, num_layers, output_size)
         return torch.einsum("bnh,noh->bno", x, self.weight)
-
+    
+    
+class MoshiLinear(nn.Module):
+    def __init__(self, input_dim, output_dim, num_codebooks, use_flexible_linear=False):
+        super().__init__()
+        
+        self.use_flexible_linear = use_flexible_linear
+        
+        if not use_flexible_linear:
+            self.linear = nn.Linear(input_dim, output_dim, bias=False)
+        else:
+            self.linear = MoshiFlexibleLinear(input_dim, output_dim, num_layers=num_codebooks)
+            
+    
+    def forward(self, x, layer_idx=None):
+        if self.use_flexible_linear:
+            return self.linear(x, layer_idx)
+        else:
+            return self.linear(x)
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Moshi
 class MoshiRotaryEmbedding(nn.Module):
@@ -374,12 +392,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class MoshiGatingMLP(nn.Module):
-    def __init__(self, config, num_layers=1, is_depth_mlp=False):
+    def __init__(self, config, use_flexible_linear=False):
         super().__init__()
 
         self.activation_fn = ACT2FN[config.hidden_act]
-        ffn_dim = config.ffn_dim if not is_depth_mlp else config.depth_ffn_dim
-        hidden_size = config.hidden_size if not is_depth_mlp else config.depth_hidden_size
+        ffn_dim = config.ffn_dim
+        hidden_size = config.hidden_size
+        num_layers = config.num_codebooks if use_flexible_linear else 1
         if num_layers == 1:
             self.fc1 = nn.Linear(hidden_size, ffn_dim, bias=False)
             self.fc2 = nn.Linear(ffn_dim // 2, hidden_size, bias=False)
@@ -413,11 +432,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class MoshiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: MoshiConfig, layer_idx: Optional[int] = None, is_depth_attention=False):
+    def __init__(self, config: MoshiConfig, layer_idx: Optional[int] = None, use_flexible_linear=False, use_rope=True):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.is_depth_attention = is_depth_attention
         if layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
@@ -426,16 +444,12 @@ class MoshiAttention(nn.Module):
             )
 
         self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size if not is_depth_attention else config.depth_hidden_size
-        self.num_heads = config.num_attention_heads if not is_depth_attention else config.depth_num_attention_heads
-        self.head_dim = config.head_dim if not is_depth_attention else config.depth_head_dim
-        self.num_key_value_heads = (
-            config.num_key_value_heads if not is_depth_attention else config.depth_num_key_value_heads
-        )
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = (
-            config.max_position_embeddings if not is_depth_attention else config.depth_max_position_embeddings
-        )
+        self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
         self.scaling = 1 / math.sqrt(self.head_dim)
@@ -446,37 +460,22 @@ class MoshiAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        if not is_depth_attention:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-            self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-            self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-            self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        else:
-            self.q_proj = MoshiFlexibleLinear(
-                self.hidden_size, self.num_heads * self.head_dim, num_layers=config.num_codebooks
-            )
-            self.k_proj = MoshiFlexibleLinear(
-                self.hidden_size, self.num_key_value_heads * self.head_dim, num_layers=config.num_codebooks
-            )
-            self.v_proj = MoshiFlexibleLinear(
-                self.hidden_size, self.num_key_value_heads * self.head_dim, num_layers=config.num_codebooks
-            )
-            self.o_proj = MoshiFlexibleLinear(
-                self.num_heads * self.head_dim, self.hidden_size, num_layers=config.num_codebooks
-            )
+        self.q_proj = MoshiLinear(self.hidden_size, self.num_heads * self.head_dim, config.num_codebooks, use_flexible_linear)
+        self.k_proj = MoshiLinear(self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear)
+        self.v_proj = MoshiLinear(self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear)
+        self.o_proj = MoshiLinear(self.num_heads * self.head_dim, self.hidden_size, config.num_codebooks, use_flexible_linear)
 
         # rotary embeddings are not used in the depth decoder
-        self.rotary_emb = (
-            MoshiRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-            if not is_depth_attention
-            else None
-        )
+        self.rotary_emb = None
+        if use_rope:
+            self.rotary_emb = MoshiRotaryEmbedding(
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    base=self.rope_theta,
+                )
 
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward with Gemma->Moshi
+
+    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -489,15 +488,9 @@ class MoshiAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = (
-            self.q_proj(hidden_states) if not self.is_depth_attention else self.q_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        key_states = (
-            self.k_proj(hidden_states) if not self.is_depth_attention else self.k_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        value_states = (
-            self.v_proj(hidden_states) if not self.is_depth_attention else self.v_proj(hidden_states, cache_position)
-        )  # Ignore copy
+        query_states = self.q_proj(hidden_states, cache_position) # Ignore copy
+        key_states = self.k_proj(hidden_states, cache_position) # Ignore copy
+        value_states = self.v_proj(hidden_states, cache_position) # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -539,9 +532,7 @@ class MoshiAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = (
-            self.o_proj(attn_output) if not self.is_depth_attention else self.o_proj(attn_output, cache_position)
-        )  # Ignore copy
+        attn_output = self.o_proj(attn_output, cache_position) # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -585,15 +576,9 @@ class MoshiFlashAttention2(MoshiAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = (
-            self.q_proj(hidden_states) if not self.is_depth_attention else self.q_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        key_states = (
-            self.k_proj(hidden_states) if not self.is_depth_attention else self.k_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        value_states = (
-            self.v_proj(hidden_states) if not self.is_depth_attention else self.v_proj(hidden_states, cache_position)
-        )  # Ignore copy
+        query_states = self.q_proj(hidden_states, cache_position) # Ignore copy
+        key_states = self.k_proj(hidden_states, cache_position) # Ignore copy
+        value_states = self.v_proj(hidden_states, cache_position) # Ignore copy
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -663,9 +648,7 @@ class MoshiFlashAttention2(MoshiAttention):
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = (
-            self.o_proj(attn_output) if not self.is_depth_attention else self.o_proj(attn_output, cache_position)
-        )  # Ignore copy
+        attn_output = self.o_proj(attn_output, cache_position) # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -711,15 +694,9 @@ class MoshiSdpaAttention(MoshiAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = (
-            self.q_proj(hidden_states) if not self.is_depth_attention else self.q_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        key_states = (
-            self.k_proj(hidden_states) if not self.is_depth_attention else self.k_proj(hidden_states, cache_position)
-        )  # Ignore copy
-        value_states = (
-            self.v_proj(hidden_states) if not self.is_depth_attention else self.v_proj(hidden_states, cache_position)
-        )  # Ignore copy
+        query_states = self.q_proj(hidden_states, cache_position) # Ignore copy
+        key_states = self.k_proj(hidden_states, cache_position) # Ignore copy
+        value_states = self.v_proj(hidden_states, cache_position) # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -768,9 +745,8 @@ class MoshiSdpaAttention(MoshiAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
 
-        attn_output = (
-            self.o_proj(attn_output) if not self.is_depth_attention else self.o_proj(attn_output, cache_position)
-        )  # Ignore copy
+        attn_output = self.o_proj(attn_output, cache_position) # Ignore copy
+
 
         return attn_output, None, past_key_value
 
@@ -783,21 +759,16 @@ MOSHI_ATTENTION_CLASSES = {
 
 
 class MoshiDecoderLayer(nn.Module):
-    def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool = False, is_depth_layer=False):
+    def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool = False, use_rope=True):
         super().__init__()
-        self.is_depth_layer = is_depth_layer
-        self.hidden_size = config.hidden_size if not is_depth_layer else config.depth_hidden_size
+        self.hidden_size = config.hidden_size
         self.use_flexible_linear = use_flexible_linear
 
         self.self_attn = MOSHI_ATTENTION_CLASSES[config._attn_implementation](
-            config=config, layer_idx=layer_idx, is_depth_attention=is_depth_layer
+            config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
         )
 
-        self.mlp = (
-            MoshiGatingMLP(config)
-            if not use_flexible_linear
-            else MoshiGatingMLP(config, config.num_codebooks, is_depth_layer)
-        )
+        self.mlp = MoshiGatingMLP(config, use_flexible_linear)
         self.input_layernorm = MoshiRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MoshiRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
@@ -1081,7 +1052,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
         self.layers = nn.ModuleList(
             [
-                MoshiDecoderLayer(config, layer_idx, use_flexible_linear=True, is_depth_layer=True)
+                MoshiDecoderLayer(config, layer_idx, use_flexible_linear=True, use_rope=False)
                 for layer_idx in range(config.depth_num_hidden_layers)
             ]
         )

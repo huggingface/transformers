@@ -29,7 +29,7 @@ from transformers import (
     PreTrainedTokenizerFast,
     logging,
 )
-from transformers.convert_slow_tokenizer import Converter, SpmConverter, _get_prepend_scheme, import_protobuf
+from transformers.convert_slow_tokenizer import Converter, SpmConverter, import_protobuf
 from transformers.utils import requires_backends
 
 
@@ -85,7 +85,7 @@ class MoshiConverter(SpmConverter):
         return decoders.Sequence(sequence)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        prepend_scheme = "first"
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
 
 
@@ -120,7 +120,7 @@ convert_list = [
     # TRANSFORMERS PART
     ("gating.linear_in", "mlp.fc1"),
     ("gating.linear_out", "mlp.fc2"),
-    ("self_attn.out_proj", "self_attn.o_proj"),
+    ("self_attn.out_proj", "self_attn.o_proj.linear"),
     ("norm1", "input_layernorm"),
     ("norm2", "post_attention_layernorm"),
     ("layer_scale_1", "self_attn_layer_scale"),
@@ -202,8 +202,8 @@ def _convert_model(
                     query_layer = mixed_qkv[:, :qkv_dim]
                     key_layer = mixed_qkv[:, qkv_dim : qkv_dim * 2]
                     value_layer = mixed_qkv[:, qkv_dim * 2 :]
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = query_layer
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = key_layer
+                    state_dict[new_k.replace("in_proj_weight", "q_proj.linear.weight")] = query_layer
+                    state_dict[new_k.replace("in_proj_weight", "k_proj.linear.weight")] = key_layer
 
                 else:
                     qkv_dim = mixed_qkv.size(0) // 3
@@ -211,14 +211,14 @@ def _convert_model(
                     query_layer = mixed_qkv[:qkv_dim]
                     key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
                     value_layer = mixed_qkv[qkv_dim * 2 :]
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = permute(
+                    state_dict[new_k.replace("in_proj_weight", "q_proj.linear.weight")] = permute(
                         query_layer, num_heads, hidden_size, hidden_size
                     )
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = permute(
+                    state_dict[new_k.replace("in_proj_weight", "k_proj.linear.weight")] = permute(
                         key_layer, num_key_value_heads, key_value_head_dim, hidden_size
                     )
 
-                state_dict[new_k.replace("in_proj_weight", "v_proj.weight")] = value_layer
+                state_dict[new_k.replace("in_proj_weight", "v_proj.linear.weight")] = value_layer
             elif "o_proj" in new_k and "depth_decoder" in new_k:
                 output_layer = state_dict.pop(k)
                 state_dict[new_k] = output_layer.view(config.num_codebooks, -1, output_layer.shape[-1])
@@ -331,8 +331,6 @@ if __name__ == "__main__":
     if args.tokenizer_vocab_path:
         tokenizer = MoshiConverter(args.tokenizer_vocab_path).tokenizer
 
-        tokenizer.save_pretrained(args.pytorch_dump_folder_path)
-
         if args.test_tokenizer:
             import sentencepiece
             import tqdm
@@ -354,6 +352,8 @@ if __name__ == "__main__":
                         f"elements in HF: {set(decoded1)-set(decoded2)} \nvs\n "
                         f"elements in original: {set(decoded2)-set(decoded1)} \n\n{string}"
                     )
+
+        tokenizer.save_pretrained(args.pytorch_dump_folder_path)
 
         if args.push_to_hub:
             print("Pushing the tokenizer to the hub...")
