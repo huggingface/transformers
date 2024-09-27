@@ -14,7 +14,7 @@ $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) 
 
 ## حساب PPL مع النماذج ذات الطول الثابت
 
-إذا لم نكن مقيدين بحجم سياق النموذج، فسنقوم بتقييم حيرة النموذج عن طريق تفكيك تسلسل بشكل ذاتي ترجعي والاشتقاق الشرطي للتسلسل الفرعي السابق بالكامل في كل خطوة، كما هو موضح أدناه.
+إذا لم نكن مقيدين بحجم سياق النموذج، فسنقوم بتقييم التعقيد اللغوي للنموذج عن طريق تحليل التسلسل تلقائيًا والشرط على التسلسل الفرعي السابق بالكامل في كل خطوة، كما هو موضح أدناه.
 
 <img width="600" alt="Full decomposition of a sequence with unlimited context length" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_full.gif"/>
 
