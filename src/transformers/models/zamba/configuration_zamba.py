@@ -126,6 +126,7 @@ class ZambaConfig(PretrainedConfig):
         vocab_size=32000,
         tie_word_embeddings=True,
         hidden_size=3712,
+        attention_hidden_size=None,
         intermediate_size=14848,
         num_hidden_layers=76,
         num_attention_heads=16,
@@ -160,6 +161,10 @@ class ZambaConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.tie_word_embeddings = tie_word_embeddings
         self.hidden_size = hidden_size
+        if attention_hidden_size is None:
+            self.attention_hidden_size = 2 * hidden_size
+        else:
+            self.attention_hidden_size = attention_hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

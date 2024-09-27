@@ -261,7 +261,7 @@ class ZambaAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
 
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
-    The input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
+    The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
     The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
     (see fig. 2 in https://arxiv.org/pdf/2405.16712).
     Additionally, replaced
@@ -275,6 +275,7 @@ class ZambaAttention(nn.Module):
         self.layer_idx = layer_idx
 
         self.hidden_size = config.hidden_size
+        self.attention_hidden_size = config.attention_hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.attention_head_dim
         self.num_key_value_heads = config.num_key_value_heads
@@ -283,14 +284,14 @@ class ZambaAttention(nn.Module):
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
 
-        if (self.head_dim * self.num_heads) != 2 * self.hidden_size:
+        if (self.head_dim * self.num_heads) != self.attention_hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(2 * self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(2 * self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(2 * self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.q_proj = nn.Linear(self.attention_hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.attention_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.attention_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
@@ -340,7 +341,7 @@ class ZambaAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, 2 * self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.attention_hidden_size)
 
         attn_output = attn_output
         attn_output = self.o_proj(attn_output)
@@ -443,7 +444,7 @@ class ZambaFlashAttention2(ZambaAttention):
             softmax_scale=softmax_scale,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, 2 * self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.attention_hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -528,7 +529,7 @@ class ZambaSdpaAttention(ZambaAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, 2 * self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, self.attention_hidden_size)
 
         attn_output = self.o_proj(attn_output)
 
@@ -846,7 +847,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         self.self_attn = ZAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.feed_forward = ZambaMLP(config)
-        self.input_layernorm = ZambaRMSNorm(2 * config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = ZambaRMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
