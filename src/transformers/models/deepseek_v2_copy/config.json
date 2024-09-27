@@ -46,7 +46,6 @@
   },
   "rope_theta": 10000,
   "routed_scaling_factor": 16.0,
-  "scoring_func": "softmax",
   "seq_aux": true,
   "tie_word_embeddings": false,
   "topk_group": 3,

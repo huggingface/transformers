@@ -52,8 +52,6 @@ class DeepseekV2Config(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to False):
             Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to 'softmax'):
-            Method of computing expert weights.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
         seq_aux = (`bool`, *optional*, defaults to True):
@@ -126,21 +124,19 @@ class DeepseekV2Config(PretrainedConfig):
         num_key_value_heads=32,
         n_shared_experts=2,
         n_routed_experts=2,
-     #   ep_size=1,
         routed_scaling_factor=1.0,
         kv_lora_rank=16,
         q_lora_rank=1536,
         qk_rope_head_dim=64,
         v_head_dim=128,
         qk_nope_head_dim=128,
-        topk_method="greedy", #TOOD: always greedy
+        topk_method="greedy", 
         n_group=None,
         topk_group=None,
         num_experts_per_tok=2,
         moe_layer_freq=1,
         first_k_dense_replace=0,
         norm_topk_prob=False,
-        scoring_func="softmax", #TODO: always softamx
         aux_loss_alpha=0.001,
         seq_aux=True,
         hidden_act="silu",
@@ -168,7 +164,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
-     #   self.ep_size = ep_size
         self.routed_scaling_factor = routed_scaling_factor
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -182,7 +177,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.moe_layer_freq = moe_layer_freq
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.scoring_func = scoring_func
         self.aux_loss_alpha = aux_loss_alpha
         self.seq_aux = seq_aux
         # for backward compatibility

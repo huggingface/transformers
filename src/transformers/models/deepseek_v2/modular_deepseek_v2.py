@@ -42,10 +42,7 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.persimmon.modeling_persimmon import PersimmonRMSNorm
-from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding, \
-    PersimmonLinearScalingRotaryEmbedding, PersimmonDynamicNTKScalingRotaryEmbedding, Persimmon_INPUTS_DOCSTRING, \
-    PersimmonForCausalLM, apply_rotary_pos_emb, rotate_half, PersimmonPreTrainedModel
+from transformers.models.mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, MixtralRotaryEmbedding, apply_rotary_pos_emb, rotate_half
 from transformers.pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_1_13,
@@ -60,26 +57,14 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import is_torch_fx_available
 
+from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
+
+from transformers.src.transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeMLP, Qwen2MoeRMSNorm, Qwen2MoeRotaryEmbedding
+
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
-
-DeepseekV2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`DeepseekV2Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 class DeepseekV2Config(PretrainedConfig):
     r"""
@@ -126,8 +111,6 @@ class DeepseekV2Config(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to False):
             Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to 'softmax'):
-            Method of computing expert weights.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
         seq_aux = (`bool`, *optional*, defaults to True):
@@ -211,7 +194,6 @@ class DeepseekV2Config(PretrainedConfig):
         moe_layer_freq=1,
         first_k_dense_replace=0,
         norm_topk_prob=False,
-        scoring_func="softmax",
         aux_loss_alpha=0.001,
         seq_aux=True,
         hidden_act="silu",
@@ -250,7 +232,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.moe_layer_freq = moe_layer_freq
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.scoring_func = scoring_func
         self.aux_loss_alpha = aux_loss_alpha
         self.seq_aux = seq_aux
         # for backward compatibility
@@ -276,24 +257,65 @@ class DeepseekV2Config(PretrainedConfig):
             **kwargs,
         )
 
-class DeepseekV2RMSNorm(PersimmonRMSNorm):
+
+#qwen2
+class DeepseekV2RMSNorm(Qwen2MoeRMSNorm):
     pass
 
 ALL_LAYERNORM_LAYERS.append(DeepseekV2RMSNorm)
 
+
 #TODO: confirm OK to skip this change: self.max_seq_len_cached = None, dtype=torch.int64).type_as(self.inv_freq == dtype=self.inv_freq.dtype
-class DeepseekV2RotaryEmbedding(PersimmonRotaryEmbedding):
-    pass
+class DeepseekV2RotaryEmbedding(Qwen2MoeRotaryEmbedding):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+        super().__init__()
+        self.scaling_factor = scaling_factor
 
 
-class DeepseekV2LinearScalingRotaryEmbedding(PersimmonLinearScalingRotaryEmbedding):
-    pass
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->DeepseekV2
+class DeepseekV2LinearScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
+    """DeepseekV2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = t / self.scaling_factor
+
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->DeepseekV2
-class DeepseekV2DynamicNTKScalingRotaryEmbedding(PersimmonDynamicNTKScalingRotaryEmbedding):
-    pass
+class DeepseekV2DynamicNTKScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
+    """DeepseekV2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
+    def __init__(
+        self, dim,max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+
+        if seq_len > self.max_position_embeddings:
+            base = self.base * ((self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / ( base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
 # Inverse dim formula to find dim based on number of rotations
@@ -323,7 +345,6 @@ def yarn_linear_ramp_mask(min, max, dim):
     return ramp_func
 
 
-# All Yarn is new
 class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
     def __init__(
         self,
@@ -380,34 +401,12 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
         self.register_buffer("sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False)
 
 
-# Copied from transformers.models.Persimmon.modeling_Persimmon.rotate_hal
-def rotate_half(rotate_half):
-    pass
-
-
-# Copied from transformers.models.Persimmon.modeling_Persimmon.apply_rotary_pos_emb
-def apply_rotary_pos_emb(apply_rotary_pos_emb):
-    pass
-
-
-# does not need to have hidden_size passed, same as qwen 2
-class DeepseekV2MLP(nn.Module):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
+class DeepseekV2MLP(Qwen2MoeMLP):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
-# MOE gate is new
 class MoEGate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -415,7 +414,6 @@ class MoEGate(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha
         self.seq_aux = config.seq_aux
         self.topk_method = config.topk_method
@@ -425,7 +423,9 @@ class MoEGate(nn.Module):
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
+        self.weight = nn.Parameter(
+            torch.empty((self.n_routed_experts, self.gating_dim))
+        )
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -434,84 +434,32 @@ class MoEGate(nn.Module):
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, hidden_states):
-        bsz, seq_len, h = hidden_states.shape
-        ### compute gating score
-        hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        if self.scoring_func == "softmax":
-            scores = logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
 
         ### select top-k experts
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-            group_mask = torch.zeros_like(group_scores)  # [n, n_group]
-            group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
-            score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group)
-                .reshape(bsz * seq_len, -1)
-            )  # [n, e]
-            tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
+            group_scores = routing_weights.view(batch_size * sequence_length, self.n_group, -1).max(dim=-1).values
+            topk_group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False).indices
+            group_mask = F.one_hot(topk_group_idx, num_classes=self.n_group).sum(dim=1).bool()
+            group_mask = group_mask.unsqueeze(-1).expand(-1, -1, self.n_routed_experts // self.n_group).reshape(batch_size * sequence_length, -1)
+            
+            masked_routing_weights = routing_weights.masked_fill(~group_mask, 0.0)
+            routing_weights, selected_experts = torch.topk(masked_routing_weights, k=self.top_k, dim=-1, sorted=False)
 
         ### norm gate to sum 1
         if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
+            denominator = routing_weights.sum(dim=-1, keepdim=True) + 1e-20
+            routing_weights = routing_weights / denominator
         else:
-            topk_weight = topk_weight * self.routed_scaling_factor
+            routing_weights = routing_weights * self.routed_scaling_factor
 
-        ### expert-level computation auxiliary loss
-        if self.training and self.alpha > 0.0:
-            scores_for_aux = scores
-            aux_topk = self.top_k
-            # always compute aux loss based on the naive greedy topk method
-            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)
-            if self.seq_aux:
-                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)
-                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)
-                ce.scatter_add_(
-                    1,
-                    topk_idx_for_aux_loss,
-                    torch.ones(bsz, seq_len * aux_topk, device=hidden_states.device),
-                ).div_(seq_len * aux_topk / self.n_routed_experts)
-                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha
-            else:
-                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)
-                ce = mask_ce.float().mean(0)
-                Pi = scores_for_aux.mean(0)
-                fi = ce * self.n_routed_experts
-                aux_loss = (Pi * fi).sum() * self.alpha
-        else:
-            aux_loss = None
-        return topk_idx, topk_weight, aux_loss
-
-
-class AddAuxiliaryLoss(torch.autograd.Function):
-    """
-    The trick function of adding auxiliary (aux) loss,
-    which includes the gradient of the aux loss during backpropagation.
-    """
-
-    @staticmethod
-    def forward(ctx, x, loss):
-        assert loss.numel() == 1
-        ctx.dtype = loss.dtype
-        ctx.required_aux_loss = loss.requires_grad
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        grad_loss = None
-        if ctx.required_aux_loss:
-            grad_loss = torch.ones(1, dtype=ctx.dtype, device=grad_output.device)
-        return grad_output, grad_loss
-
+        return selected_experts, routing_weights, router_logits
 
 class DeepseekV2MoE(nn.Module):
     """
@@ -521,8 +469,9 @@ class DeepseekV2MoE(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.num_experts_per_tok = config.num_experts_per_tok
+        self.top_k = config.num_experts_per_tok
         self.experts_per_rank = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
         self.experts = nn.ModuleList(
             [
                 DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)
@@ -532,27 +481,37 @@ class DeepseekV2MoE(nn.Module):
         self.gate = MoEGate(config)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
+            self.shared_experts = DeepseekV2MLP(
+                config=config, intermediate_size=intermediate_size
+            )
 
     def forward(self, hidden_states):
+      
         identity = hidden_states
-        orig_shape = hidden_states.shape
-        topk_idx, topk_weight, aux_loss = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        flat_topk_idx = topk_idx.view(-1)
-        if self.training:
-            hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
-            final_hidden_states = torch.empty_like(hidden_states)
-            for expert_idx, expert_layer in enumerate(self.experts):
-                final_hidden_states[flat_topk_idx == expert_idx] = expert_layer(hidden_states[flat_topk_idx == expert_idx])
-            final_hidden_states = (final_hidden_states.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
-            final_hidden_states = final_hidden_states.to(hidden_states.dtype).view(*orig_shape)
-            final_hidden_states = AddAuxiliaryLoss.apply(final_hidden_states, aux_loss)
-        else:
-            final_hidden_states = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+
+        selected_experts, routing_weights, router_logits = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=torch.bfloat16, device=hidden_states.device
+        )
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.experts_per_rank).permute(2, 1, 0)
+
+        for expert_idx in range(self.num_experts):
+            expert_layer = self.experts[expert_idx]
+            idx, top_x = torch.where(expert_mask[expert_idx])
+            tokens_for_this_expert = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(tokens_for_this_expert) * routing_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.bfloat16))
+
+        
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+
         if self.config.n_shared_experts is not None:
             final_hidden_states = final_hidden_states + self.shared_experts(identity)
-        return final_hidden_states
+
+        return final_hidden_states.to(hidden_states.dtype), router_logits
 
 
 # Copied from transformers.models.Persimmon.modeling_Persimmon.PersimmonAttention with Persimmon->DeepseekV2
@@ -915,7 +874,8 @@ ATTENTION_CLASSES = {
     "flash_attention_2": DeepseekV2FlashAttention2,
 }
 
-class DeepseekV2DecoderLayer(PersimmonDecoderLayer):
+#qwen2
+class DeepseekV2DecoderLayer(Qwen2MoeDecoderLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -936,22 +896,7 @@ class DeepseekV2DecoderLayer(PersimmonDecoderLayer):
         self.dropout = lambda x: x
 
 
-#same as Persimmon but without cache_position
-DeepseekV2_INPUTS_DOCSTRING = Persimmon_INPUTS_DOCSTRING[:Persimmon_INPUTS_DOCSTRING.index('cache_position')].rstrip()
-
-
-@add_start_docstrings(
-    "The bare DeepseekV2 Model outputting raw hidden-states without any specific head on top.",
-    DeepseekV2_START_DOCSTRING,
-)
-class DeepseekV2PreTrainedModel(PersimmonPreTrainedModel):
-    _no_split_modules = ["DeepseekV2DecoderLayer"]
-
-@add_start_docstrings(
-    "The bare DeepseekV2 Model outputting raw hidden-states without any specific head on top.",
-    DeepseekV2_START_DOCSTRING,
-)
-class DeepseekV2Model(DeepseekV2PreTrainedModel):
+class DeepseekV2Model(MixtralModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DeepseekV2DecoderLayer`]
 
@@ -980,7 +925,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1108,7 +1052,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         )
 
 
-class DeepseekV2ForCausalLM(PersimmonForCausalLM):
+class DeepseekV2ForCausalLM(Qwen2MoeForCausalLM):
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1180,3 +1124,10 @@ class DeepseekV2ForCausalLM(PersimmonForCausalLM):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+class DeepseekV2ForSequenceClassification(Qwen2MoeForSequenceClassification):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = DeepseekV2Model(config)
+        self.post_init()
