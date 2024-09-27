@@ -5,7 +5,7 @@
 #                           modular_xxx.py file directly. One of our CI enforces this
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The Knowledge Engineering Group (KEG) & Data Mining at Tsinghua University and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,80 @@ from ...configuration_utils import PretrainedConfig
 
 
 class GlmConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmModel`]. It is used to instantiate an Glm
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Glm-7B.
+    e.g. [google/glm-7b](https://huggingface.co/google/glm-7b)
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    Args:
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the Glm model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GlmModel`]
+        hidden_size (`int`, *optional*, defaults to 3072):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 24576):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 28):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 16):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 256):
+            The attention head dimension.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The legacy activation function. It is overwritten by the `hidden_activation`.
+        hidden_activation (`str` or `function`, *optional*):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
+            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+    ```python
+    >>> from transformers import GlmModel, GlmConfig
+    >>> # Initializing a Glm glm-7b style configuration
+    >>> configuration = GlmConfig()
+    >>> # Initializing a model from the glm-7b style configuration
+    >>> model = GlmModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+        resid_pdrop (`float`, *optional*, defaults to `0.0`):
+            Dropout ratio in the decoder layers.
+        linear_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the MLP layers, as well as the query, key, value and output projection layers during self-attention.
+    """
+
     model_type = "glm"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -35,52 +108,45 @@ class GlmConfig(PretrainedConfig):
         num_hidden_layers=40,
         num_attention_heads=32,
         num_key_value_heads=2,
+        head_dim=128,
+        hidden_act="silu",
         resid_pdrop=0.0,
         attention_dropout=0.0,
-        hidden_act="silu",
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=0.00000015625,
-        use_rms_norm=True,
-        apply_residual_connection_post_layernorm=False,
-        post_layer_norm=True,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         pad_token_id=151329,
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
-        head_dim=128,
         attention_bias=True,
         linear_bias=False,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
-        self.resid_pdrop = resid_pdrop
-        self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.use_rms_norm = use_rms_norm
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
-        self.post_layer_norm = post_layer_norm
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.head_dim = head_dim
         self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.resid_pdrop = resid_pdrop
         self.linear_bias = linear_bias
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
