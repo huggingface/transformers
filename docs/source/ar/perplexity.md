@@ -23,7 +23,6 @@ $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) 
 بدلاً من ذلك، يتم عادةً تقسيم التسلسل إلى تسلسلات فرعية مساوية لحجم الإدخال الأقصى للنموذج. فإذا كان حجم الإدخال الأقصى للنموذج هو \\(k\\)، فإننا نقرب احتمال الرمز \\(x_t\\) عن طريق الاشتقاق الشرطي فقط بالنسبة إلى \\(k-1\\) من الرموز التي تسبقه بدلاً من السياق بأكمله. وعند تقييم حيرة النموذج  لتسلسل ما، قد يبدو من المغري تقسيم التسلسل إلى أجزاء منفصلة وجمع مجموع دوال اللوغاريتم لكل جزء بشكل مستقل، لكن هذا الأسلوب ليس الأمثل.
 
 <img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
-<img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 
 تتميز هذه الطريقة بسرعة حسابها نظرًا لإمكانية حساب درجة التعقيد اللغوي لكل جزء بمسح واحد للأمام، إلا أنها تُعدّ تقريبًا ضعيفًا لدرجة التعقيد اللغوي المُحلّلة بشكل كامل، وعادةً ما تؤدي إلى درجة تعقيد لغوي أعلى (أسوأ) لأن النموذج سيكون لديه سياق أقل في معظم خطوات التنبؤ.
 
