@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The Knowledge Engineering Group (KEG) & Data Mining at Tsinghua University and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,13 +21,13 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ..gemma.configuration_gemma import GemmaConfig
 from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
@@ -50,7 +50,13 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-class GlmConfig(PretrainedConfig):
+class GlmConfig(GemmaConfig):
+    """
+    resid_pdrop (`float`, *optional*, defaults to `0.0`):
+        Dropout ratio in the decoder layers.
+    linear_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use a bias in the MLP layers, as well as the query, key, value and output projection layers during self-attention.
+    """
     model_type = "glm"
 
     def __init__(
@@ -61,9 +67,10 @@ class GlmConfig(PretrainedConfig):
         num_hidden_layers=40,
         num_attention_heads=32,
         num_key_value_heads=2,
+        head_dim=128,
+        hidden_act="silu",
         resid_pdrop=0.0,
         attention_dropout=0.0,
-        hidden_act="silu",
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=0.00000015625,
@@ -73,37 +80,16 @@ class GlmConfig(PretrainedConfig):
         pad_token_id=151329,
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
-        head_dim=128,
         attention_bias=True,
         linear_bias=False,
         **kwargs,
     ):
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             **kwargs,
         )
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.resid_pdrop = resid_pdrop
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.head_dim = head_dim
-        self.attention_bias = attention_bias
         self.linear_bias = linear_bias
+        del self.hidden_activation
 
 
 class GlmRMSNorm(Phi3RMSNorm):

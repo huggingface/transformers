@@ -5,7 +5,7 @@
 #                           modular_xxx.py file directly. One of our CI enforces this
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The Knowledge Engineering Group (KEG) & Data Mining at Tsinghua University and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -531,23 +531,14 @@ class GlmDecoderLayer(nn.Module):
         super().__init__()
 
         self.config = config
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.mlp = GlmMLP(config)
-        self.input_layernorm = (
-            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_rms_norm
-            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        )
+        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
-        self.post_attention_layernorm = (
-            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_rms_norm
-            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        )
+        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -584,12 +575,12 @@ class GlmDecoderLayer(nn.Module):
                 into the model
         """
 
-        hidden_states_after_norm = self.input_layernorm(hidden_states)
-        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states_after_norm,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -600,11 +591,11 @@ class GlmDecoderLayer(nn.Module):
         )
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs)
+        residual = hidden_states
 
-        hidden_states_after_norm = self.post_attention_layernorm(hidden_states)
-        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
 
-        hidden_states = self.mlp(hidden_states_after_norm)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.resid_mlp_dropout(hidden_states)
 
         outputs = (hidden_states,)
@@ -767,14 +758,6 @@ class GlmModel(GlmPreTrainedModel):
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
         self.gradient_checkpointing = False
-        if config.post_layer_norm:
-            self.norm = (
-                GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-                if config.use_rms_norm
-                else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-            )
-        else:
-            self.norm = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
