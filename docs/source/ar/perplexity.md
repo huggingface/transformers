@@ -25,7 +25,7 @@ $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) 
 <img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 <img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 
-هذا سريع الحساب لأن حيرة كل جزء يمكن حسابها في تمرير واحد، ولكنه يمثل تقريبًا ضعيفًا لحيرة التفكيك الكامل وسيؤدي عادةً إلى PPL أعلى (أسوأ) لأن النموذج سيكون لديه سياق أقل في معظم خطوات التنبؤ.
+تتميز هذه الطريقة بسرعة حسابها نظرًا لإمكانية حساب درجة التعقيد اللغوي لكل جزء بمسح واحد للأمام، إلا أنها تُعدّ تقريبًا ضعيفًا لدرجة التعقيد اللغوي المُحلّلة بشكل كامل، وعادةً ما تؤدي إلى درجة تعقيد لغوي أعلى (أسوأ) لأن النموذج سيكون لديه سياق أقل في معظم خطوات التنبؤ.
 
 بدلاً من ذلك، يجب تقييم حيرة النماذج ذات الطول الثابت باستخدام إستراتيجية النافذة المنزلقة. وينطوي هذا على تحريك نافذة السياق بشكل متكرر بحيث يكون للنموذج سياق أكبر عند إجراء كل تنبؤ.
 
