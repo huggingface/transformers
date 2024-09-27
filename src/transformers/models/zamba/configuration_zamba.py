@@ -44,7 +44,7 @@ class ZambaConfig(PretrainedConfig):
             model has a output word embedding layer.
         hidden_size (`int`, *optional*, defaults to 3712):
             Dimension of the hidden representations.
-        attention_hidden_size (`int`, *optional*, defaults to `None`):
+        attention_hidden_size (`int`, *optional*):
             Dimension of the hidden representations of the inputs to the Attention layer.
         intermediate_size (`int`, *optional*, defaults to 14848):
             Dimension of the MLP representations.
