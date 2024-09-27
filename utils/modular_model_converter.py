@@ -502,7 +502,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 TYPE_TO_FILE_TYPE = {
     "Config": "configuration",
     "Tokenizer": "tokenization",
-    "Processor": "processor",
+    "Processor": "processing",
     "ImageProcessor": "image_processing",
     "FeatureExtractor": "feature_extractor",
 }
