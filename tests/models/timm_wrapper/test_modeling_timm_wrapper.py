@@ -96,7 +96,11 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.config_class = TimmWrapperConfig
         self.model_tester = TimmWrapperModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=self.config_class, has_text_modality=False, common_properties=[], model_name="timm/resnet18.a1_in1k"
+            self,
+            config_class=self.config_class,
+            has_text_modality=False,
+            common_properties=[],
+            model_name="timm/resnet18.a1_in1k",
         )
 
     def test_config(self):
