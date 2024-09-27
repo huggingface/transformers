@@ -89,7 +89,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 device = "mps"
             else:
                 device = "cpu"
-            logger.info(f"Using device: {device}")
 
         return device
 

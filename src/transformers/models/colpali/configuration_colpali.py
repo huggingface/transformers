@@ -40,3 +40,4 @@ class ColPaliConfig(PaliGemmaConfig):
         super().__init__(**kwargs)
         self.model_type = "colpali"
         self.is_composition = False
+        self.embedding_dim = 128
