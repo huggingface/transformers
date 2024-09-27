@@ -104,6 +104,7 @@ class VivitEmbeddings(nn.Module):
             torch.zeros(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.tubelet_size
         self.config = config
 
     # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
