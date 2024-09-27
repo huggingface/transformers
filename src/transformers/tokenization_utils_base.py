@@ -1622,7 +1622,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
-        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
+        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
@@ -1966,10 +1966,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # priority: `chat_template` argument > `tokenizer.chat_template`
             if self.chat_template is not None:
                 chat_template = self.chat_template
-
             else:
                 raise ValueError(
-                    "Cannot use apply_chat_template() because tokenizer.chat_template is not set and no template "
+                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
                     "argument was passed! For information about writing templates and setting the "
                     "tokenizer.chat_template attribute, please see the documentation at "
                     "https://huggingface.co/docs/transformers/main/en/chat_templating"

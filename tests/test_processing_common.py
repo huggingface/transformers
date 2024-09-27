@@ -78,7 +78,7 @@ class ProcessorTesterMixin:
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-        if attribute == "tokenizer" and not component.pad_token:
+        if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
                 component.pad_token_id = 0
@@ -461,14 +461,8 @@ class ProcessorTesterMixin:
     def test_overlapping_text_kwargs_handling(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_kwargs = {}
-        processor_kwargs["image_processor"] = self.get_component("image_processor")
-        processor_kwargs["tokenizer"] = tokenizer = self.get_component("tokenizer")
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "video_processor" in self.processor_class.attributes:
-            processor_kwargs["video_processor"] = self.get_component("video_processor")
-        processor = self.processor_class(**processor_kwargs)
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
