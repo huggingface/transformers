@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 import requests
-import warnings
 
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
