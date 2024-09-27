@@ -195,82 +195,30 @@ def load_balancing_loss_func(
 class PhimoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        rope_type="default",
         config: Optional[PhimoeConfig] = None,
     ):
         super().__init__()
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
+        self.config = config
         if config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.short_mscale = config.rope_scaling.get("short_mscale")
+            self.long_mscale = config.rope_scaling.get("long_mscale")
         else:
-            self.rope_type = "default"
+            self.rope_type = "longrope"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
-
     def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
-        )
-
-
-class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
-    def __init__(self, dim, config):
-        super().__init__()
-        self.dim = dim
-        self.max_position_embeddings = config.max_position_embeddings
-        self.base = config.rope_theta
-        self.short_factor = config.rope_scaling["short_factor"]
-        self.long_factor = config.rope_scaling["long_factor"]
-        self.short_mscale = config.rope_scaling["short_mscale"]
-        self.long_mscale = config.rope_scaling["long_mscale"]
-        self.original_max_position_embeddings = config.rope_scaling["original_max_position_embeddings"]
-
-    def forward(self, x, seq_len=None):
-        if seq_len is None:
-            seq_len = x.shape[-2]
-
-        if seq_len > self.original_max_position_embeddings:
-            rescale_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+        if (
+            self.config.rope_scaling
+            and seq_len
+            and seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+        ):
             mscale = self.long_mscale
         else:
-            rescale_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
             mscale = self.short_mscale
-        assert rescale_factors.shape == (
-            self.dim // 2,
-        ), f"misaligned shape for LongRoPE rescale factors: {rescale_factors.shape}"
-
-        inv_freq = 1.0 / (
-            rescale_factors * (self.base ** (torch.arange(0, self.dim, 2).float().to(x.device) / self.dim))
-        )
-
+        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
+        mscale = attention_scaling if mscale is None else mscale
         t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
         freqs = torch.outer(t, inv_freq)
 
@@ -369,19 +317,9 @@ class PhimoeAttention(nn.Module):
         )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.config.attention_bias)
 
-        if getattr(config, "rope_scaling", None) is None:
-            self.rotary_emb = PhimoeRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-                config=self.config,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            if scaling_type == "longrope":
-                self.rotary_emb = Phi3LongRoPEScaledRotaryEmbedding(self.head_dim, self.config)
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+        self.rotary_emb = PhimoeRotaryEmbedding(
+            config=self.config,
+        )
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
