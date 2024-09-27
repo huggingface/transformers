@@ -20,14 +20,12 @@ import os
 import random
 import re
 import unittest
-from dataclasses import fields
-from inspect import isclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from textwrap import dedent
 from typing import get_args
 
-from huggingface_hub.inference._generated import types as inference_specs
-from huggingface_hub.inference._generated.types import AudioClassificationInput
+from huggingface_hub import AudioClassificationInput
 
 from transformers.pipelines import AudioClassificationPipeline
 from transformers.testing_utils import (
@@ -711,16 +709,15 @@ def get_arg_names_from_hub_spec(hub_spec, first_level=True):
     # match the Hub specification for that task
     arg_names = []
     for field in fields(hub_spec):
-        # First, recurse into nested fields
-        if first_level and isclass(field.type) and issubclass(field.type, inference_specs.BaseInferenceType):
-            arg_names.extend(get_arg_names_from_hub_spec(field.type, first_level=False))
+        # Recurse into nested fields, but max one level
+        if is_dataclass(field.type):
+            arg_names.extend([field.name for field in fields(field.type)])
             continue
         # Next, catch nested fields that are part of a Union[], which is usually caused by Optional[]
         for param_type in get_args(field.type):
-            if first_level and isclass(param_type) and issubclass(param_type, inference_specs.BaseInferenceType):
-                arg_names.extend(
-                    get_arg_names_from_hub_spec(param_type, first_level=False)
-                )  # Recurse into nested fields
+            if is_dataclass(param_type):
+                # Again, recurse into nested fields, but max one level
+                arg_names.extend([field.name for field in fields(param_type)])
                 break
         else:
             # Finally, this line triggers if it's not a nested field
