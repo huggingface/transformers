@@ -5,6 +5,8 @@
     title: Quick tour
   - local: installation
     title: Installation
+  - local: add_new_model
+    title: Adding a new model to `transformers`
   title: Get started
 - sections:
   - local: pipeline_tutorial
@@ -149,6 +151,8 @@
     title: Interoperability with GGUF files
   - local: tiktoken
     title: Interoperability with TikToken files
+  - local: modular_transformers
+    title: Modularity in `transformers`
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -173,6 +177,8 @@
     title: Optimum
   - local: quantization/torchao
     title: TorchAO
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -826,6 +832,8 @@
         title: IDEFICS
       - local: model_doc/idefics2
         title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
@@ -856,8 +864,12 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mllama
+        title: mllama
       - local: model_doc/nougat
         title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit

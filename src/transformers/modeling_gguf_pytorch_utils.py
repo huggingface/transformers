@@ -169,6 +169,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 elif ".attn_k." in name:
                     weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
 
+            if architecture == "bloom" and "attn_qkv" in name:
+                num_heads = parsed_parameters["config"]["n_head"]
+                n_embed = parsed_parameters["config"]["hidden_size"]
+                if "weight" in name:
+                    weights = reverse_reshape_weights(weights, num_heads, n_embed)
+                else:
+                    weights = reverse_reshape_bias(weights, num_heads, n_embed)
+
             for tensor_name in tensor_key_mapping:
                 if tensor_name in name:
                     name = name.replace(tensor_name, tensor_key_mapping[tensor_name])
@@ -191,3 +199,29 @@ def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Opti
     dim = weights.shape[0] // n_head // 2
     w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
     return w.swapaxes(2, 1).reshape(weights.shape)
+
+
+def reverse_reshape_weights(weights: np.ndarray, n_head: int, n_embed: int):
+    # Original reshape implementation
+    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L972-L985
+    q, k, v = np.array_split(weights, 3, axis=0)
+
+    q = q.reshape(n_head, n_embed // n_head, n_embed)
+    k = k.reshape(n_head, n_embed // n_head, n_embed)
+    v = v.reshape(n_head, n_embed // n_head, n_embed)
+    qkv_weights = np.stack([q, k, v], axis=1)
+
+    return qkv_weights.reshape(n_head * 3 * (n_embed // n_head), n_embed)
+
+
+def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
+    # Original reshape implementation
+    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L986-L998
+    q_bias, k_bias, v_bias = np.array_split(weights, 3)
+
+    q_bias = q_bias.reshape(n_head, n_embed // n_head)
+    k_bias = k_bias.reshape(n_head, n_embed // n_head)
+    v_bias = v_bias.reshape(n_head, n_embed // n_head)
+
+    qkv_bias = np.stack([q_bias, k_bias, v_bias], axis=1).flatten()
+    return qkv_bias
