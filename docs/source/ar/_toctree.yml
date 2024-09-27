@@ -229,8 +229,8 @@
     title: عائلة نماذج المحول
   - local: tokenizer_summary
     title: ملخص برنامج مقسم النصوص (tokenizers)
-  # - local: attention
-  #   title: الانتباه Attention
+  - local: attention
+    title: الانتباه Attention
   # - local: pad_truncation
   #   title: الحشو والتقليم
   # - local: bertology
