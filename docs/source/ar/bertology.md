@@ -9,7 +9,7 @@
   Manning: https://arxiv.org/abs/1906.04341
 - CAT-probing: A Metric-based Approach to Interpret How Pre-trained Models for Programming Language Attend Code Structure: https://arxiv.org/abs/2210.04633
 
-وللمساعدة في تطوير هذا المجال الجديد، قمنا بتضمين بعض الميزات الإضافية في نماذج BERT/GPT/GPT-2 للسماح للناس بالوصول إلى التمثيلات الداخلية، والتي تم تكييفها بشكل أساسي من العمل الرائع لـ Paul Michel (https://arxiv.org/abs/1905.10650):
+لإثراء هذا المجال الناشئ، قمنا بتضمين بعض الميزات الإضافية في نماذج BERT/GPT/GPT-2 للسماح للناس بالوصول إلى التمثيلات الداخلية، والتي تم تكييفها بشكل أساسي من العمل الرائد لـ Paul Michel (https://arxiv.org/abs/1905.10650):
 
 - الوصول إلى جميع المخفيّات في BERT/GPT/GPT-2،
 - الوصول إلى جميع أوزان الانتباه لكل رأس في BERT/GPT/GPT-2،
