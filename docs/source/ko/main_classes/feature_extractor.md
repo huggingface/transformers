@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 특징 추출기 [[feature-extractor]]
+# 특성 추출기 [[feature-extractor]]
 
-특징 추출기는 오디오 또는 비전 모델을 위한 입력 특징을 준비하는 역할을 합니다. 여기에는 시퀀스에서 특징을 추출하는 작업, 예를 들어 오디오 파일을 전처리하여 Log-Mel 스펙트로그램 특징을 생성하거나, 이미지에서 특징을 추출하는 작업, 예를 들어 이미지 파일을 자르는 것뿐만 아니라, 패딩, 정규화 및 NumPy, PyTorch, TensorFlow 텐서로의 변환도 포함됩니다.
+특성 추출기는 오디오 또는 비전 모델을 위한 입력 특성을 준비하는 역할을 합니다. 여기에는 시퀀스에서 특성을 추출하는 작업(예를 들어, 오디오 파일을 전처리하여 Log-Mel 스펙트로그램 특성을 생성하는 것), 이미지에서 특성을 추출하는 작업(예를 들어, 이미지 파일을 자르는 것)이 포함됩니다. 뿐만 아니라 패딩, 정규화 및 NumPy, PyTorch, TensorFlow 텐서로의 변환도 포함됩니다.
 
 
 ## FeatureExtractionMixin [[transformers.FeatureExtractionMixin]]
