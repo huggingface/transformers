@@ -2048,7 +2048,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return list(_no_split_modules)
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        multivariate_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
@@ -2068,11 +2071,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            multivariate_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+
+                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
+                between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, multivariate_resizing)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
@@ -2095,9 +2106,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, multivariate_resizing=True):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+        new_embeddings = self._get_resized_embeddings(
+            old_embeddings, new_num_tokens, pad_to_multiple_of, multivariate_resizing
+        )
         if hasattr(old_embeddings, "_hf_hook"):
             hook = old_embeddings._hf_hook
             add_hook_to_module(new_embeddings, hook)
@@ -2120,9 +2133,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
-                new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens)
+                new_lm_head = self._get_resized_embeddings(
+                    old_lm_head, new_num_tokens, multivariate_resizing=multivariate_resizing
+                )
             else:
-                new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+                new_lm_head = self._get_resized_lm_head(
+                    old_lm_head, new_num_tokens, multivariate_resizing=multivariate_resizing
+                )
             if hasattr(old_lm_head, "_hf_hook"):
                 hook = old_lm_head._hf_hook
                 add_hook_to_module(new_lm_head, hook)
@@ -2137,6 +2154,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings: nn.Embedding,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        multivariate_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
@@ -2159,6 +2177,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            multivariate_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+
+                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
+                between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
 
         Return:
@@ -2217,11 +2243,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_embeddings.weight.dtype,
         )
 
-        # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
-        # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
-        # distribution that has old embeddings' mean and covariance. as described in this article:
-        # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
-        if new_num_tokens > old_num_tokens:
+        if new_num_tokens > old_num_tokens and not multivariate_resizing:
+            self._init_weights(new_embeddings)
+
+        elif new_num_tokens > old_num_tokens and multivariate_resizing:
+            # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
+            # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
+            # distribution that has old embeddings' mean and covariance. as described in this article:
+            # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
             logger.warning(
                 "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html."
@@ -2231,17 +2260,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 import deepspeed
 
                 with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
-                    mean_embedding = torch.mean(old_embeddings.weight.data.to(torch.float32), axis=0)
+                    old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
+                    mean_embedding = torch.mean(old_embeddings_weight, axis=0)
                     covariance = (
-                        (old_embeddings.weight.data.to(torch.float32) - mean_embedding).T
-                        @ (old_embeddings.weight.data.to(torch.float32) - mean_embedding)
+                        (old_embeddings_weight - mean_embedding).T
+                        @ (old_embeddings_weight - mean_embedding)
                         / old_num_tokens
                     )
             else:
-                mean_embedding = torch.mean(old_embeddings.weight.data.to(torch.float32), axis=0)
+                old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
+                mean_embedding = torch.mean(old_embeddings_weight, axis=0)
                 covariance = (
-                    (old_embeddings.weight.data.to(torch.float32) - mean_embedding).T
-                    @ (old_embeddings.weight.data.to(torch.float32) - mean_embedding)
+                    (old_embeddings_weight - mean_embedding).T
+                    @ (old_embeddings_weight - mean_embedding)
                     / old_num_tokens
                 )
             if old_embedding_dim >= old_num_tokens:
@@ -2294,7 +2325,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return old_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+        self,
+        old_lm_head: nn.Linear,
+        new_num_tokens: Optional[int] = None,
+        transposed: Optional[bool] = False,
+        multivariate_resizing: bool = True,
     ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
@@ -2311,6 +2346,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `torch.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*, defaults
                 to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
                 vocab_size` else `vocab_size, lm_head_dim`.
+            multivariate_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+
+                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
+                between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
             `torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
@@ -2357,8 +2400,65 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_lm_head.weight.dtype,
         )
 
-        # initialize new lm head (in particular added tokens)
-        self._init_weights(new_lm_head)
+        if new_num_tokens > old_num_tokens and not multivariate_resizing:
+            self._init_weights(new_lm_head)
+
+        elif new_num_tokens > old_num_tokens and multivariate_resizing:
+            # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
+            # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
+            # distribution that has old embeddings' mean and covariance. as described in this article:
+            # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            logger.warning(
+                "The new lm_head weights will be sampled from a multivariate normal distribution that has old embeddings' mean "
+                "and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html."
+            )
+
+            if has_new_lm_head_bias:
+                # To not affect the purpose of multivariate initialization. Always initialze the bais with zeros.
+                new_lm_head.bias.data.zero_()
+
+            added_num_tokens = new_num_tokens - old_num_tokens
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
+                    old_lm_head_weight = (
+                        old_lm_head.weight.data.to(torch.float32)
+                        if not transposed
+                        else old_lm_head.weight.data.T.to(torch.float32)
+                    )
+                    mean_embedding = torch.mean(old_lm_head_weight, axis=0)
+                    covariance = (
+                        (old_lm_head_weight - mean_embedding).T
+                        @ (old_lm_head_weight - mean_embedding)
+                        / old_num_tokens
+                    )
+            else:
+                old_lm_head_weight = (
+                    old_lm_head.weight.data.to(torch.float32)
+                    if not transposed
+                    else old_lm_head.weight.data.T.to(torch.float32)
+                )
+                mean_embedding = torch.mean(old_lm_head_weight, axis=0)
+                covariance = (
+                    (old_lm_head_weight - mean_embedding).T @ (old_lm_head_weight - mean_embedding) / old_num_tokens
+                )
+            if old_lm_head_dim >= old_num_tokens:
+                # Covarince matrix must be positive definite. For edge cases, when `vocab_size` is
+                # smaller than `hidden_size`, covarince matrix won't be positive definite so we
+                # must add the eye matrix to the covarince matrix to convert it to be positive definite.
+                covariance = covariance + torch.eye(old_lm_head_dim, device=old_lm_head.weight.device) * 1e-3
+            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+                mean_embedding, covariance_matrix=1e-5 * covariance
+            )
+            if not transposed:
+                new_lm_head.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+                    sample_shape=(added_num_tokens,)
+                ).to(old_lm_head.weight.dtype)
+            else:
+                new_lm_head.weight.data[:, -1 * added_num_tokens :] = distribution.sample(
+                    sample_shape=(added_num_tokens,)
+                ).T.to(old_lm_head.weight.dtype)
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
