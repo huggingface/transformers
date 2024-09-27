@@ -16,7 +16,7 @@
     <img scale="50 %" align="center" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/local_attention_mask.png"/>
 </div>
 
-وباستخدام مصفوفات الانتباه هذه التي تحتوي على معلمات أقل، يسمح النموذج بإدخالات ذات طول تسلسل أكبر.
+وباستخدام مصفوفات الانتباه هذه التي تحتوي على عدد أقل من المعلمات، يسمح النموذج بمدخالات ذات طول تسلسل أكبر.
 
 ## حيل أخرى
 
