@@ -159,14 +159,14 @@ def get_optimal_tiled_canvas(
     has more padding.
 
     Example of canvases made from tiles:
-    
+
     To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
 
     Here's an ASCII cat image you want to fit into the tiles:
 
-       /\_/\  
-      ( o.o ) 
-       > ^ <  
+       /\_/\
+      ( o.o )
+       > ^ <
 
     If `num_tiles=6`, possible tile grids would look like this:
 
@@ -176,8 +176,8 @@ def get_optimal_tiled_canvas(
     +-------+-------+
     | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
     +-------+-------+
-    |( o.o )|   0   | 
-    +-------+-------+ 
+    |( o.o )|   0   |
+    +-------+-------+
 
     **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
     +-------+-------+-------+
@@ -202,7 +202,7 @@ def get_optimal_tiled_canvas(
     +-------+
 
     Given that the tiles you get depend on the chosen aspect ratio, you have to add
-    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3 
+    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3
     aspect ratio.
 
     The function tests these arrangements to find the smallest canvas where the image fits.
@@ -210,7 +210,7 @@ def get_optimal_tiled_canvas(
 
     In this case the first canvas is the closest to the original image.
 
-    You then feed all of the tiles to the model: 
+    You then feed all of the tiles to the model:
 
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
@@ -219,7 +219,7 @@ def get_optimal_tiled_canvas(
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ | 0     |( o.o )|   0   | > ^ < |   0   | <- First canvas
         +-------+-------+-------+-------+-------+-------+
-        
+
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
         +-------+-------+-------+-------+-------+-------+
