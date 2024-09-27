@@ -36,8 +36,28 @@ class ColPaliConfig(PaliGemmaConfig):
     documentation from [`PretrainedConfig`] for more information.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        vision_config=None,
+        text_config=None,
+        ignore_index=-100,
+        image_token_index=256000,
+        vocab_size=257152,
+        projection_dim=2048,
+        hidden_size=2048,
+        embedding_dim: int = 128,
+        **kwargs,
+    ):
+        super().__init__(
+            vision_config=vision_config,
+            text_config=text_config,
+            ignore_index=ignore_index,
+            image_token_index=image_token_index,
+            vocab_size=vocab_size,
+            projection_dim=projection_dim,
+            hidden_size=hidden_size,
+            **kwargs,
+        )
         self.model_type = "colpali"
         self.is_composition = False
-        self.embedding_dim = 128
+        self.embedding_dim = embedding_dim
