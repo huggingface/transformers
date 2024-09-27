@@ -137,6 +137,8 @@
     title: 문제 해결
   - local: in_translation
     title: (번역중) Interoperability with GGUF files
+  - local: modular_transformers
+    title: 'transformers'에서의 모듈성
   title: (번역중) 개발자 가이드
 - sections:
   - local: in_translation
