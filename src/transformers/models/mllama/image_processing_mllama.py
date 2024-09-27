@@ -135,7 +135,7 @@ def get_optimal_tiled_canvas(
     max_image_tiles: int,
     tile_size: int,
 ) -> Tuple[int, int]:
-    """
+    r"""
     Determines the best canvas based on image and tile size and maximum number of tiles.
 
     First, calculates possible resolutions based on the maximum number of tiles and tile size.
@@ -157,6 +157,74 @@ def get_optimal_tiled_canvas(
     If there are multiple resolutions with the same max scale, we pick the one with the lowest area,
     to minimize padding. E.g., the same image can be upscaled to 224x224 and 224x448, but the latter
     has more padding.
+
+    Example of canvases made from tiles:
+
+    To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
+
+    Here's an ASCII cat image you want to fit into the tiles:
+
+       /\_/\
+      ( o.o )
+       > ^ <
+
+    If `num_tiles=6`, possible tile grids would look like this:
+
+    **2x3 Canvas (2 tiles wide, 3 tiles tall)**: -> total of 6 tiles
+    +-------+-------+
+    | /\_/\ |   0   |   <- Cat image split across two tiles horizontally
+    +-------+-------+
+    | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+
+    |( o.o )|   0   |
+    +-------+-------+
+
+    **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
+    +-------+-------+-------+
+    | /\_/\ |( o.o )|   0   |   <- Cat image occupies the first two tiles, 1 tile remains empty
+    +-------+-------+-------+
+    | > ^ < |   0   |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+-------+
+
+    **1x6 Canvas (1 tile wide, 6 tiles tall)**: -> total of 6 tiles
+    +-------+
+    | /\_/\ |   <- Top part of the cat
+    +-------+
+    |( o.o )|   <- Middle part of the cat
+    +-------+
+    | > ^ < |   <- Bottom part of the cat
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+
+    Given that the tiles you get depend on the chosen aspect ratio, you have to add
+    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3
+    aspect ratio.
+
+    The function tests these arrangements to find the smallest canvas where the image fits.
+    If multiple canvases fit, it selects the one where the dimensions are closest to the image size.
+
+    In this case the first canvas is the closest to the original image.
+
+    You then feed all of the tiles to the model:
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
+        +-------+-------+-------+-------+-------+-------+
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ | 0     |( o.o )|   0   | > ^ < |   0   | <- First canvas
+        +-------+-------+-------+-------+-------+-------+
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
+        +-------+-------+-------+-------+-------+-------+
+
+    For each tile, you have num_channels (usually RGB so 3), tile_width, tile_height
 
     Args:
         image_height (`int`):
