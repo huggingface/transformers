@@ -144,7 +144,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         return batch_query
 
-    def score(
+    def post_process_retrieval(
         self,
         qs: List[torch.Tensor],
         ps: List[torch.Tensor],
