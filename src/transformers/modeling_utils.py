@@ -2424,8 +2424,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
                     bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
-                new_lm_head.bias.data.normal_(mean=bias_mean, std=bias_std*1e-5)
-                
+                new_lm_head.bias.data.normal_(mean=bias_mean, std=bias_std * 1e-5)
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
