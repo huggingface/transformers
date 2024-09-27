@@ -87,17 +87,16 @@ Alternatively, one can also perform inference using the classes:
 ```
 
 <Tip>
-In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth model performs inference on both the original and flipped images and averages out the results. The `post_process_depth_estimation` function can handle this for us by passing the flipped outputs to the optional `outputs_flipped` argument:
-```Python
->>> with torch.no_grad():   
+<p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
+<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():   
 ...     outputs = model(pixel_values)
 ...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
->>> post_processed_output = image_processor.post_process_depth_estimation(
+&gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
 ...     outputs,
 ...     source_sizes=[image.size[::-1]],
 ...     outputs_flipped=outputs_flipped,
 ... )
-```
+</code></pre>
 </Tip>
 
 ## Resources
