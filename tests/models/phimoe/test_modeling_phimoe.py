@@ -420,7 +420,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor([1, int(config.original_max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = PhimoeModel(config)
