@@ -14,36 +14,26 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GGUF and interaction with Transformers [[gguf-and-interaction-with-transformers]]
+# GGUF와 Transformers의 상호작용 [[gguf-and-interaction-with-transformers]]
 
-The GGUF file format is used to store models for inference with [GGML](https://github.com/ggerganov/ggml) and other 
-libraries that depend on it, like the very popular [llama.cpp](https://github.com/ggerganov/llama.cpp) or 
-[whisper.cpp](https://github.com/ggerganov/whisper.cpp).
+GGUF 파일 형식은 [GGML](https://github.com/ggerganov/ggml)과 그에 의존하는 다른 라이브러리, 예를 들어 매우 인기 있는 [llama.cpp](https://github.com/ggerganov/llama.cpp)나 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)에서 모델 추론을 위해 사용됩니다.
 
-It is a file format [supported by the Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf) with features 
-allowing for quick inspection of tensors and metadata within the file.
+이 파일 형식은 [Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf)에서 지원되며, 파일 내의 텐서와 메타데이터를 신속하게 검사할 수 있는 기능을 제공합니다.
 
-This file format is designed as a "single-file-format" where a single file usually contains both the configuration
-attributes, the tokenizer vocabulary and other attributes, as well as all tensors to be loaded in the model. These
-files come in different formats according to the quantization type of the file. We briefly go over some of them
-[here](https://huggingface.co/docs/hub/en/gguf#quantization-types).
+이 형식은 "단일 파일 형식(single-file-format)"으로 설계되었으며, 하나의 파일에 설정 속성, 토크나이저 어휘, 기타 속성뿐만 아니라 모델에서 로드되는 모든 텐서가 포함됩니다. 이 파일들은 파일의 양자화 유형에 따라 다른 형식으로 제공됩니다. 다양한 양자화 유형에 대한 간략한 설명은 [여기](https://huggingface.co/docs/hub/en/gguf#quantization-types)에서 확인할 수 있습니다.
 
-## Support within Transformers [[support-within-transformers]]
+## Transformers 내 지원 [[support-within-transformers]]
 
-We have added the ability to load `gguf` files within `transformers` in order to offer further training/fine-tuning
-capabilities to gguf models, before converting back those models to `gguf` to use within the `ggml` ecosystem. When
-loading a model, we first dequantize it to fp32, before loading the weights to be used in PyTorch.
+`transformers` 내에서 `gguf` 파일을 로드할 수 있는 기능을 추가하여 GGUF 모델의 추가 학습/미세 조정을 제공한 후 `ggml` 생태계에서 다시 사용할 수 있도록 `gguf` 파일로 변환하는 기능을 제공합니다. 모델을 로드할 때 먼저 FP32로 역양자화한 후, PyTorch에서 사용할 수 있도록 가중치를 로드합니다.
 
 > [!NOTE]
-> The support is still very exploratory and we welcome contributions in order to solidify it across quantization types
-> and model architectures.
+> 지원은 아직 초기 단계에 있으며, 다양한 양자화 유형과 모델 아키텍처에 대해 이를 강화하기 위한 기여를 환영합니다.
 
-For now, here are the supported model architectures and quantization types:
+현재 지원되는 모델 아키텍처와 양자화 유형은 다음과 같습니다:
 
-### Supported quantization types [[supported-quantization-types]]
+### 지원되는 양자화 유형 [[supported-quantization-types]]
 
-The initial supported quantization types are decided according to the popular quantized files that have been shared
-on the Hub.
+초기에 지원되는 양자화 유형은 Hub에서 공유된 인기 있는 양자화 파일에 따라 결정되었습니다.
 
 - F32
 - F16
@@ -69,11 +59,11 @@ on the Hub.
 - IQ4_NL
 
 > [!NOTE]
-> To support gguf dequantization, `gguf>=0.10.0` installation is required.
+> GGUF 역양자화를 지원하려면 `gguf>=0.10.0` 설치가 필요합니다.
 
-### Supported model architectures [[supported-model-architectures]]
+### 지원되는 모델 아키텍처 [[supported-model-architectures]]
 
-For now the supported model architectures are the architectures that have been very popular on the Hub, namely:
+현재 지원되는 모델 아키텍처는 Hub에서 매우 인기가 많은 아키텍처들로 제한되어 있습니다:
 
 - LLaMa
 - Mistral
@@ -82,13 +72,11 @@ For now the supported model architectures are the architectures that have been v
 - Phi3
 - Bloom
 
-## Example usage [[example-usage]]
+## 사용 예시 [[example-usage]]
 
-In order to load `gguf` files in `transformers`, you should specify the `gguf_file` argument to the `from_pretrained`
-methods of both tokenizers and models. Here is how one would load a tokenizer and a model, which can be loaded
-from the exact same file:
+`transformers`에서 `gguf` 파일을 로드하려면 `from_pretrained` 메서드에 `gguf_file` 인수를 지정해야 합니다. 동일한 파일에서 토크나이저와 모델을 로드하는 방법은 다음과 같습니다: 
 
-```py
+```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
@@ -98,15 +86,13 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 ```
 
-Now you have access to the full, unquantized version of the model in the PyTorch ecosystem, where you can combine it
-with a plethora of other tools.
+이제 PyTorch 생태계에서 모델의 역양자화된 전체 버전에 접근할 수 있으며, 다른 여러 도구들과 결합하여 사용할 수 있습니다.
 
-In order to convert back to a `gguf` file, we recommend using the 
-[`convert-hf-to-gguf.py` file](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) from llama.cpp.
+`gguf` 파일로 다시 변환하려면 llama.cpp의 [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py)를 사용하는 것을 권장합니다.
 
-Here's how you would complete the script above to save the model and export it back to `gguf`:
+위의 스크립트를 완료하여 모델을 저장하고 다시 `gguf`로 내보내는 방법은 다음과 같습니다:
 
-```py
+```python
 tokenizer.save_pretrained('directory')
 model.save_pretrained('directory')
 
