@@ -9,7 +9,7 @@ from transformers.models.colpali.processing_colpali import ColPaliProcessor
 
 @pytest.fixture(scope="module")
 def colpali_processor_path() -> str:
-    return "google/paligemma-3b-mix-448"
+    return "vidore/colpali-v1.2-hf"
 
 
 @pytest.fixture(scope="module")
