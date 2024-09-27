@@ -111,7 +111,7 @@ class TimmWrapperModel(PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if output_hidden_states is not None or output_attentions is not None:
-            raise ValueError("Cannot set return_dict, output_attentions or output_hidden_states for timm models")
+            raise ValueError("Cannot set output_attentions or output_hidden_states for timm models")
 
         prediction = self.model(pixel_values, **kwargs)
 

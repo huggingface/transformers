@@ -1254,10 +1254,10 @@ try:
     if not is_torchvision_available() and not is_timm_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .utils import dummy_torchvision_and_timm_objects
+    from .utils import dummy_timm_and_torchvision_objects
 
-    _import_structure["utils.dummy_torchvision_and_timm_objects"] = [
-        name for name in dir(dummy_torchvision_and_timm_objects) if not name.startswith("_")
+    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
+        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
     ]
 else:
     _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
@@ -6136,7 +6136,7 @@ if TYPE_CHECKING:
         if not is_torchvision_available() and not is_timm_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.dummy_torchvision_and_timm_objects import *
+        from .utils.dummy_timm_and_torchvision_objects import *
     else:
         from .models.timm_wrapper import TimmWrapperImageProcessor
 
