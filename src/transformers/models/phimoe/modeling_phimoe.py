@@ -205,18 +205,17 @@ class PhimoeRotaryEmbedding(nn.Module):
             self.short_mscale = config.rope_scaling.get("short_mscale")
             self.long_mscale = config.rope_scaling.get("long_mscale")
         else:
-            self.rope_type = "longrope"
+            self.rope_type = "default"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     def forward(self, x, seq_len=None):
-        if (
-            self.config.rope_scaling
-            and seq_len
-            and seq_len > self.config.rope_scaling["original_max_position_embeddings"]
-        ):
-            mscale = self.long_mscale
-        else:
-            mscale = self.short_mscale
+        mscale = None
+        if self.config.rope_scaling and seq_len:
+            mscale = (
+                self.long_mscale
+                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                else self.short_mscale
+            )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
         mscale = attention_scaling if mscale is None else mscale
         t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
