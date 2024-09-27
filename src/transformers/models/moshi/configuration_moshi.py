@@ -49,7 +49,7 @@ class MoshiConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
-        max_position_embeddings (`int`, *optional*, defaults to 3750):
+        max_position_embeddings (`int`, *optional*, defaults to 3000):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -61,8 +61,8 @@ class MoshiConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        sliding_window (`int`, *optional*, defaults to 250):
-            Sliding window attention window size. If not specified, will default to `250`.
+        sliding_window (`int`, *optional*, defaults to 3000):
+            Sliding window attention window size. If not specified, will default to `3000`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         ffn_dim (`int`, *optional*, defaults to 22528):
@@ -87,6 +87,8 @@ class MoshiConfig(PretrainedConfig):
         depth_num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention in the depth decoder.
             If it is not specified, will default to `depth_num_key_value_heads`.
+        depth_sliding_window (`int`, *optional*, defaults to 8):
+            Sliding window attention window size. If not specified, will default to `8`.
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether input and output word embeddings should be tied.
         kwargs (*optional*):
@@ -111,7 +113,7 @@ class MoshiConfig(PretrainedConfig):
     ...     audio_encoder_config
     ... )
 
-    >>> # Initializing a MoshiForConditionalGeneration (with random weights) from the kyutai/moshiko style configuration
+    >>> # Initializing a MoshiForConditionalGeneration (with random weights) from the kmhf/hf-moshiko style configuration
     >>> model = MoshiForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -139,7 +141,7 @@ class MoshiConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=None,
         audio_vocab_size=None, # TODO
-        max_position_embeddings=3750,
+        max_position_embeddings=3000,
         rope_theta=10000.0,
         hidden_act="silu",
         head_dim=None,
@@ -157,6 +159,7 @@ class MoshiConfig(PretrainedConfig):
         depth_ffn_dim=5632,
         depth_head_dim=None,
         depth_num_key_value_heads=None,
+        depth_sliding_window=8,
         tie_word_embeddings=False,
         **kwargs):
         self.vocab_size = vocab_size
@@ -188,12 +191,10 @@ class MoshiConfig(PretrainedConfig):
         self.depth_ffn_dim = depth_ffn_dim
         self.depth_head_dim = depth_head_dim or depth_hidden_size // depth_num_attention_heads
         self.depth_num_key_value_heads = depth_num_key_value_heads if depth_num_key_value_heads is not None else depth_num_attention_heads
+        self.depth_sliding_window = depth_sliding_window
 
-        audio_encoder_config = kwargs.pop("audio_encoder", None)
-        if audio_encoder_config is None:
-            raise ValueError("Config has to be initialized with audio_encoder config")
-        
-        audio_encoder_model_type = audio_encoder_config.pop("model_type")
+        audio_encoder_config = kwargs.pop("audio_encoder", {})
+        audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")
 
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         
