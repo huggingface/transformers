@@ -133,7 +133,10 @@ class Blip2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             text_encoding = {}
-            _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+            _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+            output_kwargs["text_kwargs"]["return_tensors"] = return_tensors
 
             # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
             # because BLIP expects image tokens to be at the beginning even before BOS token
