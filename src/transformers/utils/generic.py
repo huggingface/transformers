@@ -871,7 +871,16 @@ class LossKwargs(TypedDict, total=False):
     num_items_in_batch: Optional[int]
 
 
+def is_timm_hub_checkpoint(pretrained_model_name_or_path: str) -> bool:
+    if isinstance(pretrained_model_name_or_path, str):
+        return pretrained_model_name_or_path.startswith("hf-hub:timm/") or pretrained_model_name_or_path.startswith("timm/")
+    return False
+
+
 def is_timm_checkpoint(pretrained_model_name_or_path: str) -> bool:
+    if pretrained_model_name_or_path is None:
+        return False
+
     from . import IMAGE_PROCESSOR_NAME
 
     if os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
@@ -894,6 +903,4 @@ def is_timm_checkpoint(pretrained_model_name_or_path: str) -> bool:
             config = json.load(f)
         return "pretrained_cfg" in config
 
-    if isinstance(pretrained_model_name_or_path, str):
-        return pretrained_model_name_or_path.startswith("hf-hub:") or pretrained_model_name_or_path.startswith("timm/")
-    return False
+    return is_timm_hub_checkpoint(pretrained_model_name_or_path)

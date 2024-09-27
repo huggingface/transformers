@@ -19,7 +19,7 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import logging, is_timm_hub_checkpoint
 
 
 logger = logging.get_logger(__name__)
@@ -52,18 +52,19 @@ class TimmWrapperConfig(PretrainedConfig):
     model_type = "timm_wrapper"
 
     def __init__(self, **kwargs):
-        self.model_name = kwargs.pop("pretrained_model_name", None)
+        self.model_name = kwargs.pop("model_name", None)
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs):
-        kwargs["model_name"] = pretrained_model_name_or_path
-        return super().from_pretrained(pretrained_model_name_or_path=pretrained_model_name_or_path, **kwargs)
 
     @classmethod
     def get_config_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         config_dict, kwargs = super().get_config_dict(pretrained_model_name_or_path, **kwargs)
-        kwargs["model_name"] = pretrained_model_name_or_path
+
+        if "model_name" not in config_dict and is_timm_hub_checkpoint(pretrained_model_name_or_path):
+            # We are loading from an official timm checkpoint, we need to store the model_name in order to be able to
+            # load the model using timm.create_model
+            config_dict["model_name"] = pretrained_model_name_or_path
+
+        kwargs["pretrained_model_name_or_path"] = pretrained_model_name_or_path
         return config_dict, kwargs
