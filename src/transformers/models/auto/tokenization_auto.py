@@ -590,14 +590,6 @@ def tokenizer_class_from_name(class_name: str):
     return None
 
 
-def has_pretrainedfast(class_name: str):
-    for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
-        if class_name in tokenizers and "PreTrainedTokenizerFast" in tokenizers:
-            return PreTrainedTokenizerFast
-
-    return None
-
-
 def get_tokenizer_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
@@ -907,7 +899,9 @@ class AutoTokenizer:
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
                 if tokenizer_class is None:
-                    tokenizer_class = has_pretrainedfast(config_tokenizer_class)
+                    tokenizer_class = tokenizer_class_from_name(
+                        TOKENIZER_MAPPING_NAMES[config_tokenizer_class.rstrip("Tokenizer").lower()][1]
+                    )
             if tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
