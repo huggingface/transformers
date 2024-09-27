@@ -14,24 +14,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Generation
+# 생성 [[generation]]
 
-Each framework has a generate method for text generation implemented in their respective `GenerationMixin` class:
+각 프레임워크에는 텍스트 생성을 위한 `GenerationMixin` 클래스에서 구현된 `generate` 메서드가 있습니다:
 
-- PyTorch [`~generation.GenerationMixin.generate`] is implemented in [`~generation.GenerationMixin`].
-- TensorFlow [`~generation.TFGenerationMixin.generate`] is implemented in [`~generation.TFGenerationMixin`].
-- Flax/JAX [`~generation.FlaxGenerationMixin.generate`] is implemented in [`~generation.FlaxGenerationMixin`].
+- PyTorch에서는 [`~generation.GenerationMixin.generate`]가 [`~generation.GenerationMixin`]에 구현되어 있습니다.
+- TensorFlow에서는 [`~generation.TFGenerationMixin.generate`]가 [`~generation.TFGenerationMixin`]에 구현되어 있습니다.
+- Flax/JAX에서는 [`~generation.FlaxGenerationMixin.generate`]가 [`~generation.FlaxGenerationMixin`]에 구현되어 있습니다.
 
-Regardless of your framework of choice, you can parameterize the generate method with a [`~generation.GenerationConfig`]
-class instance. Please refer to this class for the complete list of generation parameters, which control the behavior
-of the generation method.
+사용하는 프레임워크에 상관없이, `generate` 메서드는 [`~generation.GenerationConfig`] 클래스 인스턴스로 파라미터화할 수 있습니다. 이 클래스는 생성 메서드의 동작을 제어하는 모든 생성 파라미터를 제공합니다.
 
-To learn how to inspect a model's generation configuration, what are the defaults, how to change the parameters ad hoc,
-and how to create and save a customized generation configuration, refer to the
-[text generation strategies guide](../generation_strategies). The guide also explains how to use related features,
-like token streaming.
+모델의 생성 구성을 어떻게 확인하고, 기본값이 무엇인지, 매개변수를 어떻게 임시로 변경하는지, 그리고 사용자 지정 생성 구성을 만들고 저장하는 방법을 배우려면 [텍스트 생성 전략 가이드](../generation_strategies)를 참조하세요. 이 가이드는 토큰 스트리밍과 같은 관련 기능을 사용하는 방법도 설명합니다.
 
-## GenerationConfig
+## GenerationConfig [[transformers.GenerationConfig]]
 
 [[autodoc]] generation.GenerationConfig
 	- from_pretrained
@@ -43,19 +38,19 @@ like token streaming.
 
 [[autodoc]] generation.WatermarkingConfig
 
-## GenerationMixin
+## GenerationMixin [[transformers.GenerationMixin]]
 
 [[autodoc]] generation.GenerationMixin
 	- generate
 	- compute_transition_scores
 
-## TFGenerationMixin
+## TFGenerationMixin [[transformers.TFGenerationMixin]]
 
 [[autodoc]] generation.TFGenerationMixin
 	- generate
 	- compute_transition_scores
 
-## FlaxGenerationMixin
+## FlaxGenerationMixin [[transformers.FlaxGenerationMixin]]
 
 [[autodoc]] generation.FlaxGenerationMixin
 	- generate
