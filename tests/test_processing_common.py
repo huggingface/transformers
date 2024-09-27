@@ -88,22 +88,24 @@ class ProcessorTesterMixin:
         return processor
 
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is not None:
-            if batch_size < 1:
-                raise ValueError("batch_size must be greater than 0")
-            elif batch_size == 1:
-                return ["lower newer"]
-            return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
-        return "lower newer"
+        if batch_size is None:
+            return "lower newer"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer"]
+        return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
 
     @require_vision
     def prepare_image_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of PIL images for testing"""
-        if batch_size is not None:
-            if batch_size < 1:
-                raise ValueError("batch_size must be greater than 0")
-            return prepare_image_inputs() * batch_size
-        return prepare_image_inputs()
+        if batch_size is None:
+            return prepare_image_inputs()[0]
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return prepare_image_inputs() * batch_size
 
     @require_vision
     def prepare_video_inputs(self):
