@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import unittest
+from dataclasses import fields
 
 import numpy as np
+from huggingface_hub import AudioClassificationOutputElement
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
@@ -65,6 +67,11 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         )
 
         self.run_torchaudio(audio_classifier)
+
+        spec_output_keys = {field.name for field in fields(AudioClassificationOutputElement)}
+        for single_output in output:
+            output_keys = set(single_output.keys())
+            self.assertEqual(spec_output_keys, output_keys, msg="Pipeline output keys do not match HF Hub spec!")
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
