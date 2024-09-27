@@ -13,17 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from typing import Optional, Tuple, Union
 
 import torch
 
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, load_state_dict, SAFE_WEIGHTS_NAME
 from ...utils import (
     add_start_docstrings_to_model_forward,
     is_timm_available,
     is_torch_available,
     requires_backends,
+    is_timm_checkpoint,
+    is_timm_hub_checkpoint,
 )
 from .configuration_timm_wrapper import TimmWrapperConfig
 
@@ -64,18 +67,35 @@ class TimmWrapperModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
 
+        pretrained_model_name_or_path = kwargs.pop("pretrained_model_name_or_path", None)
+
         # model_name passed into kwargs takes precedence
         model_name = kwargs.pop("model_name", None)
         if model_name is None and hasattr(config, "model_name"):
             model_name = config.model_name
+        elif model_name is None and pretrained_model_name_or_path is not None:
+            model_name = pretrained_model_name_or_path
         elif model_name is None:
             raise ValueError("model_name must be specified in either the config or kwargs")
 
         pretrained = kwargs.pop("pretrained", False)
-        self.model = timm.create_model(
-            model_name=model_name,
-            pretrained=pretrained,
-        )
+
+        # If the pretrained_model_name_or_path is a timm checkpoint, and a local file, we load the checkpoint safetensors file as the model
+        if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(pretrained_model_name_or_path):
+            model = timm.create_model(model_name=model_name, pretrained=False)
+            if pretrained:
+                weights_path = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
+                state_dict = load_state_dict(weights_path)
+                # Remove the prefix "model." from the keys
+                state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
+                model.load_state_dict(state_dict)
+        # If the pretrained_model_name_or_path is a timm checkpoint and matches a checkpoint on the hub, we use timm.create_model directly
+        else:
+            model = timm.create_model(
+                model_name=model_name,
+                pretrained=pretrained,
+            )
+        self.model = model
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -83,14 +103,17 @@ class TimmWrapperModel(PreTrainedModel):
         from ...models.timm_wrapper import TimmWrapperConfig
 
         config = kwargs.pop("config", TimmWrapperConfig.from_pretrained(pretrained_model_name_or_path))
+        pretrained = kwargs.pop("pretrained", True)
+        model_name = kwargs.pop("model_name", None)
 
-        if "model_name" in kwargs:
-            raise ValueError(
-                "The model name used to instantiate the model should be passed in as pretrained_model_name_or_path"
-            )
+        if kwargs:
+            raise ValueError(f"Unknown arguments: {', '.join(kwargs.keys())}")
 
-        kwargs["model_name"] = pretrained_model_name_or_path
-        kwargs["pretrained"] = True
+        kwargs["pretrained_model_name_or_path"] = pretrained_model_name_or_path
+        kwargs["pretrained"] = kwargs.pop("pretrained", True)
+
+        # FIXME - use super from_pretrained, or at least _from_pretrained if possible
+
         return super()._from_config(config, **kwargs)
 
     def _init_weights(self, module):

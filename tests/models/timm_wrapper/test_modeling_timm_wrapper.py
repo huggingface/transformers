@@ -170,11 +170,11 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip(reason="Safetensors is not supported by timm.")
-    def test_can_use_safetensors(self):
-        pass
+    # @unittest.skip(reason="Safetensors is not supported by timm.")
+    # def test_can_use_safetensors(self):
+    #     pass
 
-    @unittest.skip(reason="Need to use a timm backbone and there is no tiny model available.")
+    @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
     def test_model_is_small(self):
         pass
 
@@ -270,35 +270,3 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
-
-    # TimmWrapper config doesn't have out_features attribute
-    def test_create_from_modified_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            result = model(**inputs_dict)
-
-            self.assertEqual(len(result.feature_maps), len(config.out_indices))
-            self.assertEqual(len(model.channels), len(config.out_indices))
-
-            # Check output of last stage is taken if out_features=None, out_indices=None
-            modified_config = copy.deepcopy(config)
-            modified_config.out_indices = None
-            model = model_class(modified_config)
-            model.to(torch_device)
-            model.eval()
-            result = model(**inputs_dict)
-
-            self.assertEqual(len(result.feature_maps), 1)
-            self.assertEqual(len(model.channels), 1)
-
-            # Check backbone can be initialized with fresh weights
-            modified_config = copy.deepcopy(config)
-            modified_config.use_pretrained_backbone = False
-            model = model_class(modified_config)
-            model.to(torch_device)
-            model.eval()
-            result = model(**inputs_dict)
