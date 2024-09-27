@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Knowledge Engineering Group (KEG) & Data Mining at Tsinghua University and HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 TThe GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
