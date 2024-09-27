@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple, Union
 
@@ -35,6 +36,7 @@ from ...utils import (
 from ..paligemma import (
     PaliGemmaForConditionalGeneration,
 )
+from .configuration_colpali import ColPaliConfig
 
 
 @dataclass
@@ -70,7 +72,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         super().__init__(config=config)
 
         self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.embedding_dim)
+        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
@@ -161,11 +163,11 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of=None,
     ) -> nn.Embedding:
-        model_embeds = self.model.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
-        self.model.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds

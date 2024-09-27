@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple, Union
 
@@ -55,11 +56,31 @@ class ColPaliConfig(PaliGemmaConfig):
     documentation from [`PretrainedConfig`] for more information.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        vision_config=None,
+        text_config=None,
+        ignore_index=-100,
+        image_token_index=256000,
+        vocab_size=257152,
+        projection_dim=2048,
+        hidden_size=2048,
+        embedding_dim: int = 128,
+        **kwargs,
+    ):
+        super().__init__(
+            vision_config=vision_config,
+            text_config=text_config,
+            ignore_index=ignore_index,
+            image_token_index=image_token_index,
+            vocab_size=vocab_size,
+            projection_dim=projection_dim,
+            hidden_size=hidden_size,
+            **kwargs,
+        )
         self.model_type = "colpali"
         self.is_composition = False
-        self.embedding_dim = 128
+        self.embedding_dim = embedding_dim
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
@@ -215,7 +236,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         super().__init__(config=config)
 
         self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.embedding_dim)
+        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
@@ -306,11 +327,11 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of=None,
     ) -> nn.Embedding:
-        model_embeds = self.model.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
-        self.model.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
