@@ -2,9 +2,8 @@ from typing import Generator, cast
 
 import pytest
 import torch
-from PIL import Image
-
 from colpali_engine.models import ColPaliProcessor
+from PIL import Image
 
 
 @pytest.fixture(scope="module")
