@@ -165,7 +165,7 @@ default_args = {
 
 يمكن أن تكون هذه المعرفة مفيدة لمعرفة عند تحليل اختناقات الأداء.
 
-تم اشتقاق هذا الملخص من [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+هذا الملخص مُشتق من [نقل البيانات هو كل ما تحتاجه: دراسة حالة حول تحسين المحولات 2020](https://arxiv.org/abs/2007.00072)
 
 
 ## تشريح ذاكرة النموذج
