@@ -761,7 +761,7 @@ def parse_google_format_docstring_by_indentation(docstring):
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_google_format_docstring_by_indentation(docstring))
-    js_args = set(get_arg_names_from_hub_spec(hub_spec))
+    hub_args = set(get_arg_names_from_hub_spec(hub_spec))
 
     # Special casing: We allow the name of this arg to differ
     js_generate_args = [js_arg for js_arg in js_args if js_arg.startswith("generate")]
