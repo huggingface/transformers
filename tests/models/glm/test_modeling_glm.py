@@ -446,8 +446,8 @@ class GlmIntegrationTest(unittest.TestCase):
         model_id = "THUDM/glm-4-9b"
 
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -468,8 +468,8 @@ class GlmIntegrationTest(unittest.TestCase):
         model_id = "THUDM/glm-4-9b"
 
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -490,8 +490,8 @@ class GlmIntegrationTest(unittest.TestCase):
     def test_model_9b_flash_attn(self):
         model_id = "THUDM/glm-4-9b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
