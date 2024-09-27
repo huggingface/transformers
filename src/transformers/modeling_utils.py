@@ -2414,7 +2414,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             if has_new_lm_head_bias:
-                # To not affect the purpose of multivariate initialization. Always initialze the bais with zeros.
+                # To not affect the purpose of multivariate initialization. Always initialze the bias with zeros.
                 new_lm_head.bias.data.zero_()
 
             added_num_tokens = new_num_tokens - old_num_tokens
