@@ -69,8 +69,9 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         self.run_torchaudio(audio_classifier)
 
         spec_output_keys = {field.name for field in fields(AudioClassificationOutputElement)}
-        model_output_keys = set(output[0].keys())
-        self.assertEqual(spec_output_keys, model_output_keys, msg="Pipeline output keys do not match HF Hub spec!")
+        for single_output in output:
+            output_keys = set(single_output.keys())
+            self.assertEqual(spec_output_keys, output_keys, msg="Pipeline output keys do not match HF Hub spec!")
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
