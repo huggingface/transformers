@@ -231,8 +231,8 @@
     title: ملخص برنامج مقسم النصوص (tokenizers)
   - local: attention
     title: الانتباه Attention
-  # - local: pad_truncation
-  #   title: الحشو والتقليم
+  - local: pad_truncation
+    title: الحشو والتقليم
   # - local: bertology
   #   title: BERTology
   # - local: perplexity
