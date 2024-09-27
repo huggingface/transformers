@@ -68,7 +68,6 @@ class GlmConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=0.00000015625,
         use_rms_norm=True,
-        apply_residual_connection_post_layernorm=False,
         post_layer_norm=True,
         use_cache=True,
         tie_word_embeddings=False,
@@ -101,7 +100,6 @@ class GlmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_rms_norm = use_rms_norm
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.post_layer_norm = post_layer_norm
         self.use_cache = use_cache
         self.initializer_range = initializer_range
@@ -479,7 +477,6 @@ class GlmDecoderLayer(nn.Module):
         super().__init__()
 
         self.config = config
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.mlp = GlmMLP(config)
@@ -532,12 +529,12 @@ class GlmDecoderLayer(nn.Module):
                 into the model
         """
 
-        hidden_states_after_norm = self.input_layernorm(hidden_states)
-        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states_after_norm,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -548,11 +545,11 @@ class GlmDecoderLayer(nn.Module):
         )
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs)
+        residual = hidden_states
 
-        hidden_states_after_norm = self.post_attention_layernorm(hidden_states)
-        residual = hidden_states_after_norm if self.apply_residual_connection_post_layernorm else hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
 
-        hidden_states = self.mlp(hidden_states_after_norm)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.resid_mlp_dropout(hidden_states)
 
         outputs = (hidden_states,)
