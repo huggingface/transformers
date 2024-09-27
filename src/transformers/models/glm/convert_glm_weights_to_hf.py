@@ -102,7 +102,6 @@ def convert_config(original_config: dict):
         max_position_embeddings=original_config.pop("seq_length"),
         rms_norm_eps=original_config.pop("layernorm_epsilon"),
         rope_theta=10000.0 * original_config.pop("rope_ratio", 1),
-        post_layer_norm=original_config.pop("post_layer_norm"),
         use_cache=original_config.pop("use_cache"),
         head_dim=original_config.pop("kv_channels"),
         attention_bias=original_config.pop("add_qkv_bias"),

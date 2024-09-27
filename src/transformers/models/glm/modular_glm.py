@@ -67,7 +67,6 @@ class GlmConfig(PretrainedConfig):
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=0.00000015625,
-        post_layer_norm=True,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -98,7 +97,6 @@ class GlmConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.post_layer_norm = post_layer_norm
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.use_cache = use_cache
@@ -559,10 +557,7 @@ class GlmModel(LlamaModel):
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        if config.post_layer_norm:
-            self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        else:
-            self.norm = nn.Identity()
+        self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmRotaryEmbedding(
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
