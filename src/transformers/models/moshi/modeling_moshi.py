@@ -256,7 +256,7 @@ class MoshiRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -319,7 +319,6 @@ class MoshiRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     # TODO(joao): add me back asap :)
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -884,7 +883,6 @@ class MoshiDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.musicgen.modeling_musicgen.MusicgenPreTrainedModel with Musicgen->Moshi
 class MoshiPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1761,7 +1759,10 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (
+                logits,
+                hidden_states,
+            ) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
         return MoshiCausalLMOutputWithPast(
