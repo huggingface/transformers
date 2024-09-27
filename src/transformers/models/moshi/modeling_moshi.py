@@ -319,6 +319,7 @@ class MoshiRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
+    # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     # TODO(joao): add me back asap :)
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -1309,7 +1310,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Cache,
+        past_key_values: Cache,  # Ignore copy
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
@@ -1443,7 +1444,7 @@ class MoshiModel(MoshiPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size, self.padding_idx)  # Ignore copy
         self.layers = nn.ModuleList(
             [MoshiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1636,7 +1637,7 @@ class MoshiModel(MoshiPreTrainedModel):
     "The Moshi decoder model with a text language modelling head on top. Only usable for text.",
     MOSHI_START_DOCSTRING,
 )
-# Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM with GEMMA->MOSHI,Gemma->Moshi,gemma-7b->moshiko,google->kyutai, CausalLM->MoshiCausalLM
+# Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM with GEMMA->MOSHI,Gemma->Moshi,gemma-7b->moshiko,google->kyutai, CausalLM->MoshiForCausalLM
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]  # Ignore copy
 
@@ -1825,7 +1826,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
             attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.max_cache_len,
+                target_length=past_key_values.max_cache_len,  # Ignore copy
                 dtype=dtype,
                 device=device,
                 min_dtype=min_dtype,
