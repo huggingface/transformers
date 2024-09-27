@@ -29,7 +29,7 @@ def colpali_from_pretrained() -> Generator[ColPaliForRetrieval, None, None]:
     yield cast(
         ColPaliForRetrieval,
         ColPaliForRetrieval.from_pretrained(
-            "checkpoints/colpali/",
+            "vidore/colpali-v1.2-hf",
             torch_dtype=torch.bfloat16,
             device_map="auto",
         ),
@@ -38,7 +38,7 @@ def colpali_from_pretrained() -> Generator[ColPaliForRetrieval, None, None]:
 
 @pytest.fixture(scope="module")
 def processor() -> Generator[ColPaliProcessor, None, None]:
-    yield cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("google/paligemma-3b-mix-448"))
+    yield cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-hf"))
 
 
 @pytest.mark.slow
