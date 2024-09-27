@@ -59,6 +59,7 @@ class ColPaliConfig(PaliGemmaConfig):
         super().__init__(**kwargs)
         self.model_type = "colpali"
         self.is_composition = False
+        self.embedding_dim = 128
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
@@ -211,15 +212,14 @@ class ColPaliModelOutput(PaliGemmaForConditionalGeneration):
 class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
 
-    def __init__(self, config: PaliGemmaConfig):
+    def __init__(self, config: ColPaliConfig):
         super().__init__(config=config)
+
+        self.embedding_dim = self.config.embedding_dim
+        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
-        self.model = self
-
-        self.dim = 128
-        self.custom_text_proj = nn.Linear(self.model.config.text_config.hidden_size, self.dim)
 
         self.post_init()
 
