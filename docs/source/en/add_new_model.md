@@ -949,6 +949,8 @@ Finally, transformers has a "remote-code" possibility, in which contributions ar
 the Hub. This can be particularly interesting for groups that are using `transformers` as a backbone for their project,
 but don't have the bandwidth to contribute the model to transformers directly.
 
-In case the model is very succesful, then we'll very likely end up integrating it in `transformers` at the end - as this
+In case the model is very successful, then we'll very likely end up integrating it in `transformers` at the end - as this
 provides better documentation, CI, maintenance, and optimizations - but this remains a great way to make your model
 accessible day-0 with minimal friction.
+
+This guide is a great starting point for a Hub-first release: [Custom models](./custom_models)
