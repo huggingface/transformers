@@ -44,7 +44,7 @@ pip install transformers datasets accelerate nvidia-ml-py3
 ...     print_gpu_utilization()
 ```
 
-دعنا نتأكد من أننا بدأنا بذاكرة وحدة GPU فارغة:
+دعنا نتأكد من أننا نبدأ بذاكرة وحدة GPU خالية:
 
 ```py
 >>> print_gpu_utilization()
