@@ -73,7 +73,7 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).eval()
+    model = ColPaliForRetrieval(config=config).to(torch.bfloat16).eval()
     print("Created model with new config and randomly initialized weights")
 
     # Load the original weights
