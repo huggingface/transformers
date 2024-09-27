@@ -67,7 +67,6 @@ class GlmConfig(PretrainedConfig):
         max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=0.00000015625,
-        use_rms_norm=True,
         post_layer_norm=True,
         use_cache=True,
         tie_word_embeddings=False,
@@ -99,7 +98,6 @@ class GlmConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.use_rms_norm = use_rms_norm
         self.post_layer_norm = post_layer_norm
         self.use_cache = use_cache
         self.initializer_range = initializer_range
@@ -480,19 +478,11 @@ class GlmDecoderLayer(nn.Module):
         self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.mlp = GlmMLP(config)
-        self.input_layernorm = (
-            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_rms_norm
-            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        )
+        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
-        self.post_attention_layernorm = (
-            GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_rms_norm
-            else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        )
+        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -570,11 +560,7 @@ class GlmModel(LlamaModel):
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         if config.post_layer_norm:
-            self.norm = (
-                GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-                if config.use_rms_norm
-                else nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-            )
+            self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
             self.norm = nn.Identity()
         self.rotary_emb = GlmRotaryEmbedding(
