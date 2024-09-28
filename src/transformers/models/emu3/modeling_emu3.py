@@ -614,10 +614,7 @@ class Emu3SdpaAttention(Emu3Attention):
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-        query_states = self.q_norm(query_states)
-
         key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-        key_states = self.k_norm(key_states)
 
         query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -1051,7 +1048,7 @@ class Emu3VQVAEAttnBlock(nn.Module):
         self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
         self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_states, quant_channels = None):
+    def forward(self, hidden_states, quant_channels=None):
         norm_args = () if self.quant_channels is None else (quant_channels,)
 
         residual = hidden_states
@@ -1440,24 +1437,21 @@ class Emu3ImageVocabularyMapping:
 
     def __init__(self, vocab_map):
         self.vocab_map = vocab_map
-        self.image_token_id = vocab_map.get("<image>")
-
-    @cached_property
-    def val2name(self):
-        return {v: k for k, v in self.vocab_map.items()}
+        self.image_token_id = vocab_map.get("<|extra_0|>")
 
     @cached_property
     def image_tokens(self):
         return sorted([val for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
 
     @cached_property
+    def image_tokens_str(self):
+        return sorted([name for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
+
+    @cached_property
     def bpe2img(self):
-        img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
-
-        def remap(old_name: str) -> str:
-            return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("<|visual token") : -1])
-
-        return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
+        return {int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str}
+        # visual 000000 -> 151854
+        # need a map from "00000" to 151854
 
     @cached_property
     def img2bpe(self):
@@ -1692,6 +1686,7 @@ class Emu3Model(Emu3PreTrainedModel):
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
+            print(image_tokens.shape, special_image_mask.sum(-1))
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
 
         if inputs_embeds is None:

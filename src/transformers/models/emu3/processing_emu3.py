@@ -19,7 +19,7 @@ Processor class for Emu3.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
@@ -74,18 +74,17 @@ class Emu3Processor(ProcessorMixin):
         self,
         image_processor,
         tokenizer,
-        image_seq_length: int = 1024,
-        image_token: str = "<image>",
+        image_token: str = "<|extra_0|>",
         chat_template=None,
         **kwargs,
     ):
-        self.image_seq_length = image_seq_length
-        self.image_token = image_token
-        self.image_start_token = "<|image start|>"  # fixed tokens for start and end, so can hardcode
+        self.image_token = "<|extra_0|>"  # image_token, as temporarty placeholder for vq-vae tokens
+        self.image_start_token = "<|image start|>"  # fixed tokens for start and end
         self.image_end_token = "<|image end|>"
-        self.fake_token_around_image = "<|image token|>"
-        self.eol_token = ("<|extra_200|>",)
-        self.eof_token = ("<|extra_201|>",)
+        self.fake_token_around_image = "<|image token|>"  # another token indicating start of image?
+        self.eol_token = "<|extra_200|>"
+        self.eof_token = "<|extra_201|>"
+        self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -150,23 +149,49 @@ class Emu3Processor(ProcessorMixin):
         if not return_for_image_generation and text is None and images is None:
             raise ValueError("You must provide either text or images when `return_for_image_generation=False`")
 
-        # Replace the image token with the expanded image token sequence
-        image_placeholder = f"{self.image_start_token}{self.fake_token_around_image}"
-        if not return_for_image_generation:
-            image_placeholder += (
-                f"{self.image_token * self.image_seq_length}{self.eol_token}{self.eof_token}{self.image_end_token}"
-            )
+        image_features = {}
+        image_start_tokens = f"{self.image_start_token}"
+        image_end_tokens = f"{self.eol_token}{self.eof_token}{self.image_end_token}"
 
-        prompt_strings = []
-        for sample in text:
-            sample = sample.replace(self.image_token, image_placeholder)
-            prompt_strings.append(sample)
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        # generate text from image + text input, so we add placeholders for image tokens
+        if not return_for_image_generation and images is not None:
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            processed_images = iter(image_features.pixel_values)
 
-        if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            prompt_strings = []
+            for sample in text:
+                while self.image_token in sample:
+                    curr_image = next(processed_images)
+                    height, width = get_image_size(to_numpy_array(curr_image))
+                    height = height // self.downsample_ratio
+                    width = width // self.downsample_ratio
+                    image_seq_length = height * width
+
+                    image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
+                    sample = sample.replace(self.image_token, image_placeholder, 1)
+                prompt_strings.append(sample)
+            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+
+        # generate image from text input, so we add begin-of-image tokens from where image generation starts
+        else:
+            height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
+            image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
+            text = [f"{sample}{image_prompt}" for sample in text]
+
+        # else just generate from text-only input, and we do no special treatment for text
+        data = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        data.update(**image_features)
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
+
+    def calculate_generate_size(self, ratio, image_area, spatial_factor):
+        width, height = map(int, ratio.split(":"))
+        current_area = width * height
+        target_ratio = (image_area / current_area) ** 0.5
+
+        token_height = int(round(height * target_ratio / spatial_factor))
+        token_width = int(round(width * target_ratio / spatial_factor))
+        return token_height, token_width
 
     def postprocess(self, images: ImageInput, **kwargs):
         self.image_processor.postprocess(images, **kwargs)
