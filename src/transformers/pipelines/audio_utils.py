@@ -51,7 +51,7 @@ def ffmpeg_microphone(
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    run_in_background: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list] = [],
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
@@ -71,9 +71,9 @@ def ffmpeg_microphone(
             The indentifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
             the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
             for how to specify and list input devices.
-        run_in_background (`str`, *optional*):
-            The argument passed to ffmpeg that determines whether or not the process is run in the background
-            or not. Default is the empty string and the only other option is -nostdin
+        ffmpeg_additional_args (`list`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process.
 
     Returns:
         A generator yielding audio chunks of `chunk_length_s` seconds as `bytes` objects of length
@@ -118,8 +118,9 @@ def ffmpeg_microphone(
         "-loglevel",
         "quiet",
         "pipe:1",
-        run_in_background,
     ]
+    ffmpeg_command.extend(ffmpeg_additional_args)
+
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
     for item in iterator:
@@ -133,7 +134,7 @@ def ffmpeg_microphone_live(
     stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    run_in_background: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list] = [],
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
@@ -156,13 +157,9 @@ def ffmpeg_microphone_live(
         format_for_conversion (`str`, *optional*, defaults to `f32le`):
             The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
             could also be used.
-        ffmpeg_input_device (`str`, *optional*):
-            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
-            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
-            for how to specify and list input devices.
-        run_in_background (`bool`, *optional*):
-            The argument passed to ffmpeg that determines whether or not the process is run in the background
-            or not. Default is the empty string (ffmpeg uses STDIN by default) and the only other option is -nostdin.
+        ffmpeg_additional_args (`list`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process.
 
     Return:
         A generator yielding dictionaries of the following form
@@ -183,7 +180,7 @@ def ffmpeg_microphone_live(
         chunk_s,
         format_for_conversion=format_for_conversion,
         ffmpeg_input_device=ffmpeg_input_device,
-        run_in_background="-nostdin" if not run_in_background else "",
+        ffmpeg_additional_args=ffmpeg_additional_args
     )
 
     if format_for_conversion == "s16le":
