@@ -111,8 +111,8 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
 
     with torch.no_grad():
         outputs_images_original = colpali_original(**batch_images)
-        outputs_images_new = model(**batch_images, return_dict=True).embeddings
         breakpoint()
+        outputs_images_new = model(**batch_images, return_dict=True).embeddings
         if outputs_images_original.shape != outputs_images_new.shape:
             raise ValueError("Output shapes do not match for images forward pass")
         # FIXME: doesn't match

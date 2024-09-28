@@ -34,11 +34,36 @@ from ..paligemma import (
 
 class ColPaliProcessor(PaliGemmaProcessor):
     r"""
-    Processor for ColPali.
+    Constructs a ColPali processor which wraps a PaliGemmaProcessor and special methods to process images and queries, as
+    well as to compute the late-interaction retrieval score.
+
+    [`ColPaliProcessor`] offers all the functionalities of [`PaliGemmaProcessor`]. See the [`~PaliGemmaProcessor.__call__`]
+     for more information.
+
+    Args:
+        image_processor ([`SiglipImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        **kwargs,
+    ):
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+            **kwargs,
+        )
+        # NOTE: The PaliGemmaProcessor must be used with an image.
+        # To allow query processing, we create a small mock image.
         self.mock_image = Image.new("RGB", (16, 16), color="black")
 
     @staticmethod
@@ -68,6 +93,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
     ) -> BatchFeature:
         """
         Process images for ColPali.
+        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
         """
         texts_doc = ["Describe the image."] * len(images)
         images = [image.convert("RGB") for image in images]
@@ -88,6 +114,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
     ) -> BatchFeature:
         """
         Process queries for ColPali.
+        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
         """
         if suffix is None:
             suffix = "<pad>" * 10
@@ -121,7 +148,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
         device: Optional[Union[str, torch.device]] = None,
     ) -> torch.Tensor:
         """
-        Compute the MaxSim score (ColBERT-like) for the given multi-vector query and passage embeddings.
+        Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
+        query embeddings (`qs`) and passage/image embeddings (`ps`).
         """
         device = device or self.get_torch_device("auto")
 
