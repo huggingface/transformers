@@ -15,7 +15,6 @@ import argparse
 import gc
 import json
 import os
-import shutil
 import warnings
 from typing import List
 
