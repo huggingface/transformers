@@ -21,14 +21,19 @@ from typing import Any, Dict, cast
 import torch
 from colpali_engine.models import ColPali
 from colpali_engine.utils.torch_utils import get_torch_device
+from PIL import Image
 
+from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
-from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+
+device = get_torch_device("auto")
+print(f"Using device: {device}")
 
 
 def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,7 +52,7 @@ def load_original_colpali() -> ColPali:
         ColPali.from_pretrained(
             "vidore/colpali-v1.2-merged",
             torch_dtype=torch.bfloat16,
-            device_map=get_torch_device("auto"),
+            device_map=device,
         ),
     )
     return model
@@ -73,12 +78,41 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(torch.bfloat16).eval()
+    model = ColPaliForRetrieval(config=config).to(device).to(torch.bfloat16).eval()
     print("Created model with new config and randomly initialized weights")
 
     # Load the original weights
     model.load_state_dict(state_dict)
     print("Loaded original model weights")
+
+    # Sanity checks
+    images = [
+        Image.new("RGB", (32, 32), color="white"),
+        Image.new("RGB", (16, 16), color="black"),
+    ]
+    queries = [
+        "Is attention really all you need?",
+        "Are Benjamin, Antoine, Merve, and Jo best friends?",
+    ]
+
+    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-hf"))
+
+    batch_queries = processor.process_queries(queries).to(device)
+    batch_images = processor.process_images(images).to(device)
+
+    with torch.no_grad():
+        outputs_images_original = colpali_original(**batch_images)
+        outputs_images_new = model(**batch_images, return_dict=True).embeddings
+        # FIXME: doesn't match
+        if not torch.allclose(outputs_images_original, outputs_images_new, atol=1e-3):
+            raise ValueError("Images forward pass does not match")
+
+    with torch.no_grad():
+        outputs_queries_original = colpali_original(**batch_queries)
+        outputs_queries_new = model(**batch_queries, return_dict=True).embeddings
+        # FIXME: doesn't match
+        if not torch.allclose(outputs_queries_original, outputs_queries_new, atol=1e-3):
+            raise ValueError("Queries forward pass does not match")
 
     # Save the model
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True, parents=True)
