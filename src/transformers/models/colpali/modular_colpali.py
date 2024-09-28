@@ -88,8 +88,21 @@ class ColPaliProcessor(PaliGemmaProcessor):
     Processor for ColPali.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        **kwargs,
+    ):
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+            **kwargs,
+        )
+        # NOTE: The PaliGemmaProcessor must be used with an image.
+        # To allow query processing, we create a small mock image.
         self.mock_image = Image.new("RGB", (16, 16), color="black")
 
     @staticmethod
