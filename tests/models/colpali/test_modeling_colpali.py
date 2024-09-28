@@ -14,86 +14,103 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColPali model."""
 
-from typing import Generator, cast
+import unittest
+from typing import cast
 
-import pytest
 import torch
 from PIL import Image
 
+from tests.test_modeling_common import ModelTesterMixin
+from transformers import (
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
 from transformers.models.colpali.modeling_colpali import ColPaliModelOutput
+from transformers.testing_utils import require_torch, require_vision, slow
 
 
-@pytest.fixture(scope="module")
-def colpali_from_pretrained() -> Generator[ColPaliForRetrieval, None, None]:
-    yield cast(
-        ColPaliForRetrieval,
-        ColPaliForRetrieval.from_pretrained(
-            "vidore/colpali-v1.2-hf",
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        ),
-    )
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
 
 
-@pytest.fixture(scope="module")
-def processor() -> Generator[ColPaliProcessor, None, None]:
-    yield cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-hf"))
+@require_torch
+class ColPaliForRetrievalTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Model tester for `ColPaliForRetrieval`.
+    """
 
+    all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
+    fx_compatible = False
+    test_torchscript = False
+    test_pruning = False
+    test_resize_embeddings = True
+    test_head_masking = False
 
-@pytest.mark.slow
-def test_load_colpali_from_pretrained(colpali_from_pretrained: ColPaliForRetrieval):
-    assert isinstance(colpali_from_pretrained, ColPaliForRetrieval)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_name = "vidore/colpali-v1.2-hf"
 
+        # TODO: replace with randomly initialized model
+        cls.model = cast(
+            ColPaliForRetrieval,
+            ColPaliForRetrieval.from_pretrained(
+                cls.model_name,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            ),
+        )
 
-@pytest.mark.slow
-def test_colpali_forward_images(
-    colpali_from_pretrained: ColPaliForRetrieval,
-    processor: ColPaliProcessor,
-):
-    # Create a batch of dummy images
-    images = [
-        Image.new("RGB", (32, 32), color="white"),
-        Image.new("RGB", (16, 16), color="black"),
-    ]
+        cls.processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained(cls.model_name))
+        cls.device = cls.model.device
 
-    # Process the image
-    batch_images = processor.process_images(images).to(colpali_from_pretrained.device)
+    @slow
+    @require_vision
+    def test_colpali_forward_images(self):
+        # Create a batch of dummy images
+        images = [
+            Image.new("RGB", (32, 32), color="white"),
+            Image.new("RGB", (16, 16), color="black"),
+        ]
 
-    # Forward pass
-    with torch.no_grad():
-        outputs = colpali_from_pretrained(**batch_images, return_dict=True)
+        # Process the image
+        batch_images = ColPaliForRetrievalTest.processor.process_images(images).to(ColPaliForRetrievalTest.device)
 
-    # Assertions
-    assert isinstance(outputs, ColPaliModelOutput)
-    assert isinstance(outputs.embeddings, torch.Tensor)
-    assert outputs.embeddings.dim() == 3
-    batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
-    assert batch_size == len(images)
-    assert embedding_dim == colpali_from_pretrained.embedding_dim
+        # Forward pass
+        with torch.no_grad():
+            outputs = ColPaliForRetrievalTest.model(**batch_images, return_dict=True)
 
+        # Assertions
+        self.assertIsInstance(outputs, ColPaliModelOutput)
+        self.assertIsInstance(outputs.embeddings, torch.Tensor)
+        self.assertEqual(outputs.embeddings.dim(), 3)
 
-@pytest.mark.slow
-def test_colpali_forward_queries(
-    colpali_from_pretrained: ColPaliForRetrieval,
-    processor: ColPaliProcessor,
-):
-    queries = [
-        "Is attention really all you need?",
-        "Are Benjamin, Antoine, Merve, and Jo best friends?",
-    ]
+        batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
+        self.assertEqual(batch_size, len(images))
+        self.assertEqual(embedding_dim, ColPaliForRetrievalTest.model.embedding_dim)
 
-    # Process the queries
-    batch_queries = processor.process_queries(queries).to(colpali_from_pretrained.device)
+    @slow
+    def test_colpali_forward_queries(self):
+        queries = [
+            "Is attention really all you need?",
+            "Are Benjamin, Antoine, Merve, and Jo best friends?",
+        ]
 
-    # Forward pass
-    with torch.no_grad():
-        outputs = colpali_from_pretrained(**batch_queries, return_dict=True)
+        # Process the queries
+        batch_queries = ColPaliForRetrievalTest.processor.process_queries(queries).to(ColPaliForRetrievalTest.device)
 
-    # Assertions
-    assert isinstance(outputs, ColPaliModelOutput)
-    assert isinstance(outputs.embeddings, torch.Tensor)
-    assert outputs.embeddings.dim() == 3
-    batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
-    assert batch_size == len(queries)
-    assert embedding_dim == colpali_from_pretrained.embedding_dim
+        # Forward pass
+        with torch.no_grad():
+            outputs = ColPaliForRetrievalTest.model(**batch_queries, return_dict=True)
+
+        # Assertions
+        self.assertIsInstance(outputs, ColPaliModelOutput)
+        self.assertIsInstance(outputs.embeddings, torch.Tensor)
+        self.assertEqual(outputs.embeddings.dim(), 3)
+
+        batch_size, n_query_tokens, embedding_dim = outputs.embeddings.shape
+        self.assertEqual(batch_size, len(queries))
+        self.assertEqual(embedding_dim, ColPaliForRetrievalTest.model.embedding_dim)
