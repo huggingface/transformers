@@ -17,12 +17,12 @@ rendered properly in your Markdown viewer.
 # 콜백 [[callbacks]]
 
 콜백은 PyTorch [`Trainer`]의 반복 훈련 동작을 사용자 정의할 수 있는 객체입니다
-(이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 훈련 루프의 상태를
-검사하여 진행 상황 보고, TensorBoard 또는 기타 머신 러닝 플랫폼에 로그 등의 작업을 할 수 있으며, 
-결정(예: 조기 종료)도 내릴 수 있습니다.
+(이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 반복 훈련의 상태를
+검사하여 (진행 상황 보고, TensorBoard 또는 기타 머신 러닝 플랫폼에 로그 남기기 등) 
+결정(예: 조기 종료)을 내릴 수 있습니다.
 
-콜백은 [`TrainerControl`] 객체를 반환하는 것 외에는 훈련 루프에서 어떤 것도 변경할 수 없는
-"읽기 전용" 코드 조각입니다. 훈련 루프에 변경이 필요한 사용자 정의 작업이 필요한 경우, 
+콜백은 [`TrainerControl`] 객체를 반환하는 것 외에는 반복 훈련에서 어떤 것도 변경할 수 없는
+"읽기 전용" 코드 조각입니다. 반복 훈련에 변경이 필요한 사용자 정의 작업이 필요한 경우, 
 [`Trainer`]를 서브클래스로 만들어 필요한 메소드들을 오버라이드해야 합니다 (예시는 [trainer](trainer)를 참조하세요).
 
 기본적으로 `TrainingArguments.report_to`는 `"all"`로 설정되어 있으므로, [`Trainer`]는 다음 콜백을 사용합니다.
@@ -50,7 +50,7 @@ rendered properly in your Markdown viewer.
 
 콜백을 구현하는 주요 클래스는 [`TrainerCallback`]입니다. 이 클래스는 [`Trainer`]를 
 인스턴스화하는 데 사용된 [`TrainingArguments`]를 가져오고, 해당 Trainer의 내부 상태를 
-[`TrainerState`]를 통해 접근할 수 있으며, [`TrainerControl`]을 통해 훈련 루프에서 일부 
+[`TrainerState`]를 통해 접근할 수 있으며, [`TrainerControl`]을 통해 반복 훈련에서 일부 
 작업을 수행할 수 있습니다.
 
 
