@@ -21,7 +21,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -418,7 +418,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         pass
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]

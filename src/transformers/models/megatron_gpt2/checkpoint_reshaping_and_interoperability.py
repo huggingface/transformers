@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import sys
 import types
 
 import torch
+from packaging import version
 
 from transformers import AutoTokenizer, GPT2Config
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
@@ -606,9 +608,16 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     if args.megatron_path is not None:
         sys.path.insert(0, args.megatron_path)
 
-    try:
-        from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    except ModuleNotFoundError:
+    megatron_exists = importlib.util.find_spec("megatron") is not None
+    if megatron_exists:
+        from megatron.core import package_info
+
+        if version.parse(package_info.__version__) >= version.parse("0.6.0"):
+            from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
+        else:
+            from megatron.tokenizer.tokenizer import _vocab_size_with_padding
+
+    else:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
 
