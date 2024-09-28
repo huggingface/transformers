@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 콜백 [[callbacks]]
 
-콜백은 PyTorch [`Trainer`]의 훈련 루프 동작을 사용자 정의할 수 있는 객체입니다
+콜백은 PyTorch [`Trainer`]의 반복 훈련 동작을 사용자 정의할 수 있는 객체입니다
 (이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 훈련 루프의 상태를
 검사하여 진행 상황 보고, TensorBoard 또는 기타 머신 러닝 플랫폼에 로그 등의 작업을 할 수 있으며, 
 결정(예: 조기 종료)도 내릴 수 있습니다.
