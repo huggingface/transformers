@@ -103,16 +103,20 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     with torch.no_grad():
         outputs_images_original = colpali_original(**batch_images)
         outputs_images_new = model(**batch_images, return_dict=True).embeddings
+        if outputs_images_original.shape != outputs_images_new.shape:
+            raise ValueError("Output shapes do not match for images forward pass")
         # FIXME: doesn't match
         if not torch.allclose(outputs_images_original, outputs_images_new, atol=1e-3):
-            raise ValueError("Images forward pass does not match")
+            raise ValueError("Output values do not match for images forward pass")
 
     with torch.no_grad():
         outputs_queries_original = colpali_original(**batch_queries)
         outputs_queries_new = model(**batch_queries, return_dict=True).embeddings
+        if outputs_queries_original.shape != outputs_queries_new.shape:
+            raise ValueError("Output shapes do not match for images forward pass")
         # FIXME: doesn't match
         if not torch.allclose(outputs_queries_original, outputs_queries_new, atol=1e-3):
-            raise ValueError("Queries forward pass does not match")
+            raise ValueError("Output values do not match for images forward pass")
 
     # Save the model
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True, parents=True)
@@ -122,7 +126,9 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "pytorch_dump_folder_path", default="checkpoints/colpali", type=str, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
 
     convert_colpali_checkpoint(args.pytorch_dump_folder_path)
