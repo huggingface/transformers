@@ -119,6 +119,7 @@ def ffmpeg_microphone(
         "quiet",
         "pipe:1",
     ]
+
     ffmpeg_command.extend(ffmpeg_additional_args)
 
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
