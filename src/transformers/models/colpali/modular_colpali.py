@@ -50,10 +50,39 @@ class ColPaliConfig(PaliGemmaConfig):
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
     ColPaliForRetrieval according to the specified arguments, defining the model architecture.
 
-    The ColPali config is stricly equivalent to the PaliGemma config, but with a different model type.
+    The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vision_config (`PaliGemmaVisionConfig`,  *optional*):
+            Custom vision config or dict
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        ignore_index (`int`, *optional*, defaults to -100):
+            The ignore index for the loss function.
+        image_token_index (`int`, *optional*, defaults to 256000):
+            The image token index to encode the image prompt.
+        vocab_size (`int`, *optional*, defaults to 257152):
+            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
+        projection_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the multimodal projection space.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden layer of the Language model.
+        embedding_dim (`int`, *optional*, defaults to 128):
+            Dimension of the multi-vector embeddings produced by the model.
+
+    Example:
+
+    ```python
+    from transformers.models.colpali import ColPaliConfig, ColPaliForRetrieval
+
+    config = ColPaliConfig()
+    model = ColPaliForRetrieval(config)
+    ```
     """
 
     def __init__(
@@ -85,7 +114,19 @@ class ColPaliConfig(PaliGemmaConfig):
 
 class ColPaliProcessor(PaliGemmaProcessor):
     r"""
-    Processor for ColPali.
+    Constructs a ColPali processor which wraps a PaliGemmaProcessor and special methods to process images and queries, as
+    well as to compute the late-interaction retrieval score.
+
+    [`ColPaliProcessor`] offers all the functionalities of [`PaliGemmaProcessor`]. See the [`~PaliGemmaProcessor.__call__`]
+     for more information.
+
+    Args:
+        image_processor ([`SiglipImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     def __init__(
@@ -132,6 +173,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
     ) -> BatchFeature:
         """
         Process images for ColPali.
+        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
         """
         texts_doc = ["Describe the image."] * len(images)
         images = [image.convert("RGB") for image in images]
@@ -152,6 +194,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
     ) -> BatchFeature:
         """
         Process queries for ColPali.
+        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
         """
         if suffix is None:
             suffix = "<pad>" * 10
@@ -185,7 +228,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
         device: Optional[Union[str, torch.device]] = None,
     ) -> torch.Tensor:
         """
-        Compute the MaxSim score (ColBERT-like) for the given multi-vector query and passage embeddings.
+        Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
+        query embeddings (`qs`) and passage/image embeddings (`ps`).
         """
         device = device or self.get_torch_device("auto")
 
@@ -231,15 +275,21 @@ class ColPaliModelOutput(PaliGemmaForConditionalGeneration):
 
 @add_start_docstrings(
     """
-    ColPali is a PaliGemma variant to produce multi-vector representations from images.
-    It was introduced in the paper [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449).
+    ColPali leverages Vision Language Models (VLMs) to construct efficient multi-vector embeddings in the visual space for document retrieval.
+    By feeding the ViT output patches from PaliGemma-3B to a linear projection, we create a multi-vector representation of documents. The model
+    is trained to maximize the similarity between these document embeddings and the query embeddings, following the ColBERT method.
+
+    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account
+    both the textual and visual content (layout, charts, ...) of a document.
+
+    ColPali was introduced in the following paper: [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
 
     Resources:
     - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
     - The code for training ColPali and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
     - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
 
-    Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
+    Adapted from [`colpali-engine==0.3.0`](https://github.com/illuin-tech/colpali/releases/tag/v0.3.0).
     """
 )
 class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
