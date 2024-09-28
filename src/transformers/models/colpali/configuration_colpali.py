@@ -30,10 +30,39 @@ class ColPaliConfig(PaliGemmaConfig):
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
     ColPaliForRetrieval according to the specified arguments, defining the model architecture.
 
-    The ColPali config is stricly equivalent to the PaliGemma config, but with a different model type.
+    The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vision_config (`PaliGemmaVisionConfig`,  *optional*):
+            Custom vision config or dict
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        ignore_index (`int`, *optional*, defaults to -100):
+            The ignore index for the loss function.
+        image_token_index (`int`, *optional*, defaults to 256000):
+            The image token index to encode the image prompt.
+        vocab_size (`int`, *optional*, defaults to 257152):
+            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
+        projection_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the multimodal projection space.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden layer of the Language model.
+        embedding_dim (`int`, *optional*, defaults to 128):
+            Dimension of the multi-vector embeddings produced by the model.
+
+    Example:
+
+    ```python
+    from transformers.models.colpali import ColPaliConfig, ColPaliForRetrieval
+
+    config = ColPaliConfig()
+    model = ColPaliForRetrieval(config)
+    ```
     """
 
     def __init__(

@@ -36,6 +36,7 @@ from ..paligemma import (
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
 )
+from ..paligemma.modeling_paligemma import PaliGemmaCausalLMOutputWithPast
 
 
 if is_flash_attn_2_available():
@@ -261,7 +262,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
 
 @dataclass
-class ColPaliModelOutput(PaliGemmaForConditionalGeneration):
+class ColPaliModelOutput(PaliGemmaCausalLMOutputWithPast):
     """
     Base class for ColPali embeddings output.
 
@@ -356,7 +357,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         r"""
         Returns:
         """
-        outputs = super().forward(
+        vlm_outputs = super().forward(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -369,10 +370,10 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=None,
+            return_dict=True,
             num_logits_to_keep=num_logits_to_keep,
         )
-        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -381,9 +382,16 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         if not return_dict:
-            return (embeddings,)
+            return (embeddings,) + vlm_outputs
 
-        return ColPaliModelOutput(embeddings=embeddings)
+        return ColPaliModelOutput(
+            embeddings=embeddings,
+            logits=vlm_outputs.logits,
+            past_key_values=vlm_outputs.past_key_values,
+            hidden_states=vlm_outputs.hidden_states,
+            attentions=vlm_outputs.attentions,
+            image_hidden_states=vlm_outputs.image_hidden_states,
+        )
 
     def resize_token_embeddings(
         self,

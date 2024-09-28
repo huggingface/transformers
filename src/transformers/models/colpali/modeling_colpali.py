@@ -36,11 +36,12 @@ from ...utils import (
 from ..paligemma import (
     PaliGemmaForConditionalGeneration,
 )
+from ..paligemma.modeling_paligemma import PaliGemmaCausalLMOutputWithPast
 from .configuration_colpali import ColPaliConfig
 
 
 @dataclass
-class ColPaliModelOutput(PaliGemmaForConditionalGeneration):
+class ColPaliModelOutput(PaliGemmaCausalLMOutputWithPast):
     """
     Base class for ColPali embeddings output.
 
@@ -54,15 +55,21 @@ class ColPaliModelOutput(PaliGemmaForConditionalGeneration):
 
 @add_start_docstrings(
     """
-    ColPali is a PaliGemma variant to produce multi-vector representations from images.
-    It was introduced in the paper [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449).
+    ColPali leverages Vision Language Models (VLMs) to construct efficient multi-vector embeddings in the visual space for document retrieval.
+    By feeding the ViT output patches from PaliGemma-3B to a linear projection, we create a multi-vector representation of documents. The model
+    is trained to maximize the similarity between these document embeddings and the query embeddings, following the ColBERT method.
+
+    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account
+    both the textual and visual content (layout, charts, ...) of a document.
+
+    ColPali was introduced in the following paper: [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
 
     Resources:
     - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
     - The code for training ColPali and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
     - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
 
-    Adapted from colpali-engine==0.3.0: https://github.com/illuin-tech/colpali.
+    Adapted from [`colpali-engine==0.3.0`](https://github.com/illuin-tech/colpali/releases/tag/v0.3.0).
     """
 )
 class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
@@ -129,7 +136,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         r"""
         Returns:
         """
-        outputs = super().forward(
+        vlm_outputs = super().forward(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -142,10 +149,10 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=None,
+            return_dict=True,
             num_logits_to_keep=num_logits_to_keep,
         )
-        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -154,9 +161,16 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         if not return_dict:
-            return (embeddings,)
+            return (embeddings,) + vlm_outputs
 
-        return ColPaliModelOutput(embeddings=embeddings)
+        return ColPaliModelOutput(
+            embeddings=embeddings,
+            logits=vlm_outputs.logits,
+            past_key_values=vlm_outputs.past_key_values,
+            hidden_states=vlm_outputs.hidden_states,
+            attentions=vlm_outputs.attentions,
+            image_hidden_states=vlm_outputs.image_hidden_states,
+        )
 
     def resize_token_embeddings(
         self,
