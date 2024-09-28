@@ -2919,7 +2919,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
-        # For BNB/GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
+        # For BNB/GPTQ models, we prevent users from casting the model to another dtype to restrict unwanted behaviours.
         # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
         dtype_present_in_args = "dtype" in kwargs
 
