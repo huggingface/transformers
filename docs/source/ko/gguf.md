@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # GGUF와 Transformers의 상호작용 [[gguf-and-interaction-with-transformers]]
 
-GGUF 파일 형식은 [GGML](https://github.com/ggerganov/ggml)과 그에 의존하는 다른 라이브러리, 예를 들어 매우 인기 있는 [llama.cpp](https://github.com/ggerganov/llama.cpp)나 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)에서 모델 추론을 위해 사용됩니다.
+GGUF 파일 형식은 [GGML](https://github.com/ggerganov/ggml)과 그에 의존하는 다른 라이브러리, 예를 들어 매우 인기 있는 [llama.cpp](https://github.com/ggerganov/llama.cpp)이나 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)에서 추론을 위한 모델을 저장하는데 사용됩니다.
 
 이 파일 형식은 [Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf)에서 지원되며, 파일 내의 텐서와 메타데이터를 신속하게 검사할 수 있는 기능을 제공합니다.
 
@@ -74,7 +74,7 @@ GGUF 파일 형식은 [GGML](https://github.com/ggerganov/ggml)과 그에 의존
 
 ## 사용 예시 [[example-usage]]
 
-`transformers`에서 `gguf` 파일을 로드하려면 `from_pretrained` 메서드에 `gguf_file` 인수를 지정해야 합니다. 동일한 파일에서 토크나이저와 모델을 로드하는 방법은 다음과 같습니다: 
+`transformers`에서 `gguf` 파일을 로드하려면 `from_pretrained` 메소드에 `gguf_file` 인수를 지정해야 합니다. 동일한 파일에서 토크나이저와 모델을 로드하는 방법은 다음과 같습니다: 
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -86,7 +86,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 ```
 
-이제 PyTorch 생태계에서 모델의 역양자화된 전체 버전에 접근할 수 있으며, 다른 여러 도구들과 결합하여 사용할 수 있습니다.
+이제 PyTorch 생태계에서 모델의 양자화되지 않은 전체 버전에 접근할 수 있으며, 다른 여러 도구들과 결합하여 사용할 수 있습니다.
 
 `gguf` 파일로 다시 변환하려면 llama.cpp의 [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py)를 사용하는 것을 권장합니다.
 
