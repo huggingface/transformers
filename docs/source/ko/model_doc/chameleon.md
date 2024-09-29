@@ -16,53 +16,37 @@ rendered properly in your Markdown viewer.
 
 # Chameleon
 
-## Overview
+## 개요
 
-The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
+카멜레온(Chameleon) 모델은 META AI Chameleon 팀의 논문 [Chameleon: Mixed-Modal Early-Fusion Foundation Models](https://arxiv.org/abs/2405.09818v1)에서 제안되었습니다. 카멜레온은 벡터 양자화를 사용하여 이미지를 토큰화함으로써 멀티모달 출력을 생성할 수 있는 비전-언어 모델입니다. 이 모델은 이미지와 텍스트를 포함한 교차 형식의 입력을 받아 텍스트 응답을 생성합니다. 이미지 생성 모듈은 아직 공개되지 않았습니다.
 
+논문의 초록은 다음과 같습니다:
 
-The abstract from the paper is the following:
-
-*We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
-approach from inception, an alignment recipe, and an architectural parameterization tailored for the
-early-fusion, token-based, mixed-modal setting. The models are evaluated on a comprehensive range
-of tasks, including visual question answering, image captioning, text generation, image generation, and
-long-form mixed modal generation. Chameleon demonstrates broad and general capabilities, including
-state-of-the-art performance in image captioning tasks, outperforms Llama-2 in text-only tasks while
-being competitive with models such as Mixtral 8x7B and Gemini-Pro, and performs non-trivial image
-generation, all in a single model. It also matches or exceeds the performance of much larger models,
-including Gemini Pro and GPT-4V, according to human judgments on a new long-form mixed-modal
-generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
-text. Chameleon marks a significant step forward in unified modeling of full multimodal documents*
-
+*우리는 이미지와 텍스트를 임의의 순서로 이해하고 생성할 수 있는 초기 융합 토큰 기반의 혼합 모달 모델 패밀리인 카멜레온을 소개합니다. 우리는 초기부터 안정적인 훈련 접근법, 정렬 방법, 그리고 초기 융합 토큰 기반 혼합 모달 설정에 맞춘 아키텍처 매개변수를 제시합니다. 이 모델들은 시각적 질문 응답, 이미지 캡션 생성, 텍스트 생성, 이미지 생성, 장문 혼합 모달 생성 등 포괄적인 작업 범위에서 평가되었습니다. 카멜레온은 이미지 캡션 생성 작업에서 최첨단의 성능을 포함하여 광범위하고 일반적인 능력을 보여주며, 텍스트 전용 작업에서 Llama-2를 능가하면서 Mixtral 8x7B와 Gemini-Pro와 같은 모델과 경쟁력을 갖추고 있으며, 단일 모델에서 비트리비얼한 이미지 생성도 수행합니다. 또한 프롬프트나 출력에 이미지와 텍스트의 혼합 시퀀스가 포함된 새로운 장문 혼합 모달 생성 평가에서 인간의 판단에 따라 Gemini Pro와 GPT-4V를 포함한 훨씬 더 큰 모델의 성능과 일치하거나 이를 능가합니다. 카멜레온은 완전한 멀티모달 문서의 통합 모델링에서 중요한 진전을 나타냅니다.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chameleon_arch.png"
 alt="drawing" width="600"/>
 
-<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image generation using an auto-regressive transformer. Taken from the <a href="https://arxiv.org/abs/2405.09818v1">original paper.</a> </small>
+<small>카멜레온은 이미지를 이산적인 토큰으로 변환하기 위해 벡터 양자화 모듈을 통합합니다. 이는 자기회귀 변환기를 사용한 이미지 생성을 가능하게 합니다. <a href="https://arxiv.org/abs/2405.09818v1">원본 논문</a>에서 가져왔습니다.</small>
 
-This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The original code can be found [here](https://github.com/facebookresearch/chameleon).
+이 모델은 [joaogante](https://huggingface.co/joaogante)와 [RaushanTurganbay](https://huggingface.co/RaushanTurganbay)가 기여했습니다. 원본 코드는 [여기](https://github.com/facebookresearch/chameleon)에서 찾을 수 있습니다.
 
+## 사용 팁
 
-## Usage tips
+- 배치 생성 시 `padding_side="left"`를 사용하는 것을 권장합니다. 이는 더 정확한 결과를 제공합니다. 생성하기 전에 `processor.tokenizer.padding_side = "left"`로 설정하십시오.
 
-- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to set `processor.tokenizer.padding_side = "left"` before generating.
+- 카멜레온은 안전성 정렬을 위해 튜닝되었음을 유의하십시오. 모델이 응답을 거부하는 경우, 열린 질문보다는 더 구체적인 질문을 해보세요.
 
-- Note that Chameleon was tuned for safety alignment. If the model is refusing to answer, consider asking a more concrete question, instead of an open question.
-
-- Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
+- 카멜레온은 채팅 형식으로 생성하므로, 생성된 텍스트는 항상 "assistant's turn"으로 표시됩니다. 프로세서를 호출할 때 `return_for_text_completion=True`를 전달하여 텍스트 완성 생성을 활성화할 수 있습니다.
 
 > [!NOTE]
-> Chameleon implementation in Transformers uses a special image token to indicate where to merge image embeddings. For special image token we didn't add a new one but used one of the reserved tokens: `<reserved08707>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
+> Transformers에서의 카멜레온 구현은 이미지 임베딩을 병합할 위치를 나타내기 위해 특별한 이미지 토큰을 사용합니다. 특별한 이미지 토큰을 위해 새로운 토큰을 추가하지 않고 예약된 토큰 중 하나인 `<reserved08707>`를 사용했습니다. 올바른 생성을 위해 프롬프트에서 이미지가 임베딩될 위치에 `<image>`를 추가해야 합니다.
 
-## Usage example
+## 사용 예제
 
-### Single image inference
+### 단일 이미지 추론
 
-Chameleon is a gated model so make sure to have access and login to Hugging Face Hub using a token.
-Here's how to load the model and perform inference in half-precision (`torch.bfloat16`):
+카멜레온은 게이트된 모델이므로 Hugging Face Hub에 대한 액세스 권한이 있고 토큰으로 로그인했는지 확인하세요. 다음은 모델을 로드하고 반정밀도(`torch.bfloat16`)로 추론하는 방법입니다:
 
 ```python
 from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
@@ -73,21 +57,21 @@ import requests
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
 
-# prepare image and text prompt
+# 이미지와 텍스트 프롬프트 준비
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
-prompt = "What do you see in this image?<image>"
+prompt = "이 이미지에서 무엇을 보나요?<image>"
 
 inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
-# autoregressively complete prompt
+# 프롬프트를 자동 회귀적으로 완성
 output = model.generate(**inputs, max_new_tokens=50)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### Multi image inference
+### 다중 이미지 추론
 
-Chameleon can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+카멜레온은 여러 이미지를 입력으로 받아들이며, 이미지들은 동일한 프롬프트에 속하거나 다른 프롬프트에 속할 수 있습니다(배치 추론에서). 다음은 그 방법입니다:
 
 ```python
 from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
@@ -99,7 +83,7 @@ processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
 model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
 
-# Get three different images
+# 세 가지 다른 이미지 가져오기
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
 image_stop = Image.open(requests.get(url, stream=True).raw)
 
@@ -109,41 +93,41 @@ image_cats = Image.open(requests.get(url, stream=True).raw)
 url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
 image_snowman = Image.open(requests.get(url, stream=True).raw)
 
-# Prepare a batched prompt, where the first one is a multi-image prompt and the second is not
+# 배치된 프롬프트 준비: 첫 번째는 다중 이미지 프롬프트이고 두 번째는 단일 이미지 프롬프트입니다
 prompts = [
-    "What do these images have in common?<image><image>",
-    "<image>What is shown in this image?"
+    "이 이미지들은 무엇이 공통점인가요?<image><image>",
+    "<image>이 이미지에 무엇이 나타나 있나요?"
 ]
 
-# We can simply feed images in the order they have to be used in the text prompt
-# Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
+# 이미지들을 텍스트 프롬프트에서 사용되어야 하는 순서대로 입력할 수 있습니다
+# 각 "<image>" 토큰은 하나의 이미지를 사용하며, 다음 "<image>" 토큰은 다음 이미지를 사용합니다
 inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
 
-# Generate
+# 생성
 generate_ids = model.generate(**inputs, max_new_tokens=50)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
 
-## Model optimization
+## 모델 최적화
 
-### Quantization using Bitsandbytes
+### Bitsandbytes를 사용한 양자화
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
+모델은 8비트 또는 4비트로 로드할 수 있으며, 이는 원본 모델의 성능을 유지하면서 메모리 요구 사항을 크게 줄여줍니다. 먼저 bitsandbytes를 설치하고(`pip install bitsandbytes`), 라이브러리가 지원하는 GPU/가속기를 사용 중인지 확인하십시오.
 
-<Tip>
+<팁>
 
-bitsandbytes is being refactored to support multiple backends beyond CUDA. Currently, ROCm (AMD GPU) and Intel CPU implementations are mature, with Intel XPU in progress and Apple Silicon support expected by Q4/Q1. For installation instructions and the latest backend updates, visit [this link](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend).
+bitsandbytes는 CUDA 이외의 여러 백엔드를 지원하도록 리팩터링되고 있습니다. 현재 ROCm(AMD GPU) 및 Intel CPU 구현이 성숙 단계이며, Intel XPU는 진행 중이고 Apple Silicon 지원은 4분기/1분기에 예상됩니다. 설치 지침 및 최신 백엔드 업데이트는 [이 링크](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend)를 방문하세요.
 
-We value your feedback to help identify bugs before the full release! Check out [these docs](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends) for more details and feedback links.
+전체 릴리스 전에 버그를 식별하는 데 도움이 되는 피드백을 소중히 생각합니다! 자세한 내용과 피드백 링크는 [이 문서](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends)를 확인하세요.
 
-</Tip>
+</팁>
 
-Simply change the snippet above with:
+위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
 
 ```python
 from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig
 
-# specify how to quantize the model
+# 모델 양자화 방식 지정
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -153,9 +137,9 @@ quantization_config = BitsAndBytesConfig(
 model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="cuda")
 ```
 
-### Use Flash-Attention 2 and SDPA to further speed-up generation
+### Flash-Attention 2와 SDPA를 사용하여 생성 속도 향상
 
-The models supports both, Flash-Attention 2 and PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) which can be enables for optimization. SDPA is the default options when you load the model, If you want to switch for Flash Attention 2, first make sure to install flash-attn. Refer to the [original repository](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
+이 모델은 최적화를 위해 Flash-Attention 2와 PyTorch의 [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)를 모두 지원합니다. SDPA는 모델을 로드할 때 기본 옵션입니다. Flash Attention 2로 전환하려면 먼저 flash-attn을 설치해야 합니다. 해당 패키지 설치에 대해서는 [원본 저장소](https://github.com/Dao-AILab/flash-attention)를 참고하십시오. 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
 
 ```python
 from transformers import ChameleonForConditionalGeneration
