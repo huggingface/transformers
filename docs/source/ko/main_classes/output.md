@@ -65,250 +65,254 @@ outputs[:2]
 [[autodoc]] utils.ModelOutput
     - to_tuple
 
-## BaseModelOutput
+## BaseModelOutput[[transformers.BaseModelOutput]]
 
 [[autodoc]] modeling_outputs.BaseModelOutput
 
-## BaseModelOutputWithPooling
+## BaseModelOutputWithPooling[[transformers.modeling_outputs.BaseModelOutputWithPooling]]
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithPooling
 
-## BaseModelOutputWithCrossAttentions
+## BaseModelOutputWithCrossAttentions[[transformers.modeling_outputs.BaseModelOutputWithCrossAttentions]]
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithCrossAttentions
 
-## BaseModelOutputWithPoolingAndCrossAttentions
+## BaseModelOutputWithPoolingAndCrossAttentions[[transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions]]
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions
 
-## BaseModelOutputWithPast
+## BaseModelOutputWithPast[[transformers.modeling_outputs.BaseModelOutputWithPast]]
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithPast
 
-## BaseModelOutputWithPastAndCrossAttentions
+## BaseModelOutputWithPastAndCrossAttentions[[transformers.modeling_outputs.BaseModelOutputWithPastAndCrossAttentions]]
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithPastAndCrossAttentions
 
-## Seq2SeqModelOutput
+## Seq2SeqModelOutput[[transformers.modeling_outputs.Seq2SeqModelOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqModelOutput
 
-## CausalLMOutput
+## CausalLMOutput[[transformers.modeling_outputs.CausalLMOutput]]
 
 [[autodoc]] modeling_outputs.CausalLMOutput
 
-## CausalLMOutputWithCrossAttentions
+## CausalLMOutputWithCrossAttentions[[transformers.modeling_outputs.CausalLMOutputWithCrossAttentions]]
 
 [[autodoc]] modeling_outputs.CausalLMOutputWithCrossAttentions
 
-## CausalLMOutputWithPast
+## CausalLMOutputWithPast[[transformers.modeling_outputs.CausalLMOutputWithPast]]
 
 [[autodoc]] modeling_outputs.CausalLMOutputWithPast
 
-## MaskedLMOutput
+## MaskedLMOutput[[transformers.modeling_outputs.MaskedLMOutput]]
 
 [[autodoc]] modeling_outputs.MaskedLMOutput
 
-## Seq2SeqLMOutput
+## Seq2SeqLMOutput[[transformers.modeling_outputs.Seq2SeqLMOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqLMOutput
 
-## NextSentencePredictorOutput
+## NextSentencePredictorOutput[[transformers.modeling_outputs.NextSentencePredictorOutput]]
 
 [[autodoc]] modeling_outputs.NextSentencePredictorOutput
 
-## SequenceClassifierOutput
+## SequenceClassifierOutput[[transformers.modeling_outputs.SequenceClassifierOutput]]
 
 [[autodoc]] modeling_outputs.SequenceClassifierOutput
 
-## Seq2SeqSequenceClassifierOutput
+## Seq2SeqSequenceClassifierOutput[[transformers.modeling_outputs.Seq2SeqSequenceClassifierOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqSequenceClassifierOutput
 
-## MultipleChoiceModelOutput
+## MultipleChoiceModelOutput[[transformers.modeling_outputs.MultipleChoiceModelOutput]]
 
 [[autodoc]] modeling_outputs.MultipleChoiceModelOutput
 
-## TokenClassifierOutput
+## TokenClassifierOutput[[transformers.modeling_outputs.TokenClassifierOutput]]
 
 [[autodoc]] modeling_outputs.TokenClassifierOutput
 
-## QuestionAnsweringModelOutput
+## QuestionAnsweringModelOutput[[transformers.modeling_outputs.QuestionAnsweringModelOutput]]
 
 [[autodoc]] modeling_outputs.QuestionAnsweringModelOutput
 
-## Seq2SeqQuestionAnsweringModelOutput
+## Seq2SeqQuestionAnsweringModelOutput[[transformers.modeling_outputs.Seq2SeqQuestionAnsweringModelOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqQuestionAnsweringModelOutput
 
-## Seq2SeqSpectrogramOutput
+## Seq2SeqSpectrogramOutput[[transformers.modeling_outputs.Seq2SeqSpectrogramOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqSpectrogramOutput
 
-## SemanticSegmenterOutput
+## SemanticSegmenterOutput[[transformers.modeling_outputs.SemanticSegmenterOutput]]
 
 [[autodoc]] modeling_outputs.SemanticSegmenterOutput
 
-## ImageClassifierOutput
+## ImageClassifierOutput[[transformers.modeling_outputs.ImageClassifierOutput]]
 
 [[autodoc]] modeling_outputs.ImageClassifierOutput
 
-## ImageClassifierOutputWithNoAttention
+## ImageClassifierOutputWithNoAttention[[transformers.modeling_outputs.ImageClassifierOutputWithNoAttention]]
 
 [[autodoc]] modeling_outputs.ImageClassifierOutputWithNoAttention
 
-## DepthEstimatorOutput
+## DepthEstimatorOutput[[transformers.modeling_outputs.DepthEstimatorOutput]]
 
 [[autodoc]] modeling_outputs.DepthEstimatorOutput
 
-## Wav2Vec2BaseModelOutput
+## Wav2Vec2BaseModelOutput[[transformers.modeling_outputs.Wav2Vec2BaseModelOutput]]
 
 [[autodoc]] modeling_outputs.Wav2Vec2BaseModelOutput
 
-## XVectorOutput
+## XVectorOutput[[transformers.modeling_outputs.XVectorOutput]]
 
 [[autodoc]] modeling_outputs.XVectorOutput
 
-## Seq2SeqTSModelOutput
+## Seq2SeqTSModelOutput[[transformers.modeling_outputs.Seq2SeqTSModelOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqTSModelOutput
 
-## Seq2SeqTSPredictionOutput
+## Seq2SeqTSPredictionOutput[[transformers.modeling_outputs.Seq2SeqTSPredictionOutput]]
 
 [[autodoc]] modeling_outputs.Seq2SeqTSPredictionOutput
 
-## SampleTSPredictionOutput
+## SampleTSPredictionOutput[[transformers.modeling_outputs.SampleTSPredictionOutput]]
 
 [[autodoc]] modeling_outputs.SampleTSPredictionOutput
 
-## TFBaseModelOutput
+## TFBaseModelOutput[[transformers.modeling_outputs.TFBaseModelOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFBaseModelOutput
 
-## TFBaseModelOutputWithPooling
+## TFBaseModelOutputWithPooling[[transformers.modeling_tf_outputs.TFBaseModelOutputWithPooling]]
 
 [[autodoc]] modeling_tf_outputs.TFBaseModelOutputWithPooling
 
-## TFBaseModelOutputWithPoolingAndCrossAttentions
+## TFBaseModelOutputWithPoolingAndCrossAttentions[[transformers.modeling_tf_outputs.TFBaseModelOutputWithPoolingAndCrossAttentions]]
 
 [[autodoc]] modeling_tf_outputs.TFBaseModelOutputWithPoolingAndCrossAttentions
 
-## TFBaseModelOutputWithPast
+## TFBaseModelOutputWithPast[[transformers.modeling_tf_outputs.TFBaseModelOutputWithPast]]
 
 [[autodoc]] modeling_tf_outputs.TFBaseModelOutputWithPast
 
-## TFBaseModelOutputWithPastAndCrossAttentions
+## TFBaseModelOutputWithPastAndCrossAttentions[[transformers.modeling_tf_outputs.TFBaseModelOutputWithPastAndCrossAttentions]]
 
 [[autodoc]] modeling_tf_outputs.TFBaseModelOutputWithPastAndCrossAttentions
 
-## TFSeq2SeqModelOutput
+## TFSeq2SeqModelOutput[[transformers.modeling_tf_outputs.TFSeq2SeqModelOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFSeq2SeqModelOutput
 
-## TFCausalLMOutput
+## TFCausalLMOutput[[transformers.modeling_tf_outputs.TFCausalLMOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFCausalLMOutput
 
-## TFCausalLMOutputWithCrossAttentions
+## TFCausalLMOutputWithCrossAttentions[[transformers.modeling_tf_outputs.TFCausalLMOutputWithCrossAttentions]]
 
 [[autodoc]] modeling_tf_outputs.TFCausalLMOutputWithCrossAttentions
 
-## TFCausalLMOutputWithPast
+## TFCausalLMOutputWithPast[[transformers.modeling_tf_outputs.TFCausalLMOutputWithPast]]
 
 [[autodoc]] modeling_tf_outputs.TFCausalLMOutputWithPast
 
-## TFMaskedLMOutput
+## TFMaskedLMOutput[[transformers.modeling_tf_outputs.TFMaskedLMOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFMaskedLMOutput
 
-## TFSeq2SeqLMOutput
+## TFSeq2SeqLMOutput[[transformers.modeling_tf_outputs.TFSeq2SeqLMOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFSeq2SeqLMOutput
 
-## TFNextSentencePredictorOutput
+## TFNextSentencePredictorOutput[[transformers.modeling_tf_outputs.TFNextSentencePredictorOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFNextSentencePredictorOutput
 
-## TFSequenceClassifierOutput
+## TFSequenceClassifierOutput[[transformers.modeling_tf_outputs.TFSequenceClassifierOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFSequenceClassifierOutput
 
-## TFSeq2SeqSequenceClassifierOutput
+## TFSeq2SeqSequenceClassifierOutput[[transformers.modeling_tf_outputs.TFSeq2SeqSequenceClassifierOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFSeq2SeqSequenceClassifierOutput
 
-## TFMultipleChoiceModelOutput
+## TFMultipleChoiceModelOutput[[transformers.modeling_tf_outputs.TFMultipleChoiceModelOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFMultipleChoiceModelOutput
 
-## TFTokenClassifierOutput
+## TFTokenClassifierOutput[[transformers.modeling_tf_outputs.TFTokenClassifierOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFTokenClassifierOutput
 
-## TFQuestionAnsweringModelOutput
+## TFQuestionAnsweringModelOutput[[transformers.modeling_tf_outputs.TFQuestionAnsweringModelOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFQuestionAnsweringModelOutput
 
-## TFSeq2SeqQuestionAnsweringModelOutput
+## TFSeq2SeqQuestionAnsweringModelOutput[[transformers.modeling_tf_outputs.TFSeq2SeqQuestionAnsweringModelOutput]]
 
 [[autodoc]] modeling_tf_outputs.TFSeq2SeqQuestionAnsweringModelOutput
 
-## FlaxBaseModelOutput
+## FlaxBaseModelOutput[[transformers.modeling_flax_outputs.FlaxBaseModelOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutput
 
-## FlaxBaseModelOutputWithPast
+## FlaxBaseModelOutputWithPast[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPast]]
 
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutputWithPast
 
-## FlaxBaseModelOutputWithPooling
+## FlaxBaseModelOutputWithPooling[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPooling]]
+
 
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutputWithPooling
 
-## FlaxBaseModelOutputWithPastAndCrossAttentions
+## FlaxBaseModelOutputWithPastAndCrossAttentions[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPastAndCrossAttentions]]
+
 
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutputWithPastAndCrossAttentions
 
-## FlaxSeq2SeqModelOutput
+## FlaxSeq2SeqModelOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqModelOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqModelOutput
 
-## FlaxCausalLMOutputWithCrossAttentions
+## FlaxCausalLMOutputWithCrossAttentions[[transformers.modeling_flax_outputs.FlaxCausalLMOutputWithCrossAttentions]]
 
 [[autodoc]] modeling_flax_outputs.FlaxCausalLMOutputWithCrossAttentions
 
-## FlaxMaskedLMOutput
+## FlaxMaskedLMOutput[[transformers.modeling_flax_outputs.FlaxMaskedLMOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxMaskedLMOutput
 
-## FlaxSeq2SeqLMOutput
+## FlaxSeq2SeqLMOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqLMOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqLMOutput
 
-## FlaxNextSentencePredictorOutput
+## FlaxNextSentencePredictorOutput[[transformers.modeling_flax_outputs.FlaxNextSentencePredictorOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxNextSentencePredictorOutput
 
-## FlaxSequenceClassifierOutput
+## FlaxSequenceClassifierOutput[[transformers.modeling_flax_outputs.FlaxSequenceClassifierOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxSequenceClassifierOutput
 
-## FlaxSeq2SeqSequenceClassifierOutput
+## FlaxSeq2SeqSequenceClassifierOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqSequenceClassifierOutput]]
+
 
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqSequenceClassifierOutput
 
-## FlaxMultipleChoiceModelOutput
+## FlaxMultipleChoiceModelOutput[[transformers.modeling_flax_outputs.FlaxMultipleChoiceModelOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxMultipleChoiceModelOutput
 
-## FlaxTokenClassifierOutput
+## FlaxTokenClassifierOutput[[transformers.modeling_flax_outputs.FlaxTokenClassifierOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxTokenClassifierOutput
 
-## FlaxQuestionAnsweringModelOutput
+## FlaxQuestionAnsweringModelOutput[[transformers.modeling_flax_outputs.FlaxQuestionAnsweringModelOutput]]
+
 
 [[autodoc]] modeling_flax_outputs.FlaxQuestionAnsweringModelOutput
 
-## FlaxSeq2SeqQuestionAnsweringModelOutput
+## FlaxSeq2SeqQuestionAnsweringModelOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqQuestionAnsweringModelOutput]]
 
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqQuestionAnsweringModelOutput
