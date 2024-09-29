@@ -47,6 +47,7 @@ class GgufIntegrationTests(unittest.TestCase):
     falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
+    stablelm_model_id = "afrideva/stablelm-3b-4e1t-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -58,6 +59,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
     q5_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"
     q6_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
+    q4_k_m_stablelm_model_id = "stablelm-3b-4e1t.q4_k_m.gguf"
     # imatrix
     iq1_m_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ1_M.gguf"
     iq1_s_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ1_S.gguf"
@@ -502,6 +504,21 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+
+    def test_stablelm_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.stablelm_model_id, gguf_file=self.q4_k_m_stablelm_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.stablelm_model_id,
+            gguf_file=self.q4_k_m_stablelm_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello-\nI am trying to create a new user"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
         import tqdm
