@@ -302,8 +302,8 @@
       title: (번역중) Quantization
     - local: in_translation
       title: (번역중) Tokenizer
-    - local: in_translation
-      title: (번역중) Trainer
+    - local: main_classes/trainer
+      title: Trainer
     - local: deepspeed
       title: DeepSpeed
     - local: in_translation
