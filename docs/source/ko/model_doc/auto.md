@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 자동 클래스[[auto-classes]]
+# Auto 클래스[[auto-classes]]
 
-많은 경우, 사용하려는 아키텍처는 `from_pretrained()` 메소드에서 제공하는 사전 학습된 모델의 이름이나 경로로부터 유추할 수 있습니다. AutoClasses는 이 작업을 위해 존재하며, 사전 학습된 weight/config/vocabulary에 대한 이름/경로를 제공하면 자동으로 관련 모델을 가져오도록 도와줍니다.
+많은 경우, 사용하려는 아키텍처는 `from_pretrained()` 메소드에서 제공하는 사전 학습된 모델의 이름이나 경로로부터 유추할 수 있습니다. AutoClasses는 이 작업을 위해 존재하며, 사전 학습된 모델 가중치/구성/단어사전에 대한 이름/경로를 제공하면 자동으로 관련 모델을 가져오도록 도와줍니다.
 
 [`AutoConfig`], [`AutoModel`], [`AutoTokenizer`] 중 하나를 인스턴스화하면 해당 아키텍처의 클래스를 직접 생성합니다. 예를 들어,
 
@@ -40,7 +40,7 @@ AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
 ```
 
-그 후에는 평소처럼 자동 클래스를 사용할 수 있게 됩니다!
+이후에는 일반적으로 자동 클래스를 사용하는 것처럼 사용할 수 있습니다!
 
 <Tip warning={true}>
 
@@ -88,7 +88,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 일반적인 사전 학습 클래스[[generic-pretraining-classes]]
 
-다음 자동 클래스들은 사전 학습 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
+다음 자동 클래스들은 사전 훈련 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
 
 ### AutoModelForPreTraining[[transformers.AutoModelForPreTraining]]
 
