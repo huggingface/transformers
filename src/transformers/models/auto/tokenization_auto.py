@@ -895,13 +895,12 @@ class AutoTokenizer:
             )
         elif config_tokenizer_class is not None:
             tokenizer_class = None
+            class_name = config_tokenizer_class.rstrip("Tokenizer").lower()
             if use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if tokenizer_class is None:
-                    tokenizer_class = tokenizer_class_from_name(
-                        TOKENIZER_MAPPING_NAMES[config_tokenizer_class.rstrip("Tokenizer").lower()][1]
-                    )
+                if tokenizer_class is None and class_name in TOKENIZER_MAPPING_NAMES:
+                    tokenizer_class = tokenizer_class_from_name(TOKENIZER_MAPPING_NAMES[class_name][1])
             if tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
