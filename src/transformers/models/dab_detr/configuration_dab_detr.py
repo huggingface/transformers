@@ -97,6 +97,8 @@ class DABDETRConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+        dilation (`bool`, *optional*, defaults to `False`):
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -178,7 +180,6 @@ class DABDETRConfig(PretrainedConfig):
         backbone="resnet50",
         use_pretrained_backbone=True,
         backbone_kwargs=None,
-        # num_channels=3,
         num_queries=300,
         encoder_layers=6,
         encoder_ffn_dim=2048,

@@ -129,6 +129,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "DABDETRConfig": ["dilation"],
 }
 
 
