@@ -27,27 +27,27 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-BERT 모델은 Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova가 발표한 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) 논문에서 제안되었습니다. 이 모델은 마스킹 언어 모델링 목표와 다음 문장 예측을 결합하여 토론토 북 코퍼스와 위키백과로 구성된 대규모 코퍼스에서 사전 학습된 양방향 트랜스포머입니다.
+BERT 모델은 Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova가 발표한 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) 논문에서 제안되었습니다. 이 모델은 마스크드 언어 모델링과 다음 문장 예측을 결합하여 Toronto Book Corpus와 Wikipedia로 구성된 대규모 코퍼스로부터 사전훈련된 양방향 트랜스포머입니다.
 
 논문의 초록은 다음과 같습니다:
 
-*우리는 BERT(Bidirectional Encoder Representations from Transformers)라는 새로운 언어 표현 모델을 소개합니다. 최근의 언어 표현 모델과 달리, BERT는 모든 레이어에서 왼쪽과 오른쪽 문맥을 동시에 고려하여 비지도 텍스트로부터 깊은 양방향 표현을 사전 학습하도록 설계되었습니다. 그 결과, 사전 학습된 BERT 모델은 하나의 추가 출력 레이어만으로 질문 응답 및 언어 추론과 같은 다양한 작업에 대해 최신 모델을 구축할 수 있으며, 별도의 작업별 아키텍처 수정 없이도 가능합니다.*
+*우리는 BERT(Bidirectional Encoder Representations from Transformers)라는 새로운 언어 표현 모델을 소개합니다. 최근의 언어 표현 모델과 달리, BERT는 모든 레이어에서 왼쪽과 오른쪽 컨텍스트를 동시에 고려하여 비지도 텍스트로부터 깊은 양방향 표현을 사전훈련하도록 설계되었습니다. 그 결과, 사전훈련된 BERT 모델은 하나의 추가 출력 레이어만으로 질의 응답 및 언어 추론과 같은 다양한 작업에 대해 최신 모델을 구축할 수 있으며, 별도의 작업별 아키텍처 수정 없이도 가능합니다.*
 
-*BERT는 개념적으로 단순하면서도 실질적으로 강력합니다. 이 모델은 11개의 자연어 처리 작업에서 새로운 최고 성능을 달성했으며, GLUE 점수를 80.5%로 끌어올리며(절대 7.7%포인트 향상), MultiNLI 정확도를 86.7%(절대 4.6%포인트 향상), SQuAD v1.1 질문 응답 테스트 F1 점수를 93.2(절대 1.5포인트 향상), SQuAD v2.0 테스트 F1 점수를 83.1(절대 5.1포인트 향상)로 끌어올렸습니다.*
+*BERT는 개념적으로 단순하면서도 실질적으로 강력합니다. 이 모델은 11개의 자연어 처리 작업에서 새로운 최고 성능을 달성했으며, GLUE 점수를 80.5%로 끌어올리며(수치상으로 7.7%포인트 향상), MultiNLI 정확도를 86.7%(수치상으로 4.6%포인트 향상), SQuAD v1.1 질의 응답 테스트 F1 점수를 93.2(수치상으로 1.5포인트 향상), SQuAD v2.0 테스트 F1 점수를 83.1(수치상으로 5.1포인트 향상)로 끌어올렸습니다.*
 
 이 모델은 [thomwolf](https://huggingface.co/thomwolf)가 기여하였습니다. 원본 코드는 [여기](https://github.com/google-research/bert)에서 찾을 수 있습니다.
 
 ## 사용 팁[[usage-tips]]
 
 - BERT는 절대적 위치 임베딩을 사용하는 모델이므로 입력을 왼쪽이 아닌 오른쪽에서 패딩하는 것이 일반적으로 권장됩니다.
-- BERT는 마스킹 언어 모델링(MLM)과 다음 문장 예측(NSP) 목표로 학습되었습니다. 마스킹된 토큰을 예측하고 일반적으로 자연어 이해(NLU)에 효율적이지만, 텍스트 생성에는 최적화되어 있지 않습니다.
-- 랜덤 마스킹을 사용해 입력을 훼손합니다. 더 구체적으로 말하자면, 사전 학습 중에는 주어진 토큰의 일정 비율(일반적으로 15%)이 다음과 같이 마스킹됩니다:
+- BERT는 마스크드 언어 모델링(MLM)과 다음 문장 예측(NSP) 목표로 학습되었습니다. 마스킹된 토큰을 예측하는 작업과 일반적인 자연어 이해(NLU)에 효율적이지만, 텍스트 생성에는 최적화되어 있지 않습니다.
+- 랜덤 마스킹을 사용해 입력을 변형합니다. 더 구체적으로 말하자면, 사전훈련 중에는 주어진 토큰의 일정 비율(일반적으로 15%)이 다음과 같이 마스킹됩니다:
 
     * 80% 확률로 특수 마스크 토큰을 사용
     * 10% 확률로 마스킹된 토큰과 다른 임의의 토큰을 사용
     * 10% 확률로 동일한 토큰을 유지
 
-- 모델은 원래 문장을 예측해야 하며, 두 번째 목표도 있습니다: 입력은 A와 B라는 두 문장(사이에 구분 토큰이 있음)으로 구성됩니다. 50% 확률로 이 문장들은 코퍼스에서 연속적이며, 나머지 50%는 서로 관련이 없습니다. 모델은 문장들이 연속적인지 아닌지를 예측해야 합니다.
+- 모델은 원래 문장을 예측해야 하며, 동시에 두 번째 목표도 있습니다: 입력은 A와 B라는 두 문장(사이에 구분 토큰이 있음)으로 구성됩니다. 50% 확률로 이 문장들은 코퍼스에서 연속적이며, 나머지 50%는 서로 관련이 없습니다. 모델은 문장들이 연속적인지 아닌지를 예측해야 합니다.
 
 ### Scaled Dot Product Attention(SDPA) 사용[[using-scaled-dot-product-attention-sdpa]]
 
@@ -89,14 +89,14 @@ model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16
 |4         |256    |6.285                       |5.364                      |17.166     |443.209       |444.382    |-0.264       |
 
 
-## 자료[[resources]]
+## 관련 자료[[resources]]
 
-BERT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시된) 자료 목록입니다. 이곳에 포함될 자료를 제출하고 싶다면 자유롭게 Pull Request를 열어주세요! 자료는 기존 자료를 중복하기보다는 새로운 내용을 다루는 것이 좋습니다.
+BERT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시된) 자료 목록입니다. 이곳에 포함될 자료를 제출하고 싶다면 자유롭게 Pull Request를 열어주세요! 자료는 기존 자료와 중복된 내용보다는 새로운 내용을 다루는 것이 좋습니다.
 
 <PipelineTag pipeline="text-classification"/>
 
 - [다른 언어로 BERT 텍스트 분류](https://www.philschmid.de/bert-text-classification-in-a-different-language)에 관한 블로그 게시물.
-- [다중 레이블 텍스트 분류를 위한 BERT(및 기타) 미세 조정](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb) 노트북.
+- [다중 레이블 텍스트 분류를 위한 BERT(및 다른 모델) 미세 조정](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb) 노트북.
 - PyTorch를 사용해 [BERT를 다중 레이블 분류에 미세 조정](https://colab.research.google.com/github/abhimishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)하는 방법을 설명한 노트북. 🌎
 - [요약을 위해 BERT로 EncoderDecoder 모델을 웜 스타트](https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/BERT2BERT_for_CNN_Dailymail.ipynb)하는 방법에 관한 노트북.
 - [`BertForSequenceClassification`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
@@ -127,20 +127,20 @@ BERT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(�
 - [`BertForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
 - [`TFBertForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
 - [`FlaxBertForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
-- 🤗 Hugging Face 강좌의 [질문 응답](https://huggingface.co/course/chapter7/7?fw=pt) 챕터.
-- [질문 응답 작업 가이드](../tasks/question_answering)
+- 🤗 Hugging Face 강좌의 [질의 응답](https://huggingface.co/course/chapter7/7?fw=pt) 챕터.
+- [질의 응답 작업 가이드](../tasks/question_answering)
 
-**선택형 문제**
+**다중 선택 문제**
 - [`BertForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
 - [`TFBertForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
-- [선택형 문제 작업 가이드](../tasks/multiple_choice)
+- [다중 선택 문제 작업 가이드](../tasks/multiple_choice)
 
 ⚡️ **추론(Inference)**
 - [Hugging Face Transformers와 AWS Inferentia로 BERT 추론 가속화](https://huggingface.co/blog/bert-inferentia-sagemaker)에 관한 블로그 게시물.
 - [GPU에서 DeepSpeed-Inference를 사용해 BERT 추론 가속화](https://www.philschmid.de/bert-deepspeed-inference)에 관한 블로그 게시물.
 
-⚙️ **사전 학습(Pretraining)**
-- [Hugging Face Transformers와 Habana Gaudi로 BERT 사전 학습](https://www.philschmid.de/pre-training-bert-habana)에 관한 블로그 게시물.
+⚙️ **사전훈련(Pretraining)**
+- [Hugging Face Transformers와 Habana Gaudi로 BERT 사전훈련](https://www.philschmid.de/pre-training-bert-habana)에 관한 블로그 게시물.
 
 🚀 **배포(Deploy)**
 - [Hugging Face Optimum으로 Transformers를 ONNX로 변환](https://www.philschmid.de/convert-transformers-to-onnx)에 관한 블로그 게시물.
@@ -180,7 +180,7 @@ BERT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(�
 </tf>
 </frameworkcontent>
 
-## Bert 특정 출력[[transformers.models.bert.modeling_bert.BertForPreTrainingOutput]]
+## Bert에 특화된 출력[[transformers.models.bert.modeling_bert.BertForPreTrainingOutput]]
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
