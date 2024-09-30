@@ -56,7 +56,7 @@ class GlmConverter(TikTokenConverter):
 
 def merge_safetensors(input_dir: str):
     all_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
-    all_files = sorted(all_files, key=lambda x: int(x.split("-", 2)[1]))
+    all_files = sorted(all_files, key=lambda x: int(x.rsplit("-", 3)[1]))
 
     all_weights = {}
     for file in all_files:
