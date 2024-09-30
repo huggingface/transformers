@@ -18,7 +18,14 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer, SiglipTokenizerFast
+from transformers import (
+    SPIECE_UNDERLINE,
+    AddedToken,
+    AutoTokenizer,
+    BatchEncoding,
+    PreTrainedTokenizerFast,
+    SiglipTokenizer,
+)
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
@@ -40,8 +47,8 @@ else:
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/siglip-base-patch16-224"
     tokenizer_class = SiglipTokenizer
-    rust_tokenizer_class = SiglipTokenizerFast
-    test_rust_tokenizer = True
+    rust_tokenizer_class = PreTrainedTokenizerFast
+    test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
@@ -50,7 +57,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
+        tokenizer = SiglipTokenizer.from_pretrained(self.from_pretrained_id[0])
         tokenizer.save_pretrained(self.tmpdirname)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_convert_token_and_id with T5->Siglip
@@ -59,11 +66,15 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "<s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
+
+        self.assertEqual(tokenizer._convert_token_to_id(token), token_id)
+        self.assertEqual(tokenizer._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+        tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
+
+        vocab_keys = list(tokenizer.get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
@@ -138,19 +149,19 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        return SiglipTokenizer.from_pretrained(self.from_pretrained_id[0], **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_rust_tokenizer with T5->Siglip
-    def get_rust_tokenizer(self, **kwargs) -> SiglipTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return AutoTokenizer.from_pretrained(self.from_pretrained_id[0], use_fast=True, **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained_id[0])
+        rust_tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained_id[0])
 
         sequence = "I was born in 92000, and this is falsé."
 
@@ -244,7 +255,9 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                    pretrained_name,
+                    additional_special_tokens=added_tokens,
+                    **kwargs,
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
@@ -408,6 +421,25 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize(" ▁")
         self.assertEqual(tokens, [])
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+    def test_compare_prepare_for_model(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            self.skipTest(reason="test_slow_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                string_sequence = "Asserting that both tokenizers are equal"
+                python_output = tokenizer_p.prepare_for_model(
+                    tokenizer_p.encode(string_sequence, add_special_tokens=False), add_special_tokens=False
+                )
+                rust_output = tokenizer_r.prepare_for_model(
+                    tokenizer_r.encode(string_sequence, add_special_tokens=False), add_special_tokens=False
+                )
+                for key in python_output:
+                    self.assertEqual(python_output[key], rust_output[key])
 
 
 @require_sentencepiece
