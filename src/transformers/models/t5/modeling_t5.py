@@ -604,12 +604,9 @@ class T5Attention(nn.Module):
             position_bias_masked = position_bias
 
         scores += position_bias_masked
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -618,10 +615,10 @@ class T5Attention(nn.Module):
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output,) + (past_key_value,) + (position_bias,)
+        outputs = (attn_output, past_key_value, position_bias)
 
         if output_attentions:
-            outputs = outputs + (attn_weights,)
+            outputs += (attn_weights,)
         return outputs
 
 
@@ -832,6 +829,9 @@ class T5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
+    _supports_quantized_cache = False  # enc-dec models don't support yet
+    _supports_static_cache = True
+    _supports_cache_class = True
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
 
@@ -1053,9 +1053,6 @@ class T5Stack(T5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
-
         if use_cache is True:
             if not self.is_decoder:
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
@@ -1090,15 +1087,24 @@ class T5Stack(T5PreTrainedModel):
             )
 
         if attention_mask is None:
+            # required mask seq length can be calculated via length of past
+            mask_seq_length = (
+                past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
+            )
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            cache_position,
-            past_key_values.self_attention_cache if past_key_values is not None else None,
-            output_attentions,
-        )
+        if self.config.is_decoder:
+            causal_mask = self._update_causal_mask(
+                attention_mask,
+                inputs_embeds,
+                cache_position,
+                past_key_values.self_attention_cache if past_key_values is not None else None,
+                output_attentions,
+            )
+        else:
+            causal_mask = attention_mask[:, None, None, :]
+            causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
+            causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1139,7 +1145,7 @@ class T5Stack(T5PreTrainedModel):
                 torch.cuda.set_device(hidden_states.device)
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
+                    causal_mask = causal_mask.to(hidden_states.device)
                 if position_bias is not None:
                     position_bias = position_bias.to(hidden_states.device)
                 if encoder_hidden_states is not None:
@@ -1169,6 +1175,7 @@ class T5Stack(T5PreTrainedModel):
                     None,  # past_key_value is always None with gradient checkpointing
                     use_cache,
                     output_attentions,
+                    return_dict,
                     cache_position,
                 )
             else:
@@ -1184,6 +1191,7 @@ class T5Stack(T5PreTrainedModel):
                     past_key_value=past_key_values,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    return_dict=return_dict,
                     cache_position=cache_position,
                 )
 
@@ -1192,7 +1200,7 @@ class T5Stack(T5PreTrainedModel):
             if use_cache is False:
                 layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
 
-            hidden_states, nexy_decoder_cache = layer_outputs[:2]
+            hidden_states, next_decoder_cache = layer_outputs[:2]
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
@@ -1219,7 +1227,7 @@ class T5Stack(T5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = nexy_decoder_cache if use_cache else None
+        next_cache = next_decoder_cache if use_cache else None
         if return_self_attention_cache:
             next_cache = past_key_values.self_attention_cache
         if return_legacy_cache:

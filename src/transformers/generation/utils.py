@@ -496,7 +496,7 @@ class GenerationMixin:
                 add_hook_to_module(encoder, AlignDevicesHook(io_same_device=True))
 
         # 2. Prepare encoder args and encoder kwargs from model kwargs and generation config.
-        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
+        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache", "past_key_values"]
         encoder_kwargs = {
             argument: value
             for argument, value in model_kwargs.items()
@@ -1386,6 +1386,7 @@ class GenerationMixin:
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
 
+        print("initial", cache_position)
         past_length = 0
         if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
@@ -1394,6 +1395,7 @@ class GenerationMixin:
                 past_length = cache[0][0].shape[2]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
+                print("cropped", past_length, cache.self_attention_cache, cache.self_attention_cache.get_seq_length())
 
             # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
             # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
@@ -1865,11 +1867,15 @@ class GenerationMixin:
                 inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
             )
 
+        if "past_key_values" in model_kwargs:
+            print("before", model_kwargs["past_key_values"].get_seq_length())
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
+        if "past_key_values" in model_kwargs:
+            print("after", model_kwargs["past_key_values"].get_seq_length())
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
@@ -2993,6 +2999,7 @@ class GenerationMixin:
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
             # prepare model inputs
+            print(model_kwargs["cache_position"])
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # prepare variable output controls (note: some models won't accept all output controls)
