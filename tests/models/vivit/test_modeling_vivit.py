@@ -364,7 +364,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2")
         video = prepare_video()
         inputs = image_processor(
-            video, size={"shortest_edge": 480}, crop_size={"height": 480, "width": 480}, return_tensors="pt"
+            video, size={"shortest_edge": 480}, return_tensors="pt"
         )
         pixel_values = inputs.pixel_values.to(torch_device)
 
