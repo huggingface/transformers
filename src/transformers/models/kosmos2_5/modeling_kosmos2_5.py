@@ -1748,6 +1748,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Returns:
@@ -1767,6 +1768,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
 
@@ -1816,6 +1818,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Kosmos2_5ModelOutput]:
         r"""
         Returns:
@@ -1884,6 +1887,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
