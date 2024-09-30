@@ -450,12 +450,6 @@ class GgufIntegrationTests(unittest.TestCase):
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
 
-    def test_falcon_q2_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.falcon_model_id, gguf_file=self.q2_k_falcon_model_id)
-        model = AutoModelForCausalLM.from_pretrained(
-            self.falcon_model_id,
-            gguf_file=self.q2_k_falcon_model_id,
-
     def test_falcon7b_q2_k(self):
         tokenizer = AutoTokenizer.from_pretrained(self.falcon7b_model_id, gguf_file=self.q2_k_falcon7b_model_id)
         model = AutoModelForCausalLM.from_pretrained(
