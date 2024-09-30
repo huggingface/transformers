@@ -815,6 +815,7 @@ class MT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
+    _supports_quantized_cache = False  # enc-dec models don't support yet
     _supports_static_cache = True
     _supports_cache_class = True
     _no_split_modules = ["MT5Block"]
