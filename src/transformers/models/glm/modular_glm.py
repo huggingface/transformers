@@ -164,6 +164,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.linear_bias)
+        # Not used in the attention, only for BC
         self.rotary_emb = GlmRotaryEmbedding(
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
