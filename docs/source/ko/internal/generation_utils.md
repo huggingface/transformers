@@ -14,17 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Generation
+# 생성(Generation)을 위한 유틸리티
 
-This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
+이 페이지는 [`~generation.GenerationMixin.generate`]에서 사용되는 모든 유틸리티 함수들을 나열합니다.
 
-## Generate Outputs
+## 생성 출력
 
-The output of [`~generation.GenerationMixin.generate`] is an instance of a subclass of
-[`~utils.ModelOutput`]. This output is a data structure containing all the information returned
-by [`~generation.GenerationMixin.generate`], but that can also be used as tuple or dictionary.
+[`~generation.GenerationMixin.generate`]의 출력은 [`~utils.ModelOutput`]의 하위 클래스의 인스턴스입니다. 이 출력은 [`~generation.GenerationMixin.generate`]에서 반환되는 모든 정보를 포함하는 데이터 구조체이며, 튜플 또는 딕셔너리로도 사용할 수 있습니다.
 
-Here's an example:
+다음은 예시입니다:
 
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
@@ -36,34 +34,28 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-The `generation_output` object is a [`~generation.GenerateDecoderOnlyOutput`], as we can
-see in the documentation of that class below, it means it has the following attributes:
+`generation_output` 객체는 [`~generation.GenerateDecoderOnlyOutput`]입니다. 아래 문서에서 확인할 수 있듯이, 이 클래스는 다음과 같은 속성을 가지고 있습니다:
 
-- `sequences`: the generated sequences of tokens
-- `scores` (optional): the prediction scores of the language modelling head, for each generation step
-- `hidden_states` (optional): the hidden states of the model, for each generation step
-- `attentions` (optional): the attention weights of the model, for each generation step
+- `sequences`: 생성된 토큰 시퀀스
+- `scores` (옵션): 각 생성 단계에서 언어 모델링 헤드의 예측 점수
+- `hidden_states` (옵션): 각 생성 단계에서 모델의 히든 스테이트
+- `attentions` (옵션): 각 생성 단계에서 모델의 어텐션 가중치
 
-Here we have the `scores` since we passed along `output_scores=True`, but we don't have `hidden_states` and
-`attentions` because we didn't pass `output_hidden_states=True` or `output_attentions=True`.
+우리가 `output_scores=True`를 전달했기 때문에 `scores`는 포함되어 있지만, `output_hidden_states=True` 또는 `output_attentions=True`를 전달하지 않았으므로 `hidden_states`와 `attentions`는 포함되지 않았습니다.
 
-You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
-will get `None`. Here for instance `generation_output.scores` are all the generated prediction scores of the
-language modeling head, and `generation_output.attentions` is `None`.
+각 속성은 일반적으로 접근할 수 있으며, 모델이 해당 속성을 반환하지 않았다면 `None`이 반환됩니다. 예를 들어, `generation_output.scores`는 언어 모델링 헤드에서 생성된 모든 예측 점수를 포함하고 있으며, `generation_output.attentions`는 `None`입니다.
 
-When using our `generation_output` object as a tuple, it only keeps the attributes that don't have `None` values.
-Here, for instance, it has two elements, `loss` then `logits`, so
+`generation_output` 객체를 튜플로 사용할 경우, `None` 값이 아닌 속성만 포함됩니다. 예를 들어, `loss`와 `logits`라는 두 요소가 포함된 경우:
 
 ```python
 generation_output[:2]
 ```
 
-will return the tuple `(generation_output.sequences, generation_output.scores)` for instance.
+는 `(generation_output.sequences, generation_output.scores)` 튜플을 반환합니다.
 
-When using our `generation_output` object as a dictionary, it only keeps the attributes that don't have `None`
-values. Here, for instance, it has two keys that are `sequences` and `scores`.
+`generation_output` 객체를 딕셔너리로 사용할 경우, `None` 값이 아닌 속성만 포함됩니다. 예를 들어, `sequences`와 `scores`라는 두 개의 키를 가질 수 있습니다.
 
-We document here all output types.
+여기서는 모든 출력 유형을 문서화합니다.
 
 
 ### PyTorch
@@ -108,8 +100,7 @@ We document here all output types.
 
 ## LogitsProcessor
 
-A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for
-generation.
+[`LogitsProcessor`]는 생성 중 언어 모델 헤드의 예측 점수를 수정하는 데 사용됩니다.
 
 ### PyTorch
 
@@ -295,9 +286,9 @@ generation.
 [[autodoc]] FlaxWhisperTimeStampLogitsProcessor
     - __call__
 
-## StoppingCriteria
+## 중단 기준
 
-A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
+[`StoppingCriteria`]는 생성이 언제 멈출지를 결정하는 데 사용됩니다 (EOS 토큰 외). 이 기능은 PyTorch 구현에만 제공됩니다.
 
 [[autodoc]] StoppingCriteria
     - __call__
@@ -317,9 +308,9 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] EosTokenCriteria
     - __call__
 
-## Constraints
+## 제약 조건
 
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
+[`Constraint`]는 생성 출력에 특정 토큰이나 시퀀스를 강제로 포함시키는 데 사용됩니다. 이 기능은 PyTorch 구현에만 제공됩니다.
 
 [[autodoc]] Constraint
 
@@ -329,7 +320,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] ConstraintListState
 
-## BeamSearch
+## 빔 검색
 
 [[autodoc]] BeamScorer
     - process
@@ -343,13 +334,13 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - process
     - finalize
 
-## Streamers
+## 스트리머
 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
 
-## Caches
+## 캐시
 
 [[autodoc]] Cache
     - update
@@ -416,7 +407,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update_ssm_state
     - reset
 
-## Watermark Utils
+## 워터마크 유틸리티
 
 [[autodoc]] WatermarkDetector
     - __call__
