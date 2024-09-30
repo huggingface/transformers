@@ -747,7 +747,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([Kosmos2_5VisionLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-    
+
     def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
@@ -931,7 +931,7 @@ class Kosmos2_5TextAttention(nn.Module):
         add_inner_attn_layernorm: bool = False,
         bias: bool = True,
         is_causal=True,
-        layer_idx: Optional[int] = None
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.layer_idx = layer_idx
@@ -968,8 +968,8 @@ class Kosmos2_5TextAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor, # text part
-        encoder_hidden_states: Optional[torch.Tensor] = None, #image part
+        hidden_states: torch.Tensor,  # text part
+        encoder_hidden_states: Optional[torch.Tensor] = None,  # image part
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -1045,8 +1045,8 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
 
     def forward(
         self,
-        hidden_states: torch.Tensor, # text part
-        encoder_hidden_states: Optional[torch.Tensor] = None, #image part
+        hidden_states: torch.Tensor,  # text part
+        encoder_hidden_states: Optional[torch.Tensor] = None,  # image part
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -1064,16 +1064,12 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
 
-        query_states = self.q_proj(current_states)
-        key_states = self.k_proj(current_states)
-        value_states = self.v_proj(current_states)
-
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = self._shape(self.q_proj(hidden_states))
+        key_states = self._shape(self.k_proj(current_states))
+        value_states = self._shape(self.v_proj(current_states))
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -1105,7 +1101,7 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
-
+        # breakpoint()
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
@@ -1139,8 +1135,8 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
     # Adapted from LlamaAttention.forward
     def forward(
         self,
-        hidden_states: torch.Tensor, # text part
-        encoder_hidden_states: Optional[torch.Tensor] = None, #image part
+        hidden_states: torch.Tensor,  # text part
+        encoder_hidden_states: Optional[torch.Tensor] = None,  # image part
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -1173,15 +1169,14 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
 
+        query_states = self._shape(self.q_proj(hidden_states))
         key_states = self._shape(self.k_proj(current_states))
         value_states = self._shape(self.v_proj(current_states))
-        query_states = self._shape(self.q_proj(hidden_states))
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
 
         causal_mask = attention_mask
         if attention_mask is not None:
@@ -1237,7 +1232,7 @@ class Kosmos2_5TextBlock(nn.Module):
             is_decoder=True,
             add_inner_attn_layernorm=False,
             is_causal=True,
-            layer_idx=layer_idx
+            layer_idx=layer_idx,
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -1366,9 +1361,9 @@ class Kosmos2_5TextTransformer(nn.Module):
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
         if self.config._attn_implementation == "flash_attention_2":
-                if attention_mask is not None and 0.0 in attention_mask:
-                    return attention_mask
-                return None
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1466,14 +1461,16 @@ class Kosmos2_5TextTransformer(nn.Module):
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
-        
+
         # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`.
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         # Ignore copy
         if image_embeds is not None:
-            inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(inputs_embeds.device).view(-1, image_embeds.size(-1))
+            inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(inputs_embeds.device).view(
+                -1, image_embeds.size(-1)
+            )
 
         inputs_embeds = inputs_embeds * self.embed_scale
 
@@ -1580,7 +1577,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
             next_cache = next_cache.to_legacy_cache()
-        
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
