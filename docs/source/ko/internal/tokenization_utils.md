@@ -14,23 +14,23 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 토크나이저를 위한 유틸리티
+# 토크나이저를 위한 유틸리티 [[utilities-for-tokenizers]]
 
-이 페이지는 토크나이저에서 사용되는 모든 유틸리티 함수들을 나열하며, 주로 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`] 사이의 공통 메서드를 구현하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`] 클래스와 [`~tokenization_utils_base.SpecialTokensMixin`]을 다룹니다.
+이 페이지는 토크나이저에서 사용되는 모든 유틸리티 함수들을 나열하며, 주로 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`] 사이의 공통 메소드를 구현하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`] 클래스와 [`~tokenization_utils_base.SpecialTokensMixin`]을 다룹니다.
 
-이 함수들 대부분은 라이브러리의 토크나이저 코드를 연구할 때 유용합니다.
+이 함수들 대부분은 라이브러리의 토크나이저 코드를 연구할 때만 유용합니다.
 
-## PreTrainedTokenizerBase
+## PreTrainedTokenizerBase [[transformers.PreTrainedTokenizerBase]]
 
 [[autodoc]] tokenization_utils_base.PreTrainedTokenizerBase
    - __call__
    - all
 
-## SpecialTokensMixin
+## SpecialTokensMixin [[transformers.SpecialTokensMixin]]
 
 [[autodoc]] tokenization_utils_base.SpecialTokensMixin
 
-## Enums 및 namedtuples
+## Enums 및 namedtuples [[transformers.tokenization_utils_base.TruncationStrategy]]
 
 [[autodoc]] tokenization_utils_base.TruncationStrategy
 
