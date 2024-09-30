@@ -56,7 +56,7 @@ class GlmConverter(TikTokenConverter):
 
 def merge_safetensors(input_dir: str):
     all_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
-    all_files = sorted(all_files, key=lambda x: int(x.split("-", 2)[1]))
+    all_files = sorted(all_files, key=lambda x: int(x.rsplit("-", 3)[1]))
 
     all_weights = {}
     for file in all_files:
@@ -107,6 +107,7 @@ def convert_config(original_config: dict):
         linear_bias=original_config.pop("add_bias_linear"),
         eos_token_id=original_config.pop("eos_token_id"),
         pad_token_id=original_config.pop("pad_token_id"),
+        tie_word_embeddings=original_config.pop("tie_word_embeddings"),
     )
     print(f"Unused config keys: {original_config.keys(),}")
     return new_config
