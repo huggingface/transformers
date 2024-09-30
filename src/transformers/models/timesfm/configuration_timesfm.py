@@ -71,6 +71,8 @@ class TimesFMConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        backend (`str`, *optional*, defaults to `"gpu"`):
+            The backend to use for the model. Can be either `"gpu"` or `"cpu"`.
     """
 
     model_type = "timesfm"
@@ -97,8 +99,9 @@ class TimesFMConfig(PretrainedConfig):
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
-        per_core_batch_size: int = 32, 
+        per_core_batch_size: int = 32,
         initializer_factor: float = 1.0,
+        backend: str = "gpu",
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -117,6 +120,7 @@ class TimesFMConfig(PretrainedConfig):
         self.use_positional_embedding = use_positional_embedding
         self.per_core_batch_size = per_core_batch_size
         self.initializer_factor = initializer_factor
+        self.backend = backend
 
         super().__init__(
             **kwargs,

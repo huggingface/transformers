@@ -31,22 +31,21 @@ def _masked_mean_std(
     It excludes values where `padding` is 1.
 
     Args:
-      inputs: A PyTorch tensor of shape [b, n, p].
-      padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
+        inputs: A PyTorch tensor of shape [b, n, p].
+        padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
 
     Returns:
-      A tuple containing the mean and standard deviation.
-      We return the statistics of the first patch with more than three non-padded
-      values.
+        A tuple containing the mean and standard deviation.
+        We return the statistics of the first patch with more than three non-padded values.
     """
-    # Selecting the first patch with more than 3 unpadded values.
-    pad_sum = torch.sum(1 - padding, dim=2)
 
+    # Selecting the first patch with more than 3 unpadded values.
     def _get_patch_index(arr: torch.Tensor):
         indices = torch.argmax((arr >= 3).to(torch.int32), dim=1)
         row_sum = (arr >= 3).to(torch.int32).sum(dim=1)
         return torch.where(row_sum == 0, arr.shape[1] - 1, indices)
 
+    pad_sum = torch.sum(1 - padding, dim=2)
     patch_indices = _get_patch_index(pad_sum)
     bidxs = torch.arange(inputs.shape[0])
 
@@ -57,9 +56,8 @@ def _masked_mean_std(
     mask = 1 - pad
 
     # Calculate the number of valid elements
-    num_valid_elements = torch.sum(mask, dim=1)
     num_valid_elements = torch.where(
-        num_valid_elements == 0,
+        torch.sum(mask, dim=1) == 0,
         torch.tensor(
             1, dtype=num_valid_elements.dtype, device=num_valid_elements.device
         ),
@@ -87,11 +85,11 @@ def _shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
     """Shifts rows of seq based on the first 0 in each row of the mask.
 
     Args:
-      mask: mask tensor of shape [B, N]
-      seq: seq tensor of shape [B, N, P]
+        mask: mask tensor of shape [B, N]
+        seq: seq tensor of shape [B, N, P]
 
     Returns:
-      Returns the shifted sequence.
+        The shifted sequence.
     """
     batch_size, num_seq, feature_dim = seq.shape
 
