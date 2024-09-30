@@ -751,8 +751,8 @@
       title: (번역중) Graph models
     title: (번역중) 모델
   - sections:
-    - local: in_translation
-      title: (번역중) Custom Layers and Utilities
+    - local: internal/modeling_utils
+      title: 사용자 정의 레이어 및 유틸리티
     - local: in_translation
       title: (번역중) Utilities for pipelines
     - local: in_translation
