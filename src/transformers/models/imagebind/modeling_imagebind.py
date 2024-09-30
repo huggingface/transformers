@@ -2089,4 +2089,13 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         )
 
 
-__all__ = ["ImageBindTextModel", "ImageBindVisionModel", "ImageBindAudioModel", "ImageBindModel", "ImageBindTextModelWithProjection", "ImageBindVisionModelWithProjection", "ImageBindAudioModelWithProjection"]
+__all__ = [
+    "ImageBindTextModel",
+    "ImageBindVisionModel",
+    "ImageBindAudioModel",
+    "ImageBindPreTrainedModel",
+    "ImageBindModel",
+    "ImageBindTextModelWithProjection",
+    "ImageBindVisionModelWithProjection",
+    "ImageBindAudioModelWithProjection",
+]

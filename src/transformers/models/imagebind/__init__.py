@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from .configuration_imagebind import *
     from .feature_extraction_imagebind import *
     from .image_processing_imagebind import *
-    from .processing_imagebind import *
     from .modeling_imagebind import *
+    from .processing_imagebind import *
 else:
     import sys
 
