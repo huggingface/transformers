@@ -2369,13 +2369,7 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                is_last_step = (step + 1) == steps_in_epoch
-
-                if (step + 1) % args.gradient_accumulation_steps == 0 or is_last_step:
-                    # `is_last_step` case is not covered in accelerate, explicitly enable sync gradients to True.
-                    if is_last_step:
-                        self.accelerator.gradient_state._set_sync_gradients(True)
-
+                if self.accelerator.sync_gradients:
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         # deepspeed does its own clipping
@@ -4774,8 +4768,6 @@ class Trainer:
         elif "num_steps" not in grad_acc_kwargs:
             # take the gradient_accumulation_steps setting from TrainingArguments.
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-
-        grad_acc_kwargs["sync_with_dataloader"] = False
 
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
