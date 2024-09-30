@@ -24,9 +24,9 @@ from .integrations import (
     GGUF_TENSOR_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
-    load_dequant_gguf_tensor,
 )
 from .utils import is_torch_available
+from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
 
 
@@ -71,14 +71,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """
-    try:
-        from gguf import GGUFReader
-    except (ImportError, ModuleNotFoundError):
+    if is_gguf_available() and is_torch_available():
+        from gguf import GGUFReader, dequantize
+    else:
         logger.error(
-            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF to be installed. Please see "
+            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise
+        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
 
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
@@ -95,6 +95,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         updated_architecture = "mistral"
     else:
         updated_architecture = architecture
+
+    if "qwen2moe" in architecture:
+        updated_architecture = "qwen2_moe"
 
     if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture} not supported")
@@ -154,12 +157,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                         tensor_name_mapping, GGUF_TO_TRANSFORMERS_MAPPING["tensors"][tensor_name_mapping]
                     )
 
-            shape = tensor.shape
             name = tensor.name
 
-            weights = load_dequant_gguf_tensor(
-                shape=shape, ggml_type=tensor.tensor_type, data=tensor.data, n_bytes=int(tensor.n_bytes)
-            )
+            weights = dequantize(tensor.data, tensor.tensor_type)
 
             if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
@@ -168,6 +168,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     weights = reverse_permute_weights(weights, num_heads, num_heads)
                 elif ".attn_k." in name:
                     weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
+
+            if architecture == "bloom" and "attn_qkv" in name:
+                num_heads = parsed_parameters["config"]["n_head"]
+                n_embed = parsed_parameters["config"]["hidden_size"]
+                if "weight" in name:
+                    weights = reverse_reshape_weights(weights, num_heads, n_embed)
+                else:
+                    weights = reverse_reshape_bias(weights, num_heads, n_embed)
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name in name:
@@ -191,3 +199,29 @@ def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Opti
     dim = weights.shape[0] // n_head // 2
     w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
     return w.swapaxes(2, 1).reshape(weights.shape)
+
+
+def reverse_reshape_weights(weights: np.ndarray, n_head: int, n_embed: int):
+    # Original reshape implementation
+    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L972-L985
+    q, k, v = np.array_split(weights, 3, axis=0)
+
+    q = q.reshape(n_head, n_embed // n_head, n_embed)
+    k = k.reshape(n_head, n_embed // n_head, n_embed)
+    v = v.reshape(n_head, n_embed // n_head, n_embed)
+    qkv_weights = np.stack([q, k, v], axis=1)
+
+    return qkv_weights.reshape(n_head * 3 * (n_embed // n_head), n_embed)
+
+
+def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
+    # Original reshape implementation
+    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L986-L998
+    q_bias, k_bias, v_bias = np.array_split(weights, 3)
+
+    q_bias = q_bias.reshape(n_head, n_embed // n_head)
+    k_bias = k_bias.reshape(n_head, n_embed // n_head)
+    v_bias = v_bias.reshape(n_head, n_embed // n_head)
+
+    qkv_bias = np.stack([q_bias, k_bias, v_bias], axis=1).flatten()
+    return qkv_bias

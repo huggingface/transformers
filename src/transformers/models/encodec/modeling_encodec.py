@@ -103,8 +103,12 @@ class EncodecConv1d(nn.Module):
             )
 
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if self.norm_type == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
+            self.conv = weight_norm(self.conv)
         elif self.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
@@ -186,8 +190,13 @@ class EncodecConvTranspose1d(nn.Module):
             )
 
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
+
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if config.norm_type == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
+            self.conv = weight_norm(self.conv)
         elif config.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
