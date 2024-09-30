@@ -654,7 +654,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
-
+            n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+            n_video_features = video_features.shape[0]
+            if n_video_tokens != n_video_features:
+                raise ValueError(
+                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                )
             special_video_mask = (
                 (input_ids == self.config.video_token_index)
                 .unsqueeze(-1)
