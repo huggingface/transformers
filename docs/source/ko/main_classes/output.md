@@ -263,7 +263,6 @@ outputs[:2]
 
 ## FlaxBaseModelOutputWithPooling[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPooling]]
 
-
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutputWithPooling
 
 ## FlaxBaseModelOutputWithPastAndCrossAttentions[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPastAndCrossAttentions]]
