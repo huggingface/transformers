@@ -14,13 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 일반 유틸리티 (General Utilities)
+# 일반 유틸리티 (General Utilities) [[general-utilities]]
 
 이 페이지는 `utils.py` 파일에 있는 Transformers의 일반 유틸리티 함수들을 나열합니다.
 
-이 함수들 대부분은 라이브러리의 일반적인 코드를 연구할 때 유용합니다.
+이 함수들 대부분은 라이브러리의 일반적인 코드를 연구할 때만 유용합니다.
 
-## Enums 및 namedtuples
+
+## Enums 및 namedtuples [[transformers.utils.ExplicitEnum]]
 
 [[autodoc]] utils.ExplicitEnum
 
@@ -28,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.TensorType
 
-## 특수 데코레이터
+## 특수 데코레이터 (Special Decorators) [[transformers.add_start_docstrings]]
 
 [[autodoc]] utils.add_start_docstrings
 
@@ -40,10 +41,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.replace_return_docstrings
 
-## 특수 속성
+## 특수 속성 (Special Properties) [[transformers.utils.cached_property]]
 
 [[autodoc]] utils.cached_property
 
-## 기타 유틸리티
+## 기타 유틸리티 (Other Utilities) [[transformers.utils._LazyModule]]
 
 [[autodoc]] utils._LazyModule
