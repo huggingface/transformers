@@ -16,6 +16,7 @@
 
 import math
 import unittest
+import warnings
 
 from transformers import LlamaConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
@@ -64,6 +65,18 @@ class RopeTest(unittest.TestCase):
                 else:
                     with self.assertRaises(KeyError):
                         rope_config_validation(config)
+
+        # Any other parameters passed to RoPE will raise a warning that a particular key is not used
+        # But sometimes we can have model-specific RoPE kwargs and bypass warning with `ignore_keys`
+        model_specific_kwarg = "mrope_sections"  # e,g in Qwen2-VL
+
+        for rope_type in all_rope_types:
+            if rope_type == "default":
+                config.rope_scaling = {"rope_type": rope_type, model_specific_kwarg: True}
+                rope_config_validation(config, ignore_keys={model_specific_kwarg})
+                with warnings.catch_warnings(record=True) as warning_list:
+                    rope_config_validation(config)
+                    self.assertEqual(len(warning_list), 1)
 
     def test_default_rope_function_bc(self):
         config = LlamaConfig()

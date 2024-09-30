@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from typing import Optional, Tuple
 
 from .configuration_utils import PretrainedConfig
@@ -386,7 +387,7 @@ def _check_received_keys(
     else:
         unused_keys = received_keys - required_keys
     if unused_keys:
-        logger.warning(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
+        warnings.warn(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
 def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
@@ -406,7 +407,7 @@ def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_ke
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        warnings.warn(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
 def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
@@ -420,7 +421,7 @@ def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_k
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        warnings.warn(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
 def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
@@ -433,22 +434,22 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        warnings.warn(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
     attention_factor = rope_scaling.get("attention_factor")
     if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
-        logger.warning(
+        warnings.warn(
             f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
         )
     beta_fast = rope_scaling.get("beta_fast")
     if beta_fast is not None and not isinstance(beta_fast, float):
-        logger.warning(f"`rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
+        warnings.warn(f"`rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
     beta_slow = rope_scaling.get("beta_slow")
     if beta_slow is not None and not isinstance(beta_slow, float):
-        logger.warning(f"`rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
+        warnings.warn(f"`rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
 
     if (beta_fast or 32) < (beta_slow or 1):
-        logger.warning(
+        warnings.warn(
             f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
             f"(defaults to 32 if None) and beta_slow={beta_slow} (defaults to 1 if None)"
         )
@@ -469,15 +470,15 @@ def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optiona
 
     short_factor = rope_scaling.get("short_factor")
     if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
-        logger.warning(f"`rope_scaling`'s short_factor field must be a list of numbers, got {short_factor}")
+        warnings.warn(f"`rope_scaling`'s short_factor field must be a list of numbers, got {short_factor}")
     if not len(short_factor) == dim // 2:
-        logger.warning(f"`rope_scaling`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
+        warnings.warn(f"`rope_scaling`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
 
     long_factor = rope_scaling.get("long_factor")
     if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
-        logger.warning(f"`rope_scaling`'s long_factor field must be a list of numbers, got {long_factor}")
+        warnings.warn(f"`rope_scaling`'s long_factor field must be a list of numbers, got {long_factor}")
     if not len(long_factor) == dim // 2:
-        logger.warning(f"`rope_scaling`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
+        warnings.warn(f"`rope_scaling`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
 
     # Handle Phi3 divergence: prefer the use of `attention_factor` and/or `factor` over
     # `original_max_position_embeddings` to compute internal variables. The latter lives outside `rope_scaling` and is
@@ -492,14 +493,14 @@ def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optiona
     else:
         factor = rope_scaling.get("factor")
         if factor is None:
-            logger.warning("Missing required keys in `rope_scaling`: 'factor'")
+            warnings.warn("Missing required keys in `rope_scaling`: 'factor'")
         elif not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+            warnings.warn(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
         attention_factor = rope_scaling.get("attention_factor")
         if attention_factor is not None:
             if not isinstance(attention_factor, float) or attention_factor < 0.0:
-                logger.warning(
+                warnings.warn(
                     f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
                 )
 
@@ -513,28 +514,28 @@ def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        warnings.warn(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
     low_freq_factor = rope_scaling["low_freq_factor"]
     high_freq_factor = rope_scaling["high_freq_factor"]
     if low_freq_factor is None or not isinstance(low_freq_factor, float):
-        logger.warning(f"`rope_scaling`'s low_freq_factor field must be a float, got {low_freq_factor}")
+        warnings.warn(f"`rope_scaling`'s low_freq_factor field must be a float, got {low_freq_factor}")
     if high_freq_factor is None or not isinstance(high_freq_factor, float):
-        logger.warning(f"`rope_scaling`'s high_freq_factor field must be a float, got {high_freq_factor}")
+        warnings.warn(f"`rope_scaling`'s high_freq_factor field must be a float, got {high_freq_factor}")
     if high_freq_factor <= low_freq_factor:
-        logger.warning(
+        warnings.warn(
             "`rope_scaling`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
             f"{high_freq_factor} and low_freq_factor={low_freq_factor}"
         )
 
     original_max_position_embeddings = rope_scaling["original_max_position_embeddings"]
     if original_max_position_embeddings is None or not isinstance(original_max_position_embeddings, int):
-        logger.warning(
+        warnings.warn(
             "`rope_scaling`'s original_max_position_embeddings field must be an integer, got "
             f"{original_max_position_embeddings}"
         )
     if original_max_position_embeddings >= config.max_position_embeddings:
-        logger.warning(
+        warnings.warn(
             "`rope_scaling`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
             f"{original_max_position_embeddings} and max_position_embeddings={config.max_position_embeddings}"
         )
@@ -565,6 +566,6 @@ def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] 
     if validation_fn is not None:
         validation_fn(config, ignore_keys=ignore_keys)
     else:
-        logger.warning(
+        warnings.warn(
             f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
         )
