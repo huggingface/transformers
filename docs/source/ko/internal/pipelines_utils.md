@@ -14,14 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for pipelines
+# 파이프라인을 위한 유틸리티
 
-This page lists all the utility functions the library provides for pipelines.
+이 페이지는 라이브러리에서 파이프라인에 제공하는 모든 유틸리티 함수들을 나열합니다.
 
-Most of those are only useful if you are studying the code of the models in the library.
+이 함수들 대부분은 라이브러리 내 모델의 코드를 연구할 때 유용합니다.
 
-
-## Argument handling
+## 인자 처리
 
 [[autodoc]] pipelines.ArgumentHandler
 
@@ -29,7 +28,7 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pipelines.QuestionAnsweringArgumentHandler
 
-## Data format
+## 데이터 형식
 
 [[autodoc]] pipelines.PipelineDataFormat
 
@@ -39,6 +38,6 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pipelines.PipedPipelineDataFormat
 
-## Utilities
+## 유틸리티
 
 [[autodoc]] pipelines.PipelineException
