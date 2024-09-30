@@ -52,7 +52,7 @@ logger.warning("WARN")
 ```
 
 
-이 로깅 모듈의 모든 메서드는 아래에 문서화되어 있으며, 주요 메서드는 현재 로거의 출력 수준을 가져오는 [logging.get_verbosity]와 원하는 출력 수준으로 설정하는 [logging.set_verbosity]입니다. 출력 수준은 (가장 적은 출력에서 가장 많은 출력 순으로) 다음과 같으며, 해당 수준에 대응하는 정수 값은 괄호 안에 표시됩니다.
+이 로깅 모듈의 모든 메서드는 아래에 문서화되어 있으며, 주요 메서드는 현재 로거의 출력 수준을 가져오는 [`logging.get_verbosity`]와 원하는 출력 수준으로 설정하는 [`logging.set_verbosity`] 입니다. 출력 수준은 (가장 적은 출력에서 가장 많은 출력 순으로) 다음과 같으며, 해당 수준에 대응하는 정수 값은 괄호 안에 표시됩니다.
 
 - `transformers.logging.CRITICAL` 또는 `transformers.logging.FATAL` (정수 값, 50): 가장 심각한 오류만 보고합니다.
 - `transformers.logging.ERROR` (정수 값, 40): 오류만 보고합니다.
