@@ -66,8 +66,12 @@ def merge_safetensors(input_dir: str):
     return all_weights
 
 
-def convert_state_dict(original_state_dict: dict):
+def convert_state_dict(original_state_dict: dict, config: GlmConfig):
     new_dict = {}
+
+    head_dim = config.hidden_size // config.num_attention_heads
+    query_size = config.num_attention_heads * head_dim
+    kv_size = config.num_key_value_heads * head_dim
 
     for key, value in original_state_dict.items():
         # Should not be part of the state dict
@@ -78,7 +82,13 @@ def convert_state_dict(original_state_dict: dict):
         for old, new in STATE_DICT_MAPPING.items():
             new_key = new_key.replace(old, new)
 
-        new_dict[new_key] = value
+        if "qkv_proj." in new_key:
+            q_proj, k_proj, v_proj = value[..., :query_size], value[..., query_size : query_size + kv_size], value[..., query_size + kv_size : ]
+            new_dict[new_key.replace("qkv_proj.", "q_proj.")] = q_proj
+            new_dict[new_key.replace("qkv_proj.", "k_proj.")] = k_proj
+            new_dict[new_key.replace("qkv_proj.", "v_proj.")] = v_proj
+        else:
+            new_dict[new_key] = value
     return new_dict
 
 
