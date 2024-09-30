@@ -95,7 +95,6 @@ class QuantizationConfigMixin:
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
-
         config = cls(**config_dict)
 
         to_remove = []
@@ -194,15 +193,9 @@ class HqqConfig(QuantizationConfigMixin):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, *optional*, defaults to 64):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
-        quant_zero (`bool`, *optional*, defaults to `True`):
-            Quantize the zero-point if set to `True`.
-        quant_scale (`bool`, *optional*, defaults to `False`):
-            Quantize the scaling if set to `True`.
-        offload_meta (`bool`, *optional*, defaults to `False`):
-            Offload the meta-data to the CPU if set to `True`.
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
-        axis (`int`, *optional*, defaults to 0):
+        axis (`Optional[int]`, *optional*):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
@@ -217,17 +210,24 @@ class HqqConfig(QuantizationConfigMixin):
         self,
         nbits: int = 4,
         group_size: int = 64,
-        quant_zero: bool = True,
-        quant_scale: bool = False,
-        offload_meta: bool = False,
         view_as_float: bool = False,
-        axis: int = 0,
+        axis: Optional[int] = None,
         dynamic_config: Optional[dict] = None,
         skip_modules: List[str] = ["lm_head"],
         **kwargs,
     ):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
+        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
+            if deprecated_key in kwargs:
+                logger.info(
+                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
+                )
+
+        if axis is None:
+            axis = 1
+            logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
 
         if axis not in [0, 1]:
             raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
@@ -241,9 +241,6 @@ class HqqConfig(QuantizationConfigMixin):
                 **{
                     "nbits": nbits,
                     "group_size": group_size,
-                    "quant_zero": quant_zero,
-                    "quant_scale": quant_scale,
-                    "offload_meta": offload_meta,
                     "view_as_float": view_as_float,
                     "axis": axis,
                 }
@@ -260,12 +257,26 @@ class HqqConfig(QuantizationConfigMixin):
         """
         pass
 
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]):
+        """
+        Override from_dict, used in AutoQuantizationConfig.from_dict in quantizers/auto.py
+        """
+        instance = cls()
+        instance.quant_config = config["quant_config"]
+        instance.skip_modules = config["skip_modules"]
+        return instance
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return self.quant_config
+        return {
+            "quant_config": self.quant_config,
+            "quant_method": self.quant_method,
+            "skip_modules": self.skip_modules,
+        }
 
     def __repr__(self):
         config_dict = self.to_dict()
@@ -1235,24 +1246,11 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
-        self.kwargs = kwargs
-        self._STR_TO_METHOD = {}
-        if is_torchao_available():
-            from torchao.quantization import (
-                int4_weight_only,
-                int8_dynamic_activation_int8_weight,
-                int8_weight_only,
-            )
-
-            self._STR_TO_METHOD = {
-                "int4_weight_only": int4_weight_only,
-                "int8_weight_only": int8_weight_only,
-                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-            }
+        # when we load from serailized config, "quant_type_kwargs" will be the key
+        if "quant_type_kwargs" in kwargs:
+            self.quant_type_kwargs = kwargs["quant_type_kwargs"]
         else:
-            raise ValueError(
-                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
-            )
+            self.quant_type_kwargs = kwargs
 
         self.post_init()
 
@@ -1263,26 +1261,46 @@ class TorchAoConfig(QuantizationConfigMixin):
         if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
             raise ValueError("Requires torchao 0.4.0 version and above")
 
-        if self.quant_type not in self._STR_TO_METHOD.keys():
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        if self.quant_type not in _STR_TO_METHOD.keys():
             raise ValueError(
                 f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
             )
 
-        method = self._STR_TO_METHOD[self.quant_type]
+        method = _STR_TO_METHOD[self.quant_type]
         sig = signature(method)
         all_kwargs = [
             param.name
             for param in sig.parameters.values()
             if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
         ]
-        for k in self.kwargs:
+        for k in self.quant_type_kwargs:
             if k not in all_kwargs:
                 raise ValueError(
                     f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
                 )
 
+    def _get_torchao_quant_type_to_method(self):
+        if is_torchao_available():
+            from torchao.quantization import (
+                int4_weight_only,
+                int8_dynamic_activation_int8_weight,
+                int8_weight_only,
+            )
+
+            return {
+                "int4_weight_only": int4_weight_only,
+                "int8_weight_only": int8_weight_only,
+                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            }
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
+
     def get_apply_tensor_subclass(self):
-        return self._STR_TO_METHOD[self.quant_type](**self.kwargs)
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.quant_type_kwargs.items())})"
