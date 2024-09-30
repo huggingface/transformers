@@ -14,19 +14,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DeepSpeed
+# DeepSpeed [[deepspeed]]
 
-[DeepSpeed](https://github.com/microsoft/DeepSpeed), powered by Zero Redundancy Optimizer (ZeRO), is an optimization library for training and fitting very large models onto a GPU. It is available in several ZeRO stages, where each stage progressively saves more GPU memory by partitioning the optimizer state, gradients, parameters, and enabling offloading to a CPU or NVMe. DeepSpeed is integrated with the [`Trainer`] class and most of the setup is automatically taken care of for you. 
+[DeepSpeed](https://github.com/microsoft/DeepSpeed)는 Zero Redundancy Optimizer (ZeRO)를 기반으로, 매우 큰 모델을 GPU에 맞춰 학습시키기 위한 최적화 라이브러리입니다. ZeRO는 여러 단계로 제공되며, 각 단계는 옵티마이저 상태, 기울기, 파라미터를 분할하고 CPU 또는 NVMe로 오프로드할 수 있게 하여 점진적으로 더 많은 GPU 메모리를 절약합니다. DeepSpeed는 [`Trainer`] 클래스와 통합되어 있으며, 대부분의 설정이 자동으로 처리됩니다.
 
-However, if you want to use DeepSpeed without the [`Trainer`], Transformers provides a [`HfDeepSpeedConfig`] class.
+그러나 [`Trainer`] 없이 DeepSpeed를 사용하고 싶다면, Transformers에서 [`HfDeepSpeedConfig`] 클래스를 제공합니다.
 
 <Tip>
 
-Learn more about using DeepSpeed with [`Trainer`] in the [DeepSpeed](../deepspeed) guide.
+[DeepSpeed](../deepspeed)가이드에 있는 [`Trainer`]를 사용해서 DeepSpeed에 대해 더 배워보세요.
 
 </Tip>
 
-## HfDeepSpeedConfig
+## HfDeepSpeedConfig [[transformers.integrations.HfDeepSpeedConfig]]
 
 [[autodoc]] integrations.HfDeepSpeedConfig
     - all
