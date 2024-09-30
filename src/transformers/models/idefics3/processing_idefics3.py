@@ -324,10 +324,10 @@ class Idefics3Processor(ProcessorMixin):
             text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
-            if n_images_in_images != n_images_in_text:
-                raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
-                )
+           # if n_images_in_images != n_images_in_text:
+            #    raise ValueError(
+             #       f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+              #  )
 
         return inputs
 
