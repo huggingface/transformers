@@ -304,7 +304,7 @@
       title: (번역중) Tokenizer
     - local: in_translation
       title: (번역중) Trainer
-    - local: deepspeed
+    - local: main_classes/deepspeed
       title: DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
