@@ -344,6 +344,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called before the optimizer step but after gradient clipping. Useful for monitoring gradients.
+        """
+        pass
+
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after the optimizer step but before gradients are zeroed out. Useful for monitoring gradients.
@@ -474,6 +480,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
+
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_pre_optimizer_step", args, state, control)
 
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_optimizer_step", args, state, control)

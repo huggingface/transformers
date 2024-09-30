@@ -285,12 +285,11 @@ class HqqHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_hqq_quantized = True
-        model.is_hqq_serializable = self.is_serializable
+        model.is_hqq_serializable = self.is_serializable()
         return model
 
-    @property
-    def is_serializable(self):
-        return True
+    def is_serializable(self, safe_serialization=None):
+        return False
 
     @property
     def is_trainable(self) -> bool:
