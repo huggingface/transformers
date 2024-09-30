@@ -320,11 +320,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_after_weight_loading with 8bit->4bit
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_4bit = True
-        model.is_4bit_serializable = self.is_serializable
+        model.is_4bit_serializable = self.is_serializable()
         return model
 
-    @property
-    def is_serializable(self):
+    def is_serializable(self, safe_serialization=None):
         _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
 
         if not _is_4bit_serializable:

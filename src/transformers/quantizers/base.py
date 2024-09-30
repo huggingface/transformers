@@ -217,9 +217,8 @@ class HfQuantizer(ABC):
     @abstractmethod
     def _process_model_after_weight_loading(self, model, **kwargs): ...
 
-    @property
     @abstractmethod
-    def is_serializable(self): ...
+    def is_serializable(self, safe_serialization=None): ...
 
     @property
     @abstractmethod
