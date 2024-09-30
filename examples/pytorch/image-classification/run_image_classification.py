@@ -42,10 +42,10 @@ from transformers import (
     AutoImageProcessor,
     AutoModelForImageClassification,
     HfArgumentParser,
+    TimmWrapperImageProcessor,
     Trainer,
     TrainingArguments,
     set_seed,
-    TimmWrapperImageProcessor,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
