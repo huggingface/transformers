@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# `FeatureExtractors`를 위한 유틸리티
+# `FeatureExtractors`를 위한 유틸리티 [[utilities-for-featureextractors]]
 
-이 페이지는 오디오 [`FeatureExtractor`]가 *단시간 푸리에 변환(Short Time Fourier Transform)* 또는 *로그 멜 스펙트로그램(log mel spectrogram)*과 같은 일반적인 알고리즘을 사용하여 원시 오디오에서 특수한 특징을 계산하는 데 사용할 수 있는 유틸리티 함수들을 나열합니다.
+이 페이지는 오디오 [`FeatureExtractor`]가 *단시간 푸리에 변환(Short Time Fourier Transform)* 또는 *로그 멜 스펙트로그램(log mel spectrogram)*과 같은 일반적인 알고리즘을 사용하여 원시 오디오에서 특수한 특성을 계산하는 데 사용할 수 있는 유틸리티 함수들을 나열합니다.
 
-이 함수들 대부분은 라이브러리 내 오디오 처리 코드 연구에 유용합니다.
+이 함수들 대부분은 라이브러리 내 오디오 처리 코드를 연구할 때에만 유용합니다.
 
-## 오디오 변환
+## 오디오 변환 [[transformers.audio_utils.hertz_to_mel]]
 
 [[autodoc]] audio_utils.hertz_to_mel
 
