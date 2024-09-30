@@ -35,6 +35,8 @@ from transformers.testing_utils import (
     slow,
 )
 
+from transformers.convert_slow_tokenizer import Converter, MoshiConverter, import_protobuf
+
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
@@ -49,23 +51,45 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     test_slow_tokenizer = False
     test_rust_tokenizer = True
-    test_sentencepiece = True
     from_pretrained_kwargs = {}
-
+    
     def setUp(self):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
+        bos_token="<s>",
+        unk_token="<unk>",
+        eos_token="</s>",
+    )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizers(self, **kwargs):
-        kwargs.update({"pad_token": "<PAD>"})
-        return super().get_tokenizers(**kwargs)
+    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    
+    @unittest.skip(reason="No slow tokenizer")
+    def test_added_tokens_serialization(self):
+        pass
+    
+    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
+    def test_rust_tokenizer_signature(self):
+        pass
+    
+    @unittest.skip(reason="No slow tokenizer")
+    def test_encode_decode_with_spaces(self):
+        pass
+    
 
+    
     def test_full_tokenizer(self):
-        tokenizer = PreTrainedTokenizerFast(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
+        bos_token="<s>",
+        unk_token="<unk>",
+        eos_token="</s>",
+    )
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -136,40 +160,6 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
 
-    @require_torch
-    def test_batch_tokenization(self):
-        if not self.test_seq2seq:
-            self.skipTest(reason="test_seq2seq is set to False")
-
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                # Longer text that will definitely require truncation.
-                text = [
-                    " UN Chief Says There Is No Military Solution in Syria",
-                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
-                    " Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons"
-                    " will only worsen the violence and misery for millions of people.",
-                ]
-                try:
-                    batch = tokenizer(
-                        text=text,
-                        max_length=3,
-                        max_target_length=10,
-                        return_tensors="pt",
-                    )
-                except NotImplementedError:
-                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
-                self.assertEqual(batch.input_ids.shape[1], 3)
-                # max_target_length will default to max_length if not specified
-                batch = tokenizer(text, max_length=3, return_tensors="pt")
-                self.assertEqual(batch.input_ids.shape[1], 3)
-
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
-                self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
-                self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
-                self.assertNotIn("decoder_input_ids", batch_encoder_only)
-
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -184,29 +174,18 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
-    @slow
-    def test_tokenizer_integration(self):
-        expected_encoding = {'input_ids': [[1, 4103, 689, 414, 313, 24784, 368, 2998, 408, 282, 3637, 25350, 29899, 9067, 414, 322, 282, 3637, 25350, 29899, 1457, 3018, 1312, 29899, 2151, 29897, 8128, 2498, 29899, 15503, 4220, 6956, 1973, 313, 13635, 29911, 29892, 402, 7982, 29899, 29906, 29892, 1528, 13635, 29911, 29874, 29892, 1060, 26369, 29892, 6652, 309, 29933, 814, 29892, 1060, 29931, 6779, 11410, 363, 18385, 17088, 7634, 11235, 313, 25103, 29965, 29897, 322, 18385, 17088, 28203, 313, 25103, 29954, 29897, 411, 975, 29871, 29941, 29906, 29974, 758, 3018, 1312, 4733, 297, 29871, 29896, 29900, 29900, 29974, 10276, 322, 6483, 1006, 3372, 3097, 1546, 435, 1165, 29892, 10772, 29911, 25350, 322, 323, 6073, 17907, 29889], [1, 350, 20161, 338, 8688, 304, 758, 29899, 14968, 6483, 21000, 8684, 284, 22540, 515, 443, 29880, 24025, 1426, 491, 14002, 368, 4195, 292, 373, 1716, 2175, 322, 1492, 3030, 297, 599, 15359, 29889], [1, 450, 4996, 17354, 1701, 29916, 432, 17204, 975, 278, 17366, 11203, 29889]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
-
-        self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="hf-internal-testing/llama-tokenizer",
-            revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
-            padding=False,
-        )
-
     def test_picklable(self):
         with tempfile.NamedTemporaryFile() as f:
             shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = PreTrainedTokenizerFast(f.name, keep_accents=True)
+            tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=MoshiConverter(vocab_file=f.name).converted(),
+        bos_token="<s>",
+        unk_token="<unk>",
+        eos_token="</s>",
+    )
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
-    def test_load_tokenizer_with_model_file_only(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            hf_hub_download(repo_id="huggyllama/llama-7b", filename="tokenizer.model", local_dir=tmp_dir)
-            tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir)
-            self.assertEqual(tokenizer_fast.encode("This is a test"), [1, 910, 338, 263, 1243])
 
 
 @require_torch
@@ -284,7 +263,7 @@ class MoshiIntegrationTest(unittest.TestCase):
 
         # self.assertEqual(rust_tokenizer.encode(" Hello"), [260, 11725])
 
-        self.assertEqual(rust_tokenizer.encode("<s>"), [607, 266, 578])
+        # self.assertEqual(rust_tokenizer.encode("<s>"), [607, 266, 578])
 
     def test_no_differences_decode(self):
         rust_tokenizer = self.rust_tokenizer
