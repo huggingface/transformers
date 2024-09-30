@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 이미지 프로세서를 위한 유틸리티
+# 이미지 프로세서를 위한 유틸리티 [[utilities-for-image-processors]]
 
-이 페이지는 이미지 프로세서에서 사용되는 유틸리티 함수들을 나열하며, 주로 이미지를 처리하는 데 사용되는 기능적 변환들입니다.
+이 페이지는 이미지 프로세서에서 사용되는 유틸리티 함수들을 나열하며, 주로 이미지를 처리하기 위한 함수 기반의 변환 작업들을 다룹니다.
 
-이 함수들 대부분은 라이브러리의 이미지 프로세서 코드를 연구할 때 유용합니다.
+이 함수들 대부분은 라이브러리의 이미지 프로세서 코드를 연구할 때만 유용합니다.
 
-## 이미지 변환
+## 이미지 변환 [[transformers.image_transforms.center_crop]]
 
 [[autodoc]] image_transforms.center_crop
 
@@ -42,6 +42,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] image_transforms.to_pil_image
 
-## ImageProcessingMixin
+## ImageProcessingMixin [[transformers.ImageProcessingMixin]]
 
 [[autodoc]] image_processing_utils.ImageProcessingMixin
