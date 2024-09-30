@@ -651,8 +651,6 @@ class ModularConverterTransformer(CSTTransformer):
                         start_insert_idx -= 1
                         file_to_update[dependency] = {"insert_idx": start_insert_idx, "node": node}
                     elif dependency not in self.inserted_deps:
-                        print("processing :", dependency)
-
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
                         if (
