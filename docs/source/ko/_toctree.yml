@@ -757,8 +757,8 @@
       title: (번역중) Utilities for pipelines
     - local: in_translation
       title: (번역중) Utilities for Tokenizers
-    - local: in_translation
-      title: (번역중) Utilities for Trainer
+    - local: internal/trainer_utils
+      title: 트레이너(Trainer)를 위한 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Generation
     - local: in_translation
