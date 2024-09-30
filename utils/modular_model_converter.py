@@ -590,11 +590,6 @@ class ModularConverterTransformer(CSTTransformer):
             self.global_scope_index += 100
         return updated_node
 
-    @m.visit(m.ClassDef() | m.FunctionDef() | m.AddAssign())
-    def create_global_node(self, node):
-        name = re.search(r"(?:def|class)\s+([a-zA-Z_]\w*)|([A-Z_]\w*)", self.python_module.code_for_node(node))
-        self.all_nodes[name] = node
-
     def leave_ClassDef(self, original_node, updated_node):
         """
         1. Filter the `base` classes of this class
@@ -771,7 +766,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/glm/modular_glm.py"],
+        default=["examples/modular-transformers/modular_dummy.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
