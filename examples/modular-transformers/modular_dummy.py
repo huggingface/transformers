@@ -1,9 +1,6 @@
-from math import log
-
 import torch
 
 from transformers.models.llama.modeling_llama import LlamaModel
-
 
 
 def rotate_half(x):
