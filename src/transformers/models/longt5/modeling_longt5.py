@@ -509,6 +509,10 @@ class LongT5Attention(nn.Module):
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
+        # failure that tensors are not on the same device otherwise
+        if torch.jit.is_tracing():
+            seq_length = seq_length.to(hidden_states.device)
+
         real_seq_length = seq_length
         real_seq_length += cache_position[0] if query_length is None else query_length
 
@@ -596,7 +600,7 @@ class LongT5Attention(nn.Module):
         outputs = (attn_output, past_key_value, position_bias)
 
         if output_attentions:
-            outputs += (attn_weights,)
+            outputs = outputs + (attn_weights,)
         return outputs
 
 

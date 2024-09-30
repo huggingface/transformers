@@ -638,7 +638,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/longt5_test.onnx",
                 export_params=True,
-                opset_version=13,
+                opset_version=14,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 

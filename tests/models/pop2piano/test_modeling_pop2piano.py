@@ -620,7 +620,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/Pop2Piano_test.onnx",
                 export_params=True,
-                opset_version=9,
+                opset_version=14,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 
