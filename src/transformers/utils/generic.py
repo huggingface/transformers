@@ -860,7 +860,9 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
 
 def is_timm_hub_checkpoint(pretrained_model_name_or_path: str) -> bool:
     if isinstance(pretrained_model_name_or_path, str):
-        return pretrained_model_name_or_path.startswith("hf-hub:timm/") or pretrained_model_name_or_path.startswith("timm/")
+        return pretrained_model_name_or_path.startswith("hf-hub:timm/") or pretrained_model_name_or_path.startswith(
+            "timm/"
+        )
     return False
 
 
