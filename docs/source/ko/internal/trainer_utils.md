@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Trainer
+# 트레이너(Trainer)를 위한 유틸리티
 
-This page lists all the utility functions used by [`Trainer`].
+이 페이지는 [`Trainer`]에서 사용되는 모든 유틸리티 함수들을 나열합니다.
 
-Most of those are only useful if you are studying the code of the Trainer in the library.
+이 함수들 대부분은 라이브러리 내 Trainer 코드를 연구할 때 유용합니다.
 
-## Utilities
+## 유틸리티
 
 [[autodoc]] EvalPrediction
 
@@ -32,18 +32,18 @@ Most of those are only useful if you are studying the code of the Trainer in the
 
 [[autodoc]] torch_distributed_zero_first
 
-## Callbacks internals
+## 콜백 내부 처리
 
 [[autodoc]] trainer_callback.CallbackHandler
 
-## Distributed Evaluation
+## 분산 평가
 
 [[autodoc]] trainer_pt_utils.DistributedTensorGatherer
 
-## Trainer Argument Parser
+## 트레이너 인자 파서
 
 [[autodoc]] HfArgumentParser
 
-## Debug Utilities
+## 디버그 유틸리티
 
 [[autodoc]] debug_utils.DebugUnderflowOverflow
