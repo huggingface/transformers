@@ -14,30 +14,30 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Video-text-to-text
+# Video-text-to-text [[videotexttotext]]
 
 [[open-in-colab]]
 
-Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning. 
+비디오-텍스트-텍스트 모델, 비디오 언어 모델 또는 비디오 입력을 사용하는 비전 언어 모델로도 알려져 있으며, 비디오 입력을 받는 언어 모델입니다. 이러한 모델은 비디오 질문 응답에서 비디오 캡션 생성에 이르기까지 다양한 작업을 수행할 수 있습니다.
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text.md) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
+이 모델들은 [image-text-to-text](../image_text_to_text.md) 모델과 거의 동일한 아키텍처를 가지며, 비디오 데이터를 수용하기 위한 일부 변경 사항이 있습니다. 비디오 데이터는 기본적으로 시간적 의존성을 가진 이미지 프레임이기 때문입니다. 일부 image-text-to-text 모델은 여러 이미지를 입력으로 받을 수 있지만, 이것만으로는 비디오를 수용하기에 충분하지 않습니다. 또한, 비디오-텍스트-텍스트 모델은 종종 모든 비전 모달리티로 학습됩니다. 각 예시는 비디오, 여러 비디오, 이미지 및 여러 이미지가 포함될 수 있습니다. 일부 모델은 인터리브된 입력을 받을 수도 있습니다. 예를 들어, 텍스트 내에 비디오 토큰을 추가하여 특정 비디오를 참조할 수 있습니다. 예: "이 비디오에서 무슨 일이 벌어지고 있나요? `<video>`".
 
-In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
+이 가이드에서는 비디오 언어 모델에 대한 간략한 개요를 제공하고 🤗 Transformers로 추론하는 방법을 보여줍니다.
 
-To begin with, there are multiple types of video LMs:
-- base models used for fine-tuning
-- chat fine-tuned models for conversation
-- instruction fine-tuned models
+먼저, 비디오 언어 모델에는 여러 유형이 있습니다:
+- 파인튜닝에 사용되는 기본 모델
+- 대화를 위한 채팅 파인튜닝 모델
+- 명령어에 맞춘 파인튜닝 모델
 
-This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf) if your hardware doesn't allow running a 7B model.
+이 가이드는 명령어에 맞춘 모델인 [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf)를 사용하여 추론하는 것에 중점을 둡니다. 이 모델은 인터리브된 데이터를 받을 수 있습니다. 하드웨어가 7B 모델을 실행할 수 없다면 [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf)를 시도할 수 있습니다.
 
-Let's begin installing the dependencies.
+이제 종속성을 설치해 봅시다.
 
 ```bash
 pip install -q transformers accelerate flash_attn 
 ```
 
-Let's initialize the model and the processor. 
+모델과 프로세서를 초기화해 보겠습니다.
 
 ```python
 from transformers import LlavaProcessor, LlavaForConditionalGeneration
@@ -50,7 +50,7 @@ model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torc
 model.to("cuda")
 ```
 
-Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it. 
+일부 모델은 `<video>` 토큰을 직접 사용하고, 다른 모델은 샘플링된 프레임 수에 맞는 `<image>` 토큰을 받습니다. 이 모델은 후자의 방식으로 비디오를 처리합니다. 우리는 이미지 토큰을 처리하는 간단한 유틸리티와 URL에서 비디오를 가져와 프레임을 샘플링하는 또 다른 유틸리티를 작성할 것입니다.
 
 ```python
 import uuid
@@ -85,7 +85,7 @@ def sample_frames(url, num_frames):
     return frames
 ```
 
-Let's get our inputs. We will sample frames and concatenate them.
+이제 입력을 받아 보겠습니다. 우리는 프레임을 샘플링하고 그것을 연결할 것입니다.
 
 ```python
 video_1 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"
@@ -103,7 +103,7 @@ videos
 # <PIL.Image.Image image mode=RGB size=1920x1080>, ...]
 ```
 
-Both videos have cats.
+두 비디오 모두 고양이를 포함하고 있습니다.
 
 <div class="container">
   <div class="video-container">
@@ -119,9 +119,9 @@ Both videos have cats.
   </div>
 </div>
 
-Now we can preprocess the inputs.
+이제 입력을 전처리할 수 있습니다.
 
-This model has a prompt template that looks like following. First, we'll put all the sampled frames into one list. Since we have eight frames in each video, we will insert 12 `<image>` tokens to our prompt. Add `assistant` at the end of the prompt to trigger the model to give answers. Then we can preprocess.
+이 모델에는 다음과 같은 프롬프트 템플릿이 있습니다. 먼저, 샘플링된 모든 프레임을 하나의 리스트에 넣을 것입니다. 각 비디오에는 8개의 프레임이 있으므로 프롬프트에 12개의 `<image>` 토큰을 삽입할 것입니다. 프롬프트 끝에 `assistant`를 추가하여 모델이 응답을 하도록 합니다. 그런 다음 전처리를 진행할 수 있습니다.
 
 ```python
 user_prompt = "Are these two cats in these two videos doing the same thing?"
@@ -130,17 +130,17 @@ prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assis
 inputs = processor(prompt, images=videos).to(model.device, model.dtype)
 ```
 
-We can now call [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so we only take the text after the prompt and `assistant` part from the model output. 
+이제 [`~GenerationMixin.generate`]를 호출하여 추론할 수 있습니다. 모델은 입력의 질문과 답변을 출력하므로, 프롬프트와 `assistant` 부분 이후의 텍스트만 모델 출력에서 가져옵니다.
 
 ```python
 output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
 print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)+10:])
 
-# The first cat is shown in a relaxed state, with its eyes closed and a content expression, while the second cat is shown in a more active state, with its mouth open wide, possibly in a yawn or a vocalization.
+# The first cat is shown in a relaxed state, with its eyes closed and a content expression, while the second cat is shown in a more active state, with its mouth open wide, possibly in a yawn or a vocalization. (첫 번째 고양이는 눈을 감고 만족스러운 표정을 지으며 편안한 상태를 보여주고 있으며, 두 번째 고양이는 입을 크게 벌리고 있어 하품을 하거나 소리를 내는 것처럼 더 활발한 상태를 보여줍니다.)
 
 
 ```
 
-And voila! 
+그리고 보세요!
 
-To learn more about chat templates and token streaming for video-text-to-text models, refer to the [image-text-to-text](../image_text_to_text) task guide because these models work similarly.
+비디오-텍스트-텍스트 모델을 위한 채팅 템플릿과 토큰 스트리밍에 대해 더 배우고 싶다면, 이 모델들이 유사하게 작동하므로 [image-text-to-text](../image_text_to_text) 작업 가이드를 참조하세요.
