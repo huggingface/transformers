@@ -268,7 +268,6 @@ outputs[:2]
 
 ## FlaxBaseModelOutputWithPastAndCrossAttentions[[transformers.modeling_flax_outputs.FlaxBaseModelOutputWithPastAndCrossAttentions]]
 
-
 [[autodoc]] modeling_flax_outputs.FlaxBaseModelOutputWithPastAndCrossAttentions
 
 ## FlaxSeq2SeqModelOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqModelOutput]]
@@ -297,7 +296,6 @@ outputs[:2]
 
 ## FlaxSeq2SeqSequenceClassifierOutput[[transformers.modeling_flax_outputs.FlaxSeq2SeqSequenceClassifierOutput]]
 
-
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqSequenceClassifierOutput
 
 ## FlaxMultipleChoiceModelOutput[[transformers.modeling_flax_outputs.FlaxMultipleChoiceModelOutput]]
@@ -309,7 +307,6 @@ outputs[:2]
 [[autodoc]] modeling_flax_outputs.FlaxTokenClassifierOutput
 
 ## FlaxQuestionAnsweringModelOutput[[transformers.modeling_flax_outputs.FlaxQuestionAnsweringModelOutput]]
-
 
 [[autodoc]] modeling_flax_outputs.FlaxQuestionAnsweringModelOutput
 
