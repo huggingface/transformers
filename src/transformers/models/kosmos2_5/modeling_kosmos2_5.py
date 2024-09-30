@@ -983,22 +983,7 @@ class Kosmos2_5TextAttention(nn.Module):
 
         # use encoder_hidden_states if cross attention
         is_cross_attention = encoder_hidden_states is not None
-
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
-        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
-        # `encoder_hidden_states` to support prefix tuning
-        # if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
-        #     # reuse k,v, cross_attentions
-        #     key_states = past_key_value[0]
-        #     value_states = past_key_value[1]
-        # else:
-        #     key_states = self._shape(self.k_proj(current_states))
-        #     value_states = self._shape(self.v_proj(current_states))
-        #     if past_key_value is not None and not is_cross_attention:
-        #         # reuse k, v, self_attention
-        #         key_states = torch.cat([past_key_value[0], key_states], dim=2)
-        #         value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         key_states = self._shape(self.k_proj(current_states))
         value_states = self._shape(self.v_proj(current_states))
@@ -1011,8 +996,6 @@ class Kosmos2_5TextAttention(nn.Module):
 
         # this weight maybe overflow with fp16
         attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2))
-
-        # breakpoint()
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -1062,38 +1045,48 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        hidden_states: torch.Tensor, # text part
+        encoder_hidden_states: Optional[torch.Tensor] = None, #image part
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
         is_cross_attention = encoder_hidden_states is not None
         bsz, q_len, _ = hidden_states.size()
 
         # use encoder_hidden_states if cross attention
-        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
-        # `encoder_hidden_states` to support prefix tuning
-        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        else:
-            key_states = self._shape(self.k_proj(current_states)).transpose(1, 2)
-            value_states = self._shape(self.v_proj(current_states)).transpose(1, 2)
-            if past_key_value is not None and not is_cross_attention:
-                key_states = torch.cat([past_key_value[0], key_states], dim=1)
-                value_states = torch.cat([past_key_value[1], value_states], dim=1)
+        is_cross_attention = encoder_hidden_states is not None
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
 
-        query_states = self._shape(self.q_proj(hidden_states)).transpose(1, 2)
+        query_states = self.q_proj(current_states)
+        key_states = self.k_proj(current_states)
+        value_states = self.v_proj(current_states)
 
-        if self.is_decoder:
-            past_key_value = (key_states, value_states)
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         input_dtype = query_states.dtype
-
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = torch.get_autocast_gpu_dtype()
@@ -1126,11 +1119,10 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         )
 
         attn_output = attn_output.view(bsz, -1, self.embed_dim)
-
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
-
         attn_output = self.out_proj(attn_output)
+
         if not output_attentions:
             attn_weights = None
 
@@ -1147,13 +1139,18 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
     # Adapted from LlamaAttention.forward
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        # past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        past_key_value: Optional[Cache] = None,
+        hidden_states: torch.Tensor, # text part
+        encoder_hidden_states: Optional[torch.Tensor] = None, #image part
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
         if output_attentions:
             logger.warning_once(
                 "Kosmos2_5TextModel is using Kosmos2_5TextSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
@@ -1162,33 +1159,29 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             return super().forward(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
-
-        is_cross_attention = encoder_hidden_states is not None
         bsz, q_len, _ = hidden_states.size()
-        # use encoder_hidden_states if cross attention
-        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
-        # `encoder_hidden_states` to support prefix tuning
-        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        else:
-            key_states = self._shape(self.k_proj(current_states))
-            value_states = self._shape(self.v_proj(current_states))
-            if past_key_value is not None and not is_cross_attention:
-                # reuse k, v, self_attention
-                key_states = torch.cat([past_key_value[0], key_states], dim=2)
-                value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
+        # use encoder_hidden_states if cross attention
+        is_cross_attention = encoder_hidden_states is not None
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+
+        key_states = self._shape(self.k_proj(current_states))
+        value_states = self._shape(self.v_proj(current_states))
         query_states = self._shape(self.q_proj(hidden_states))
 
-        if self.is_decoder:
-            past_key_value = (key_states, value_states)
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
 
         causal_mask = attention_mask
         if attention_mask is not None:
@@ -1367,6 +1360,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        # breakpoint()
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
