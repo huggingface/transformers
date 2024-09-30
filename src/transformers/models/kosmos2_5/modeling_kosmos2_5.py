@@ -1416,7 +1416,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[Cache]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1525,12 +1525,13 @@ class Kosmos2_5TextTransformer(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
                     encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
                     output_attentions,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1631,44 +1632,14 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             factor = self.config.vision_config.initializer_factor
             std = self.config.text_config.init_std
-
-        if isinstance(module, Kosmos2_5VisionEmbeddings):
-            nn.init.normal_(module.column_embedder.weight, std=std)
-            nn.init.normal_(module.row_embedder.weight, std=std)
-            nn.init.normal_(module.patch_projection.weight, std=std)
-        elif isinstance(module, Kosmos2_5VisionAttention):
-            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.hidden_size**-0.5) * factor
-            nn.init.normal_(module.query.weight, std=in_proj_std)
-            nn.init.normal_(module.key.weight, std=in_proj_std)
-            nn.init.normal_(module.value.weight, std=in_proj_std)
-            nn.init.normal_(module.output.weight, std=out_proj_std)
-        elif isinstance(module, Kosmos2_5VisionMlp):
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.wi_0.weight, std=fc_std)
-            nn.init.normal_(module.wi_1.weight, std=in_proj_std)
-            nn.init.normal_(module.wo.weight, std=fc_std)
-        elif isinstance(module, Kosmos2_5VisionLayer):
-            module.pre_mlp_layer_norm.weight.data.fill_(1.0)
-            module.pre_attention_layer_norm.weight.data.fill_(1.0)
-        elif isinstance(module, Kosmos2_5TextAttention):
-            nn.init.normal_(module.q_proj.weight, std=std)
-            nn.init.normal_(module.k_proj.weight, std=std)
-            nn.init.normal_(module.v_proj.weight, std=std)
-            nn.init.normal_(module.out_proj.weight, std=std)
-        elif isinstance(module, Kosmos2_5TextFFN):
-            nn.init.normal_(module.fc1.weight, std=std)
-            nn.init.normal_(module.fc2.weight, std=std)
-        elif isinstance(module, Kosmos2_5TextForCausalLM):
-            nn.init.normal_(module.lm_head.weight, std=std)
-        elif isinstance(module, Kosmos2_5ImageToTextProjection):
-            nn.init.normal_(module.dense.weight, std=std)
-        elif isinstance(module, Kosmos2_5TextTransformer):
-            module.embed_tokens.weight.data.normal_(std=std)
-            if module.embed_tokens.padding_idx is not None:
-                module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
-            module.segment_emb.weight.data.normal_(std=std)
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
@@ -1771,7 +1742,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -2050,6 +2021,8 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        cache_position=None,
+        position_ids=None,
         **model_kwargs,
     ):
         input_shape = input_ids.shape
@@ -2151,7 +2124,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        # past_key_values: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
