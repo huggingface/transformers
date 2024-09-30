@@ -14,14 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Image Processors
+# 이미지 프로세서를 위한 유틸리티
 
-This page lists all the utility functions used by the image processors, mainly the functional
-transformations used to process the images.
+이 페이지는 이미지 프로세서에서 사용되는 유틸리티 함수들을 나열하며, 주로 이미지를 처리하는 데 사용되는 기능적 변환들입니다.
 
-Most of those are only useful if you are studying the code of the image processors in the library.
+이 함수들 대부분은 라이브러리의 이미지 프로세서 코드를 연구할 때 유용합니다.
 
-## Image Transformations
+## 이미지 변환
 
 [[autodoc]] image_transforms.center_crop
 
