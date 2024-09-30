@@ -1,0 +1,51 @@
+{
+  "_name_or_path": "timm/resnet50.a1_in1k",
+  "architecture": "resnet50",
+  "architectures": [
+    "TimmWrapperModel"
+  ],
+  "model_name": "timm/resnet50.a1_in1k",
+  "model_type": "timm_wrapper",
+  "num_classes": 1000,
+  "num_features": 2048,
+  "pretrained_cfg": {
+    "classifier": "fc",
+    "crop_mode": "center",
+    "crop_pct": 0.95,
+    "custom_load": false,
+    "first_conv": "conv1",
+    "fixed_input_size": false,
+    "input_size": [
+      3,
+      224,
+      224
+    ],
+    "interpolation": "bicubic",
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "num_classes": 1000,
+    "origin_url": "https://github.com/huggingface/pytorch-image-models",
+    "paper_ids": "arXiv:2110.00476",
+    "pool_size": [
+      7,
+      7
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "tag": "a1_in1k",
+    "test_crop_pct": 1.0,
+    "test_input_size": [
+      3,
+      288,
+      288
+    ]
+  },
+  "torch_dtype": "float32",
+  "transformers_version": "4.46.0.dev0"
+}

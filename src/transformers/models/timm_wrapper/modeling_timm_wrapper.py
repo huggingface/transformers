@@ -17,26 +17,23 @@ import os
 from typing import Optional, Tuple, Union
 
 import torch
+from torch import Tensor, nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel, load_state_dict, SAFE_WEIGHTS_NAME
+from ...modeling_utils import SAFE_WEIGHTS_NAME, PreTrainedModel, load_state_dict
 from ...utils import (
     add_start_docstrings_to_model_forward,
     is_timm_available,
-    is_torch_available,
-    requires_backends,
     is_timm_checkpoint,
     is_timm_hub_checkpoint,
+    requires_backends,
 )
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
 if is_timm_available():
     import timm
-
-
-if is_torch_available():
-    from torch import Tensor
 
 
 TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
@@ -53,6 +50,21 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 """
 
 
+def resize_classification_head(model, num_labels: int):
+    classification_head_names = ["head", "fc", "classifier", "head.fc", "head.classifier"]
+
+    for name in classification_head_names:
+        if hasattr(model, name):
+            has_bias = getattr(model, name).bias is not None
+            new_head = torch.nn.Linear(
+                in_features=getattr(model, name).in_features, out_features=num_labels, bias=has_bias
+            )
+            setattr(model, name, new_head)
+            break
+
+    return model
+
+
 class TimmWrapperModel(PreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers.
@@ -61,6 +73,7 @@ class TimmWrapperModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
+    base_model_prefix = "timm_model"
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -68,6 +81,7 @@ class TimmWrapperModel(PreTrainedModel):
         self.config = config
 
         pretrained_model_name_or_path = kwargs.pop("pretrained_model_name_or_path", None)
+        pretrained = kwargs.pop("pretrained", False)
 
         # model_name passed into kwargs takes precedence
         model_name = kwargs.pop("model_name", None)
@@ -78,49 +92,40 @@ class TimmWrapperModel(PreTrainedModel):
         elif model_name is None:
             raise ValueError("model_name must be specified in either the config or kwargs")
 
-        pretrained = kwargs.pop("pretrained", False)
-
         # If the pretrained_model_name_or_path is a timm checkpoint, and a local file, we load the checkpoint safetensors file as the model
-        if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(pretrained_model_name_or_path):
+        if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(
+            pretrained_model_name_or_path
+        ):
             model = timm.create_model(model_name=model_name, pretrained=False)
             if pretrained:
                 weights_path = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
                 state_dict = load_state_dict(weights_path)
                 # Remove the prefix "model." from the keys
-                state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
+                state_dict = {k.replace("timm_model.", ""): v for k, v in state_dict.items()}
                 model.load_state_dict(state_dict)
         # If the pretrained_model_name_or_path is a timm checkpoint and matches a checkpoint on the hub, we use timm.create_model directly
         else:
-            model = timm.create_model(
-                model_name=model_name,
-                pretrained=pretrained,
-            )
-        self.model = model
+            model = timm.create_model(model_name=model_name, pretrained=pretrained)
+
+        self.timm_model = model
+        self.post_init()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])
-        from ...models.timm_wrapper import TimmWrapperConfig
-
-        config = kwargs.pop("config", TimmWrapperConfig.from_pretrained(pretrained_model_name_or_path))
-        pretrained = kwargs.pop("pretrained", True)
-        model_name = kwargs.pop("model_name", None)
-
-        if kwargs:
-            raise ValueError(f"Unknown arguments: {', '.join(kwargs.keys())}")
-
-        kwargs["pretrained_model_name_or_path"] = pretrained_model_name_or_path
-        kwargs["pretrained"] = kwargs.pop("pretrained", True)
-
-        # FIXME - use super from_pretrained, or at least _from_pretrained if possible
-
-        return super()._from_config(config, **kwargs)
+        kwargs["pretrained"] = True
+        return super().from_pretrained(
+            pretrained_model_name_or_path=pretrained_model_name_or_path, *model_args, **kwargs
+        )
 
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
         """
-        pass
+        if isinstance(module, (nn.Linear)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
     def forward(
@@ -136,7 +141,7 @@ class TimmWrapperModel(PreTrainedModel):
         if output_hidden_states is not None or output_attentions is not None:
             raise ValueError("Cannot set output_attentions or output_hidden_states for timm models")
 
-        prediction = self.model(pixel_values, **kwargs)
+        prediction = self.timm_model(pixel_values, **kwargs)
 
         if not return_dict:
             return (prediction,)
@@ -148,6 +153,16 @@ class TimmWrapperForImageClassification(TimmWrapperModel):
     """
     Wrapper class for timm models to be used in transformers for image classification.
     """
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+
+        # To enable resizing of classification head in the model
+        if getattr(config, "num_labels") is not None:
+            self.num_labels = self.config.num_labels
+            self.timm_model = resize_classification_head(self.timm_model, self.num_labels)
+
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
     def forward(
@@ -170,11 +185,29 @@ class TimmWrapperForImageClassification(TimmWrapperModel):
         if output_hidden_states is not None or output_attentions is not None:
             raise ValueError("Cannot set return_dict, output_attentions or output_hidden_states for timm models")
 
-        logits = self.model(pixel_values, **kwargs)
+        logits = self.timm_model(pixel_values, **kwargs)
 
         loss = None
         if labels is not None:
-            raise ValueError("It is not possible to train timm models for image classification yet.")
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             return (loss, logits)

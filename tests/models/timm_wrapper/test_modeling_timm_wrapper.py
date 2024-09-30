@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import inspect
 import unittest
 
@@ -56,9 +55,7 @@ class TimmWrapperModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return TimmWrapperConfig(
-            model_name=self.model_name,
-        )
+        return TimmWrapperConfig.from_pretrained(self.model_name)
 
     def create_and_check_model(self, config, pixel_values):
         model = TimmWrapperModel(config=config)
@@ -170,16 +167,16 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_torchscript_output_attentions(self):
         pass
 
-    # @unittest.skip(reason="Safetensors is not supported by timm.")
-    # def test_can_use_safetensors(self):
-    #     pass
+    @unittest.skip(reason="TimmWrapper doesn't support output_hidden_states.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper only loads safetensor files.")
+    def test_save_load_fast_init_to_base(self):
+        pass
 
     @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
     def test_model_is_small(self):
-        pass
-
-    @unittest.skip(reason="It is not possible to train TimmWrapper models for image classification yet.")
-    def test_training(self):
         pass
 
     # OVerriding as output_hidden_states and output_attentions are not supported by TimmWrapper and model is not trainable
@@ -241,32 +238,3 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = self.has_attentions
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-        outputs = model(**inputs)
-        output = outputs[0][-1]
-
-        # Encoder-/Decoder-only models
-        hidden_states = outputs.hidden_states[0]
-        hidden_states.retain_grad()
-
-        if self.has_attentions:
-            attentions = outputs.attentions[0]
-            attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(hidden_states.grad)
-
-        if self.has_attentions:
-            self.assertIsNotNone(attentions.grad)

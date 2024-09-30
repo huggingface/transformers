@@ -554,7 +554,7 @@ def load_state_dict(
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
+        if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -3994,7 +3994,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with safe_open(resolved_archive_file, framework="pt") as f:
                 metadata = f.metadata()
 
-            if metadata.get("format") == "pt":
+            if metadata is None:
+                pass
+            elif metadata.get("format") == "pt":
                 pass
             elif metadata.get("format") == "tf":
                 from_tf = True
