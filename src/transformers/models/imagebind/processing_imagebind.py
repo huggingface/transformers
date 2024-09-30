@@ -28,21 +28,21 @@ from ...tokenization_utils_base import BatchEncoding
 
 
 class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
-    do_convert_rgb: bool = None
-    do_chunk: bool = None
-    chunk_duration: float = None
-    num_chunks: int = None
-    num_frames_per_chunk: int = None
-    fps: int = None
+    do_convert_rgb: bool
+    do_chunk: bool
+    chunk_duration: float
+    num_chunks: int
+    num_frames_per_chunk: int
+    fps: int
 
 
 class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
-    do_normalize: Optional[bool] = None
-    mean: Optional[float] = None
-    std: Optional[float] = None
-    do_chunk: Optional[bool] = None
-    chunk_duration: Optional[float] = None
-    num_chunks: Optional[int] = None
+    do_normalize: Optional[bool]
+    mean: Optional[float]
+    std: Optional[float]
+    do_chunk: Optional[bool]
+    chunk_duration: Optional[float]
+    num_chunks: Optional[int]
 
 
 class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
