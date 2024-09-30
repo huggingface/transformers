@@ -1144,7 +1144,7 @@ class T5Stack(T5PreTrainedModel):
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
                 # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
+                if causal_mask is not None:
                     causal_mask = causal_mask.to(hidden_states.device)
                 if position_bias is not None:
                     position_bias = position_bias.to(hidden_states.device)
@@ -1434,8 +1434,8 @@ T5_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
+            Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+            cache in the correct position and to infer the complete sequence length.
 """
 
 T5_ENCODER_INPUTS_DOCSTRING = r"""
