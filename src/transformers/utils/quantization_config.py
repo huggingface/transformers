@@ -221,7 +221,9 @@ class HqqConfig(QuantizationConfigMixin):
 
         for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
             if deprecated_key in kwargs:
-                logger.info(deprecated_key + " is deprecated. This parameter will be ignored in quantization settings.")
+                logger.info(
+                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
+                )
 
         if axis is None:
             axis = 1
