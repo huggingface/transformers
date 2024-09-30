@@ -296,8 +296,8 @@
       title: (번역중) Model outputs
     - local: in_translation
       title: (번역중) Pipelines
-    - local: in_translation
-      title: (번역중) Processors
+    - local: main_classes/processors
+      title: 프로세서
     - local: in_translation
       title: (번역중) Quantization
     - local: in_translation
