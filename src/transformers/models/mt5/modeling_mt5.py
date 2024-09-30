@@ -1081,7 +1081,9 @@ class MT5Stack(MT5PreTrainedModel):
 
         if attention_mask is None:
             # required mask seq length can be calculated via length of past
-            mask_seq_length = past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
+            mask_seq_length = (
+                past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
+            )
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
