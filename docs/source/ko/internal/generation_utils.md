@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 생성(Generation)을 위한 유틸리티
+# 생성을 위한 유틸리티 [[utilities-for-generation]]
 
 이 페이지는 [`~generation.GenerationMixin.generate`]에서 사용되는 모든 유틸리티 함수들을 나열합니다.
 
-## 생성 출력
+## 출력을 생성하기 (Generate Outputs) [[generate-outputs]]
 
 [`~generation.GenerationMixin.generate`]의 출력은 [`~utils.ModelOutput`]의 하위 클래스의 인스턴스입니다. 이 출력은 [`~generation.GenerationMixin.generate`]에서 반환되는 모든 정보를 포함하는 데이터 구조체이며, 튜플 또는 딕셔너리로도 사용할 수 있습니다.
 
@@ -38,10 +38,10 @@ generation_output = model.generate(**inputs, return_dict_in_generate=True, outpu
 
 - `sequences`: 생성된 토큰 시퀀스
 - `scores` (옵션): 각 생성 단계에서 언어 모델링 헤드의 예측 점수
-- `hidden_states` (옵션): 각 생성 단계에서 모델의 히든 스테이트
+- `hidden_states` (옵션): 각 생성 단계에서 모델의 은닉 상태
 - `attentions` (옵션): 각 생성 단계에서 모델의 어텐션 가중치
 
-우리가 `output_scores=True`를 전달했기 때문에 `scores`는 포함되어 있지만, `output_hidden_states=True` 또는 `output_attentions=True`를 전달하지 않았으므로 `hidden_states`와 `attentions`는 포함되지 않았습니다.
+`output_scores=True`를 전달했기 때문에 `scores`는 포함되어 있지만, `output_hidden_states=True` 또는 `output_attentions=True`를 전달하지 않았으므로 `hidden_states`와 `attentions`는 포함되지 않았습니다.
 
 각 속성은 일반적으로 접근할 수 있으며, 모델이 해당 속성을 반환하지 않았다면 `None`이 반환됩니다. 예를 들어, `generation_output.scores`는 언어 모델링 헤드에서 생성된 모든 예측 점수를 포함하고 있으며, `generation_output.attentions`는 `None`입니다.
 
@@ -58,7 +58,7 @@ generation_output[:2]
 여기서는 모든 출력 유형을 문서화합니다.
 
 
-### PyTorch
+### PyTorch [[transformers.generation.GenerateDecoderOnlyOutput]]
 
 [[autodoc]] generation.GenerateDecoderOnlyOutput
 
@@ -68,7 +68,7 @@ generation_output[:2]
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-### TensorFlow
+### TensorFlow [[transformers.generation.TFGreedySearchEncoderDecoderOutput]]
 
 [[autodoc]] generation.TFGreedySearchEncoderDecoderOutput
 
@@ -90,7 +90,7 @@ generation_output[:2]
 
 [[autodoc]] generation.TFContrastiveSearchDecoderOnlyOutput
 
-### FLAX
+### FLAX [[transformers.generation.FlaxSampleOutput]]
 
 [[autodoc]] generation.FlaxSampleOutput
 
@@ -98,11 +98,11 @@ generation_output[:2]
 
 [[autodoc]] generation.FlaxBeamSearchOutput
 
-## LogitsProcessor
+## LogitsProcessor [[logitsprocessor]]
 
 [`LogitsProcessor`]는 생성 중 언어 모델 헤드의 예측 점수를 수정하는 데 사용됩니다.
 
-### PyTorch
+### PyTorch [[transformers.AlternatingCodebooksLogitsProcessor]]
 
 [[autodoc]] AlternatingCodebooksLogitsProcessor
     - __call__
@@ -198,7 +198,7 @@ generation_output[:2]
     - __call__
 
 
-### TensorFlow
+### TensorFlow [[transformers.TFForcedBOSTokenLogitsProcessor]]
 
 [[autodoc]] TFForcedBOSTokenLogitsProcessor
     - __call__
@@ -245,7 +245,7 @@ generation_output[:2]
 [[autodoc]] TFTopPLogitsWarper
     - __call__
 
-### FLAX
+### FLAX [[transformers.FlaxForcedBOSTokenLogitsProcessor]]
 
 [[autodoc]] FlaxForcedBOSTokenLogitsProcessor
     - __call__
@@ -286,7 +286,7 @@ generation_output[:2]
 [[autodoc]] FlaxWhisperTimeStampLogitsProcessor
     - __call__
 
-## 중단 기준
+## StoppingCriteria [[transformers.StoppingCriteria]]
 
 [`StoppingCriteria`]는 생성이 언제 멈출지를 결정하는 데 사용됩니다 (EOS 토큰 외). 이 기능은 PyTorch 구현에만 제공됩니다.
 
@@ -308,7 +308,7 @@ generation_output[:2]
 [[autodoc]] EosTokenCriteria
     - __call__
 
-## 제약 조건
+## Constraint [[transformers.Constraint]]
 
 [`Constraint`]는 생성 출력에 특정 토큰이나 시퀀스를 강제로 포함시키는 데 사용됩니다. 이 기능은 PyTorch 구현에만 제공됩니다.
 
@@ -320,7 +320,7 @@ generation_output[:2]
 
 [[autodoc]] ConstraintListState
 
-## 빔 검색
+## 빔 검색 (BeamSearch) [[transformers.BeamScorer]]
 
 [[autodoc]] BeamScorer
     - process
@@ -334,13 +334,13 @@ generation_output[:2]
     - process
     - finalize
 
-## 스트리머
+## 스트리머 (Streamers) [[transformers.TextStreamer]]
 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
 
-## 캐시
+## 캐시 (Caches) [[transformers.Cache]]
 
 [[autodoc]] Cache
     - update
@@ -407,7 +407,7 @@ generation_output[:2]
     - update_ssm_state
     - reset
 
-## 워터마크 유틸리티
+## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 
 [[autodoc]] WatermarkDetector
     - __call__
