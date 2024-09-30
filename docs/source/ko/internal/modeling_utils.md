@@ -14,13 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 사용자 정의 레이어 및 유틸리티
+# 사용자 정의 레이어 및 유틸리티 [[custom-layers-and-utilities]]
 
 이 페이지는 라이브러리에서 사용되는 사용자 정의 레이어와 모델링을 위한 유틸리티 함수들을 나열합니다.
 
-이 함수들 대부분은 라이브러리 내의 모델 코드를 연구할 때 유용합니다.
+이 함수들 대부분은 라이브러리 내의 모델 코드를 연구할 때만 유용합니다.
 
-## PyTorch 사용자 정의 모듈
+
+## PyTorch 사용자 정의 모듈 [[transformers.Conv1D]]
 
 [[autodoc]] pytorch_utils.Conv1D
 
@@ -41,7 +42,7 @@ rendered properly in your Markdown viewer.
 [[autodoc]] modeling_utils.SequenceSummary
    - forward
 
-## PyTorch 도우미 함수
+## PyTorch 도우미 함수 [[transformers.apply_chunking_to_forward]]
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
@@ -53,13 +54,13 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.prune_linear_layer
 
-## TensorFlow 사용자 정의 레이어
+## TensorFlow 사용자 정의 레이어 [[transformers.modeling_tf_utils.TFConv1D]]
 
 [[autodoc]] modeling_tf_utils.TFConv1D
 
 [[autodoc]] modeling_tf_utils.TFSequenceSummary
 
-## TensorFlow 손실 함수
+## TensorFlow 손실 함수 [[transformers.modeling_tf_utils.TFCausalLanguageModelingLoss]]
 
 [[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
 
@@ -73,7 +74,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
 
-## TensorFlow 도우미 함수
+## TensorFlow 도우미 함수 [[transformers.modeling_tf_utils.get_initializer]]
 
 [[autodoc]] modeling_tf_utils.get_initializer
 
