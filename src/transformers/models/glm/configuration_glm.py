@@ -140,8 +140,6 @@ class GlmConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.resid_pdrop = resid_pdrop
-        self.linear_bias = linear_bias
 
         super().__init__(
             pad_token_id=pad_token_id,
