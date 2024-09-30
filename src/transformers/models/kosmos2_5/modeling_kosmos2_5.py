@@ -1527,11 +1527,6 @@ class Kosmos2_5TextTransformer(nn.Module):
                     hidden_states,
                     encoder_hidden_states,
                     causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
