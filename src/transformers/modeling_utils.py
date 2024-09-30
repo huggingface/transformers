@@ -934,12 +934,17 @@ def _load_state_dict_into_meta_model(
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
         # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+
         old_param = model
         splits = param_name.split(".")
         for split in splits:
             old_param = getattr(old_param, split)
+            # Not all the attributes of a module are Parameters/Tensor
+            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+                old_param = None
             if old_param is None:
                 break
+
         if old_param is not None:
             if dtype is None:
                 param = param.to(old_param.dtype)
@@ -3819,6 +3824,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_pt = not (from_tf | from_flax)
 
         # load pt weights early so that we know which dtype to init the model under
+
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
@@ -4176,6 +4182,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
 
+        if hf_quantizer is not None:
+            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
+
         def _fix_key(key):
             if "beta" in key:
                 return key.replace("beta", "bias")
@@ -4290,7 +4299,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if (
                         not is_quantized
-                        or getattr(hf_quantizer, "requires_parameters_quantization", False)
+                        or (getattr(hf_quantizer, "requires_parameters_quantization", False))
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
                         )

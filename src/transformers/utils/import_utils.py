@@ -92,6 +92,7 @@ ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
+HQQ_MIN_VERSION = "0.2.1"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -181,7 +182,7 @@ _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
-_hqq_available = _is_package_available("hqq")
+_hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
@@ -323,8 +324,8 @@ def is_torch_deterministic():
         return True
 
 
-def is_hqq_available():
-    return _hqq_available
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
+    return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
 def is_pygments_available():
