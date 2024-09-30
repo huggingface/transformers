@@ -14,35 +14,34 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Custom Layers and Utilities
+# 사용자 정의 레이어 및 유틸리티
 
-This page lists all the custom layers used by the library, as well as the utility functions it provides for modeling.
+이 페이지는 라이브러리에서 사용되는 사용자 정의 레이어와 모델링을 위한 유틸리티 함수들을 나열합니다.
 
-Most of those are only useful if you are studying the code of the models in the library.
+이 함수들 대부분은 라이브러리 내의 모델 코드를 연구할 때 유용합니다.
 
-
-## Pytorch custom modules
+## PyTorch 사용자 정의 모듈
 
 [[autodoc]] pytorch_utils.Conv1D
 
 [[autodoc]] modeling_utils.PoolerStartLogits
-    - forward
+   - forward
 
 [[autodoc]] modeling_utils.PoolerEndLogits
-    - forward
+   - forward
 
 [[autodoc]] modeling_utils.PoolerAnswerClass
-    - forward
+   - forward
 
 [[autodoc]] modeling_utils.SquadHeadOutput
 
 [[autodoc]] modeling_utils.SQuADHead
-    - forward
+   - forward
 
 [[autodoc]] modeling_utils.SequenceSummary
-    - forward
+   - forward
 
-## PyTorch Helper Functions
+## PyTorch 도우미 함수
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
@@ -54,13 +53,13 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pytorch_utils.prune_linear_layer
 
-## TensorFlow custom layers
+## TensorFlow 사용자 정의 레이어
 
 [[autodoc]] modeling_tf_utils.TFConv1D
 
 [[autodoc]] modeling_tf_utils.TFSequenceSummary
 
-## TensorFlow loss functions
+## TensorFlow 손실 함수
 
 [[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
 
@@ -74,7 +73,7 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
 
-## TensorFlow Helper Functions
+## TensorFlow 도우미 함수
 
 [[autodoc]] modeling_tf_utils.get_initializer
 
