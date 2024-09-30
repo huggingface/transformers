@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -696,7 +697,7 @@ class XGLMModel(XGLMPreTrainedModel):
     """,
     XGLM_START_DOCSTRING,
 )
-class XGLMForCausalLM(XGLMPreTrainedModel):
+class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
 

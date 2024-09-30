@@ -212,7 +212,7 @@ def no_init_weights(_enable=True):
                 setattr(torch.nn.init, name, init_func)
 
 
-def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     try:
         return next(parameter.parameters()).device
     except StopIteration:
@@ -227,7 +227,7 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
         return first_tuple[1].device
 
 
-def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_first_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first parameter dtype (can be non-floating) or asserts if none were found.
     """
@@ -245,7 +245,7 @@ def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "Modu
         return first_tuple[1].dtype
 
 
-def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
@@ -540,7 +540,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool = False):
+def load_state_dict(
+    checkpoint_file: Union[str, os.PathLike],
+    is_quantized: bool = False,
+    map_location: Optional[Union[str, torch.device]] = None,
+):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -555,13 +559,18 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
             )
         return safe_load_file(checkpoint_file)
     try:
-        if (
-            (is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0)
-            or (is_fsdp_enabled() and not is_local_dist_rank_0())
-        ) and not is_quantized:
-            map_location = "meta"
-        else:
-            map_location = "cpu"
+        if map_location is None:
+            if (
+                (
+                    is_deepspeed_zero3_enabled()
+                    and torch.distributed.is_initialized()
+                    and torch.distributed.get_rank() > 0
+                )
+                or (is_fsdp_enabled() and not is_local_dist_rank_0())
+            ) and not is_quantized:
+                map_location = "meta"
+            else:
+                map_location = "cpu"
         extra_args = {}
         # mmap can only be used with files serialized with zipfile-based format.
         if (
@@ -818,7 +827,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
-    loaded_state_dict_keys,  # left for now but could be removed, see below
     start_prefix,
     expected_keys,
     device_map=None,
@@ -847,8 +855,6 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-    # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
-    #   they won't get loaded.
 
     error_msgs = []
 
@@ -868,6 +874,18 @@ def _load_state_dict_into_meta_model(
             # We add only the first key as an example
             new_key = key.replace("beta", "bias")
             renamed_beta[key] = new_key if not renamed_beta else renamed_beta
+
+        # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            if "weight_g" in key:
+                new_key = key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                new_key = key.replace("weight_v", "parametrizations.weight.original1")
+        else:
+            if "parametrizations.weight.original0" in key:
+                new_key = key.replace("parametrizations.weight.original0", "weight_g")
+            if "parametrizations.weight.original1" in key:
+                new_key = key.replace("parametrizations.weight.original1", "weight_v")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -884,8 +902,7 @@ def _load_state_dict_into_meta_model(
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
     for param_name, param in state_dict.items():
-        # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+        if param_name not in expected_keys:
             continue
 
         if param_name.startswith(start_prefix):
@@ -917,12 +934,17 @@ def _load_state_dict_into_meta_model(
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
         # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+
         old_param = model
         splits = param_name.split(".")
         for split in splits:
             old_param = getattr(old_param, split)
+            # Not all the attributes of a module are Parameters/Tensor
+            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+                old_param = None
             if old_param is None:
                 break
+
         if old_param is not None:
             if dtype is None:
                 param = param.to(old_param.dtype)
@@ -1301,6 +1323,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
+# TODO (joao): remove `GenerationMixin` inheritance in v4.50
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
@@ -1630,11 +1653,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation.
-        # Alternativelly, the model can also have a custom `generate` function.
-        if "GenerationMixin" in str(cls.prepare_inputs_for_generation) and "GenerationMixin" in str(cls.generate):
-            return False
-        return True
+        # Directly inherits `GenerationMixin` -> can generate
+        if "GenerationMixin" in str(cls.__bases__):
+            return True
+        # Model class overwrites `generate` (e.g. time series models) -> can generate
+        if str(cls.__name__) in str(cls.generate):
+            return True
+        # The class inherits from a class that can generate (recursive check) -> can generate
+        for base in cls.__bases__:
+            if not hasattr(base, "can_generate"):
+                continue
+            if "PreTrainedModel" not in str(base) and base.can_generate():
+                return True
+        # BC: Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
+        # was how we detected whether a model could generate.
+        if "GenerationMixin" not in str(cls.prepare_inputs_for_generation):
+            logger.warning_once(
+                f"{cls.__name__} has generative capabilities, as `prepare_inputs_for_generation` is explicitly "
+                "overwritten. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, "
+                "`PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability "
+                "to call `generate` and other related functions."
+                "\n  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the "
+                "model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes"
+                "\n  - If you are the owner of the model architecture code, please modify your model class such that "
+                "it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception)."
+                "\n  - If you are not the owner of the model architecture class, please contact the model code owner "
+                "to update it."
+            )
+            return True
+        # Otherwise, can't generate
+        return False
 
     @classmethod
     def _check_and_enable_flash_attn_2(
@@ -1669,6 +1717,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if flash_attention_version < version.parse("2.1.0"):
                     raise ImportError(
                         f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}"
+                    )
+                elif not torch.cuda.is_available():
+                    raise ValueError(
+                        f"{preface} Flash Attention 2 is not available on CPU. Please make sure torch can access a CUDA device."
                     )
                 else:
                     raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
@@ -2526,7 +2578,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
+            hf_quantizer is not None
+            and isinstance(hf_quantizer, HfQuantizer)
+            and hf_quantizer.is_serializable(safe_serialization=safe_serialization)
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -3046,7 +3100,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -3770,6 +3824,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_pt = not (from_tf | from_flax)
 
         # load pt weights early so that we know which dtype to init the model under
+
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
@@ -4127,11 +4182,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
 
+        if hf_quantizer is not None:
+            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
+
         def _fix_key(key):
             if "beta" in key:
                 return key.replace("beta", "bias")
             if "gamma" in key:
                 return key.replace("gamma", "weight")
+
+            # to avoid logging parametrized weight norm renaming
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                if "weight_g" in key:
+                    return key.replace("weight_g", "parametrizations.weight.original0")
+                if "weight_v" in key:
+                    return key.replace("weight_v", "parametrizations.weight.original1")
+            else:
+                if "parametrizations.weight.original0" in key:
+                    return key.replace("parametrizations.weight.original0", "weight_g")
+                if "parametrizations.weight.original1" in key:
+                    return key.replace("parametrizations.weight.original1", "weight_v")
             return key
 
         original_loaded_keys = loaded_keys
@@ -4229,7 +4299,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if (
                         not is_quantized
-                        or getattr(hf_quantizer, "requires_parameters_quantization", False)
+                        or (getattr(hf_quantizer, "requires_parameters_quantization", False))
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
                         )
@@ -4376,7 +4446,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
-                    loaded_keys,
                     start_prefix,
                     expected_keys,
                     device_map=device_map,
@@ -4430,7 +4499,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
+                map_location = None
+                if (
+                    device_map is not None
+                    and hf_quantizer is not None
+                    and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+                    and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
+                ):
+                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+                state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4453,7 +4530,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             state_dict,
-                            loaded_keys,
                             start_prefix,
                             expected_keys,
                             device_map=device_map,
@@ -4609,7 +4685,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         error_msgs = _load_state_dict_into_meta_model(
             model,
             state_dict,
-            loaded_state_dict_keys,
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,

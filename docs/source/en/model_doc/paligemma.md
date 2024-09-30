@@ -29,7 +29,20 @@ This model was contributed by [Molbap](https://huggingface.co/Molbap).
 
 ## Usage tips
 
-Inference with PaliGemma can be performed as follows:
+- PaliGemma is not meant for conversational use, and it works best when fine-tuning to a specific use case. Some downstream tasks on which PaliGemma can be fine-tuned include image captioning, visual question answering (VQA), object detection, referring expression segmentation and document understanding.
+- One can use `PaliGemmaProcessor` to prepare images, text and optional labels for the model. When fine-tuning a PaliGemma model, the `suffix` argument can be passed to the processor which creates the `labels` for the model:
+
+```python
+prompt = "What is on the flower?"
+answer = "a bee"
+inputs = processor(images=raw_image, text=prompt, suffix=answer, return_tensors="pt")
+```
+
+## Usage Example
+
+The model can accept a single or multiple images. According to the [paper](https://arxiv.org/abs/2407.07726v1), the checkpoint PaliGemma can transfer to tasks which take multiple images as input. NLVR2 is one such task, which asks one question about two images, and requires looking at both to give the correct answer. Here's an example code for single and multi image inference.
+
+### Single-image Inference
 
 ```python
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
@@ -41,19 +54,34 @@ processor = AutoProcessor.from_pretrained(model_id)
 prompt = "What is on the flower?"
 image_file = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
 raw_image = Image.open(requests.get(image_file, stream=True).raw)
-inputs = processor(prompt, raw_image, return_tensors="pt")
+inputs = processor(raw_image, prompt, return_tensors="pt")
 output = model.generate(**inputs, max_new_tokens=20)
 
-print(processor.decode(output[0], skip_special_tokens=True)[len(prompt):])
+print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
 ```
 
-- PaliGemma is not meant for conversational use, and it works best when fine-tuning to a specific use case. Some downstream tasks on which PaliGemma can be fine-tuned include image captioning, visual question answering (VQA), object detection, referring expression segmentation and document understanding.
-- One can use `PaliGemmaProcessor` to prepare images, text and optional labels for the model. When fine-tuning a PaliGemma model, the `suffix` argument can be passed to the processor which creates the `labels` for the model:
+### Multi-image Inference
 
 ```python
-prompt = "What is on the flower?"
-answer = "a bee"
-inputs = processor(text=prompt, images=raw_image, suffix=answer, return_tensors="pt")
+model_id = "google/paligemma-3b-ft-nlvr2-448"  # checkpoint tuned for multiple images
+model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
+processor = PaliGemmaProcessor.from_pretrained(model_id)
+
+prompt = "answer en Which of the two pictures shows a snowman, first or second?"
+stop_sign_image = Image.open(
+    requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+)
+snow_image = Image.open(
+    requests.get(
+        "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True
+    ).raw
+)
+
+inputs = processor(images=[[snow_image, stop_sign_image]], text=prompt, return_tensors="pt")
+
+output = model.generate(**inputs, max_new_tokens=20)
+print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
+
 ```
 
 ## Resources

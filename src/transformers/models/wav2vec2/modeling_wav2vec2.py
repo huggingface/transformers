@@ -1478,7 +1478,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
