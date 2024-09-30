@@ -53,7 +53,7 @@ class CacheTest(unittest.TestCase):
     def test_dynamic_cache_retrocompatibility(self):
         """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
         legacy_cache = ()
-        new_cache = DynamicCache(num_hidden_layers=10)
+        new_cache = DynamicCache()
 
         # Creates a new cache with 10 layers in both formats
         for layer_idx in range(10):
@@ -103,7 +103,7 @@ class CacheTest(unittest.TestCase):
         legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
-        new_cache = DynamicCache(num_hidden_layers=10)
+        new_cache = DynamicCache()
 
         # Creates a new cache with 10 layers in both formats
         for layer_idx in range(10):

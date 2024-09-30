@@ -1846,13 +1846,12 @@ class GenerationTesterMixin:
                 input_ids, attention_mask=attention_mask, **generation_kwargs, **inputs_dict
             )
             set_seed(seed)
-            num_hidden_layers = config.get_text_config().num_hidden_layers
             if config.is_encoder_decoder:
                 cache_cls = EncoderDecoderCache
-                past_key_values = cache_cls(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
+                past_key_values = cache_cls(DynamicCache(), DynamicCache())
             else:
                 cache_cls = DynamicCache
-                past_key_values = cache_cls(num_hidden_layers)
+                past_key_values = cache_cls()
             new_results = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
@@ -1966,11 +1965,10 @@ class GenerationTesterMixin:
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
-                num_hidden_layers = config.get_text_config().num_hidden_layers
                 model.generate(
                     input_ids,
                     attention_mask=attention_mask,
-                    past_key_valyes=DynamicCache(num_hidden_layers),
+                    past_key_valyes=DynamicCache(),
                     **generation_kwargs,
                 )
 
