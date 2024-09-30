@@ -5,7 +5,7 @@
 #                           modular_xxx.py file directly. One of our CI enforces this
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 TThe GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -164,9 +164,9 @@ class GlmRotaryEmbedding(nn.Module):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -191,8 +191,22 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Interleave them instead of usual shape
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
+
+    # Keep half for later concatenation
+    q, q_pass = q[..., : q.shape[-1] // 2], q[..., q.shape[-1] // 2 :]
+    k, k_pass = k[..., : k.shape[-1] // 2], k[..., k.shape[-1] // 2 :]
+
+    # Apply rotary embeddings on the first half
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
 
 
