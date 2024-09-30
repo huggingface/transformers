@@ -721,7 +721,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
+# Adapted from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionEncoder(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
@@ -1082,7 +1082,7 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
-        # breakpoint()
+
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
@@ -1220,7 +1220,7 @@ class Kosmos2_5TextBlock(nn.Module):
         self.ffn = Kosmos2_5TextFFN(config)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextBlock.forward
+    # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextBlock.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1265,7 +1265,7 @@ class Kosmos2_5TextBlock(nn.Module):
         residual = hidden_states
 
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        # breakpoint()
+
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1298,7 +1298,7 @@ class Kosmos2_5TextBlock(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
+# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
 class Kosmos2_5TextTransformer(nn.Module):
     """
     Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2_5TextBlock`].
@@ -1328,6 +1328,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
         self.gradient_checkpointing = False
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1336,7 +1337,6 @@ class Kosmos2_5TextTransformer(nn.Module):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        # breakpoint()
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
@@ -1745,7 +1745,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         )
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
+# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
 
@@ -1938,7 +1938,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextForCausalLM with KOSMOS-2->KOSMOS-2.5,KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
+# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextForCausalLM with KOSMOS-2->KOSMOS-2.5,KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
     _tied_weights_keys = ["lm_head.weight"]
