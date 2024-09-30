@@ -540,7 +540,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool = False):
+def load_state_dict(
+    checkpoint_file: Union[str, os.PathLike],
+    is_quantized: bool = False,
+    map_location: Optional[Union[str, torch.device]] = None,
+):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -555,13 +559,18 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
             )
         return safe_load_file(checkpoint_file)
     try:
-        if (
-            (is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0)
-            or (is_fsdp_enabled() and not is_local_dist_rank_0())
-        ) and not is_quantized:
-            map_location = "meta"
-        else:
-            map_location = "cpu"
+        if map_location is None:
+            if (
+                (
+                    is_deepspeed_zero3_enabled()
+                    and torch.distributed.is_initialized()
+                    and torch.distributed.get_rank() > 0
+                )
+                or (is_fsdp_enabled() and not is_local_dist_rank_0())
+            ) and not is_quantized:
+                map_location = "meta"
+            else:
+                map_location = "cpu"
         extra_args = {}
         # mmap can only be used with files serialized with zipfile-based format.
         if (
@@ -2564,7 +2573,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
+            hf_quantizer is not None
+            and isinstance(hf_quantizer, HfQuantizer)
+            and hf_quantizer.is_serializable(safe_serialization=safe_serialization)
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -4479,7 +4490,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
+                map_location = None
+                if (
+                    device_map is not None
+                    and hf_quantizer is not None
+                    and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+                    and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
+                ):
+                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+                state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
