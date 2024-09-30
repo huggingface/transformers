@@ -837,3 +837,6 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 pixel_values.append(_pixel_values)
 
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+
+
+__all__ = ["ImageBindImageProcessor"]

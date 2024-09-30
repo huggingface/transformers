@@ -526,3 +526,6 @@ class ImageBindConfig(PretrainedConfig):
         output["audio_config"] = self.audio_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+
+__all__ = ["ImageBindTextConfig", "ImageBindVisionConfig", "ImageBindAudioConfig", "ImageBindConfig"]

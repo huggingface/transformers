@@ -162,3 +162,6 @@ class ImageBindProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))
+
+
+__all__ = ["ImageBindProcessor"]

@@ -2087,3 +2087,6 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
             attentions=audio_outputs.attentions,
             normalized_audio_embeds=normalized_audio_embeds,
         )
+
+
+__all__ = ["ImageBindTextModel", "ImageBindVisionModel", "ImageBindAudioModel", "ImageBindModel", "ImageBindTextModelWithProjection", "ImageBindVisionModelWithProjection", "ImageBindAudioModelWithProjection"]
