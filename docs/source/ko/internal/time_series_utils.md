@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Time Series Utilities
+# 시계열 유틸리티
 
-This page lists all the utility functions and classes that can be used for Time Series based models.
+이 페이지는 시계열 기반 모델에서 사용할 수 있는 유틸리티 함수와 클래스들을 나열합니다.
 
-Most of those are only useful if you are studying the code of the time series models or you wish to add to the collection of distributional output classes.
+이 함수들 대부분은 시계열 모델의 코드를 연구하거나 분포 출력 클래스의 컬렉션에 추가하려는 경우에만 유용합니다.
 
-## Distributional Output
+## 분포 출력 (Distributional Output)
 
 [[autodoc]] time_series_utils.NormalOutput
 
