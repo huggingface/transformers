@@ -95,7 +95,6 @@ class QuantizationConfigMixin:
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
-
         config = cls(**config_dict)
 
         to_remove = []
@@ -1235,24 +1234,11 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
-        self.kwargs = kwargs
-        self._STR_TO_METHOD = {}
-        if is_torchao_available():
-            from torchao.quantization import (
-                int4_weight_only,
-                int8_dynamic_activation_int8_weight,
-                int8_weight_only,
-            )
-
-            self._STR_TO_METHOD = {
-                "int4_weight_only": int4_weight_only,
-                "int8_weight_only": int8_weight_only,
-                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-            }
+        # when we load from serailized config, "quant_type_kwargs" will be the key
+        if "quant_type_kwargs" in kwargs:
+            self.quant_type_kwargs = kwargs["quant_type_kwargs"]
         else:
-            raise ValueError(
-                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
-            )
+            self.quant_type_kwargs = kwargs
 
         self.post_init()
 
@@ -1263,26 +1249,46 @@ class TorchAoConfig(QuantizationConfigMixin):
         if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
             raise ValueError("Requires torchao 0.4.0 version and above")
 
-        if self.quant_type not in self._STR_TO_METHOD.keys():
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        if self.quant_type not in _STR_TO_METHOD.keys():
             raise ValueError(
                 f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
             )
 
-        method = self._STR_TO_METHOD[self.quant_type]
+        method = _STR_TO_METHOD[self.quant_type]
         sig = signature(method)
         all_kwargs = [
             param.name
             for param in sig.parameters.values()
             if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
         ]
-        for k in self.kwargs:
+        for k in self.quant_type_kwargs:
             if k not in all_kwargs:
                 raise ValueError(
                     f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
                 )
 
+    def _get_torchao_quant_type_to_method(self):
+        if is_torchao_available():
+            from torchao.quantization import (
+                int4_weight_only,
+                int8_dynamic_activation_int8_weight,
+                int8_weight_only,
+            )
+
+            return {
+                "int4_weight_only": int4_weight_only,
+                "int8_weight_only": int8_weight_only,
+                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            }
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
+
     def get_apply_tensor_subclass(self):
-        return self._STR_TO_METHOD[self.quant_type](**self.kwargs)
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.quant_type_kwargs.items())})"
