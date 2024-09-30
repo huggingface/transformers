@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -94,6 +94,32 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "phi3": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.gate_up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_up_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_qkv": "self_attn.qkv_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
+    "bloom": {
+        "token_embd.weight": "transformer.word_embeddings.weight",
+        "token_embd_norm": "transformer.word_embeddings_layernorm",
+        "blk": "transformer.h",
+        "ffn_up": "mlp.dense_h_to_4h",
+        "ffn_down": "mlp.dense_4h_to_h",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_qkv": "self_attention.query_key_value",
+        "attn_output": "self_attention.dense",
+        "output.weight": "lm_head.weight",
+        "output_norm": "transformer.ln_f",
+    },
 }
 
 
@@ -107,7 +133,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
@@ -119,7 +146,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
@@ -155,6 +183,25 @@ GGUF_CONFIG_MAPPING = {
         "ggml.eos_token_id": "eos_token_id",
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
+    },
+    "phi3": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "bloom": {
+        "block_count": "n_layer",
+        "embedding_length": "hidden_size",
+        "attention.head_count": "n_head",
+        "vocab_size": "vocab_size",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
     },
 }
 
@@ -390,10 +437,99 @@ class GGUFQwen2Converter(Qwen2Converter):
         return tokenizer
 
 
+class GGUFPhi3Converter(LlamaConverter):
+    def __init__(self, tokenizer_dict):
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def merges(self, proto):
+        return proto.merges
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(self.proto)
+        merges = self.merges(self.proto)
+        bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+
+        tokenizer = Tokenizer(BPE(bpe_vocab, merges))
+        # add the special tokens from phi3 tokenizer config
+        tokenizer.add_special_tokens(
+            [
+                AddedToken("</s>", rstrip=True, lstrip=False, normalized=False, special=True),
+                AddedToken("<|endoftext|>", normalized=False, special=True),
+                AddedToken("<|assistant|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder1|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder2|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder3|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder4|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|system|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|end|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder5|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder6|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|user|>", rstrip=True, normalized=False, special=True),
+            ]
+        )
+
+        self.additional_kwargs["unk_token"] = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        self.additional_kwargs["eos_token"] = (
+            proto.tokens[proto.eos_token_id] if proto.eos_token_id is not None else None
+        )
+        self.additional_kwargs["bos_token"] = (
+            proto.tokens[proto.bos_token_id] if proto.bos_token_id is not None else None
+        )
+        self.additional_kwargs["pad_token"] = (
+            proto.tokens[proto.pad_token_id] if proto.pad_token_id is not None else None
+        )
+
+        return tokenizer
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+            decoders.Replace(replacement, " "),
+        ]
+
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer(self.proto)
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+
+        return tokenizer
+
+
+class GGUFBloomConverter(GPT2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+        tokenizer = super().converted(vocab, merges)
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
+    "phi3": GGUFPhi3Converter,
+    "bloom": GGUFBloomConverter,
 }
 
 

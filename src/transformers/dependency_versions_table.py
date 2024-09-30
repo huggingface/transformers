@@ -86,7 +86,7 @@ deps = {
     "timeout-decorator": "timeout-decorator",
     "tiktoken": "tiktoken",
     "timm": "timm<=0.9.16",
-    "tokenizers": "tokenizers>=0.19,<0.20",
+    "tokenizers": "tokenizers>=0.20,<0.21",
     "torch": "torch",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
@@ -97,4 +97,6 @@ deps = {
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
     "pytest-rich": "pytest-rich",
+    "libcst": "libcst",
+    "rich": "rich",
 }

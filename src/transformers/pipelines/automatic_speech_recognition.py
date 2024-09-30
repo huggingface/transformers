@@ -440,6 +440,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     truncation=False,
                     padding="longest",
                     return_tensors="pt",
+                    return_attention_mask=True,
                 )
             else:
                 if self.type == "seq2seq_whisper" and stride is None:
@@ -448,13 +449,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         sampling_rate=self.feature_extractor.sampling_rate,
                         return_tensors="pt",
                         return_token_timestamps=True,
+                        return_attention_mask=True,
                     )
                     extra["num_frames"] = processed.pop("num_frames")
                 else:
                     processed = self.feature_extractor(
-                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                        inputs,
+                        sampling_rate=self.feature_extractor.sampling_rate,
+                        return_tensors="pt",
+                        return_attention_mask=True,
                     )
-
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
@@ -500,6 +504,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
                     else:
                         generate_kwargs["num_frames"] = num_frames
+
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
 
             tokens = self.model.generate(
                 inputs=inputs,
@@ -557,7 +565,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
         for outputs in model_outputs:
-            items = outputs[key].numpy()
+            if self.framework == "pt" and outputs[key].dtype in (torch.bfloat16, torch.float16):
+                items = outputs[key].to(torch.float32).numpy()
+            else:
+                items = outputs[key].numpy()
             stride = outputs.get("stride", None)
             if stride is not None and self.type in {"ctc", "ctc_with_lm"}:
                 total_n, left, right = stride

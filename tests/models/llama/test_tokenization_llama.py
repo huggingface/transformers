@@ -874,7 +874,8 @@ class TikTokenIntegrationTests(unittest.TestCase):
     """
 
     def test_tiktoken_llama(self):
-        model_path = "hf-internal-testing/Llama3-Instruct-Internal"
+        model_path = "hf-internal-testing/llama-3-8b-internal"
+        subfolder = "original"
         test_text = "This is a test sentence."
         test_tokens = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         num_reserved_special_tokens = 256
@@ -894,6 +895,7 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
         tiktoken_tokenizer = PreTrainedTokenizerFast.from_pretrained(
             model_path,
+            subfolder=subfolder,
             additional_special_tokens=special_tokens,
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>",
@@ -902,7 +904,14 @@ class TikTokenIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens[0], "<|begin_of_text|>")
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
-            model_path, legacy=False, additional_special_tokens=special_tokens, add_bos_token=True, add_eos_token=True
+            model_path,
+            subfolder=subfolder,
+            legacy=False,
+            additional_special_tokens=special_tokens,
+            bos_token="<|begin_of_text|>",
+            eos_token="<|end_of_text|>",
+            add_bos_token=True,
+            add_eos_token=True,
         )
         self.assertTrue(isinstance(tiktoken_tokenizer, PreTrainedTokenizerFast))
 
@@ -920,7 +929,10 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
             model_path,
+            subfolder=subfolder,
             additional_special_tokens=special_tokens,
+            bos_token="<|begin_of_text|>",
+            eos_token="<|end_of_text|>",
             from_slow=True,
             add_bos_token=True,
             add_eos_token=True,
