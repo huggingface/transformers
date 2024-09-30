@@ -349,6 +349,7 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = [
                 "attention_mask",
                 "bbox",
+                "cache_position",
                 "cross_attn_head_mask",
                 "decoder_attention_mask",
                 "decoder_head_mask",

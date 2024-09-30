@@ -1528,7 +1528,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
             batch_size, sequence_length = input_ids.shape
             device = input_ids.device
 
-            dtype = self.proj_out.weight.dtype
+            dtype = self.get_output_embeddings().weight.dtype
             min_dtype = torch.finfo(dtype).min
 
             decoder_attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(

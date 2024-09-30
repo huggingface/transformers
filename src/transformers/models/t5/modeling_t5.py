@@ -1053,6 +1053,7 @@ class T5Stack(T5PreTrainedModel):
                 )
                 use_cache = False
 
+        print(input_ids.shape, self.embed_tokens.weight.data.shape)
         if inputs_embeds is None:
             if self.embed_tokens is None:
                 raise ValueError("You have to initialize the model with valid token embeddings")
