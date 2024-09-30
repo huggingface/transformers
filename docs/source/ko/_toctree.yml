@@ -765,8 +765,8 @@
       title: (번역중) Utilities for Image Processors
     - local: in_translation
       title: (번역중) Utilities for Audio processing
-    - local: in_translation
-      title: (번역중) General Utilities
+    - local: internal/file_utils
+      title: 일반 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Time Series
     title: (번역중) Internal Helpers
