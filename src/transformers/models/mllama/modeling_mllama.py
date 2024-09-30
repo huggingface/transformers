@@ -286,14 +286,20 @@ class MllamaVisionFlashAttention2(MllamaVisionAttention):
     implements the forward pass using Flash Attention for improved performance.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Check if flash attention version is greater or equal to 2.1
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
     def forward(
-            self,
-            hidden_state: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            output_attentions: bool = False,
+        self,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if output_attentions:
-            warnings.warn(
+            logger.warning_once(
                 "MllamaVisionFlashAttention does not support `output_attentions=True`. "
                 "Falling back to the manual attention implementation.",
                 UserWarning
