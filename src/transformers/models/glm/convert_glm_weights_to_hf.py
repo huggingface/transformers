@@ -106,7 +106,6 @@ def convert_config(original_config: dict):
             if not original_config.pop("multi_query_attention")
             else original_config.pop("multi_query_group_num")
         ),
-        resid_pdrop=original_config.pop("hidden_dropout"),
         attention_dropout=original_config.pop("attention_dropout"),
         max_position_embeddings=original_config.pop("seq_length"),
         rms_norm_eps=original_config.pop("layernorm_epsilon"),
@@ -114,7 +113,6 @@ def convert_config(original_config: dict):
         use_cache=original_config.pop("use_cache"),
         head_dim=original_config.pop("kv_channels"),
         attention_bias=original_config.pop("add_qkv_bias"),
-        linear_bias=original_config.pop("add_bias_linear"),
         eos_token_id=original_config.pop("eos_token_id"),
         pad_token_id=original_config.pop("pad_token_id"),
         tie_word_embeddings=original_config.pop("tie_word_embeddings"),

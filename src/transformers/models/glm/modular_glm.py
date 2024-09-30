@@ -35,6 +35,7 @@ from ..gemma.modeling_gemma import (
 )
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaDecoderLayer,
     LlamaFlashAttention2,
     LlamaSdpaAttention,
     LlamaModel,
@@ -92,8 +93,6 @@ class GlmConfig(GemmaConfig):
         super().__init__(
             **kwargs,
         )
-        self.resid_pdrop = resid_pdrop
-        self.linear_bias = linear_bias
         del self.hidden_activation
 
 
@@ -106,11 +105,7 @@ class GlmRotaryEmbedding(Phi3RotaryEmbedding):
 
 
 class GlmMLP(Phi3MLP):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=self.config.linear_bias)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=self.config.linear_bias)
+    pass
 
 
 def rotate_half(x):
@@ -164,7 +159,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.linear_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         # Not used in the attention, only for BC
         self.rotary_emb = GlmRotaryEmbedding(
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
@@ -185,87 +180,13 @@ GLM_ATTENTION_CLASSES = {
 }
 
 
-class GlmDecoderLayer(nn.Module):
+class GlmDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GlmConfig, layer_idx: int):
         super().__init__()
 
-        self.config = config
-        self.self_attn = GLM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
-
         self.mlp = GlmMLP(config)
         self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
-        self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
         self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-        )
-
-        hidden_states = residual + self.resid_attn_dropout(attn_outputs)
-        residual = hidden_states
-
-        hidden_states = self.post_attention_layernorm(hidden_states)
-
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.resid_mlp_dropout(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
 
 
 class GlmModel(LlamaModel):
