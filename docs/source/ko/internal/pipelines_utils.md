@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 파이프라인을 위한 유틸리티
+# 파이프라인을 위한 유틸리티 [[utilities-for-pipelines]]
 
-이 페이지는 라이브러리에서 파이프라인에 제공하는 모든 유틸리티 함수들을 나열합니다.
+이 페이지는 라이브러리에서 파이프라인을 위해 제공하는 모든 유틸리티 함수들을 나열합니다.
 
-이 함수들 대부분은 라이브러리 내 모델의 코드를 연구할 때 유용합니다.
+이 함수들 대부분은 라이브러리 내 모델의 코드를 연구할 때만 유용합니다.
 
-## 인자 처리
+## 인자 처리 [[transformers.pipelines.ArgumentHandler]]
 
 [[autodoc]] pipelines.ArgumentHandler
 
@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.QuestionAnsweringArgumentHandler
 
-## 데이터 형식
+## 데이터 형식 [[transformers.PipelineDataFormat]]
 
 [[autodoc]] pipelines.PipelineDataFormat
 
@@ -38,6 +38,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.PipedPipelineDataFormat
 
-## 유틸리티
+## 유틸리티 [[transformers.pipelines.PipelineException]]
 
 [[autodoc]] pipelines.PipelineException
