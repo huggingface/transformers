@@ -107,6 +107,7 @@ def convert_config(original_config: dict):
         linear_bias=original_config.pop("add_bias_linear"),
         eos_token_id=original_config.pop("eos_token_id"),
         pad_token_id=original_config.pop("pad_token_id"),
+        tie_word_embeddings=original_config.pop("tie_word_embeddings"),
     )
     print(f"Unused config keys: {original_config.keys(),}")
     return new_config
