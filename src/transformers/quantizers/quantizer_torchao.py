@@ -160,13 +160,24 @@ class TorchAoHfQuantizer(HfQuantizer):
         """No process required for torchao quantized model"""
         return
 
-    @property
-    def is_serializable(self):
-        return False
+    def is_serializable(self, safe_serialization=None):
+        if safe_serialization:
+            logger.warning(
+                "torchao quantized model does not support safe serialization, "
+                "please set `safe_serialization` to False"
+            )
+            return False
+        _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(
+            "0.25.0"
+        )
+        if not _is_torchao_serializable:
+            logger.warning("torchao quantized model is only serializable after huggingface_hub >= 0.25.0 ")
+        return _is_torchao_serializable
 
     @property
     def is_trainable(self):
-        # torchao does not have official support for QAT (Quantization Aware Training)
-        # but torchao support nf4/PEFT, but it is not integrated yet
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        supported_quant_types_for_training = [
+            "int8_weight_only",
+            "int8_dynamic_activation_int8_weight",
+        ]
+        return self.quantization_config.quant_type in supported_quant_types_for_training
