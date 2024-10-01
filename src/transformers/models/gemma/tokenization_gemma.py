@@ -203,14 +203,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    @property
-    def unk_token_length(self):
-        raise AttributeError("Not needed for Gemma")
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self):
-        raise AttributeError("Not needed for Gemma")
-
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None

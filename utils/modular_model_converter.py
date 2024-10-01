@@ -458,7 +458,11 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 new_params = new_params.with_changes(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
-            func = func.with_changes(body=updated_methods[name].body, params=new_params)
+            if not re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", class_finder.python_module.code_for_node(updated_methods[name])):
+                func = func.with_changes(body=updated_methods[name].body, params=new_params)
+            else:
+                print("Skipping ", name, "as it raises an error.")
+                continue
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             assign_targets[target] = func
@@ -483,10 +487,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
             ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
-            if not re.match(r"def .*\(\):\n    raise .*Error\(", class_finder.python_module.code_for_node(func)):
-                end_meth.append(func)
-            else:
-                print("Getting rid of ", name)
+            end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             # TODO we only use single assign might cause issues
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
