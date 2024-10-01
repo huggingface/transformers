@@ -466,7 +466,9 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 class_finder.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, leading_lines=leading_lines)
+                func = func.with_changes(
+                    body=updated_methods[name].body, params=new_params, leading_lines=leading_lines
+                )
             else:
                 continue
 
