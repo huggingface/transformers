@@ -273,7 +273,6 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
     def unk_token_length(self):
         raise AttributeError("Not needed for Gemma")
 
-    # skip
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Args:
@@ -282,7 +281,6 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
         """
         return PreTrainedTokenizer.tokenize(self, text, **kwargs)
 
-    # skip
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string. The Gemma tokenizer never adds a prefix space.

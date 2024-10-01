@@ -224,6 +224,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
+        if re.findall(r'# Copied from', updated_node.value):
+            return cst.RemoveFromParent()
         update = self.preserve_case_replace(updated_node.value)
         return updated_node.with_changes(value=update)
 
@@ -458,16 +460,12 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 new_params = new_params.with_changes(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
-            if re.findall(r"# skip", class_finder.python_module.code_for_node(updated_methods[name])):
-                leading_lines = [cst.EmptyLine()]
-            else:
-                leading_lines = func.leading_lines
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 class_finder.python_module.code_for_node(updated_methods[name]),
             ):
                 func = func.with_changes(
-                    body=updated_methods[name].body, params=new_params, leading_lines=leading_lines
+                    body=updated_methods[name].body, params=new_params
                 )
             else:
                 continue

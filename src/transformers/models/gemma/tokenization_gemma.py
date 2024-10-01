@@ -51,11 +51,11 @@ class GemmaTokenizer(PreTrainedTokenizer):
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
         sp_model_kwargs (`Dict[str, Any]`, `Optional`, *optional*):
@@ -85,6 +85,76 @@ class GemmaTokenizer(PreTrainedTokenizer):
             Whether or not the default system prompt for Gemma should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not to add spaces between special tokens.
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens.
+            Make sure to also set `from_slow` to `True`.
+            A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import GemmaTokenizerFast
+
+            >>> tokenizer = GemmaTokenizerFast.from_pretrained("huggygemma/gemma-7b", legacy=True, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
+            [1, 15043, 29871, 1, 869]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import GemmaTokenizerFast
+
+            >>> tokenizer = GemmaTokenizerFast.from_pretrained("huggygemma/gemma-7b", legacy=False, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
+            [1, 15043, 29871, 1, 29889]
+            ```
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. Again, this should be set with `from_slow=True` to make sure it's taken into account.
+
+        Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
+        no padding token in the original model.
+
+        Args:
+            vocab_file (`str`):
+                Path to the vocabulary file.
+            unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
+                The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+                token instead.
+            bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
+                The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+            eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
+                The end of sequence token.
+            pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
+                A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+                attention mechanisms or loss computation.
+            sp_model_kwargs (`Dict[str, Any]`, `Optional`, *optional*):
+                Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+                SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+                to set:
+
+                - `enable_sampling`: Enable subword regularization.
+                - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+                  - `nbest_size = {0,1}`: No sampling is performed.
+                  - `nbest_size > 1`: samples from the nbest_size results.
+                  - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                    using forward-filtering-and-backward-sampling algorithm.
+
+                - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+                  BPE-dropout.
+
+            add_bos_token (`bool`, *optional*, defaults to `True`):
+                Whether or not to add an `bos_token` at the start of sequences.
+            add_eos_token (`bool`, *optional*, defaults to `False`):
+                Whether or not to add an `eos_token` at the end of sequences.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+                extra spaces.
+            use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+                Whether or not the default system prompt for Gemma should be used.
+            spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to add spaces between special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
