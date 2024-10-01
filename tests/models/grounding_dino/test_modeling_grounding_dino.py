@@ -782,7 +782,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
 
     def test_grounding_dino_loss(self):
-        ds = load_dataset("EduardoPacheco/aquarium-sample", split="train")
+        ds = load_dataset("hf-internal-testing/tiny-object-detection-aquarium-dataset", split="train")
         image_processor = self.default_processor.image_processor
         tokenizer = self.default_processor.tokenizer
         id2label = {0: "fish", 1: "jellyfish", 2: "penguins", 3: "sharks", 4: "puffins", 5: "stingrays", 6: "starfish"}
