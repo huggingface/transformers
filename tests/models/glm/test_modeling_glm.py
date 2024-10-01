@@ -453,7 +453,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
             torch_dtype=torch.bfloat16,
-            revision="refs/pr/15"
+            revision="refs/pr/15",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=15, do_sample=False)
@@ -852,9 +852,9 @@ class GlmIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, revision=self.revision).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, revision=self.revision
+        ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -865,15 +865,14 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_9b_bf16(self):
-
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision=self.revision).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision=self.revision
+        ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -884,14 +883,17 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_9b_eager(self):
-
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager", revision=self.revision
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+            revision=self.revision,
         )
         model.to(torch_device)
 
@@ -905,14 +907,17 @@ class GlmIntegrationTest(unittest.TestCase):
 
     @require_torch_sdpa
     def test_model_9b_sdpa(self):
-
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa", revision=self.revision
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="sdpa",
+            revision=self.revision,
         )
         model.to(torch_device)
 
@@ -933,7 +938,11 @@ class GlmIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", revision=self.revision
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            revision=self.revision,
         )
         model.to(torch_device)
 
