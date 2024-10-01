@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from typing import Optional
 
 import torch
@@ -26,12 +27,14 @@ from ..gemma.modeling_gemma import (
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
 )
+from ..granite.modeling_granite import (
+    GraniteAttention,
+    GraniteFlashAttention2,
+    GraniteSdpaAttention,
+)
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
-    LlamaFlashAttention2,
     LlamaModel,
-    LlamaSdpaAttention,
 )
 from ..phi3.modeling_phi3 import (
     Phi3MLP,
@@ -67,15 +70,12 @@ class GlmConfig(GemmaConfig):
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         attention_bias=True,
-        pretraining_tp=1,
         **kwargs,
     ):
         super().__init__(
             **kwargs,
         )
         del self.hidden_activation
-        # Never used, but needs to be present when using "eager" attention
-        self.pretraining_tp = pretraining_tp
 
 
 class GlmRMSNorm(Phi3RMSNorm):
@@ -138,21 +138,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class GlmAttention(LlamaAttention):
+class GlmAttention(GraniteAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        # Not used in the attention, only for BC
-        self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
-        )
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.scaling = 1 / math.sqrt(self.head_dim)
 
 
-class GlmFlashAttention2(GlmAttention, LlamaFlashAttention2):
+class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
     pass
 
 
-class GlmSdpaAttention(GlmAttention, LlamaSdpaAttention):
+class GlmSdpaAttention(GlmAttention, GraniteSdpaAttention):
     pass
 
 
