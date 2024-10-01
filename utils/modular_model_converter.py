@@ -458,14 +458,19 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 new_params = new_params.with_changes(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
+            if re.findall(r"# skip", class_finder.python_module.code_for_node(updated_methods[name])):
+                leading_lines = [cst.EmptyLine()]
+            else:
+                leading_lines = func.leading_lines
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 class_finder.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params)
+                func = func.with_changes(body=updated_methods[name].body, params=new_params, leading_lines=leading_lines)
             else:
-                print("Skipping ", name, "as it raises an error.")
+                logger.warning("Skipping ", name, "as it raises an error.") # we skip modules that would raise an attribute error anyways
                 continue
+
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             assign_targets[target] = func
