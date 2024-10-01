@@ -14,15 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Vorverarbeiten
-
+#Preprocessing
 [[open-in-colab]]
 
-Bevor Sie Ihre Daten in einem Modell verwenden können, müssen die Daten in ein für das Modell akzeptables Format gebracht werden. Ein Modell versteht keine Rohtexte, Bilder oder Audiodaten. Diese Eingaben müssen in Zahlen umgewandelt und zu Tensoren zusammengesetzt werden. In dieser Anleitung werden Sie:
+Before you can use your data in a model, the data needs to be converted into a format that the model can accept. A model does not understand raw text, images, or audio data. These inputs need to be transformed into numbers and assembled into tensors. In this guide, you will:
 
-* Textdaten mit einem Tokenizer vorverarbeiten.
-* Bild- oder Audiodaten mit einem Feature Extractor vorverarbeiten.
-* Daten für eine multimodale Aufgabe mit einem Prozessor vorverarbeiten.
+Preprocess text data with a tokenizer.
+Preprocess image or audio data with a feature extractor.
+Preprocess data for a multimodal task with a processor.
 
 ## NLP
 
