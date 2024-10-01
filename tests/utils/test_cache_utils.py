@@ -181,7 +181,7 @@ class CacheTest(unittest.TestCase):
 
         set_seed(0)
         device = "cpu"
-        dtype = torch.float32
+        dtype = "bfloat16"
         cache_implementation = "static"
         attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
         batch_size = 1
