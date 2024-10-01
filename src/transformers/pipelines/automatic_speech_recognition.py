@@ -310,7 +310,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
             warnings.warn(
-                "`max_new_tokens` is deprecated and will be removed in version 5 of Transformers. To remove this warning, pass `max_new_tokens` as a key inside `generate_kwargs` instead.",
+                "`max_new_tokens` is deprecated and will be removed in version 4.49 of Transformers. To remove this warning, pass `max_new_tokens` as a key inside `generate_kwargs` instead.",
                 FutureWarning,
             )
             forward_params["max_new_tokens"] = max_new_tokens
