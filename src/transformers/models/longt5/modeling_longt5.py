@@ -2292,7 +2292,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
             device = input_ids.device
 
             dtype = self.get_output_embeddings().weight.dtype
-            min_dtype = torch.finfo(dtype).min
 
             attention_mask = self.decoder._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -2300,7 +2299,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
                 target_length=past_key_values.self_attention_cache.get_max_length(),
                 dtype=dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )

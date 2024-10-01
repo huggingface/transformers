@@ -2025,6 +2025,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    # Copied from transformers.models.longt5.modeling_longt5.LongT5ForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -2075,8 +2076,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             batch_size, sequence_length = input_ids.shape
             device = input_ids.device
 
-            dtype = self.proj_out.weight.dtype
-            min_dtype = torch.finfo(dtype).min
+            dtype = self.get_output_embeddings().weight.dtype
 
             attention_mask = self.decoder._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -2084,7 +2084,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
                 target_length=past_key_values.self_attention_cache.get_max_length(),
                 dtype=dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
@@ -2098,9 +2097,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
-            "bbox": kwargs.get("bbox", None),
-            "pixel_values": kwargs.get("pixel_values", None),
-            "visual_bbox": kwargs.get("visual_bbox", None),
             "cache_position": cache_position,
         }
 

@@ -1862,6 +1862,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 total_expert_indexes.append(expert_indexes)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
+    # Copied from transformers.models.longt5.modeling_longt5.LongT5ForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1912,8 +1913,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             batch_size, sequence_length = input_ids.shape
             device = input_ids.device
 
-            dtype = self.proj_out.weight.dtype
-            min_dtype = torch.finfo(dtype).min
+            dtype = self.get_output_embeddings().weight.dtype
 
             attention_mask = self.decoder._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -1921,7 +1921,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 target_length=past_key_values.self_attention_cache.get_max_length(),
                 dtype=dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
@@ -1935,7 +1934,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
-            "output_router_logits": kwargs.get("output_router_logits", True),
             "cache_position": cache_position,
         }
 
