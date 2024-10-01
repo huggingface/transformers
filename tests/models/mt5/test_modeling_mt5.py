@@ -610,58 +610,58 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
 
-            # try:
-            if model.config.is_encoder_decoder:
-                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                labels = inputs.get("labels", None)
-                input_names = [
-                    "attention_mask",
-                    "decoder_attention_mask",
-                    "decoder_input_ids",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                ]
-                if labels is not None:
-                    input_names.append("labels")
-                filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                input_names = list(filtered_inputs.keys())
-                model_output = model(**filtered_inputs)
-                traced_model = symbolic_trace(model, input_names)
-                traced_output = traced_model(**filtered_inputs)
-            else:
-                input_names = [
-                    "attention_mask",
-                    "bbox",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                    "pixel_values",
-                    "token_type_ids",
-                    "visual_feats",
-                    "visual_pos",
-                ]
-                labels = inputs.get("labels", None)
-                start_positions = inputs.get("start_positions", None)
-                end_positions = inputs.get("end_positions", None)
-                if labels is not None:
-                    input_names.append("labels")
-                if start_positions is not None:
-                    input_names.append("start_positions")
-                if end_positions is not None:
-                    input_names.append("end_positions")
-                filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                input_names = list(filtered_inputs.keys())
-                if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
-                    not hasattr(model.config, "problem_type") or model.config.problem_type is None
-                ):
-                    model.config.problem_type = "single_label_classification"
-                traced_model = symbolic_trace(model, input_names)
-                traced_output = traced_model(**filtered_inputs)
-                model_output = model(**filtered_inputs)
+            try:
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                    labels = inputs.get("labels", None)
+                    input_names = [
+                        "attention_mask",
+                        "decoder_attention_mask",
+                        "decoder_input_ids",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                    ]
+                    if labels is not None:
+                        input_names.append("labels")
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+                    model_output = model(**filtered_inputs)
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+                else:
+                    input_names = [
+                        "attention_mask",
+                        "bbox",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                        "pixel_values",
+                        "token_type_ids",
+                        "visual_feats",
+                        "visual_pos",
+                    ]
+                    labels = inputs.get("labels", None)
+                    start_positions = inputs.get("start_positions", None)
+                    end_positions = inputs.get("end_positions", None)
+                    if labels is not None:
+                        input_names.append("labels")
+                    if start_positions is not None:
+                        input_names.append("start_positions")
+                    if end_positions is not None:
+                        input_names.append("end_positions")
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
+                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
+                    ):
+                        model.config.problem_type = "single_label_classification"
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+                    model_output = model(**filtered_inputs)
 
-            # except Exception as e:
-            #    self.fail(f"Couldn't trace module: {e}")
+            except Exception as e:
+                self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
                 flatten = []
