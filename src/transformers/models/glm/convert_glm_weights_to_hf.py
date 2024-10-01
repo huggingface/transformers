@@ -96,7 +96,7 @@ def convert_config(original_config: dict):
 
 
 def convert_glm_tokenizer(input_dir):
-    fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir)
+    fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir, model_input_names=["input_ids", "attention_mask"])
     # Add the two tokens automatically with post processor
     fast_tok._tokenizer.post_processor = processors.Sequence(
         [
