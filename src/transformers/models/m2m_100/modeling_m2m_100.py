@@ -418,7 +418,7 @@ class M2M100FlashAttention2(M2M100Attention):
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             softmax_scale=None,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
