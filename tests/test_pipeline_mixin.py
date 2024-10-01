@@ -25,9 +25,9 @@ from pathlib import Path
 from textwrap import dedent
 from typing import get_args
 
-from huggingface_hub import AudioClassificationInput
+from huggingface_hub import AudioClassificationInput, AutomaticSpeechRecognitionInput
 
-from transformers.pipelines import AudioClassificationPipeline
+from transformers.pipelines import AudioClassificationPipeline, AutomaticSpeechRecognitionPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -104,6 +104,7 @@ task_to_pipeline_and_spec_mapping = {
     # Adding a task to this list will cause its pipeline input signature to be checked against the corresponding
     # task spec in the HF Hub
     "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
+    "automatic-speech-recognition": (AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionInput),
 }
 
 for task, task_info in pipeline_test_mapping.items():
