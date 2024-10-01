@@ -23,11 +23,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -1097,7 +1098,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = (
-            self.config.text_config.initializer_range
+            self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
@@ -1345,11 +1346,20 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            if not isinstance(past_key_values, Cache):
                 return_legacy_cache = True
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                if past_key_values is None:
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                    logger.warning_once(
+                        "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                        "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                        "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                    )
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1442,7 +1452,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
-class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

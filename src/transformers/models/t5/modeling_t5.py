@@ -27,6 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1704,7 +1705,7 @@ class T5Model(T5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
-class T5ForConditionalGeneration(T5PreTrainedModel):
+class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]

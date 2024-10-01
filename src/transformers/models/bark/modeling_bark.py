@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
     BarkEosPrioritizerLogitsProcessor,
@@ -262,7 +263,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             value,
             attention_mask,
             query_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
@@ -546,7 +547,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 # GPT2-like autoregressive model
-class BarkCausalModel(BarkPreTrainedModel):
+class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
 
     def __init__(self, config):

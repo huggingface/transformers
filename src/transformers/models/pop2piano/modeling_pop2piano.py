@@ -27,6 +27,7 @@ from transformers.generation import GenerationConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1155,7 +1156,7 @@ Pop2Piano_START_DOCSTRING = r"""
 
 
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
-class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
+class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: Pop2PianoConfig):

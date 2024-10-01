@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -2053,7 +2054,7 @@ class LongT5Model(LongT5PreTrainedModel):
 
 
 @add_start_docstrings("""LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING)
-class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
+class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]

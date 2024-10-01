@@ -2,9 +2,10 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from transformers import Cache
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaModel
+
+from ...cache_utils import Cache
 
 
 # example where we need some deps and some functions

@@ -18,7 +18,9 @@ import unittest
 import torch
 
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import (
+    require_vision,
+)
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin

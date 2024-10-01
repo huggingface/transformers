@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -1613,7 +1614,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 @add_start_docstrings(
     """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
-class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
+class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):

@@ -21,8 +21,15 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import PretrainedConfig
-from transformers.models.llama.modeling_llama import (
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import is_torchdynamo_compiling, logging
+from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
     LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
@@ -31,13 +38,6 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import CausalLMOutputWithPast
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -215,6 +215,35 @@ class GemmaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+class GemmaLinearScalingRotaryEmbedding(GemmaRotaryEmbedding):
+    """GemmaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: a scaling factor is aplied to the position ids
+        position_ids = position_ids.float() / self.scaling_factor
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
+
+
+class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
+    """GemmaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (
+                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
+
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
+
+
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -339,8 +368,95 @@ class GemmaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# TODO felix: does this inheritance really work out in the end to GemmaFlashAttention2 inheriting form GemmaAttention?
-class GemmaFlashAttention2(LlamaFlashAttention2):
+class GemmaSdpaAttention(GemmaAttention):
+    """
+    Gemma attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `GemmaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from GemmaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "GemmaModel is using GemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+class GemmaFlashAttention2(LlamaFlashAttention2, GemmaAttention):
     """
     Gemma flash attention module. This module inherits from `GemmaAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -426,12 +542,12 @@ class GemmaFlashAttention2(LlamaFlashAttention2):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
-
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
@@ -441,7 +557,95 @@ class GemmaFlashAttention2(LlamaFlashAttention2):
         return attn_output, attn_weights, past_key_value
 
 
+GEMMA_ATTENTION_CLASSES = {
+    "eager": GemmaAttention,
+    "flash_attention_2": GemmaFlashAttention2,
+    "sdpa": GemmaSdpaAttention,
+}
+
+
+class GemmaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__(config)
+        self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
+
 class GemmaModel(LlamaModel):
+    def __init__(self, config: GemmaConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
+        self.post_init()
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -454,7 +658,7 @@ class GemmaModel(LlamaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -476,12 +680,19 @@ class GemmaModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False  # noqa: F841
-        if (
-            use_cache and not isinstance(past_key_values, Cache) and not self.training
-        ):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(past_key_values, Cache):
             return_legacy_cache = True  # noqa: F841
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+            else:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                logger.warning_once(
+                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -505,22 +716,72 @@ class GemmaModel(LlamaModel):
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
-        return super().forward(
-            causal_mask,
-            position_ids,
-            past_key_values,
-            use_cache,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            cache_position,
-            input_ids=None,
-            inputs_embeds=hidden_states,
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        next_decoder_cache = None
+
+        for decoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = next_cache.to_legacy_cache()
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
         )
 
 
 # Example where we ony modify the docstring and call super
 class GemmaForCausalLM(LlamaForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -534,18 +795,9 @@ class GemmaForCausalLM(LlamaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
@@ -581,10 +833,18 @@ class GemmaForCausalLM(LlamaForCausalLM):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is None and not is_torchdynamo_compiling():
+            logger.warning_once(
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove the float() operation in v4.46
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
+
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -610,8 +870,14 @@ class GemmaForCausalLM(LlamaForCausalLM):
 
 
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()
 
 
 class GemmaForTokenClassification(LlamaForTokenClassification):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+        self.post_init()
