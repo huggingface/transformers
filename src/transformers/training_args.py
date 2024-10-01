@@ -707,8 +707,12 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
-            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
-            that need inputs, predictions and references for scoring calculation in Metric class.
+            This argument is deprecated. Use `include_for_metrics` instead, e.g, `include_for_metrics = ["inputs"]`.
+        include_for_metrics (`List[str]`, *optional*, defaults to `[]`):
+            Include additional data in the `compute_metrics` function if needed for metrics computation.
+            Possible options to add to `include_for_metrics` list:
+            - `"inputs"`: Input data passed to the model, intended for calculating input dependent metrics.
+            - `"loss"`: Loss values computed during evaluation, intended for calculating loss dependent metrics.
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
@@ -1362,7 +1366,17 @@ class TrainingArguments:
         },
     )
     include_inputs_for_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+        default=False,
+        metadata={
+            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
+        },
+    )
+    include_for_metrics: List[str] = field(
+        default_factory=list,
+        metadata={
+            "help": "List of strings to specify additional data to include in the `compute_metrics` function."
+            "Options: 'inputs', 'loss'."
+        },
     )
     eval_do_concat_batches: bool = field(
         default=True,
@@ -2063,6 +2077,12 @@ class TrainingArguments:
                 "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
+
+        if self.include_inputs_for_metrics:
+            logger.warning(
+                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
+            )
+            self.include_for_metrics.append("inputs")
 
     def __str__(self):
         self_as_dict = asdict(self)
