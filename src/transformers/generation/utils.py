@@ -406,7 +406,7 @@ class GenerationMixin:
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
         for model_input_name in ["position_ids", "token_type_ids"]:
-            if model_input_name in kwargs:
+            if model_input_name in kwargs and kwargs[model_input_name] is not None:
                 model_input = kwargs[model_input_name]
                 if past_key_values:
                     model_input = model_input[:, -input_ids.shape[1] :]
