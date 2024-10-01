@@ -107,7 +107,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -138,7 +138,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
 
     @require_torch
     @require_vision

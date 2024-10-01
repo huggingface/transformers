@@ -115,12 +115,12 @@ class Blip2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        text_encoding = None
         # BC for explicit return_tensors
         if "return_tensors" in output_kwargs["common_kwargs"]:
             return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
         else:
             return_tensors = None
+        encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):
                 text = [text]
@@ -152,12 +152,10 @@ class Blip2Processor(ProcessorMixin):
                 )
 
             # cast to desired return tensors type
-        else:
-            text_encoding = None
+            encoding.update(BatchEncoding(text_encoding, tensor_type=return_tensors))
+        # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
+        # else, return the text encoding.
 
-        encoding = BatchFeature(tensor_type=return_tensors)
-        if text is not None:
-            encoding.update(text_encoding)
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
