@@ -157,6 +157,7 @@ def convert_imagebind_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
+    hub_repo_path = args.hub_repo_path
 
     config = ImageBindConfig()
 
@@ -191,9 +192,9 @@ def convert_imagebind_checkpoint(args):
         model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and processor for {model_name} to hub")
-        model.push_to_hub(f"EduardoPacheco/{model_name}")
-        processor.push_to_hub(f"EduardoPacheco/{model_name}")
+        print(f"Pushing model and processor for {model_name} to hub at {hub_repo_path}")
+        model.push_to_hub(hub_repo_path)
+        processor.push_to_hub(hub_repo_path)
 
 
 if __name__ == "__main__":
@@ -211,6 +212,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
+    parser.add_argument(
+        "--hub-repo-path", default=None, type=str, help="Path of the repository to push the model on the 🤗 hub."
     )
 
     args = parser.parse_args()
