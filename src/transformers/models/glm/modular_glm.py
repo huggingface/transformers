@@ -204,3 +204,12 @@ class GlmForTokenClassification(GemmaForTokenClassification):
         super().__init__(config)
         self.model = GlmModel(config)
         self.post_init()
+
+
+__all__ = [
+    "GlmConfig",
+    "GlmModel",
+    "GlmForCausalLM",
+    "GlmForSequenceClassification",
+    "GlmForTokenClassification",
+]
