@@ -170,7 +170,7 @@ def video_resize(
     return frames
 
 
-# Same as in image_transformers.py but taking offsets like int(math.ceil((orig_height - crop_height) / 2))
+# Same as in image_transforms.py but taking offsets like int(math.ceil((orig_height - crop_height) / 2))
 def modified_center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
