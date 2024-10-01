@@ -249,6 +249,7 @@ class Seq2SeqTrainer(Trainer):
         inputs: Dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
+        preserve_model_output: bool = False,
         **gen_kwargs,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
@@ -266,6 +267,8 @@ class Seq2SeqTrainer(Trainer):
                 argument `labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
+            preserve_model_output (`bool`, *optional*, defaults to `False`):
+                Whether to return the outputs of the model as `ModelOutput` objects, or to return the outputs unpacked as a tuple.
             gen_kwargs:
                 Additional `generate` specific kwargs.
 
@@ -276,7 +279,11 @@ class Seq2SeqTrainer(Trainer):
 
         if not self.args.predict_with_generate or prediction_loss_only:
             return super().prediction_step(
-                model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys
+                model,
+                inputs,
+                prediction_loss_only=prediction_loss_only,
+                ignore_keys=ignore_keys,
+                preserve_model_output=preserve_model_output,
             )
 
         has_labels = "labels" in inputs

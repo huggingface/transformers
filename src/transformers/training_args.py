@@ -712,6 +712,12 @@ class TrainingArguments:
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
+        eval_preserve_model_output (`bool`, *optional*, defaults to `False`):
+            Whether to return the outputs of the model as `ModelOutput` objects during evaluation, or to return
+            the outputs unpacked as a tuple.
+        eval_numpify_tensors (`bool`, *optional*, defaults to `True`):
+            Whether to convert the tensors to numpy arrays before passing them to the `compute_metrics` function
+            and returning from `Trainer.evaluation_loop`.
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -1368,6 +1374,18 @@ class TrainingArguments:
         default=True,
         metadata={
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
+        },
+    )
+    eval_preserve_model_output: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to return the outputs of the model as `ModelOutput` objects during evaluation, or to return the outputs unpacked as a tuple."
+        },
+    )
+    eval_numpify_tensors: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to convert the tensors to numpy arrays before passing them to the `compute_metrics` function and returning from `Trainer.evaluation_loop`."
         },
     )
     # Deprecated arguments

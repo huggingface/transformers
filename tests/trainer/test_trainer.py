@@ -271,8 +271,8 @@ class AlmostAccuracyBatched:
         if isinstance(labels, tuple):
             labels = labels[0]
         batch_size = len(predictions)
-        true = torch.abs(predictions - labels) <= self.thresh
-        acc = true.type(torch.FloatTensor).mean().item()
+        true = np.abs(predictions - labels) <= self.thresh
+        acc = true.astype(np.float32).mean().item()
         self.batch_acc.extend([acc] * batch_size)
         if compute_result:
             result = {"accuracy": np.mean(self.batch_acc).item()}
