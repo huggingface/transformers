@@ -23,8 +23,8 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
