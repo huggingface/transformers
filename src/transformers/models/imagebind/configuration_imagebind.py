@@ -70,7 +70,7 @@ class ImageBindTextConfig(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         logit_scale_init_value (`float`, *optional*, defaults to 14.2857):
-            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            The initial value of the `logit_scale` parameter for the text component. If `None`, the logits will not
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `True`):
             Whether the `logit_scale` is learnable or fixed.
@@ -337,7 +337,7 @@ class ImageBindAudioConfig(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         logit_scale_init_value (`float`, *optional*, defaults to 20.0):
-            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            The initial value of the `logit_scale` parameter for the audio component. If `None`, the logits will not
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `False`):
             Whether the `logit_scale` is learnable or fixed.
@@ -496,7 +496,6 @@ class ImageBindConfig(PretrainedConfig):
         self.audio_config = ImageBindAudioConfig(**audio_config) if isinstance(audio_config, dict) else audio_config
 
         self.projection_dim = projection_dim
-        self.initializer_factor = 1.0
 
     @classmethod
     # Copied from transformers.models.clip.configuration_clip.CLIPConfig.from_text_vision_configs with CLIP->ImageBind, clip->imagebind

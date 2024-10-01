@@ -161,8 +161,6 @@ def prepare_input():
 def convert_imagebind_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
-    verify_logits = args.verify_logits
-    verify_inputs = args.verify_inputs
     push_to_hub = args.push_to_hub
 
     config = ImageBindConfig()
@@ -188,113 +186,11 @@ def convert_imagebind_checkpoint(args):
     print("")
     print("Unexpected keys:", unexpected_keys)
 
-    if verify_inputs:
-        images, texts, audios = prepare_input()
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+    image_processor = ImageBindImageProcessor()
+    feature_extractor = ImageBindFeatureExtractor()
+    processor = ImageBindProcessor(image_processor, tokenizer, feature_extractor)
 
-        original_image_processor = transforms.Compose(
-            [
-                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=OPENAI_CLIP_MEAN,
-                    std=OPENAI_CLIP_STD,
-                ),
-            ]
-        )
-
-        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-        image_processor = ImageBindImageProcessor()
-        feature_extractor = ImageBindFeatureExtractor()
-        processor = ImageBindProcessor(image_processor, tokenizer, feature_extractor)
-
-        inputs_audio_vision = processor(images=images, audios=audios, return_tensors="pt")
-        inputs_text_vision = processor(images=images, text=texts, return_tensors="pt", padding=True)
-
-        expected_input_features = torch.tensor(
-            [
-                [-1.2776, -0.9167, -1.2776],
-                [-1.2439, -0.8372, -0.8748],
-                [-1.1235, -0.7492, -1.0867],
-            ]
-        )
-
-        expected_pixel_values = torch.stack([original_image_processor(image) for image in images])
-
-        assert torch.allclose(inputs_audio_vision["pixel_values"], expected_pixel_values, atol=1e-4)
-        assert torch.allclose(inputs_audio_vision["input_features"][:, :, 0, 0, 0], expected_input_features, atol=1e-4)
-
-        expected_output_vision = torch.tensor(
-            [
-                [0.0188, 0.0075, 0.0532, 0.0326, -0.0159],
-                [0.0190, 0.0106, 0.0275, 0.0189, -0.0268],
-                [-0.0104, -0.0203, 0.0048, -0.0158, 0.0076],
-            ]
-        )
-        expected_output_text = torch.tensor(
-            [
-                [-1.3476, -1.5732, -0.7386, 9.7949, 0.5856],
-                [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
-                [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
-            ]
-        )
-        expected_output_audio = torch.tensor(
-            [
-                [0.3245, -0.3749, 0.3955, 0.5600, -0.1932],
-                [0.7091, 0.2072, -1.0133, 0.4689, -0.2142],
-                [-0.0282, -0.4923, 1.0058, 0.0459, -0.2271],
-            ]
-        )
-    else:
-        torch.manual_seed(0)
-        input_ids = (torch.rand(3, 77) * 10).to(torch.long)
-        attention_mask = None
-        pixel_values = torch.rand(3, 3, 224, 224)
-        input_features = torch.rand(3, 3, 1, 128, 204)
-
-        inputs_audio_vision = {
-            "pixel_values": pixel_values,
-            "input_features": input_features,
-        }
-        inputs_text_vision = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-        }
-
-        expected_output_text = torch.tensor(
-            [
-                [-0.5316, -0.2157, -2.1864, -3.9650, 3.5471],
-                [0.2426, 0.3373, -2.1500, -4.1384, -0.1837],
-                [-0.5758, -3.9821, -2.7557, -2.5204, 1.4688],
-            ]
-        )
-        expected_output_vision = torch.tensor(
-            [
-                [-0.0059, -0.0323, -0.0267, 0.0090, 0.0060],
-                [-0.0097, -0.0341, -0.0280, 0.0094, 0.0012],
-                [-0.0090, -0.0299, -0.0225, 0.0066, 0.0039],
-            ]
-        )
-        expected_output_audio = torch.tensor(
-            [
-                [-0.0787, 0.5590, -0.3436, 0.8121, 0.0827],
-                [-0.0593, 0.4983, -0.3214, 0.7622, 0.1231],
-                [-0.1378, 0.5677, -0.3606, 0.8254, 0.0609],
-            ]
-        )
-
-    outputs_text_vision = model(**inputs_text_vision)
-    outputs_audio_vision = model(**inputs_audio_vision)
-
-    if verify_logits:
-        assert torch.allclose(outputs_text_vision.image_embeds[:, :5], expected_output_vision, atol=1e-4)
-        assert torch.allclose(outputs_text_vision.text_embeds[:, :5], expected_output_text, atol=1e-4)
-        assert torch.allclose(outputs_audio_vision.audio_embeds[:, :5], expected_output_audio, atol=1e-4)
-        assert torch.allclose(outputs_text_vision.image_embeds, outputs_audio_vision.image_embeds, atol=1e-4)
-        print("Looks good!")
-    else:
-        print("Converted without verifying logits")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
@@ -318,16 +214,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch-dump-folder-path", default=None, type=str, help="Path to the output PyTorch model directory."
-    )
-    parser.add_argument(
-        "--verify-logits",
-        action="store_true",
-        help="Whether or not to verify the logits against the original implementation.",
-    )
-    parser.add_argument(
-        "--verify-inputs",
-        action="store_true",
-        help="Whether or not to verify the inputs against the original implementation.",
     )
     parser.add_argument(
         "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
