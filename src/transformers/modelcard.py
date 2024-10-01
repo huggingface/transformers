@@ -876,14 +876,15 @@ def extract_hyperparameters_from_trainer(trainer):
 
     if trainer.args.optim:
         optimizer_name = trainer.args.optim
-        optimizer_args = trainer.args.optim_args
+        optimizer_args = trainer.args.optim_args if trainer.args.optim_args else "No additional optimizer arguments"
 
-        hyperparameters["optimizer"] = (
-            f"Use {optimizer_name} And the args are:\n"
-            f"{optimizer_args}"
-        )
-    else:
-        hyperparameters["optimizer"] = "Error: No optimizer found"
+        if "adam" in optimizer_name.lower():
+            hyperparameters["optimizer"] = (
+                f"Use {optimizer_name} with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+                f" epsilon={trainer.args.adam_epsilon} and optimizer_args={optimizer_args}"
+            )
+        else:
+            hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:
