@@ -3420,6 +3420,7 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "TimmWrapperForImageClassification",
             ]
             special_param_names = [
                 r"^bit\.",
