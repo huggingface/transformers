@@ -391,7 +391,7 @@ jobs:
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         shell: bash
         run: |
           echo "${{ matrix.machine_type }}"
