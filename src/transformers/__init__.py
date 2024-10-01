@@ -2557,7 +2557,6 @@ else:
     _import_structure["models.glm"].extend(
         [
             "GlmForCausalLM",
-            "GlmForQuestionAnswering",
             "GlmForSequenceClassification",
             "GlmForTokenClassification",
             "GlmModel",
