@@ -345,8 +345,12 @@ class PipelineTesterMixin:
                 A subclass of `PretrainedModel` or `PretrainedModel`.
             tokenizer_name (`str`):
                 The name of a subclass of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
-            image_processor_or_feature_extractor_name (`str`):
-                The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
+            image_processor_name (`str`):
+                The name of a subclass of `BaseImageProcessor`.
+            feature_extractor_name (`str`):
+                The name of a subclass of `FeatureExtractionMixin`.
+            processor_name (`str`):
+                The name of a subclass of `ProcessorMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.
             torch_dtype (`str`, `optional`, defaults to `'float32'`):
