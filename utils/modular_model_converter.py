@@ -468,7 +468,6 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             ):
                 func = func.with_changes(body=updated_methods[name].body, params=new_params, leading_lines=leading_lines)
             else:
-                logger.warning("Skipping ", name, "as it raises an error.") # we skip modules that would raise an attribute error anyways
                 continue
 
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
