@@ -56,12 +56,6 @@ logger = logging.get_logger(__name__)
 
 
 class GlmConfig(GemmaConfig):
-    """
-    resid_pdrop (`float`, *optional*, defaults to `0.0`):
-        Dropout ratio in the decoder layers.
-    linear_bias (`bool`, *optional*, defaults to `False`):
-        Whether to use a bias in the MLP layers, as well as the query, key, value and output projection layers during self-attention.
-    """
 
     model_type = "glm"
 

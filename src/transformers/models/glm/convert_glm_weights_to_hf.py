@@ -4,10 +4,9 @@ import os
 
 import torch
 from safetensors.torch import load_file
-from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import processors
 
-from transformers import AutoTokenizer, GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
-from transformers.convert_slow_tokenizer import TikTokenConverter
+from transformers import GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
 
 
 STATE_DICT_MAPPING = {
@@ -23,35 +22,6 @@ STATE_DICT_MAPPING = {
     "dense_h_to_4h.": "gate_up_proj.",
     "dense_4h_to_h.": "down_proj.",
 }
-
-
-class GlmConverter(TikTokenConverter):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer()
-        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
-            ]
-        )
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
-
-        tokenizer.post_processor = processors.Sequence(
-            [
-                processors.ByteLevel(trim_offsets=False),
-                processors.TemplateProcessing(
-                    single="[gMASK]:0 <sop>:0 $A:0",
-                    pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
-                    special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
-                ),
-            ],
-        )
-
-        return tokenizer
 
 
 def merge_safetensors(input_dir: str):
@@ -122,19 +92,20 @@ def convert_config(original_config: dict):
 
 
 def convert_glm_tokenizer(input_dir):
-    fast_tok = GlmConverter(os.path.join(input_dir, "tokenizer.model"), additional_special_tokens=[]).converted()
-    tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b", trust_remote_code=True)
-    new_tok = PreTrainedTokenizerFast(
-        tokenizer_object=fast_tok,
-        bos_token=tokenizer.bos_token,
-        eos_token=tokenizer.eos_token,
-        pad_token=tokenizer.pad_token,
-        clean_up_tokenization_spaces=tokenizer.clean_up_tokenization_spaces,
-        additional_special_tokens=tokenizer.additional_special_tokens,
-        padding_side=tokenizer.padding_side,
+    fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir)
+    # Add the two tokens automatically with post processor
+    fast_tok._tokenizer.post_processor = processors.Sequence(
+        [
+            processors.ByteLevel(trim_offsets=False),
+            processors.TemplateProcessing(
+                single="[gMASK]:0 <sop>:0 $A:0",
+                pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
+                special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
+            ),
+        ],
     )
 
-    return new_tok
+    return fast_tok
 
 
 def convert_glm_model(input_dir, output_dir):
