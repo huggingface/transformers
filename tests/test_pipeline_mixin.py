@@ -196,6 +196,10 @@ class PipelineTesterMixin:
                 else:
                     raise ValueError(f"Unknown processor class: {cls_name}")
 
+            # If no image processor or feature extractor is found, we still need to test the pipeline with None
+            image_processor_names = image_processor_names or [None]
+            feature_extractor_names = feature_extractor_names or [None]
+
             # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
             processor_names = PROCESSOR_MAPPING_NAMES.get(model_type, None)
