@@ -2282,6 +2282,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
     ):
+        # Overitten -- different expected inputs/outputs
+
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]

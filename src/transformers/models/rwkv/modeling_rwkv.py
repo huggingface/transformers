@@ -770,6 +770,8 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         self.head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, use_cache=None, **kwargs):
+        # Overwritten -- this model uses `state`, but doesn't have a cache (`past_key_values`)
+
         # only last token for inputs_ids if the state is passed along.
         if state is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)

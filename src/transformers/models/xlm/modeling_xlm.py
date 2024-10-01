@@ -676,6 +676,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         self.pred_layer.proj = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # Overwritten -- this model uses config options to prepare inputs
+
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
 

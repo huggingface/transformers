@@ -1564,6 +1564,7 @@ class GenerationTesterMixin:
                 continue
 
             # Skip models without explicit support
+            config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue

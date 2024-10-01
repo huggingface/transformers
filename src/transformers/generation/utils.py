@@ -371,8 +371,7 @@ class GenerationMixin:
         #   (this alternative is not as robust as calling `generate` and letting it create `cache_position`)
         elif cache_position is None:
             past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-            input_length = input_ids.shape[1] or inputs_embeds.shape[1]
-            cache_position = torch.arange(past_length, input_length, dtype=torch.long, device=input_ids.device)
+            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
         # 2. Generic cache-dependent input preparation
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -396,7 +395,11 @@ class GenerationMixin:
             model_inputs["inputs_embeds"] = None
 
         # 4. Create missing `position_ids` on the fly
-        if attention_mask is not None and "position_ids" not in kwargs and "position_ids" in set(inspect.signature(self.forward).parameters.keys()):
+        if (
+            attention_mask is not None
+            and "position_ids" not in kwargs
+            and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+        ):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             kwargs["position_ids"] = position_ids  # placed in kwargs for further processing (see below)

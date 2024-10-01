@@ -604,6 +604,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+        # Overwritten -- old model with reduced inputs
         return {"input_ids": input_ids}
 
 
