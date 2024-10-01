@@ -505,14 +505,17 @@ class AwqIPEXTest(unittest.TestCase):
         quantization_config = AwqConfig(version="ipex")
 
         model = AutoModelForCausalLM.from_pretrained(
-            "TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ",
+            "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
             quantization_config=quantization_config,
             device_map="cpu",
         )
-        tokenizer = AutoTokenizer.from_pretrained("TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ")
+        tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
         input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
-        output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=50256)
+        pad_token_id = tokenizer.eos_token_id
+        output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id)
         print(tokenizer.decode(output[0], skip_special_tokens=True))
 
-        expected_output = "How to make a cake with flour, sugar, eggs, and baking powder"
+        expected_output = (
+            "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
+        )
         self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)

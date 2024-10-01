@@ -272,6 +272,7 @@ def fuse_awq_modules(model, quantization_config):
 
         # Replace MLP layers if awq version is not ipex.
         if quantization_config.version != "ipex":
+            logger.info("The IPEX version AWQ does not support fuse mlp for now.")
             _fuse_awq_mlp(model, name, modules_to_fuse["mlp"], module, QuantFusedMLP)
 
         # Replace attention layers
