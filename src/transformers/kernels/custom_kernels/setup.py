@@ -2,11 +2,11 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 setup(
-    name='your_extension',
+    name='sparse_kernels',
     ext_modules=[
         CUDAExtension(
-            name='your_extension',
-            sources=['your_extension.cpp', 'kernels.cu'],
+            name='sparse_kernels',
+            sources=['sparse_kernels.cpp', 'kernels.cu'],
         ),
     ],
     cmdclass={
