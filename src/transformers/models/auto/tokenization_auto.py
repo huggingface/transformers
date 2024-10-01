@@ -459,8 +459,8 @@ else:
             (
                 "siglip",
                 (
-                    "SiglipTokenizer",
-                    "PreTrainedTokenizerFast" if is_sentencepiece_available() else None,
+                    "SiglipTokenizer" if is_sentencepiece_available() else None,
+                    "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
