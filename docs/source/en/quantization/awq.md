@@ -260,7 +260,7 @@ output = model(input_ids)
 print(output.logits)
 
 tokenizer = AutoTokenizer.from_pretrained("TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ")
-input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
 output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=50256)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
