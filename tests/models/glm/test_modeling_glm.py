@@ -307,8 +307,8 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_pruning = False
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "/raid/cyril/glm-4-9b-new"
-    _torch_compile_test_revision = "rev"
+    _torch_compile_test_ckpt = "THUDM/glm-4-9b"
+    _torch_compile_test_revision = "refs/pr/15"
 
     def setUp(self):
         self.model_tester = GlmModelTester(self)
@@ -433,13 +433,13 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_flash_attn_2_generate_padding_right(self):
         """Overwrite the common test as the test is flaky on tiny models."""
         model = GlmForCausalLM.from_pretrained(
-            "/raid/cyril/glm-4-9b-new",
+            "THUDM/glm-4-9b",
             device_map={"": 0},
             torch_dtype=torch.bfloat16,
-            revision="rev",
+            revision="refs/pr/15",
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("/raid/cyril/glm-4-9b-new", revision="rev")
+        tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b", revision="refs/pr/15")
         tokenizer.padding_side = "right"
 
         texts = ["hi", "Hello this is a very long sentence"]
@@ -449,11 +449,11 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         output_native = tokenizer.batch_decode(output_native)
 
         model = GlmForCausalLM.from_pretrained(
-            "/raid/cyril/glm-4-9b-new",
+            "THUDM/glm-4-9b",
             device_map={"": 0},
             attn_implementation="flash_attention_2",
             torch_dtype=torch.bfloat16,
-            revision="rev"
+            revision="refs/pr/15"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=15, do_sample=False)
@@ -834,8 +834,8 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @require_torch_accelerator
 class GlmIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    model_id = "/raid/cyril/glm-4-9b-new"
-    revision = "rev"
+    model_id = "THUDM/glm-4-9b"
+    revision = "refs/pr/15"
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
