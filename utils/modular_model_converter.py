@@ -16,6 +16,7 @@ import argparse
 import glob
 import importlib
 import re
+from collections import defaultdict
 from typing import Dict
 
 import libcst as cst
@@ -113,7 +114,11 @@ class ClassFinder(CSTVisitor):
         if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
             self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
         ):
-            self.assignments[node.body[0].targets[0].target.value] = node
+            if hasattr(node.body[0].targets[0].target, "value"):
+                self.assignments[node.body[0].targets[0].target.value] = node
+            else:
+                for idx, target in enumerate(list(node.body[0].targets[0].target.elements)):
+                    self.assignments[target.value.value] = node.body[0].value.elements[idx].value
         if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
             self.imports[node.body[0].names] = node
 
@@ -538,6 +543,7 @@ class ModularConverterTransformer(CSTTransformer):
         }
         self.match_patterns = "|".join(self.files.keys())
         self.all_definitions = {}
+        self.class_to_file_type = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -679,8 +685,10 @@ class ModularConverterTransformer(CSTTransformer):
         match = re.search(rf"({match_pattern})$", class_name)
         if match:
             key = TYPE_TO_FILE_TYPE[match.group(1)]
+            self.class_to_file_type[class_name] = key
             self.files[key][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         else:
+            self.class_to_file_type[class_name] = "modeling"
             self.files["modeling"][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         return updated_node
 
@@ -689,6 +697,29 @@ class ModularConverterTransformer(CSTTransformer):
         if m.matches(parent_node, m.Module()):
             self.all_definitions[node.name.value] = node
         return node
+
+    def visit_Assign(self, node: cst.Assign) -> None:
+        # Check if the assignment target is '__all__'
+        if isinstance(node.targets[0].target, cst.Name) and node.targets[0].target.value == "__all__":
+            if isinstance(node.value, cst.List):
+                # Extract the elements from the list
+                all_all_to_add = defaultdict(list)
+                for elt in node.value.elements:
+                    if isinstance(elt.value, cst.SimpleString):
+                        # Remove quotes and add the string to the elements list
+                        class_name = elt.value.value
+                        file = self.class_to_file_type[
+                            elt.value.evaluated_value
+                        ]  # evaluated value give the content of the string
+                        all_all_to_add[file] += [class_name]
+                for f_type, new_alls in all_all_to_add.items():
+                    updated_node = node.with_changes(
+                        value=cst.List(elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls])
+                    )
+                    self.files[f_type][class_name] = {
+                        "insert_idx": self.global_scope_index + 100,
+                        "node": updated_node,
+                    }
 
     def leave_If(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
@@ -764,7 +795,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["examples/modular-transformers/modular_dummy.py"],
+        default=["src/transformers/models/gemma/modular_gemma.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )

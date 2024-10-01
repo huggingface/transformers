@@ -39,6 +39,16 @@ from ..llama.modeling_llama import (
     repeat_kv,
 )
 
+import sentencepiece as spm
+
+from ...tokenization_utils import PreTrainedTokenizer
+
+from ..llama.tokenization_llama import LlamaTokenizer
+
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+
+SPIECE_UNDERLINE = "▁"
+
 
 logger = logging.get_logger(__name__)
 
@@ -163,6 +173,103 @@ class GemmaConfig(PretrainedConfig):
             **kwargs,
         )
 
+class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
+
+    def __init__(
+        self,
+        vocab_file,
+        unk_token="<unk>",
+        bos_token="<bos>",
+        eos_token="<eos>",
+        pad_token="<pad>",
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        add_bos_token=True,
+        add_eos_token=False,
+        clean_up_tokenization_spaces=False,
+        use_default_system_prompt=False,
+        spaces_between_special_tokens=False,
+        **kwargs,
+    ):
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
+            sp_model_kwargs=sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            use_default_system_prompt=use_default_system_prompt,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            **kwargs,
+        )
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+        del self.add_prefix_space
+        del self.legacy
+
+    def get_spm_processor(self):
+        raise AttributeError("Not needed for Gemma")
+
+    def unk_token_length(self):
+        raise AttributeError("Not needed for Gemma")
+
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        """
+        Args:
+            text: TextInput
+        Simply calls PreTrainedTokenizer's method
+        """
+        return PreTrainedTokenizer.tokenize(self, text, **kwargs)
+
+    def _tokenize(self, text, **kwargs):
+        """
+        Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
+        """
+        return self.sp_model.encode(text, out_type=str)
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        spaces_between_special_tokens: bool = False,
+        **kwargs,
+    ) -> str:
+        sub_texts = []
+        current_sub_text = []
+        for ids in token_ids:
+            if skip_special_tokens and ids in self.all_special_ids:
+                continue
+            if ids in self._added_tokens_decoder:
+                if current_sub_text:
+                    sub_texts.append(self.sp_model.decode(current_sub_text))
+                sub_texts.append(self._added_tokens_decoder[ids].content)
+                current_sub_text = []
+            else:
+                current_sub_text.append(ids)
+        if current_sub_text:
+            sub_texts.append(self.sp_model.decode(current_sub_text))
+
+        if spaces_between_special_tokens:
+            sub_texts = " ".join(sub_texts)
+        else:
+            sub_texts = "".join(sub_texts)
+
+        return sub_texts.replace(SPIECE_UNDERLINE, " ")
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self._added_tokens_encoder:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -881,3 +988,13 @@ class GemmaForTokenClassification(LlamaForTokenClassification):
         super().__init__(config)
         self.model = GemmaModel(config)
         self.post_init()
+
+
+__all__ = [
+    "GemmaConfig",
+    "GemmaTokenizer",
+    "GemmaModel",
+    "GemmaForCausalLM",
+    "GemmaForSequenceClassification",
+    "GemmaForTokenClassification",
+]
