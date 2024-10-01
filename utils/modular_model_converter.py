@@ -483,7 +483,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
             ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
-            end_meth.append(func)
+            if not re.match(r"def .*\(\):\n    raise .*Error\(", class_finder.python_module.code_for_node(func)):
+                end_meth.append(func)
+            else:
+                print("Getting rid of ", name)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             # TODO we only use single assign might cause issues
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
@@ -728,7 +731,7 @@ class ModularConverterTransformer(CSTTransformer):
             if re.search(r"[\s\S]*is_.*available", full_statement):
                 self.all_safe_imports.append(node)
             elif full_statement not in self.all_imports:
-                logger.warning("one import is protected so hard to guess where it's used", full_statement)
+                logger.warning(f"one import is protected so hard to guess where it's used {full_statement}" )
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):
