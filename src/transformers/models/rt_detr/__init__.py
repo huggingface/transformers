@@ -17,7 +17,10 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_rt_detr": ["RTDetrConfig", "RTDetrOnnxConfig"], "configuration_rt_detr_resnet": ["RTDetrResNetConfig"]}
+_import_structure = {
+    "configuration_rt_detr": ["RTDetrConfig", "RTDetrOnnxConfig"],
+    "configuration_rt_detr_resnet": ["RTDetrResNetConfig"],
+}
 
 try:
     if not is_vision_available():
