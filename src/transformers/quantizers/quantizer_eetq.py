@@ -161,8 +161,7 @@ class EetqHfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    @property
-    def is_serializable(self):
+    def is_serializable(self, safe_serialization=None):
         return True
 
     @property
