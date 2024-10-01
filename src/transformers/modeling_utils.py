@@ -2251,41 +2251,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
             # distribution that has old embeddings' mean and covariance. as described in this article:
             # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
-            logger.warning(
+            logger.warning_once(
                 "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
-                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html."
+                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
+                "To disable this, use `multivariate_resizing=False`"
             )
+
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
-                with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
-                    old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
-                    mean_embedding = torch.mean(old_embeddings_weight, axis=0)
-                    covariance = (
-                        (old_embeddings_weight - mean_embedding).T
-                        @ (old_embeddings_weight - mean_embedding)
-                        / old_num_tokens
+                with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
+                    self._init_added_embeddings_weights_with_mean(
+                        old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
                     )
             else:
-                old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
-                mean_embedding = torch.mean(old_embeddings_weight, axis=0)
-                covariance = (
-                    (old_embeddings_weight - mean_embedding).T
-                    @ (old_embeddings_weight - mean_embedding)
-                    / old_num_tokens
+                self._init_added_embeddings_weights_with_mean(
+                    old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
                 )
-            if old_embedding_dim >= old_num_tokens:
-                # Covarince matrix must be positive definite. For edge cases, when `vocab_size` is
-                # smaller than `hidden_size`, covarince matrix won't be positive definite so we
-                # must add the eye matrix to the covarince matrix to convert it to be positive definite.
-                covariance = covariance + torch.eye(old_embedding_dim, device=old_embeddings.weight.device) * 1e-3
-            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embedding, covariance_matrix=1e-5 * covariance
-            )
-            new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                sample_shape=(added_num_tokens,)
-            ).to(old_embeddings.weight.dtype)
 
         # Copy token embeddings from the previous weights
 
@@ -2408,66 +2391,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
             # distribution that has old embeddings' mean and covariance. as described in this article:
             # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
-            logger.warning(
-                "The new lm_head weights will be sampled from a multivariate normal distribution that has old embeddings' mean "
-                "and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html."
+            logger.warning_once(
+                "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
+                "To disable this, use `multivariate_resizing=False`"
             )
-
-            if has_new_lm_head_bias:
-                # To not affect the purpose of multivariate initialization. Always initialze the bias with zeros.
-                if is_deepspeed_zero3_enabled() and not is_quantized:
-                    import deepspeed
-
-                    with deepspeed.zero.GatheredParameters(old_lm_head.bias, modifier_rank=None):
-                        bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
-                        bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
-                else:
-                    bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
-                    bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
-                new_lm_head.bias.data.normal_(mean=bias_mean, std=bias_std * 1e-5)
 
             added_num_tokens = new_num_tokens - old_num_tokens
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
-                with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
-                    old_lm_head_weight = (
-                        old_lm_head.weight.data.to(torch.float32)
-                        if not transposed
-                        else old_lm_head.weight.data.T.to(torch.float32)
+                params = [old_lm_head.weight]
+                if has_new_lm_head_bias:
+                    params += [old_lm_head.bias]
+                with deepspeed.zero.GatheredParameters(params, modifier_rank=None):
+                    self._init_added_lm_head_weights_with_mean(
+                        old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
                     )
-                    mean_embedding = torch.mean(old_lm_head_weight, axis=0)
-                    covariance = (
-                        (old_lm_head_weight - mean_embedding).T
-                        @ (old_lm_head_weight - mean_embedding)
-                        / old_num_tokens
-                    )
+                    if has_new_lm_head_bias:
+                        self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
+
             else:
-                old_lm_head_weight = (
-                    old_lm_head.weight.data.to(torch.float32)
-                    if not transposed
-                    else old_lm_head.weight.data.T.to(torch.float32)
+                self._init_added_lm_head_weights_with_mean(
+                    old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
                 )
-                mean_embedding = torch.mean(old_lm_head_weight, axis=0)
-                covariance = (
-                    (old_lm_head_weight - mean_embedding).T @ (old_lm_head_weight - mean_embedding) / old_num_tokens
-                )
-            if old_lm_head_dim >= old_num_tokens:
-                # Covarince matrix must be positive definite. For edge cases, when `vocab_size` is
-                # smaller than `hidden_size`, covarince matrix won't be positive definite so we
-                # must add the eye matrix to the covarince matrix to convert it to be positive definite.
-                covariance = covariance + torch.eye(old_lm_head_dim, device=old_lm_head.weight.device) * 1e-3
-            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embedding, covariance_matrix=1e-5 * covariance
-            )
-            if not transposed:
-                new_lm_head.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                    sample_shape=(added_num_tokens,)
-                ).to(old_lm_head.weight.dtype)
-            else:
-                new_lm_head.weight.data[:, -1 * added_num_tokens :] = distribution.sample(
-                    sample_shape=(added_num_tokens,)
-                ).T.to(old_lm_head.weight.dtype)
+                if has_new_lm_head_bias:
+                    self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
@@ -2485,6 +2434,52 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         return new_lm_head
+
+    def _init_added_embeddings_weights_with_mean(
+        self, old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+    ):
+        old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
+        mean_embeddings = torch.mean(old_embeddings_weight, axis=0)
+        old_centered_embeddings = old_embeddings_weight - mean_embeddings
+        covariance = old_centered_embeddings.T @ old_centered_embeddings / old_num_tokens
+        if old_embedding_dim >= old_num_tokens:
+            # Covarince matrix must be positive definite. For edge cases, when `vocab_size` is
+            # smaller than `hidden_size`, covarince matrix won't be positive definite so we
+            # must add the eye matrix to the covarince matrix to convert it to be positive definite.
+            covariance = covariance + torch.eye(old_embedding_dim, device=old_embeddings.weight.device) * 1e-3
+        distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+            mean_embeddings, covariance_matrix=1e-5 * covariance
+        )
+        new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+            sample_shape=(added_num_tokens,)
+        ).to(old_embeddings.weight.dtype)
+
+    def _init_added_lm_head_weights_with_mean(
+        self,
+        old_lm_head,
+        new_lm_head,
+        old_lm_head_dim,
+        old_num_tokens,
+        added_num_tokens,
+        transposed=False,
+    ):
+        if transposed:
+            # Transpose to the desired shape for the function.
+            new_lm_head.weight.data = new_lm_head.weight.data.T
+
+        # The same initilization logic as Embeddings.
+        self._init_added_embeddings_weights_with_mean(
+            old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens
+        )
+
+        if transposed:
+            # Transpose again to the correct shape.
+            new_lm_head.weight.data = new_lm_head.weight.data.T
+
+    def _init_added_lm_head_bias_with_mean(self, old_lm_head, new_lm_head, added_num_tokens):
+        bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
+        bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
+        new_lm_head.bias.data[-1 * added_num_tokens :].normal_(mean=bias_mean, std=bias_std * 1e-5)
 
     def _copy_lm_head_original_to_resized(
         self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
