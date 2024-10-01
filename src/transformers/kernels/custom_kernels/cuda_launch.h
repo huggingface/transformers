@@ -1,7 +1,7 @@
 #pragma once
 #include <torch/extension.h>
 
-// Declare the kernel functions here
+//  kernel functions declared here
 
 at::Tensor index_max_kernel(at::Tensor index_vals, at::Tensor indices, int A_num_block, int B_num_block);
 
