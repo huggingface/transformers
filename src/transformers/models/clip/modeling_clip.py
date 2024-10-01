@@ -284,7 +284,7 @@ class CLIPTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        position_embeddings = self.position_embedding(position_ids)
+        position_embeddings = self.position_embedding(position_ids.to(self.position_embedding.weight.device))
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
