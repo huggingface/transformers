@@ -24,18 +24,6 @@ from ...image_utils import ImageInput, make_list_of_images
 from ...utils import TensorType, is_timm_available, is_torch_available, is_vision_available, requires_backends
 
 
-if is_vision_available():
-    pass
-
-
-if is_timm_available():
-    import timm
-
-
-if is_torch_available():
-    pass
-
-
 class TimmWrapperImageProcessor(BaseImageProcessor):
     """
     Wrapper class for timm models to be used within transformers.
@@ -102,12 +90,12 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         # If the input a torch tensor, then no conversion needed
         # Otherwise, we need to pass in a list of PIL images
         if not isinstance(images, torch.Tensor):
-            images = self.val_transforms(images)
+            images = self.train_transforms(images)
             # Add batch dimension if a single image
             images = images.unsqueeze(0) if images.ndim == 3 else images
         else:
             images = make_list_of_images(images)
             images = [to_pil_image(image) for image in images]
-            images = torch.stack([self.val_transforms(image) for image in images])
+            images = torch.stack([self.train_transforms(image) for image in images])
 
         return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
