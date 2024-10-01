@@ -16,20 +16,20 @@ rendered properly in your Markdown viewer.
 
 # 콜백 [[callbacks]]
 
-콜백은 PyTorch [`Trainer`]의 반복 훈련 동작을 사용자 정의할 수 있는 객체입니다
-(이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 반복 훈련의 상태를
+콜백은 PyTorch [`Trainer`]의 반복 학습 동작을 사용자 정의할 수 있는 객체입니다
+(이 기능은 TensorFlow에서는 아직 구현되지 않았습니다). 콜백은 반복 학습의 상태를
 검사하여 (진행 상황 보고, TensorBoard 또는 기타 머신 러닝 플랫폼에 로그 남기기 등) 
 결정(예: 조기 종료)을 내릴 수 있습니다.
 
-콜백은 [`TrainerControl`] 객체를 반환하는 것 외에는 반복 훈련에서 어떤 것도 변경할 수 없는
-"읽기 전용" 코드 조각입니다. 반복 훈련에 변경이 필요한 사용자 정의 작업이 필요한 경우, 
+콜백은 [`TrainerControl`] 객체를 반환하는 것 외에는 반복 학습에서 어떤 것도 변경할 수 없는
+"읽기 전용" 코드 조각입니다. 반복 학습에 변경이 필요한 사용자 정의 작업이 필요한 경우, 
 [`Trainer`]를 서브클래스로 만들어 필요한 메소드들을 오버라이드해야 합니다 (예시는 [trainer](trainer)를 참조하세요).
 
 기본적으로 `TrainingArguments.report_to`는 `"all"`로 설정되어 있으므로, [`Trainer`]는 다음 콜백을 사용합니다.
 
 - [`DefaultFlowCallback`]는 로그, 저장, 평가에 대한 기본 동작을 처리합니다.
 - [`PrinterCallback`] 또는 [`ProgressCallback`]는 진행 상황을 표시하고 로그를 출력합니다 
-  (첫 번째는 [`TrainingArguments`]를 통해 tqdm을 비활성화하면 사용되고, 그렇지 않으면 두 번째가 사용됩니다).
+  ([`TrainingArguments`]를 통해 tqdm을 비활성화하면 첫 번째 콜백이 사용되고, 그렇지 않으면 두 번째가 사용됩니다).
 - [`~integrations.TensorBoardCallback`]는 TensorBoard가 (PyTorch >= 1.4
  또는 tensorboardX를 통해) 접근 가능하면 사용됩니다.
 - [`~integrations.WandbCallback`]는 [wandb](https://www.wandb.com/)가 설치되어 있으면
@@ -46,11 +46,11 @@ rendered properly in your Markdown viewer.
 - [`~integrations.FlyteCallback`]는 [flyte](https://flyte.org/)가 설치되어 있으면 사용됩니다.
 - [`~integrations.DVCLiveCallback`]는 [dvclive](https://dvc.org/doc/dvclive)가 설치되어 있으면 사용됩니다.
 
-패키지가 설치되어 있지만 해당 통합을 사용하지 않으려면, `TrainingArguments.report_to`를 사용하고 싶은 통합 목록으로 변경할 수 있습니다 (예: `["azure_ml", "wandb"]`).
+패키지가 설치되어 있지만 해당 통합 기능을 사용하고 싶지 않다면, `TrainingArguments.report_to`를 사용하고자 하는 통합 기능 목록으로 변경할 수 있습니다 (예: `["azure_ml", "wandb"]`).
 
 콜백을 구현하는 주요 클래스는 [`TrainerCallback`]입니다. 이 클래스는 [`Trainer`]를 
 인스턴스화하는 데 사용된 [`TrainingArguments`]를 가져오고, 해당 Trainer의 내부 상태를 
-[`TrainerState`]를 통해 접근할 수 있으며, [`TrainerControl`]을 통해 반복 훈련에서 일부 
+[`TrainerState`]를 통해 접근할 수 있으며, [`TrainerControl`]을 통해 반복 학습에서 일부 
 작업을 수행할 수 있습니다.
 
 
