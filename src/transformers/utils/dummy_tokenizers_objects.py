@@ -184,13 +184,6 @@ class FunnelTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class GemmaTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class GPT2TokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
