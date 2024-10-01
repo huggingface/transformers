@@ -16,21 +16,13 @@
 Processor class for Donut.
 """
 
-import sys
-from typing import List, Optional, Union
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
-
 import re
 import warnings
 from contextlib import contextmanager
+from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
