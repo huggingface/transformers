@@ -101,14 +101,16 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         updated_architecture = "qwen2_moe"
 
     model_size = ""
+    # extract the number of params from file name as architectures can differ ;
+    # eg. for falcon : `...falcon-7b-...`
     if "falcon" in architecture:
         gguf_file_name = gguf_checkpoint_path.split("/")[-1].lower()
-        m = re.search(r"-\d+b-", gguf_file_name)
+        m = re.search(r"-\d+b-", gguf_file_name)  # regex to catch `-7b-`
         if m is None:
             raise ValueError(
                 f"From file name, cannot determine the number of parameters for {architecture} architecture"
             )
-        model_size = m.group().strip("-")
+        model_size = m.group().strip("-")  # only keeps `7b`
 
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture + model_size} not supported")
