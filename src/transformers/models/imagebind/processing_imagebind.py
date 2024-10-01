@@ -37,6 +37,7 @@ class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
 
 
 class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
+    sampling_rate: Optional[int]
     do_normalize: Optional[bool]
     mean: Optional[float]
     std: Optional[float]
@@ -49,7 +50,25 @@ class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     images_kwargs: ImageBindProcessorImagesKwargs
     audio_kwargs: ImageBindProcessorAudioKwargs
-    _defaults = {}
+    _defaults = {
+        "images_kwargs": {
+            "do_convert_rgb": True,
+            "do_chunk": True,
+            "chunk_duration": 2.0,
+            "num_chunks": 5,
+            "num_frames_per_chunk": 2,
+            "fps": 30,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "do_normalize": True,
+            "mean": -4.268,
+            "std": 9.138,
+            "do_chunk": True,
+            "chunk_duration": 2.0,
+            "num_chunks": 3,
+        },
+    }
 
 
 class ImageBindProcessor(ProcessorMixin):
