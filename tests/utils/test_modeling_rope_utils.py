@@ -16,7 +16,6 @@
 
 import math
 import unittest
-import warnings
 
 from transformers import LlamaConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
@@ -74,9 +73,10 @@ class RopeTest(unittest.TestCase):
             if rope_type == "default":
                 config.rope_scaling = {"rope_type": rope_type, model_specific_kwarg: True}
                 rope_config_validation(config, ignore_keys={model_specific_kwarg})
-                with warnings.catch_warnings(record=True) as warning_list:
+                with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
                     rope_config_validation(config)
-                    self.assertEqual(len(warning_list), 1)
+                    self.assertEqual(len(logs.output), 1)
+                    self.assertIn(model_specific_kwarg, logs.output[0])
 
     def test_default_rope_function_bc(self):
         config = LlamaConfig()
