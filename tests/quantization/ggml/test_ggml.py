@@ -480,15 +480,10 @@ class GgufIntegrationTests(unittest.TestCase):
         quantized_state_dict = quantized_model.state_dict()
         original_state_dict = original_model.state_dict()
 
-        for (quantized_name, quantized_param), (original_name, original_param) in zip(
-            quantized_state_dict.items(), original_state_dict.items()
-        ):
-            if (
-                "self_attention.query_key_value" in quantized_name
-                and "self_attention.query_key_value" in original_name
-            ):
-                self.assertTrue(quantized_param.shape == original_param.shape)
-                torch.testing.assert_close(quantized_param, original_param)
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in quantized_state_dict:
+                self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
 
     def test_tokenization_xnli(self):
         import tqdm
