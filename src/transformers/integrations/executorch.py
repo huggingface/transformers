@@ -68,7 +68,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             config=self.model.config,
             batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
-            dtype=self.model.config.torch_dtype,
+            dtype=self.model.dtype,
         )
         self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
         if self.is_causal:
