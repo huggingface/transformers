@@ -1797,7 +1797,7 @@ class MambaCache:
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(conv_state.device)
+        conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
         self.conv_states[layer_idx].zero_()
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
