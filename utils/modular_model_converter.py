@@ -727,8 +727,8 @@ class ModularConverterTransformer(CSTTransformer):
             full_statement = self.python_module.code_for_node(original_node.test)
             if re.search(r"[\s\S]*is_.*available", full_statement):
                 self.all_safe_imports.append(node)
-            elif full_statement not in self.new_body:
-                self.new_body[node] = {"insert_idx": self.global_scope_index, "node": node}
+            elif full_statement not in self.all_imports:
+                logger.warning("one import is protected so hard to guess where it's used", full_statement)
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):

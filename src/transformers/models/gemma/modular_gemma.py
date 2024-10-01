@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+import sentencepiece as spm
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -27,6 +28,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import is_torchdynamo_compiling, logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -38,12 +40,11 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
-import sentencepiece as spm
-
-from ...tokenization_utils import PreTrainedTokenizer, AddedToken
-
 from ..llama.tokenization_llama import LlamaTokenizer
+
+
+if TYPE_CHECKING:
+    from ...tokenization_utils_base import TextInput
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
@@ -172,6 +173,7 @@ class GemmaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
 
 class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
     """
@@ -327,6 +329,7 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
                 current_sub_tokens.append(token)
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
+
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
