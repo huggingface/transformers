@@ -17,7 +17,6 @@ import argparse
 import torch
 import torchaudio
 from datasets import load_dataset
-from torchvision import transforms
 
 from transformers import (
     CLIPTokenizer,
@@ -26,10 +25,6 @@ from transformers import (
     ImageBindImageProcessor,
     ImageBindModel,
     ImageBindProcessor,
-)
-from transformers.image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
 )
 from transformers.utils import logging
 
@@ -190,7 +185,6 @@ def convert_imagebind_checkpoint(args):
     image_processor = ImageBindImageProcessor()
     feature_extractor = ImageBindFeatureExtractor()
     processor = ImageBindProcessor(image_processor, tokenizer, feature_extractor)
-
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")

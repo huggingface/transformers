@@ -26,12 +26,12 @@ from transformers import (
     CLIPTokenizer,
     ImageBindAudioConfig,
     ImageBindConfig,
-    ImageBindProcessor,
-    ImageBindTextConfig,
-    ImageBindVisionConfig,
     ImageBindFeatureExtractor,
     ImageBindImageProcessor,
     ImageBindModel,
+    ImageBindProcessor,
+    ImageBindTextConfig,
+    ImageBindVisionConfig,
 )
 from transformers.image_utils import (
     OPENAI_CLIP_MEAN,
@@ -874,20 +874,21 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [-1.2439, -0.8372, -0.8748],
                 [-1.1235, -0.7492, -1.0867],
             ],
-        device=torch_device
+            device=torch_device,
         )
 
         expected_pixel_values = torch.tensor(
-            [[-0.1134, 0.7392, 1.3069], [-0.6244, 0.1089, 0.2688], [-0.8434, 0.1089, 0.9088]],
-        device=torch_device
+            [[-0.1134, 0.7392, 1.3069], [-0.6244, 0.1089, 0.2688], [-0.8434, 0.1089, 0.9088]], device=torch_device
         )
 
         expected_input_ids = torch.tensor(
             [[49406, 320, 3329, 49407, 49407], [49406, 320, 1615, 49407, 49407], [49406, 320, 1929, 269, 49407]],
-        device=torch_device
+            device=torch_device,
         )
 
-        expected_attention_mask = torch.tensor([[1, 1, 1, 1, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 1]],device=torch_device)
+        expected_attention_mask = torch.tensor(
+            [[1, 1, 1, 1, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 1]], device=torch_device
+        )
 
         self.assertTrue(torch.allclose(inputs.input_features[:, :, 0, 0, 0], expected_input_features, atol=1e-4))
         self.assertTrue(torch.allclose(inputs.pixel_values[:, :, 0, 0], expected_pixel_values, atol=1e-4))
@@ -906,7 +907,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [0.0190, 0.0106, 0.0275, 0.0189, -0.0268],
                 [-0.0104, -0.0203, 0.0048, -0.0158, 0.0076],
             ],
-        device=torch_device
+            device=torch_device,
         )
         expected_text_embeds = torch.tensor(
             [
@@ -914,7 +915,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
                 [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
             ],
-        device=torch_device
+            device=torch_device,
         )
         expected_audio_embeds = torch.tensor(
             [
@@ -922,7 +923,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [0.7091, 0.2073, -1.0133, 0.4689, -0.2142],
                 [-0.0281, -0.4922, 1.0057, 0.0459, -0.2271],
             ],
-        device=torch_device
+            device=torch_device,
         )
 
         self.assertTrue(torch.allclose(outputs_vision_text.image_embeds[:, :5], expected_image_embeds, atol=1e-4))
@@ -931,13 +932,12 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs_vision_text.image_embeds, outputs_vision_audio.image_embeds, atol=1e-4))
 
         expected_logits_per_audio = torch.tensor(
-            [[7.3541, 1.1908, 2.2897], [1.1930, 3.0097, 2.0238], [0.9584, 1.2224, 4.2325]],
-        device=torch_device
+            [[7.3541, 1.1908, 2.2897], [1.1930, 3.0097, 2.0238], [0.9584, 1.2224, 4.2325]], device=torch_device
         )
 
         expected_logits_per_image_with_text = torch.tensor(
             [[23.6142, 19.1165, 13.2448], [12.1343, 23.4165, 11.8823], [15.8471, 20.1186, 24.8246]],
-        device=torch_device
+            device=torch_device,
         )
 
         self.assertTrue(torch.allclose(outputs_vision_audio.logits_per_audio, expected_logits_per_audio, atol=1e-4))
@@ -966,7 +966,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [-1.2439, -0.8372, -0.8748],
                 [-1.1235, -0.7492, -1.0867],
             ],
-        device=torch_device
+            device=torch_device,
         )
 
         expected_pixel_values = torch.stack([original_image_processor(image) for image in images]).to(torch_device)
@@ -980,7 +980,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [0.0347, -0.0987, -0.0190, -0.0034, 0.0352],
                 [0.0389, -0.0910, -0.0230, -0.0072, 0.0455],
             ],
-        device=torch_device
+            device=torch_device,
         )
         expected_output_text = torch.tensor(
             [
@@ -988,7 +988,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [-0.1800, 0.2736, 0.5057, 0.4819, -0.5618],
                 [-0.2461, 0.2926, 0.4936, 0.4322, -0.2178],
             ],
-        device=torch_device
+            device=torch_device,
         )
         expected_output_audio = torch.tensor(
             [
@@ -996,7 +996,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
                 [-0.4186, -0.2179, 0.0913, 0.9061, -0.0390],
                 [-0.1190, -0.5368, 0.2956, 1.1277, 0.0037],
             ],
-        device=torch_device
+            device=torch_device,
         )
 
         outputs_text_vision = model(**inputs_text_vision)
