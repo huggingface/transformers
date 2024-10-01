@@ -13,20 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...utils import (
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-)
+from ...utils import logging
 from ..gemma.configuration_gemma import GemmaConfig
 from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
@@ -37,9 +30,8 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaFlashAttention2,
-    LlamaSdpaAttention,
     LlamaModel,
-    repeat_kv,
+    LlamaSdpaAttention,
 )
 from ..phi3.modeling_phi3 import (
     Phi3MLP,
@@ -48,15 +40,10 @@ from ..phi3.modeling_phi3 import (
 )
 
 
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-
-
 logger = logging.get_logger(__name__)
 
 
 class GlmConfig(GemmaConfig):
-
     model_type = "glm"
 
     def __init__(
@@ -166,6 +153,7 @@ class GlmFlashAttention2(GlmAttention, LlamaFlashAttention2):
 
 class GlmSdpaAttention(GlmAttention, LlamaSdpaAttention):
     pass
+
 
 GLM_ATTENTION_CLASSES = {
     "eager": GlmAttention,
