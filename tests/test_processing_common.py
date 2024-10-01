@@ -339,6 +339,8 @@ class ProcessorTesterMixin:
             tokenizer = self.get_tokenizer(max_length=117, padding="max_length")
         elif hasattr(self, "get_component"):
             tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        else:
+            self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
