@@ -139,7 +139,7 @@ jobs:
       - name: Make sure report directory exists
         shell: bash
         run: |
-          mkdir -p /transformers/reports/${{ nv.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          mkdir -p /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
           echo "hello" > /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
           echo "${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
 
