@@ -510,7 +510,7 @@ class AwqIPEXTest(unittest.TestCase):
             device_map="cpu",
         )
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/WizardLM-1.0-Uncensored-Llama2-13B-AWQ")
-        input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+        input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
         output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=50256)
         print(tokenizer.decode(output[0], skip_special_tokens=True))
 
