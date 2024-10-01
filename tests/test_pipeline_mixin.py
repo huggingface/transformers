@@ -27,12 +27,8 @@ from typing import get_args
 
 from huggingface_hub import AudioClassificationInput
 
-from transformers.pipelines import AudioClassificationPipeline
-from transformers.feature_extraction_utils import FeatureExtractionMixin
-from transformers.image_processing_utils import BaseImageProcessor
-from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
-from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.pipelines import AudioClassificationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
