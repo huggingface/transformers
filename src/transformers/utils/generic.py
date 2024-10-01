@@ -872,37 +872,48 @@ class LossKwargs(TypedDict, total=False):
 
 
 def is_timm_hub_checkpoint(pretrained_model_name_or_path: str) -> bool:
-    if isinstance(pretrained_model_name_or_path, str):
-        return pretrained_model_name_or_path.startswith("hf-hub:timm/") or pretrained_model_name_or_path.startswith(
-            "timm/"
-        )
-    return False
+    "Checks whether a checkpoint is a hub model hosted under the timm organization."
+    if not isinstance(pretrained_model_name_or_path, str):
+        return False
+
+    if os.path.isfile(pretrained_model_name_or_path) or os.path.isdir(pretrained_model_name_or_path):
+        return False
+
+    return pretrained_model_name_or_path.startswith("hf-hub:timm/") or pretrained_model_name_or_path.startswith(
+        "timm/"
+    )
 
 
 def is_timm_checkpoint(pretrained_model_name_or_path: str) -> bool:
+    """
+    Checks whether a checkpoint is a timm model checkpoint.
+    """
     if pretrained_model_name_or_path is None:
         return False
 
     from . import IMAGE_PROCESSOR_NAME
 
-    if os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
-        os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
-    ):
+    is_file = os.path.isfile(pretrained_model_name_or_path)
+    is_dir = os.path.isdir(pretrained_model_name_or_path)
+    is_local = is_file or is_dir
+
+    if is_dir and os.path.exists(os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)):
         # timm models don't have a preprocessor_config.json file saved out
         return False
 
     # pretrained_model_name_or_path is a file
-    if os.path.isfile(pretrained_model_name_or_path):
+    if is_file:
         with open(pretrained_model_name_or_path, "r") as f:
             config = json.load(f)
         return "pretrained_cfg" in config
 
     # pretrained_model_name_or_path is a directory with a config.json
-    if os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
-        os.path.join(pretrained_model_name_or_path, "config.json")
-    ):
+    if is_file and os.path.exists(os.path.join(pretrained_model_name_or_path, "config.json")):
         with open(os.path.join(pretrained_model_name_or_path, "config.json"), "r") as f:
             config = json.load(f)
         return "pretrained_cfg" in config
+
+    if is_local:
+        return False
 
     return is_timm_hub_checkpoint(pretrained_model_name_or_path)

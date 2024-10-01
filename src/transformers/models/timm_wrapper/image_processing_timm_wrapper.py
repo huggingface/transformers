@@ -21,7 +21,15 @@ import torch
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_list_of_images
-from ...utils import TensorType, is_timm_available, is_torch_available, is_vision_available, requires_backends
+from ...utils import TensorType, requires_backends
+from ...utils.import_utils import is_timm_available, is_torch_available
+
+
+if is_timm_available():
+    import timm
+
+if is_torch_available():
+    import torch
 
 
 class TimmWrapperImageProcessor(BaseImageProcessor):
