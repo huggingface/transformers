@@ -18,6 +18,7 @@ Processor class for BLIP-2.
 
 from typing import List, Optional, Union
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
@@ -151,20 +152,16 @@ class Blip2Processor(ProcessorMixin):
                 )
 
             # cast to desired return tensors type
-            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
         else:
             text_encoding = None
 
-        # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
-        # else, return the text encoding.
-
+        encoding = BatchFeature(tensor_type=return_tensors)
+        if text is not None:
+            encoding.update(text_encoding)
         if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-            if text_encoding is not None:
-                encoding_image_processor.update(text_encoding)
-            return encoding_image_processor
-
-        return text_encoding
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding.update(image_encoding)
+        return encoding
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
