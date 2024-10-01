@@ -108,9 +108,5 @@ class BitNetHfQuantizer(HfQuantizer):
         return target_dtype
 
     @property
-    def is_serializable(self):
-        return True
-
-    @property
     def is_trainable(self) -> bool:
         return False

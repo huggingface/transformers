@@ -1306,6 +1306,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def __repr__(self):
         return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
 
+
 @dataclass
 class BitNetConfig(QuantizationConfigMixin):
     def __init__(
