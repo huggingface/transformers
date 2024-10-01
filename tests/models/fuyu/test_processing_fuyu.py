@@ -190,7 +190,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
 
@@ -218,7 +218,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
 
@@ -237,7 +237,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
 
@@ -264,7 +264,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
 
@@ -290,7 +290,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
         inputs = processor(
@@ -315,7 +315,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer", "upper older longer string"]
+        input_str = self.prepare_text_inputs(batch_size=2)
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
         inputs = processor(
