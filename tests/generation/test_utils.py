@@ -110,6 +110,8 @@ class GenerationTesterMixin:
             "decoder_attention_mask",
             # we'll set cache use in each test differently
             "use_cache",
+            # Ignore labels if it is in the input dict
+            "labels",
             # model-specific exceptions should overload/overwrite this function
         ]
         filtered_inputs_dict = {

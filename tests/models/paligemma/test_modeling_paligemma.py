@@ -168,6 +168,7 @@ class PaliGemmaVisionText2TextModelTester:
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "labels": input_ids,
             "token_type_ids": torch.zeros_like(input_ids),
         }
         return config, inputs_dict
