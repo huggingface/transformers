@@ -41,7 +41,7 @@ from ..llama.modeling_llama import (
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer, AddedToken
 
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -190,7 +190,21 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
         spaces_between_special_tokens=False,
         **kwargs,
     ):
-        super().__init__(
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
+
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
+        PreTrainedTokenizer.__init__(
+            self,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -203,8 +217,6 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
             spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
         del self.add_prefix_space
         del self.legacy
 
