@@ -3507,7 +3507,9 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.timm_wrapper"].extend(["TimmWrapperForImageClassification", "TimmWrapperModel"])
+    _import_structure["models.timm_wrapper"].extend(
+        ["TimmWrapperForImageClassification", "TimmWrapperPreTrainedModel", "TimmWrapperModel"]
+    )
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -7994,7 +7996,11 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.timm_wrapper import TimmWrapperForImageClassification, TimmWrapperModel
+        from .models.timm_wrapper import (
+            TimmWrapperForImageClassification,
+            TimmWrapperModel,
+            TimmWrapperPreTrainedModel,
+        )
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,

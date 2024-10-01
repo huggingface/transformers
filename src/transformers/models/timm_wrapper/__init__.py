@@ -30,7 +30,11 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_timm_wrapper"] = ["TimmWrapperImageProcessor"]
-    _import_structure["modeling_timm_wrapper"] = ["TimmWrapperForImageClassification", "TimmWrapperModel"]
+    _import_structure["modeling_timm_wrapper"] = [
+        "TimmWrapperForImageClassification",
+        "TimmWrapperPreTrainedModel",
+        "TimmWrapperModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -43,7 +47,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_timm_wrapper import TimmWrapperImageProcessor
-        from .modeling_timm_wrapper import TimmWrapperForImageClassification, TimmWrapperModel
+        from .modeling_timm_wrapper import (
+            TimmWrapperForImageClassification,
+            TimmWrapperPreTrainedModel,
+            TimmWrapperModel,
+        )
 
 else:
     import sys

@@ -65,15 +65,12 @@ def resize_classification_head(model, num_labels: int):
     return model
 
 
-class TimmWrapperModel(PreTrainedModel):
-    """
-    Wrapper class for timm models to be used in transformers.
-    """
-
+class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
     base_model_prefix = "timm_model"
+    _no_split_modules = []
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -127,6 +124,12 @@ class TimmWrapperModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
+
+class TimmWrapperModel(TimmWrapperPreTrainedModel):
+    """
+    Wrapper class for timm models to be used in transformers.
+    """
+
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -149,7 +152,7 @@ class TimmWrapperModel(PreTrainedModel):
         return BaseModelOutput(last_hidden_state=prediction)
 
 
-class TimmWrapperForImageClassification(TimmWrapperModel):
+class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers for image classification.
     """
