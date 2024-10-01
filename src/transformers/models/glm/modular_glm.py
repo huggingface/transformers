@@ -56,7 +56,6 @@ class GlmConfig(GemmaConfig):
         num_key_value_heads=2,
         head_dim=128,
         hidden_act="silu",
-        resid_pdrop=0.0,
         attention_dropout=0.0,
         max_position_embeddings=131072,
         initializer_range=0.02,
@@ -68,13 +67,15 @@ class GlmConfig(GemmaConfig):
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         attention_bias=True,
-        linear_bias=False,
+        pretraining_tp=1,
         **kwargs,
     ):
         super().__init__(
             **kwargs,
         )
         del self.hidden_activation
+        # Never used, but needs to be present when using "eager" attention
+        self.pretraining_tp = pretraining_tp
 
 
 class GlmRMSNorm(Phi3RMSNorm):

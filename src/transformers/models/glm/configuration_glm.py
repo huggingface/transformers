@@ -105,7 +105,6 @@ class GlmConfig(PretrainedConfig):
         num_key_value_heads=2,
         head_dim=128,
         hidden_act="silu",
-        resid_pdrop=0.0,
         attention_dropout=0.0,
         max_position_embeddings=131072,
         initializer_range=0.02,
@@ -117,7 +116,7 @@ class GlmConfig(PretrainedConfig):
         eos_token_id=[151329, 151336, 151338],
         bos_token_id=None,
         attention_bias=True,
-        linear_bias=False,
+        pretraining_tp=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -135,6 +134,8 @@ class GlmConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        # Never used, but needs to be present when using "eager" attention
+        self.pretraining_tp = pretraining_tp
 
         super().__init__(
             pad_token_id=pad_token_id,
