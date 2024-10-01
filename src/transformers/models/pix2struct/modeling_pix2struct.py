@@ -39,6 +39,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -239,14 +240,17 @@ class Pix2StructVisionAttention(nn.Module):
             if self.gradient_checkpointing and self.training:
                 position_bias.requires_grad = True
 
-            if attention_mask is None:
-                attention_mask = torch.ones((batch_size, seq_length), device=scores.device, dtype=scores.dtype)
-
             if attention_mask.dim() == 2:
                 position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
-            else:
+            elif attention_mask is not None:
                 # (batch_size, n_heads, seq_length, key_length)
                 position_bias = position_bias + attention_mask.to(position_bias.device)
+            elif not is_torchdynamo_compiling():
+                attention_mask = torch.ones(
+                    (batch_size, seq_length), device=position_bias.device, dtype=position_bias.dtype
+                )
+                position_bias = position_bias + attention_mask.to(position_bias.device)
+
             position_bias = 1 - position_bias
 
         position_bias_masked = position_bias.masked_fill(position_bias == 1, torch.finfo(scores.dtype).min)
@@ -1926,7 +1930,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
         # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
         # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-        input_ids = input_ids.contiguous()
+        input_ids = input_ids.clone(memory_format=torch.contiguous_format)
 
         if (
             isinstance(past_key_values, EncoderDecoderCache)

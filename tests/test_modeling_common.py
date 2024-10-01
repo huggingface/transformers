@@ -36,6 +36,7 @@ import transformers
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     GenerationConfig,
@@ -4764,7 +4765,10 @@ class ModelTesterMixin:
         n_iter = 3
 
         tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        if self.is_encoder_decoder:
+            model = AutoModelForSeq2SeqLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
 
         model.generation_config.max_new_tokens = 4
 
@@ -4793,7 +4797,10 @@ class ModelTesterMixin:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
         tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        if self.is_encoder_decoder:
+            model = AutoModelForSeq2SeqLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
 
         cache_implementation = "static"
         if model.config.model_type == "gemma2":

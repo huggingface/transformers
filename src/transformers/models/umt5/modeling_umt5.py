@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -347,8 +348,11 @@ class UMT5Attention(nn.Module):
         # compute positional bias
         if self.has_relative_attention_bias:
             query_length = seq_length
-            if past_key_value is not None:
+            if isinstance(past_key_value, StaticCache):
+                query_length = past_key_value.get_max_length()
+            elif past_key_value is not None:
                 query_length += past_key_value.get_seq_length()
+
             position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
         else:
             position_bias = torch.zeros(
@@ -755,7 +759,7 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )
 
-        if attention_mask is None:
+        if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past
             mask_seq_length = (
                 past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
@@ -770,10 +774,12 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values.self_attention_cache if past_key_values is not None else None,
                 output_attentions,
             )
-        else:
+        elif attention_mask is not None:
             causal_mask = attention_mask[:, None, None, :]
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
+        else:
+            causal_mask = None
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1442,6 +1448,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1514,7 +1521,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
 
         # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
         # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-        input_ids = input_ids.contiguous()
+        input_ids = input_ids.clone(memory_format=torch.contiguous_format)
 
         if (
             isinstance(past_key_values, EncoderDecoderCache)

@@ -444,11 +444,6 @@ class Pop2PianoAttention(nn.Module):
         if torch.jit.is_tracing():
             seq_length = seq_length.to(hidden_states.device)
 
-        if past_key_value is not None:
-            seq_length += cache_position[0] if query_length is None else query_length
-
-        key_length = seq_length if key_value_states is None else key_value_states.shape[1]
-
         def shape(states):
             """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
@@ -469,6 +464,13 @@ class Pop2PianoAttention(nn.Module):
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
+
+        if isinstance(past_key_value, StaticCache):
+            seq_length = past_key_value.get_max_length()
+        elif past_key_value is not None:
+            seq_length += cache_position[0] if query_length is None else query_length
+
+        key_length = seq_length if key_value_states is None else key_value_states.shape[1]
 
         # get key/value states
         current_states = key_value_states if key_value_states is not None else hidden_states
