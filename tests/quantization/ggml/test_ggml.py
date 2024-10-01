@@ -45,6 +45,7 @@ class GgufIntegrationTests(unittest.TestCase):
     bloom_model_id = "afrideva/bloom-560m-GGUF"
     original_bloom_model_id = "bigscience/bloom-560m"
     falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
+    falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
 
     # standard quants
@@ -78,6 +79,7 @@ class GgufIntegrationTests(unittest.TestCase):
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
+    q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
 
     example_text = "Hello"
 
@@ -448,6 +450,22 @@ class GgufIntegrationTests(unittest.TestCase):
             ):
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
+
+    @unittest.skip(reason="Heavy memory")
+    def test_falcon40b_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.falcon40b_model_id, gguf_file=self.q2_k_falcon40b_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.falcon40b_model_id,
+            gguf_file=self.q2_k_falcon40b_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello All,\nI am new to this forum."
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_falcon7b_q2_k(self):
         tokenizer = AutoTokenizer.from_pretrained(self.falcon7b_model_id, gguf_file=self.q2_k_falcon7b_model_id)
