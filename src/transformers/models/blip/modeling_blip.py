@@ -233,7 +233,6 @@ class BlipVisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -245,14 +244,14 @@ class BlipVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, :1]
+        patch_pos_embed = self.position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
