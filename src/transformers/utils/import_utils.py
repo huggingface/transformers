@@ -1955,9 +1955,10 @@ def create_import_structure_from_path(module_path):
 
     # Modular files should not be imported
     def find_substring(substring, list_):
-        return any([substring in x for x in list_])
+        return any(substring in x for x in list_)
+
     if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if not "modular_" in module]
+        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
 
     module_requirements = {}
     for module_name in adjacent_modules:
