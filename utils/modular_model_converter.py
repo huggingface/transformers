@@ -458,7 +458,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 new_params = new_params.with_changes(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
-            if not re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", class_finder.python_module.code_for_node(updated_methods[name])):
+            if not re.match(
+                r"\ndef .*\(.*\):\n    raise.*Error\(.*",
+                class_finder.python_module.code_for_node(updated_methods[name]),
+            ):
                 func = func.with_changes(body=updated_methods[name].body, params=new_params)
             else:
                 print("Skipping ", name, "as it raises an error.")
