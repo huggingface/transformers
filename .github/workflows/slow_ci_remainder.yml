@@ -32,20 +32,8 @@ jobs:
     - run: |
         echo ${{ steps.find_comment.outputs.comment-id }}
 
-    - name: Delete previous comment (if found)
-      if: steps.find_comment.outputs.comment-id != ''
-      uses: actions/github-script@v6
-      with:
-        result-encoding: string
-        github-token: ${{ secrets.comment_bot_token }}
-        script: |
-          github.rest.issues.deleteComment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            comment_id: ${{ steps.find_comment.outputs.comment-id }},
-          })
-
-    - name: Add comment
+    - name: Add comment if not present
+      if: steps.find_comment.outputs.comment-id == ''
       uses: thollander/actions-comment-pull-request@v2
       with:
         message: |
