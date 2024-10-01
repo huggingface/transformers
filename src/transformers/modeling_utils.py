@@ -2051,7 +2051,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        multivariate_resizing: bool = True,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
@@ -2071,11 +2071,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
-            multivariate_resizing (`bool`):
+            mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
                 covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
 
-                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
                 Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
                 between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
@@ -2083,7 +2083,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, multivariate_resizing)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
@@ -2106,10 +2106,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, multivariate_resizing=True):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, mean_resizing=True):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(
-            old_embeddings, new_num_tokens, pad_to_multiple_of, multivariate_resizing
+            old_embeddings, new_num_tokens, pad_to_multiple_of, mean_resizing
         )
         if hasattr(old_embeddings, "_hf_hook"):
             hook = old_embeddings._hf_hook
@@ -2134,11 +2134,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
                 new_lm_head = self._get_resized_embeddings(
-                    old_lm_head, new_num_tokens, multivariate_resizing=multivariate_resizing
+                    old_lm_head, new_num_tokens, mean_resizing=mean_resizing
                 )
             else:
                 new_lm_head = self._get_resized_lm_head(
-                    old_lm_head, new_num_tokens, multivariate_resizing=multivariate_resizing
+                    old_lm_head, new_num_tokens, mean_resizing=mean_resizing
                 )
             if hasattr(old_lm_head, "_hf_hook"):
                 hook = old_lm_head._hf_hook
@@ -2154,7 +2154,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings: nn.Embedding,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        multivariate_resizing: bool = True,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
@@ -2177,11 +2177,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
-            multivariate_resizing (`bool`):
+            mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
                 covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
 
-                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
                 Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
                 between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
@@ -2243,10 +2243,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_embeddings.weight.dtype,
         )
 
-        if new_num_tokens > old_num_tokens and not multivariate_resizing:
+        if new_num_tokens > old_num_tokens and not mean_resizing:
             self._init_weights(new_embeddings)
 
-        elif new_num_tokens > old_num_tokens and multivariate_resizing:
+        elif new_num_tokens > old_num_tokens and mean_resizing:
             # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
             # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
             # distribution that has old embeddings' mean and covariance. as described in this article:
@@ -2254,7 +2254,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning_once(
                 "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
-                "To disable this, use `multivariate_resizing=False`"
+                "To disable this, use `mean_resizing=False`"
             )
 
             added_num_tokens = new_num_tokens - old_num_tokens
@@ -2312,7 +2312,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_lm_head: nn.Linear,
         new_num_tokens: Optional[int] = None,
         transposed: Optional[bool] = False,
-        multivariate_resizing: bool = True,
+        mean_resizing: bool = True,
     ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
@@ -2329,11 +2329,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `torch.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*, defaults
                 to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
                 vocab_size` else `vocab_size, lm_head_dim`.
-            multivariate_resizing (`bool`):
+            mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
                 covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
 
-                Setting `multivariate_resizing` to `True` is useful when increasing the size of the embedding for language models.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
                 Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
                 between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
@@ -2383,10 +2383,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_lm_head.weight.dtype,
         )
 
-        if new_num_tokens > old_num_tokens and not multivariate_resizing:
+        if new_num_tokens > old_num_tokens and not mean_resizing:
             self._init_weights(new_lm_head)
 
-        elif new_num_tokens > old_num_tokens and multivariate_resizing:
+        elif new_num_tokens > old_num_tokens and mean_resizing:
             # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
             # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
             # distribution that has old embeddings' mean and covariance. as described in this article:
@@ -2394,7 +2394,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning_once(
                 "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
-                "To disable this, use `multivariate_resizing=False`"
+                "To disable this, use `mean_resizing=False`"
             )
 
             added_num_tokens = new_num_tokens - old_num_tokens
