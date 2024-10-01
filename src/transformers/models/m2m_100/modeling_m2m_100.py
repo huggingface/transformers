@@ -339,8 +339,14 @@ class M2M100Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->MBart
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->M2M100
 class M2M100FlashAttention2(M2M100Attention):
+    """
+    M2M100 flash attention module. This module inherits from `M2M100Attention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -452,10 +458,7 @@ class M2M100FlashAttention2(M2M100Attention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim)
-
+        attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
