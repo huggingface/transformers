@@ -43,7 +43,6 @@ from ..gemma.modeling_gemma import (
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
-    _prepare_4d_causal_attention_mask_with_cache_position,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -720,7 +719,6 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_length()
@@ -728,13 +726,12 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
             device=device,
-            min_dtype=min_dtype,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -855,6 +852,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        """Different from the base `prepare_inputs_for_generation` because of `HybridCache`."""
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
@@ -894,15 +892,13 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             else:
                 batch_size, sequence_length = model_inputs["input_ids"].shape
                 device = model_inputs["input_ids"].device
-            dtype = self.lm_head.weight.dtype
-            min_dtype = torch.finfo(dtype).min
-            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+
+            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_length(),
-                dtype=dtype,
+                dtype=self.lm_head.weight.dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
