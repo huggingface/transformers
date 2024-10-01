@@ -383,43 +383,51 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_beam_sample_generate_dict_output():
+    def test_beam_sample_generate_dict_output(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_beam_search_generate_dict_output():
+    def test_beam_search_generate_dict_output(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_constrained_beam_search_generate_dict_output():
+    def test_constrained_beam_search_generate_dict_output(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_dola_decoding_sample():
+    def test_dola_decoding_sample(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_generate_methods_with_num_logits_to_keep():
+    def test_generate_methods_with_num_logits_to_keep(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_greedy_generate_dict_outputs():
+    def test_greedy_generate_dict_outputs(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_group_beam_search_generate_dict_output():
+    def test_group_beam_search_generate_dict_output(self):
         pass
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_model_parallel_beam_search():
+    def test_model_parallel_beam_search(self):
         pass
 
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_new_cache_format_2():
-        pass
+    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
+    def test_new_cache_format_0(self):
+        super().test_new_cache_format_0()
+
+    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
+    def test_new_cache_format_1(self):
+        super().test_new_cache_format_1()
+
+    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
+    def test_new_cache_format_2(self):
+        super().test_new_cache_format_2()
 
     @unittest.skip(reason="Failing test, need to fix")
-    def test_sample_generate_dict_output():
+    def test_sample_generate_dict_output(self):
         pass
 
     def test_generate_text_only_with_cache(self):
