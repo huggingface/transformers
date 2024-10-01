@@ -308,6 +308,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # used in `test_torch_compile`
     _torch_compile_test_ckpt = "/raid/cyril/glm-4-9b-new"
+    _torch_compile_test_revision = "rev"
 
     def setUp(self):
         self.model_tester = GlmModelTester(self)
@@ -435,9 +436,10 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "/raid/cyril/glm-4-9b-new",
             device_map={"": 0},
             torch_dtype=torch.bfloat16,
+            revision="rev",
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("/raid/cyril/glm-4-9b-new")
+        tokenizer = AutoTokenizer.from_pretrained("/raid/cyril/glm-4-9b-new", revision="rev")
         tokenizer.padding_side = "right"
 
         texts = ["hi", "Hello this is a very long sentence"]
@@ -451,6 +453,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
             torch_dtype=torch.bfloat16,
+            revision="rev"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=15, do_sample=False)
@@ -831,6 +834,8 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @require_torch_accelerator
 class GlmIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
+    model_id = "/raid/cyril/glm-4-9b-new"
+    revision = "rev"
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
@@ -842,17 +847,16 @@ class GlmIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def test_model_9b_fp16(self):
-        model_id = "/raid/cyril/glm-4-9b-new"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, revision=self.revision).to(
             torch_device
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -861,18 +865,17 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_9b_bf16(self):
-        model_id = "/raid/cyril/glm-4-9b-new"
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision=self.revision).to(
             torch_device
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -881,7 +884,6 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_9b_eager(self):
-        model_id = "/raid/cyril/glm-4-9b-new"
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -889,11 +891,11 @@ class GlmIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager", revision=self.revision
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -903,7 +905,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
     @require_torch_sdpa
     def test_model_9b_sdpa(self):
-        model_id = "/raid/cyril/glm-4-9b-new"
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -911,11 +912,11 @@ class GlmIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa", revision=self.revision
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -926,18 +927,17 @@ class GlmIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_model_9b_flash_attn(self):
-        model_id = "/raid/cyril/glm-4-9b-new"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", revision=self.revision
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)

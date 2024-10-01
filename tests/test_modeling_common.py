@@ -4916,14 +4916,16 @@ class ModelTesterMixin:
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
+        revision = "main" if not hasattr(self, "_torch_compile_test_revision") else self._torch_compile_test_revision
+            
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
         batch_size = 1
         n_iter = 3
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(torch_device)
 
         model.generation_config.max_new_tokens = 4
 
@@ -4991,11 +4993,12 @@ class ModelTesterMixin:
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
+        revision = "main" if not hasattr(self, "_torch_compile_test_revision") else self._torch_compile_test_revision
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(torch_device)
 
         cache_implementation = "static"
         if model.config.model_type == "gemma2":
