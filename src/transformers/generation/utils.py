@@ -397,7 +397,7 @@ class GenerationMixin:
         # 4. Create missing `position_ids` on the fly
         if (
             attention_mask is not None
-            and "position_ids" not in kwargs
+            and kwargs.get("position_ids") is None
             and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -406,8 +406,8 @@ class GenerationMixin:
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
         for model_input_name in ["position_ids", "token_type_ids"]:
-            if model_input_name in kwargs and kwargs[model_input_name] is not None:
-                model_input = kwargs[model_input_name]
+            model_input = kwargs.get(model_input_name)
+            if model_input is not None:
                 if past_key_values:
                     model_input = model_input[:, -input_ids.shape[1] :]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
