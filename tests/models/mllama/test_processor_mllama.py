@@ -310,7 +310,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=None, padding=True)
 
-    # Override as MllabmaProcessor needs image tokens in prompts
+    # Override as MllamaProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
             return "lower newer <|image|>"
