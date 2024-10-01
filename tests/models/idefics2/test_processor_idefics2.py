@@ -17,8 +17,8 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
+from typing import Optional
 
-import numpy as np
 import requests
 
 from transformers import Idefics2Processor
@@ -262,16 +262,26 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    def prepare_text_inputs(self, batched=False):
-        if batched:
-            return ["<image> lower newer", "<image> upper older longer string"]
-        return "<image> lower newer"
+    # Override as Idefics2Processor needs image tokens in prompts
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer <image>"
 
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer <image>"]
+        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
+            batch_size - 2
+        )
+
+    # Override as PixtralProcessor needs nested images to work properly with batched inputs
     @require_vision
-    def prepare_image_inputs(self, batched=False):
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of PIL images for testing"""
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        if batched:
-            return [image_inputs] * 2
-        return image_inputs
+        if batch_size is None:
+            return super().prepare_image_inputs()
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return [[super().prepare_image_inputs()]] * batch_size

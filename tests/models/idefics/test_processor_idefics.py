@@ -229,7 +229,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -246,7 +246,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, image_size=224)
@@ -263,7 +263,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -288,8 +288,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -313,7 +313,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -339,7 +339,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
