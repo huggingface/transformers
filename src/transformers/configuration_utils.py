@@ -320,7 +320,7 @@ class PretrainedConfig(PushToHubMixin):
         self._original_object_hash = None
 
     def __hash__(self):
-        return hash(self.to_json_string(use_diff=False, ignore_metadata=True))
+        return hash(self.to_json_string(ignore_metadata=True))
 
     @property
     def name_or_path(self) -> str:
