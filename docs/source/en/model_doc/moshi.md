@@ -93,15 +93,13 @@ You can dynamically use the 3 inputs depending on what you want to test:
 
 The original model is synchronized text with audio by padding the text in between each token enunciation.
 
-To follow the example of the following image, "Hello, I'm Moshi" could be transformed to "Hello,<pad><unk>I'm Moshi".
+To follow the example of the following image, `"Hello, I'm Moshi"` could be transformed to `"Hello,<pad><unk>I'm Moshi"`.
 
-<Tip>
+</Tip>
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/moshi_text_sync.png">
 </div>
-
-</Tip>
 
 
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
