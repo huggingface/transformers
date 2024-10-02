@@ -143,8 +143,6 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quanto_available = _is_package_available("quanto")
-# `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
-_optimum_quanto_available = importlib.util.find_spec("optimum.quanto") is not None
 _compressed_tensors_available = _is_package_available("compressed_tensors")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
@@ -971,7 +969,8 @@ def is_quanto_available():
 
 
 def is_optimum_quanto_available():
-    return _optimum_quanto_available
+    # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
+    return importlib.util.find_spec("optimum.quanto") is not None
 
 
 def is_compressed_tensors_available():
