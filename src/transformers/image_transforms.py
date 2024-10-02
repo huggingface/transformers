@@ -123,7 +123,12 @@ def rescale(
     if not isinstance(image, np.ndarray):
         raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
-    rescaled_image = image * scale
+    if np.issubdtype(image.dtype, np.uint8) and scale <= 0:
+        image = image.astype(np.int16)
+        rescaled_image = image * scale
+        rescaled_image = rescaled_image.astype(dtype)
+    else:
+        rescaled_image = image * scale
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format, input_data_format)
 

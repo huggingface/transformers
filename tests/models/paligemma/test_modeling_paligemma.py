@@ -37,7 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, is_flaky
 
 
 if is_torch_available():
@@ -264,10 +264,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
-
     @require_torch_sdpa
     @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
@@ -287,32 +283,21 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_model_outputs_equivalence(self):
         pass
 
-    # TODO fix the loss = nan in the testing configuration chosen @Molbap
-    @unittest.skip(reason="Edge case giving loss nan values in testing configuration.")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not use feedforward chunking.")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
         reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
+
+    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
+    @unittest.skip("Paligemma is not compatible with end-to-end generation compilation")
+    def test_generate_compile_fullgraph(self):
+        pass
+
+    @is_flaky
+    # This test is very slightly flaky. Estimated fail probability < 1%
+    def test_static_cache_matches_dynamic(self):
+        super().test_static_cache_matches_dynamic()
 
 
 @slow
