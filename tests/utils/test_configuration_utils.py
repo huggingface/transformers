@@ -219,17 +219,15 @@ class ConfigTestUtils(unittest.TestCase):
 
     def test_config_common_kwargs_is_complete(self):
         base_config = PretrainedConfig()
-        missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
+        missing_keys = {key for key in base_config.__dict__ if key not in config_common_kwargs}
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
-        self.assertListEqual(
+        self.assertSetEqual(
             missing_keys,
-            [
+            {
                 "is_encoder_decoder",
                 "_name_or_path",
-                "_commit_hash",
                 "_attn_implementation_internal",
-                "transformers_version",
-            ],
+            } | set(METADATA_FIELDS),
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
