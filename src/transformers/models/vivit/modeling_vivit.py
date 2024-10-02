@@ -227,7 +227,7 @@ class VivitSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Vivit
+# Adapted from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Vivit
 class VivitSdpaSelfAttention(VivitSelfAttention):
     def __init__(self, config: VivitConfig) -> None:
         super().__init__(config)
