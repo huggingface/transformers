@@ -149,7 +149,7 @@ class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
     pass
 
 
-class GlmSdpaAttention(GlmAttention, GraniteSdpaAttention):
+class GlmSdpaAttention(GraniteSdpaAttention):
     pass
 
 
