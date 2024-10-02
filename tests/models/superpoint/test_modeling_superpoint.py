@@ -275,7 +275,9 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
         self.assertEqual(outputs.scores.shape, expected_scores_shape)
         self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
-        expected_keypoints_image0_values = torch.tensor([[0.75, 0.0188],[0.7719, 0.0188], [0.7641, 0.0333]]).to(torch_device)
+        expected_keypoints_image0_values = torch.tensor([[0.75, 0.0188], [0.7719, 0.0188], [0.7641, 0.0333]]).to(
+            torch_device
+        )
         expected_scores_image0_values = torch.tensor(
             [0.0064, 0.0139, 0.0591, 0.0727, 0.5170, 0.0175, 0.1526, 0.2057, 0.0335]
         ).to(torch_device)
