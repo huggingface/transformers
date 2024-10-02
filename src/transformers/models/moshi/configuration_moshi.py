@@ -119,11 +119,11 @@ class MoshiConfig(PretrainedConfig):
     >>> configuration = model.config
 
     >>> # Saving the model, including its configuration
-    >>> model.save_pretrained("moshi-model")
+    >>> model.save_pretrained("kmhf/hf-moshiko")
 
     >>> # loading model and config from pretrained folder
-    >>> moshi_config = MoshiConfig.from_pretrained("moshi-model")
-    >>> model = MoshiForConditionalGeneration.from_pretrained("moshi-model", config=moshi_config)
+    >>> moshi_config = MoshiConfig.from_pretrained("kmhf/hf-moshiko")
+    >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", config=moshi_config)
     ```"""
 
     model_type = "moshi"
