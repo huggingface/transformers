@@ -15,18 +15,17 @@
 """Testing suite for the PyTorch ColPali model."""
 
 import unittest
-from typing import cast
 
 import torch
-from PIL import Image
 
 from tests.test_modeling_common import ModelTesterMixin
 from transformers import (
+    ColPaliForRetrieval,
+    ColPaliModelOutput,
+    ColPaliProcessor,
     is_torch_available,
     is_vision_available,
 )
-from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
-from transformers.models.colpali.modeling_colpali import ColPaliModelOutput
 from transformers.testing_utils import require_torch, require_vision, slow
 
 
@@ -55,16 +54,13 @@ class ColPaliForRetrievalTest(ModelTesterMixin, unittest.TestCase):
         cls.model_name = "vidore/colpali-v1.2-hf"
 
         # TODO: replace with randomly initialized model
-        cls.model = cast(
-            ColPaliForRetrieval,
-            ColPaliForRetrieval.from_pretrained(
-                cls.model_name,
-                torch_dtype=torch.bfloat16,
-                device_map="auto",
-            ),
+        cls.model = ColPaliForRetrieval.from_pretrained(
+            cls.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
         )
 
-        cls.processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained(cls.model_name))
+        cls.processor = ColPaliProcessor.from_pretrained(cls.model_name)
         cls.device = cls.model.device
 
     @slow
