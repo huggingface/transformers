@@ -15,7 +15,9 @@
 Image/Text processor class for ImageBind
 """
 
-from typing import Optional
+from typing import List, Optional, Union
+
+import numpy as np
 
 
 try:
@@ -23,8 +25,16 @@ try:
 except ImportError:
     from typing_extensions import Unpack
 
+from ...image_utils import (
+    ImageInput,
+    VideoInput,
+)
 from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PreTokenizedInput,
+    TextInput,
+)
 
 
 class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
@@ -97,9 +107,10 @@ class ImageBindProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images=None,
-        text=None,
-        audio=None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]] = None,
         **kwargs: Unpack[ImageBindProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -111,7 +122,11 @@ class ImageBindProcessor(ProcessorMixin):
         Args:
             images (`ImageInput`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is
+                number of channels, H and W are image's height and width.
+            videos (`VideoInput`, *optional*):
+                Video frames to preprocess. Expects a single or batch of video frames in PIL images, NumPy array, PyTorch
+                tensor or Lists. Each video should be of shape (T, C, H, W), where T is number of frames, C is
                 number of channels, H and W are image height and width.
             text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
@@ -132,12 +147,12 @@ class ImageBindProcessor(ProcessorMixin):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` or `videos` is not `None`.
             - **input_features** -- List of input features to be fed to a model. Returned when `audio` is not `None`.
         """
 
-        if text is None and images is None and audio is None:
-            raise ValueError("You have to specify either text, images or audio. Both cannot be none.")
+        if text is None and images is None and videos is None and audio is None:
+            raise ValueError("You have to specify either text, images, videos or audio. All cannot be none.")
 
         output_kwargs = self._merge_kwargs(
             ImageBindProcessorKwargs,
@@ -151,8 +166,8 @@ class ImageBindProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             data.update(encoding)
 
-        if images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+        if images is not None or videos is not None:
+            image_features = self.image_processor(images=images, videos=videos, **output_kwargs["images_kwargs"])
             data.update(image_features)
 
         if audio is not None:

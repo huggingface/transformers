@@ -387,7 +387,6 @@ class ImageBindImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-
     def video_resize(
         self,
         frames: List[np.ndarray],
