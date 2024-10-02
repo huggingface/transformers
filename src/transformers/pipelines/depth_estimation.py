@@ -91,8 +91,6 @@ class DepthEstimationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout)
-        self.image_height = image.height
-        self.image_width = image.width
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
@@ -108,7 +106,9 @@ class DepthEstimationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         outputs = self.image_processor.post_process_depth_estimation(
             model_outputs,
-            [(self.image_height, self.image_width)],
+            # this acts as `source_sizes` for ZoeDepth and as `target_sizes` for the rest of the models so do *not*
+            # replace with `target_sizes = [model_outputs["target_size"]]`
+            [model_outputs["target_size"]],
         )
 
         formatted_outputs = []
