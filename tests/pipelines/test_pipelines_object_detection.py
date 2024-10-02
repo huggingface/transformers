@@ -106,7 +106,6 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 )
                 compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
 
-
     @require_tf
     @unittest.skip(reason="Object detection not implemented in TF")
     def test_small_model_tf(self):
