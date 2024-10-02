@@ -233,7 +233,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -316,14 +316,9 @@ class PhimoeAttention(nn.Module):
         )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.config.attention_bias)
 
-        self.rotary_emb = PhimoeRotaryEmbedding(
-            config=self.config,
-        )
-
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # copied from transformers.models.mixtral.modeling_mixtral.MixtralAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -333,6 +328,7 @@ class PhimoeAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -344,16 +340,7 @@ class PhimoeAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -365,12 +352,6 @@ class PhimoeAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -388,6 +369,7 @@ class PhimoeAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
+
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
@@ -398,7 +380,7 @@ class PhimoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.mixtral.modeling_mixtral.MixtralFlashAttention2 with Mixtral->Phimoe
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralFlashAttention2 with Mixtral->Phimoe
 class PhimoeFlashAttention2(PhimoeAttention):
     """
     Phimoe flash attention module. This module inherits from `PhimoeAttention` as the weights of the module stays
@@ -415,6 +397,7 @@ class PhimoeFlashAttention2(PhimoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -428,21 +411,9 @@ class PhimoeFlashAttention2(PhimoeAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = (
-            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
-        )
-
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
-
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -528,7 +499,6 @@ class PhimoeFlashAttention2(PhimoeAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Phimoe
 class PhimoeSdpaAttention(PhimoeAttention):
     """
     Phimoe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -546,6 +516,7 @@ class PhimoeSdpaAttention(PhimoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -560,6 +531,7 @@ class PhimoeSdpaAttention(PhimoeAttention):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                position_embeddings=position_embeddings,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -572,11 +544,7 @@ class PhimoeSdpaAttention(PhimoeAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -626,7 +594,7 @@ PHIMOE_ATTENTION_CLASSES = {
 }
 
 
-# copied from transformers.models.mixtral.modeling_mixtral.MixtralBlockSparseTop2MLP with Mixtral->Phimoe
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralBlockSparseTop2MLP with Mixtral->Phimoe
 class PhimoeBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: PhimoeConfig):
         super().__init__()
@@ -707,21 +675,26 @@ class MultiplierProcessor(torch.autograd.Function):
         )
 
 
-def sparsemixer(scores, top_k, jitter_eps, training):
+def sparsemixer(scores, jitter_eps, training, top_k=2):
     """
     Sparse mixer function to select top-k experts and compute multipliers.
     Based on the paper: https://arxiv.org/pdf/2409.12136
+    We first replace the TopK(·) function as random sampling of discrete variables
+    in model training. Then, following Liu et al. (2023a) and Liu et al. (2023b), we apply Heun's
+    third order method to approximate the expert routing gradient and construct a modified
+    back-propagation to give a mathematically sound gradient estimation for expert routing.
 
     Args:
         scores (torch.Tensor): Input scores tensor.
-        top_k (int): Number of top experts to select.
         jitter_eps (float): Jitter epsilon for numerical stability.
         training (bool): Flag indicating if the model is in training mode.
+        top_k (int): Number of top experts to select.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: Multiplier and selected experts tensors.
     """
-    assert top_k == 2
+    if top_k != 2:
+        raise ValueError("top_k must be equal to 2")
 
     # first expert
 
@@ -869,7 +842,6 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         routing_weights, selected_experts = sparsemixer(
             router_logits,
-            top_k=2,
             jitter_eps=self.router_jitter_noise,
             training=self.training,
         )
@@ -916,7 +888,6 @@ class PhimoeDecoderLayer(nn.Module):
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
         )
 
-    # copied from transformers.models.mixtral.modeling_mixtral.MixtralDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -927,6 +898,7 @@ class PhimoeDecoderLayer(nn.Module):
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -964,6 +936,7 @@ class PhimoeDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
         hidden_states = residual + hidden_states
 
@@ -1006,7 +979,7 @@ PHIMOE_START_DOCSTRING = r"""
     "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-# copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig
     base_model_prefix = "model"
@@ -1122,6 +1095,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         )
         self._attn_implementation = config._attn_implementation
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.rotary_emb = PhimoeRotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1133,7 +1107,6 @@ class PhimoeModel(PhimoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # copied from transformers.models.mixtral.modeling_mixtral.MixtralModel.forward with MIXTRAL->PHIMOE
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1203,6 +1176,8 @@ class PhimoeModel(PhimoePreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        position_embeddings = self.rotary_emb(hidden_states, seq_len=position_ids[0][-1] + 1)
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1224,6 +1199,7 @@ class PhimoeModel(PhimoePreTrainedModel):
                     output_router_logits,
                     use_cache,
                     cache_position,
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1235,6 +1211,7 @@ class PhimoeModel(PhimoePreTrainedModel):
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    position_embeddings=position_embeddings,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1506,7 +1483,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             router_logits=outputs.router_logits,
         )
 
-    # copied from transformers.models.phi3.modeling_phi3.prepare_inputs_for_generation
+    # Copied from transformers.models.phi3.modeling_phi3.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1714,3 +1691,11 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "PhimoePreTrainedModel",
+    "PhimoeModel",
+    "PhimoeForCausalLM",
+    "PhimoeForSequenceClassification",
+]

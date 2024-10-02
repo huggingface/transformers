@@ -97,7 +97,9 @@ class PhimoeConfig(PretrainedConfig):
         input_jitter_noise (`float`, *optional*, defaults to 0.0): Input jitter noise
         attention_bias (`bool`, *optional*, defaults to `False`): Attention bias
         lm_head_bias (`bool`, *optional*, defaults to `False`): LM head bias
+
     Example:
+
     ```python
     >>> from transformers import PhimoeModel, PhimoeConfig
     >>> # Initializing a Phi-3 style configuration
@@ -196,3 +198,6 @@ class PhimoeConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["PhimoeConfig"]
