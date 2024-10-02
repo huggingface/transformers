@@ -1152,10 +1152,8 @@ class GenerationConfig(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
 
         # Fields to ignore at serialization time
-        if "_commit_hash" in output:
-            del output["_commit_hash"]
-        if "_original_object_hash" in output:
-            del output["_original_object_hash"]
+        for key in METADATA_FIELDS:
+            output.pop(key, None)
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__

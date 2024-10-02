@@ -857,10 +857,11 @@ class PretrainedConfig(PushToHubMixin):
             output["model_type"] = self.__class__.model_type
         if "_auto_class" in output:
             del output["_auto_class"]
-        if "_commit_hash" in output:
-            del output["_commit_hash"]
         if "_attn_implementation_internal" in output:
             del output["_attn_implementation_internal"]
+
+        for key in METADATA_FIELDS:
+            output.pop(key, None)
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
