@@ -125,10 +125,10 @@ class ImageBindTextModelOutput(ModelOutput):
 
 
 @dataclass
-# ClipVisionModelOutput + normalized embeddings
 class ImageBindVisionModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Base class for vision model's outputs, This is [`ClipVisionModelOutput`] that also contains image embeddings of the pooling of the
+    last hidden states.
 
     Args:
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -158,11 +158,11 @@ class ImageBindVisionModelOutput(ModelOutput):
     normalized_image_embeds: Optional[torch.FloatTensor] = None
 
 
-# CLAPAudioModelOutput + normalized embeddings
 @dataclass
 class ImageBindAudioModelOutput(ModelOutput):
     """
-    ClapAudio model output to mimic the output of the original implementation.
+    ClapAudio model output to mimic the output of the original implementation. This is [`CLAPAudioModelOutput`] that also contains a pooling of the last hidden states
+    or normalized embeddings.
 
     Args:
         audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -441,9 +441,8 @@ class ImageBindTextEmbeddings(nn.Module):
         return embeddings
 
 
-# CLIPAttention + key/value biases
 class ImageBindAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper. This is [`CLIPAttention`] with key and value biases"""
 
     def __init__(self, config):
         super().__init__()
@@ -603,8 +602,9 @@ class ImageBindDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# CLIPEncoderLayer with DropPath layer after each residual subblock (attention, feedforward)
 class ImageBindEncoderLayer(nn.Module):
+    """This is [`CLIPEncoderLayer`] with DropPath layer after each residual subblock (attention, feedforward)"""
+
     def __init__(
         self,
         config: Union[ImageBindVisionConfig, ImageBindTextConfig, ImageBindAudioConfig],
@@ -918,11 +918,10 @@ IMAGEBIND_INPUTS_DOCSTRING = r"""
 """
 
 
-# CLIPEncoder with DropPath support
 class ImageBindEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`ImageBindEncoderLayer`].
+    [`ImageBindEncoderLayer`]. This is [`CLIPEncoder`] with DropPath support
 
     Args:
         config: ImageBindConfig
