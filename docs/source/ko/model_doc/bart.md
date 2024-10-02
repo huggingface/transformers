@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BART[[cohere]]
+# BART[[bart]]
 
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=bart">
