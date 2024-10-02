@@ -1069,8 +1069,6 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
             logits = torch.tanh(logits)
             logits = logits * self.config.final_logit_softcapping
 
-        # TODO: remove the float() operation in v4.46
-        logits = logits.float()
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues

@@ -1544,8 +1544,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             logger.warning_once(
                 "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
-        # TODO: remove the float() operations in v4.46
-        logits = logits.float()
 
         loss = None
         if labels is not None:
