@@ -103,16 +103,8 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="TimmWrapper doesn't support feed forward chunking")
-    def test_feed_forward_chunking(self):
-        pass
-
     @unittest.skip(reason="TimmWrapper doesn't have num_hidden_layers attribute")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
@@ -123,56 +115,20 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper model cannot be created without specifying a backbone checkpoint")
-    def test_from_pretrained_no_checkpoint(self):
-        pass
-
-    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmWrapper")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in TimmWrapper.")
-    def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in TimmWrapper.")
-    def test_tied_model_weights_key_ignore(self):
-        pass
-
-    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmWrapper")
-    def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmWrapper")
-    def test_model_weights_reload_no_missing_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper doesn't have hidden size info in its configuration.")
-    def test_channels(self):
-        pass
-
     @unittest.skip(reason="TimmWrapper doesn't support output_attentions.")
     def test_torchscript_output_attentions(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper doesn't support output_hidden_states.")
+    def test_torchscript_output_hidden_state(self):
         pass
 
     @unittest.skip(reason="TimmWrapper doesn't support output_hidden_states.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper only loads safetensor files.")
-    def test_save_load_fast_init_to_base(self):
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_initialization(self):
         pass
 
     @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
