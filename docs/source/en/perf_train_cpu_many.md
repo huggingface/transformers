@@ -74,12 +74,15 @@ source $torch_ccl_path/env/setvars.sh
 
 Intel Extension for PyTorch (IPEX) provides performance optimizations for CPU training with both Float32 and BFloat16 (refer to the [single CPU section](./perf_train_cpu) to learn more).
 
+
 The following "Usage in Trainer" takes mpirun in Intel® MPI library as an example.
+
 
 ## Usage in Trainer
 To enable multi CPU distributed training in the Trainer with the ccl backend, users should add **`--ddp_backend ccl`** in the command arguments.
 
 Let's see an example with the [question-answering example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
+
 
 The following command enables training with 2 processes on one Xeon node, with one process running per one socket. The variables OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
 ```shell script
@@ -135,16 +138,16 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
 ## Usage with Kubernetes
 
 The same distributed training job from the previous section can be deployed to a Kubernetes cluster using the
-[Kubeflow PyTorchJob training operator](components/training/pytorch).
+[Kubeflow PyTorchJob training operator](https://www.kubeflow.org/docs/components/training/user-guides/pytorch).
 
 ### Setup
 
 This example assumes that you have:
-* Access to a Kubernetes cluster with [Kubeflow installed](components/starter/install)
-* [`kubectl`](components/starter/kubectl) installed and configured to access the Kubernetes cluster
-* A [Persistent Volume Claim (PVC)](components/starter/volumeclaim) that can be used
+* Access to a Kubernetes cluster with [Kubeflow installed](https://www.kubeflow.org/docs/started/installing-kubeflow)
+* [`kubectl`](https://kubernetes.io/docs/tasks/tools) installed and configured to access the Kubernetes cluster
+* A [Persistent Volume Claim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes) that can be used
   to store datasets and model files. There are multiple options for setting up the PVC including using an NFS
-  [storage class](components/starter/storage) or a cloud storage bucket.
+  [storage class](https://kubernetes.io/docs/concepts/storage/storage-classes) or a cloud storage bucket.
 * A Docker container that includes your model training script and all the dependencies needed to run the script. For
   distributed CPU training jobs, this typically includes PyTorch, Transformers, Intel Extension for PyTorch, Intel
   oneCCL Bindings for PyTorch, and OpenSSH to communicate between the containers.
@@ -173,7 +176,7 @@ PyTorchJob to the cluster.
 
 ### PyTorchJob Specification File
 
-The [Kubeflow PyTorchJob](components/training/pytorch) is used to run the distributed
+The [Kubeflow PyTorchJob](https://www.kubeflow.org/docs/components/training/user-guides/pytorch) is used to run the distributed
 training job on the cluster. The yaml file for the PyTorchJob defines parameters such as:
  * The name of the PyTorchJob
  * The number of replicas (workers)
@@ -270,12 +273,13 @@ To run this example, update the yaml based on your training script and the nodes
 
 <Tip>
 
-The CPU resource limits/requests in the yaml are defined in [cpu units](components/cpuunits)
+The CPU resource limits/requests in the yaml are defined in 
+[cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
 where 1 CPU unit is equivalent to 1 physical CPU core or 1 virtual core (depending on whether the node is a physical
 host or a VM). The amount of CPU and memory limits/requests defined in the yaml should be less than the amount of
 available CPU/memory capacity on a single machine. It is usually a good idea to not use the entire machine's capacity in
-order to leave some resources for the kubelet and OS. In order to get ["guaranteed"](components/guaranteed)
-[quality of service](components/qualityofservice) for the worker pods,
+order to leave some resources for the kubelet and OS. In order to get ["guaranteed"](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#guaranteed)
+[quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod) for the worker pods,
 set the same CPU and memory amounts for both the resource limits and requests.
 
 </Tip>
