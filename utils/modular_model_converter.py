@@ -547,9 +547,10 @@ def get_new_part(class_name, base_class):
         new_part = class_name
 
     # Convert the remaining new part to snake_case
-    snake_case = re.sub(r'(?<!^)(?=[A-Z])', '_', new_part).lower()
+    snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", new_part).lower()
 
     return snake_case
+
 
 class ModularConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
