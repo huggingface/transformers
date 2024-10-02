@@ -67,7 +67,7 @@ model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", device_map="aut
 
 نظرًا لأن النموذج مُحمَّل بدقة bfloat16، فباستخدام قاعدتنا الإرشادية أعلاه، نتوقع أن تكون متطلبات الذاكرة لتشغيل الاستدلال باستخدام `bigcode/octocoder` حوالي 31 جيجا بايت من ذاكرة الفيديو العشوائية (VRAM). دعنا نجرب.
 
-نقوم أولاً بتحميل النموذج والمحلل اللغوي ثم نقوم بتمرير كلاهما إلى كائن [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines) في Transformers.
+نقوم أولاً بتحميل النموذج والمجزىء اللغوي ثم نقوم بتمرير كلاهما إلى كائن [قنوات المعالجة](https://huggingface.co/docs/transformers/main_classes/pipelines) في Transformers.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
