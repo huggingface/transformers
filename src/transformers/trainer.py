@@ -401,6 +401,10 @@ class Trainer:
                     " boolean argument which will be triggered after the last batch of the eval set to signal that the"
                     " summary statistics should be returned by the function."
                 )
+        if args.eval_strategy is not None and args.eval_strategy != "no" and eval_dataset is None:
+            raise ValueError(
+                f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
+            )
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
@@ -468,19 +472,18 @@ class Trainer:
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():
-                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+                from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
-                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
-                if model_type:
-                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel(model_type=model_type)
+                if isinstance(model, PreTrainedModel):
+                    # Patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model)
                 else:
                     logger.warning(
-                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                        "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
                     )
             else:
                 raise ImportError(
-                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.3.0 is not available. "
                     "Please install it with `pip install liger-kernel`"
                 )
 
@@ -1238,6 +1241,10 @@ class Trainer:
             OptimizerNames.ADAMW_8BIT,
             OptimizerNames.PAGED_ADAMW,
             OptimizerNames.PAGED_ADAMW_8BIT,
+            OptimizerNames.ADEMAMIX,
+            OptimizerNames.ADEMAMIX_8BIT,
+            OptimizerNames.PAGED_ADEMAMIX,
+            OptimizerNames.PAGED_ADEMAMIX_8BIT,
             OptimizerNames.LION,
             OptimizerNames.LION_8BIT,
             OptimizerNames.PAGED_LION,
@@ -1267,6 +1274,33 @@ class Trainer:
                     # Above we pass all `adam_kwargs` to the optimizer, here
                     # we only pass `optim_args` which can be passed by the user.
                     additional_optim_kwargs = optim_args
+                elif "ademamix" in args.optim:
+                    if is_bitsandbytes_available() and version.parse(
+                        importlib.metadata.version("bitsandbytes")
+                    ) < version.parse("0.44.0"):
+                        raise ValueError(
+                            "The AdEMAMix optimizer is not supported by your current version of `bitsandbytes`. "
+                            "Please install `bitsandbytes` >= 0.44.0."
+                        )
+
+                    from bitsandbytes.optim import AdEMAMix
+
+                    optimizer_cls = AdEMAMix
+                    additional_optim_kwargs = {
+                        "betas": (
+                            float(optim_args.get("beta1", args.adam_beta1)),
+                            float(optim_args.get("beta2", args.adam_beta2)),
+                            float(optim_args.get("beta3", 0.9999)),
+                        ),
+                        "alpha": float(optim_args.get("alpha", 5.0)),
+                        "eps": float(optim_args.get("eps", args.adam_epsilon)),
+                    }
+
+                    if "t_alpha" in optim_args:
+                        additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
+
+                    if "t_beta3" in optim_args:
+                        additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
 
                 bnb_kwargs = {"optim_bits": optim_bits}
                 if "rmsprop" not in args.optim:
@@ -2363,13 +2397,13 @@ class Trainer:
                     and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
                 ):
                     # if loss is nan or inf simply add the average of previous logged losses
-                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
                     if tr_loss.device != tr_loss_step.device:
                         raise ValueError(
                             f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
                         )
-                    tr_loss += tr_loss_step
+                    tr_loss = tr_loss + tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
@@ -4013,6 +4047,7 @@ class Trainer:
         all_inputs = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
 
         metrics = None
+        eval_set_kwargs = {}
 
         # Will be useful when we have an iterable dataset so don't know its length.
         observed_num_examples = 0
@@ -4030,7 +4065,9 @@ class Trainer:
             # Prediction step
             losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            inputs_decode = (
+                self._prepare_input(inputs[main_input_name]) if "inputs" in args.include_for_metrics else None
+            )
 
             if is_torch_xla_available():
                 xm.mark_step()
@@ -4064,16 +4101,13 @@ class Trainer:
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and logits is not None and labels is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
-                    if args.include_inputs_for_metrics:
-                        metrics = self.compute_metrics(
-                            EvalPrediction(predictions=logits, label_ids=labels, inputs=inputs),
-                            compute_result=is_last_step,
-                        )
-                    else:
-                        metrics = self.compute_metrics(
-                            EvalPrediction(predictions=logits, label_ids=labels),
-                            compute_result=is_last_step,
-                        )
+                    batch_kwargs = {}
+                    batch_kwargs["losses"] = losses if "loss" in args.include_for_metrics else None
+                    batch_kwargs["inputs"] = inputs if "inputs" in args.include_for_metrics else None
+                    metrics = self.compute_metrics(
+                        EvalPrediction(predictions=logits, label_ids=labels, **batch_kwargs),
+                        compute_result=is_last_step,
+                    )
 
                 del losses, logits, labels, inputs
                 torch.cuda.empty_cache()
@@ -4122,12 +4156,11 @@ class Trainer:
             and all_labels is not None
             and not self.args.batch_eval_metrics
         ):
-            if args.include_inputs_for_metrics:
-                metrics = self.compute_metrics(
-                    EvalPrediction(predictions=all_preds, label_ids=all_labels, inputs=all_inputs)
-                )
-            else:
-                metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
+            eval_set_kwargs["losses"] = all_losses if "loss" in args.include_for_metrics else None
+            eval_set_kwargs["inputs"] = all_inputs if "inputs" in args.include_for_metrics else None
+            metrics = self.compute_metrics(
+                EvalPrediction(predictions=all_preds, label_ids=all_labels, **eval_set_kwargs)
+            )
         elif metrics is None:
             metrics = {}
 
@@ -4462,6 +4495,7 @@ class Trainer:
         commit_message: Optional[str] = "End of training",
         blocking: bool = True,
         token: Optional[str] = None,
+        revision: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -4474,6 +4508,8 @@ class Trainer:
                 Whether the function should return only when the `git push` has finished.
             token (`str`, *optional*, defaults to `None`):
                 Token with write permission to overwrite Trainer's original args.
+            revision (`str`, *optional*):
+                The git revision to commit from. Defaults to the head of the "main" branch.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4527,6 +4563,7 @@ class Trainer:
             token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=revision,
         )
 
     #
@@ -4596,6 +4633,7 @@ class Trainer:
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
         inputs_host: Union[torch.Tensor, List[torch.Tensor]] = None
         metrics: Optional[dict] = None
+        eval_set_kwargs: dict = {}
 
         world_size = max(1, args.world_size)
 
@@ -4622,7 +4660,9 @@ class Trainer:
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            inputs_decode = (
+                self._prepare_input(inputs[main_input_name]) if "inputs" in args.include_for_metrics else None
+            )
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
@@ -4642,16 +4682,13 @@ class Trainer:
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
-                    if args.include_inputs_for_metrics:
-                        metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),
-                            compute_result=is_last_step,
-                        )
-                    else:
-                        metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host),
-                            compute_result=is_last_step,
-                        )
+                    batch_kwargs = {}
+                    batch_kwargs["losses"] = losses_host if "loss" in args.include_for_metrics else None
+                    batch_kwargs["inputs"] = inputs_host if "inputs" in args.include_for_metrics else None
+                    metrics = self.compute_metrics(
+                        EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
+                        compute_result=is_last_step,
+                    )
 
             if self.args.batch_eval_metrics or (
                 args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0
@@ -4690,12 +4727,9 @@ class Trainer:
             and label_ids is not None
             and not self.args.batch_eval_metrics
         ):
-            if args.include_inputs_for_metrics:
-                metrics = self.compute_metrics(
-                    EvalPrediction(predictions=preds, label_ids=label_ids, inputs=inputs_ids)
-                )
-            else:
-                metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+            eval_set_kwargs["losses"] = eval_loss if "loss" in args.include_for_metrics else None
+            eval_set_kwargs["inputs"] = inputs_ids if "inputs" in args.include_for_metrics else None
+            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids, **eval_set_kwargs))
         elif metrics is None:
             metrics = {}
 
