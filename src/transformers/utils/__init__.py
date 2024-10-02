@@ -163,6 +163,7 @@ from .import_utils import (
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
+    is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
