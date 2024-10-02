@@ -32,8 +32,8 @@ else:
     _import_structure["image_processing_timm_wrapper"] = ["TimmWrapperImageProcessor"]
     _import_structure["modeling_timm_wrapper"] = [
         "TimmWrapperForImageClassification",
-        "TimmWrapperPreTrainedModel",
         "TimmWrapperModel",
+        "TimmWrapperPreTrainedModel",
     ]
 
 
