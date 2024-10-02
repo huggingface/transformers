@@ -1442,7 +1442,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
-    
+
     @require_torch
     def test_chunking_parameter_passthrough(self):
         speech_recognizer = pipeline(
