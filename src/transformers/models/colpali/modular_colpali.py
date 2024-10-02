@@ -22,11 +22,10 @@ import torch.utils.checkpoint
 from PIL import Image
 from torch import nn
 
-from transformers.utils.generic import ModelOutput
-
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -263,7 +262,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
 
 @dataclass
-class ColPaliModelOutput(ModelOutput):
+class ColPaliForRetrievalOutput(ModelOutput):
     """
     Base class for ColPali embeddings output.
 
@@ -364,7 +363,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             - 0 indicates the head is **masked**.
         """
     )
-    @replace_return_docstrings(output_type=ColPaliModelOutput, config_class="ColPaliConfig")
+    @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -381,7 +380,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
-    ) -> Union[Tuple, ColPaliModelOutput]:
+    ) -> Union[Tuple, ColPaliForRetrievalOutput]:
         r"""
         Returns:
         """
@@ -412,9 +411,8 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         if not return_dict:
             return (embeddings,) + vlm_outputs
 
-        return ColPaliModelOutput(
+        return ColPaliForRetrievalOutput(
             embeddings=embeddings,
-            logits=vlm_outputs.logits,
             past_key_values=vlm_outputs.past_key_values,
             hidden_states=vlm_outputs.hidden_states,
             attentions=vlm_outputs.attentions,
