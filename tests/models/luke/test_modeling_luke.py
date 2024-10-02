@@ -618,6 +618,7 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = True
     test_head_masking = True
+    pretrained_checkpoint = "studio-ousia/luke-base"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -689,19 +690,6 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = LukeModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LukeConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "studio-ousia/luke-base"
-        model = LukeModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

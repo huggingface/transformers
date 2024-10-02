@@ -145,15 +145,13 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Intel/zoedepth-nyu"
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
@@ -194,12 +192,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="ZoeDepth does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Intel/zoedepth-nyu"
-        model = ZoeDepthForDepthEstimation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

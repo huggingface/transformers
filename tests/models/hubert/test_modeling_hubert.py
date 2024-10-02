@@ -318,17 +318,11 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/hubert-base-ls960"
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -565,30 +559,19 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/hubert-large-ls960-ft"
 
     def setUp(self):
         self.model_tester = HubertModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
         self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -712,11 +695,6 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
-        self.assertIsNotNone(model)
 
 
 @require_torch

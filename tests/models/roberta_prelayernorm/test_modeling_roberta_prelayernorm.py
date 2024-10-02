@@ -394,20 +394,12 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     )
     fx_compatible = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "andreasmadsen/efficient_mlm_m0.15"
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setUp with Roberta->RobertaPreLayerNorm
     def setUp(self):
         self.model_tester = RobertaPreLayerNormModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=37)
-
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_various_embeddings
     def test_model_various_embeddings(self):
@@ -479,12 +471,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "andreasmadsen/efficient_mlm_m0.15"
-        model = RobertaPreLayerNormModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_respects_padding_index with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_respects_padding_index(self):

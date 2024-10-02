@@ -243,13 +243,11 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_head_masking = False
     is_encoder_decoder = False
+    pretrained_checkpoint = "microsoft/deberta-base"
 
     def setUp(self):
         self.model_tester = DebertaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_deberta_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -270,12 +268,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/deberta-base"
-        model = DebertaModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

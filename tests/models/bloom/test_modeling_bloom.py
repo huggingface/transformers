@@ -134,7 +134,7 @@ class BloomModelTester:
             dtype="float32",
         )
 
-    def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_model(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -345,17 +345,11 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems not to be supported
+    pretrained_checkpoint = "bigscience/bigscience-small-testing"
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BloomConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_bloom_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bloom_model(*config_and_inputs)
 
     def test_bloom_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -388,12 +382,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "bigscience/bigscience-small-testing"
-        model = BloomModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

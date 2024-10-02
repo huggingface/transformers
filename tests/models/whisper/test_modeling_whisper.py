@@ -296,7 +296,7 @@ class WhisperModelTester:
 
         return input_lengths
 
-    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
+    def create_and_check_model(self, config, inputs_dict, freeze_encoder=False):
         model = WhisperModel(config=config).to(torch_device).eval()
 
         if freeze_encoder:
@@ -440,9 +440,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -453,13 +450,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    def test_model_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
-
     def test_model_forward_with_frozen_encoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs, freeze_encoder=True)
+        self.model_tester.create_and_check_model(*config_and_inputs, freeze_encoder=True)
 
     def test_requires_grad_with_frozen_encoder(self):
         config = self.model_tester.get_config()
@@ -3490,7 +3483,7 @@ class WhisperEncoderModelTester:
     def encoder_seq_length(self):
         return self.get_subsampled_output_lengths(self.seq_length)
 
-    def create_and_check_model_forward(self, config, inputs_dict, use_weighted_layer_sum=False):
+    def create_and_check_model(self, config, inputs_dict, use_weighted_layer_sum=False):
         config.use_weighted_layer_sum = use_weighted_layer_sum
         model = WhisperForAudioClassification(config=config)
         model.to(torch_device).eval()
@@ -3518,9 +3511,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3533,13 +3523,9 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             expected_arg_names = ["input_features", "head_mask", "encoder_outputs"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_forward_pass(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
-
     def test_forward_pass_weighted_layer_sum(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
+        self.model_tester.create_and_check_model(*config_and_inputs, use_weighted_layer_sum=True)
 
     @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_cpu_offload(self):
@@ -3874,6 +3860,20 @@ class WhisperStandaloneDecoderModelTester:
 
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_decoder(self):
+        config, input_features = self.prepare_config_and_inputs()
+        input_ids = input_features["input_ids"]
+        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
+
+        return (config, input_ids, encoder_hidden_states)
+
+    def create_and_check_model(self, config, input_values):
+        model = WhisperDecoder(config=config).to(torch_device).eval()
+        result = model(**input_values)
+        self.parent.assertTrue(
+            result["last_hidden_state"].shape == (self.batch_size, self.seq_length, self.hidden_size)
+        )
+
     def create_and_check_decoder_model_past(self, config, input_ids):
         config.use_cache = True
         model = WhisperDecoder(config=config).to(torch_device).eval()
@@ -3958,9 +3958,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     def setUp(self):
         self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

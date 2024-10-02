@@ -159,6 +159,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "microsoft/cvt-13"
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
@@ -169,9 +170,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             hidden_size=37,
             common_properties=["hidden_size", "num_channels"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):
@@ -184,10 +182,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Cvt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -228,12 +222,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/cvt-13"
-        model = CvtModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

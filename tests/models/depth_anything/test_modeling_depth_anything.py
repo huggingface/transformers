@@ -145,6 +145,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "LiheYoung/depth-anything-small-hf"
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -156,11 +157,12 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             common_properties=["patch_size"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Depth Anything doesn't have a base model")
+    def test_model(self):
         pass
 
     def test_for_depth_estimation(self):
@@ -198,12 +200,6 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "LiheYoung/depth-anything-small-hf"
-        model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_backbone_selection(self):
         def _validate_backbone_init():

@@ -367,6 +367,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+    pretrained_checkpoint = "EleutherAI/gpt-j-6B"
 
     @unittest.skipIf(
         not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
@@ -404,9 +405,6 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = GPTJModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPTJConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_gptj_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -491,12 +489,6 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "EleutherAI/gpt-j-6B"
-        model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
-        self.assertIsNotNone(model)
 
     @require_flash_attn
     @require_torch_gpu

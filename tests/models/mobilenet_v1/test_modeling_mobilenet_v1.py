@@ -154,13 +154,11 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/mobilenet_v1_1.0_224"
 
     def setUp(self):
         self.model_tester = MobileNetV1ModelTester(self)
         self.config_tester = MobileNetV1ConfigTester(self, config_class=MobileNetV1Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="MobileNetV1 does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -173,10 +171,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="MobileNetV1 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -207,12 +201,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/mobilenet_v1_1.0_224"
-        model = MobileNetV1Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/pull/31258")
     def test_batching_equivalence(self):

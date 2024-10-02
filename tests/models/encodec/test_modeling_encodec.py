@@ -123,7 +123,7 @@ class EncodecModelTester:
             codebook_size=self.codebook_size,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
@@ -157,9 +157,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.config_tester = ConfigTester(
             self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

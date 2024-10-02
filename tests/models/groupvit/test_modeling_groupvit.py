@@ -148,15 +148,13 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -194,10 +192,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -350,12 +344,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             if self.has_attentions:
                 self.assertIsNone(attentions.grad)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class GroupViTTextModelTester:
     def __init__(
@@ -448,17 +436,11 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -491,12 +473,6 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class GroupViTModelTester:
@@ -556,13 +532,10 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "nvidia/groupvit-gcc-yfcc"
 
     def setUp(self):
         self.model_tester = GroupViTModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):
@@ -705,12 +678,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.save_pretrained(tmp_dir_name)
             text_config = GroupViTTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nvidia/groupvit-gcc-yfcc"
-        model = GroupViTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

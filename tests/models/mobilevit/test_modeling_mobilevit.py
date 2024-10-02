@@ -193,6 +193,7 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "apple/mobilevit-small"
 
     test_pruning = False
     test_resize_embeddings = False
@@ -202,9 +203,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def setUp(self):
         self.model_tester = MobileViTModelTester(self)
         self.config_tester = MobileViTConfigTester(self, config_class=MobileViTConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="MobileViT does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -217,10 +215,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip(reason="MobileViT does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -267,12 +261,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "apple/mobilevit-small"
-        model = MobileViTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
     def test_batching_equivalence(self):

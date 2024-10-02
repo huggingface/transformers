@@ -110,6 +110,23 @@ class AutoformerModelTester:
             scaling="std",  # we need std to get non-zero `loc`
         )
 
+    def create_and_check_model(self, config, input_values):
+        model = AutoformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(**input_values)
+
+        past_time_features = input_values["past_time_features"]
+        future_time_features = input_values["future_time_features"]
+        past_length = config.context_length + max(config.lags_sequence)
+        time_feat = torch.cat(
+            [past_time_features[:, past_length - config.context_length :, ...], future_time_features], dim=1
+        )
+        sequence_length = time_feat.shape[1] - (config.context_length - config.label_length)
+        self.parent.assertEqual(
+            tuple(result.last_hidden_state.shape), (self.batch_size, sequence_length, self.hidden_size)
+        )
+
     def prepare_autoformer_inputs_dict(self, config):
         _past_length = config.context_length + max(config.lags_sequence)
 
@@ -216,9 +233,6 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = AutoformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AutoformerConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

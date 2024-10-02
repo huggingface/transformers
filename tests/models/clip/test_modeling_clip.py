@@ -368,13 +368,11 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -400,10 +398,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -436,12 +430,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -567,17 +555,11 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -614,12 +596,6 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -704,13 +680,10 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "openai/clip-vit-base-patch32"
 
     def setUp(self):
         self.model_tester = CLIPModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -957,12 +930,6 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa

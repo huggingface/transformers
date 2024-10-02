@@ -227,13 +227,11 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = True
+    pretrained_checkpoint = "distilbert-base-uncased"
 
     def setUp(self):
         self.model_tester = DistilBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DistilBertConfig, dim=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_distilbert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -267,12 +265,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_multiple_choice(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "distilbert-base-uncased"
-        model = DistilBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

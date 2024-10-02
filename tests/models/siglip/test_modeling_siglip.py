@@ -316,15 +316,13 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SIGLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -350,10 +348,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
@@ -382,12 +376,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -495,20 +483,12 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
@@ -544,12 +524,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -629,15 +603,11 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipModelTester(self)
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_hidden_states_output
@@ -750,12 +720,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             config.save_pretrained(tmp_dir_name)
             text_config = SiglipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @require_flash_attn
     @require_torch_gpu

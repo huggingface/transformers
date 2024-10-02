@@ -202,17 +202,11 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "OpenGVLab/pvt_v2_b0"
 
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
         self.config_tester = PvtV2ConfigTester(self, config_class=PvtV2Config)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Pvt-V2 does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -308,12 +302,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "OpenGVLab/pvt_v2_b0"
-        model = PvtV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

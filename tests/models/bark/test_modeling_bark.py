@@ -542,9 +542,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.model_tester = BarkSemanticModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -630,9 +627,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def setUp(self):
         self.model_tester = BarkCoarseModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -720,9 +714,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = BarkFineModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkFineConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

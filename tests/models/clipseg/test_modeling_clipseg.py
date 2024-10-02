@@ -155,15 +155,13 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="CLIPSeg does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -189,10 +187,6 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -221,12 +215,6 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class CLIPSegTextModelTester:
@@ -321,17 +309,11 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def setUp(self):
         self.model_tester = CLIPSegTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -364,12 +346,6 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class CLIPSegModelTester:
@@ -458,6 +434,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment
@@ -472,10 +449,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = CLIPSegModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -766,12 +739,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -205,13 +205,11 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/mobilenet_v2_1.4_224"
 
     def setUp(self):
         self.model_tester = MobileNetV2ModelTester(self)
         self.config_tester = MobileNetV2ConfigTester(self, config_class=MobileNetV2Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="MobileNetV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -224,10 +222,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="MobileNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -262,12 +256,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/mobilenet_v2_1.4_224"
-        model = MobileNetV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
     def test_batching_equivalence(self):

@@ -208,9 +208,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             prediction_length=self.model_tester.prediction_length,
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:

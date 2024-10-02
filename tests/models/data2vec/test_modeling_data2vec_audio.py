@@ -382,17 +382,11 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/data2vec-audio-base"
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Data2VecAudioConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -589,11 +583,6 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Data2VecAudioModel.from_pretrained("facebook/data2vec-audio-base")
-        self.assertIsNotNone(model)
 
 
 @require_torch

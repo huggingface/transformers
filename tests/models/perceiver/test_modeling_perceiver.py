@@ -312,6 +312,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_torchscript = False
 
     maxDiff = None
+    pretrained_checkpoint = "deepmind/language-perceiver"
 
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)
@@ -347,9 +348,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
         return inputs_dict
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForMaskedLM)
@@ -835,12 +833,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip(reason="Perceiver doesn't support the AutoModel API")
     def test_load_with_mismatched_shapes(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "deepmind/language-perceiver"
-        model = PerceiverModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

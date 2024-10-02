@@ -359,25 +359,12 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (SeamlessM4TForSpeechToText,) if is_torch_available() else ()
-
+    pretrained_checkpoint = "facebook/hf-seamless-m4t-medium"
     input_name = "input_features"
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="speech")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4TConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/hf-seamless-m4t-medium"
-        model = SeamlessM4TModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -637,23 +624,11 @@ class SeamlessM4TModelWithTextInputTest(
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "facebook/hf-seamless-m4t-medium"
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4TConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/hf-seamless-m4t-medium"
-        model = SeamlessM4TModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

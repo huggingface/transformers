@@ -257,6 +257,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "microsoft/kosmos-2-patch14-224"
 
     # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
@@ -298,10 +299,6 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -420,12 +417,6 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/kosmos-2-patch14-224"
-        model = Kosmos2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

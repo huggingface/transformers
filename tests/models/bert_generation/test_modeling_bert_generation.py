@@ -249,17 +249,11 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "google/bert_for_seq_generation_L-24_bbc_encoder"
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
         self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_bert(self):
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
@@ -299,11 +293,6 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
-        self.assertIsNotNone(model)
 
 
 @require_torch

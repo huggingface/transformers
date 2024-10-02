@@ -584,6 +584,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "google/siglip-base-patch16-224"
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -632,13 +633,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = RoCBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -714,12 +708,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             encoder_hidden_states,
             encoder_attention_mask,
         )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "weiweishi/roc-bert-base-zh"
-        model = RoCBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

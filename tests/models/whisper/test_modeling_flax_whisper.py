@@ -206,9 +206,6 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     # overwrite because of `input_features`
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -841,9 +838,6 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
             make_partial_class(model_class, input_shape=self.init_shape) for model_class in self.all_model_classes
         )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     # overwrite because of `input_features`
     def test_jit_compilation(self):

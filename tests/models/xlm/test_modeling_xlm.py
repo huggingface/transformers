@@ -159,7 +159,7 @@ class XLMModelTester:
             bos_token_id=self.bos_token_id,
         )
 
-    def create_and_check_xlm_model(
+    def create_and_check_model(
         self,
         config,
         input_ids,
@@ -390,6 +390,7 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "FacebookAI/xlm-mlm-en-2048"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -425,13 +426,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = XLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_xlm_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlm_model(*config_and_inputs)
 
     # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->XLM
     def test_xlm_model_with_sinusoidal_encodings(self):
@@ -510,12 +504,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 [expected_shape] * len(iter_hidden_states),
             )
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "FacebookAI/xlm-mlm-en-2048"
-        model = XLMModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

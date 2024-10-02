@@ -505,17 +505,11 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     fx_compatible = True
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/wav2vec2-base-960h"
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -718,11 +712,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-        self.assertIsNotNone(model)
-
     # Wav2Vec2 cannot be torchscripted because of group norm.
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         # TODO: fix it
@@ -850,19 +839,13 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "facebook/wav2vec2-base-960h"
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1277,11 +1260,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         logits_2 = get_logits(model, input_features)
 
         self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-        self.assertIsNotNone(model)
 
 
 @require_torch

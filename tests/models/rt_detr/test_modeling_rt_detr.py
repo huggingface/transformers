@@ -285,9 +285,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["hidden_size", "num_attention_heads"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_rt_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_rt_detr_model(*config_and_inputs)

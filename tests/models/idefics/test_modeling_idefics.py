@@ -327,6 +327,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "HuggingFaceM4/idefics-9b"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -352,9 +353,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_model_single_image(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
@@ -564,12 +562,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         self.has_attentions = False
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "HuggingFaceM4/idefics-9b"
-        model = IdeficsModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @require_torch_sdpa
     @slow

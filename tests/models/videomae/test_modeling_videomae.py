@@ -186,6 +186,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "MCG-NJU/videomae-base"
 
     def setUp(self):
         self.model_tester = VideoMAEModelTester(self)
@@ -213,9 +214,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         return inputs_dict
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -229,19 +227,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "MCG-NJU/videomae-base"
-        model = VideoMAEModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

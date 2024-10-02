@@ -151,15 +151,13 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/instructblip-flan-t5-xl"
 
     def setUp(self):
         self.model_tester = InstructBlipVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=InstructBlipVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="InstructBLIP's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -185,10 +183,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training")
     def test_training(self):
@@ -217,12 +211,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/instructblip-flan-t5-xl"
-        model = InstructBlipVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class InstructBlipQFormerModelTester:
@@ -460,6 +448,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/instructblip-flan-t5-xl"
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
@@ -522,12 +511,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             config.save_pretrained(tmp_dir_name)
             qformer_config = InstructBlipQFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/instructblip-flan-t5-xl"
-        model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

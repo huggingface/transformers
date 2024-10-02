@@ -222,6 +222,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "tau/splinter-base"
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -270,13 +271,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester = SplinterModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
@@ -324,12 +318,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                         model(**inputs)[0]
                 else:
                     model(**inputs)[0]
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "tau/splinter-base"
-        model = SplinterModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
     # When the batch is distributed to multiple devices, each replica could get different values for the maximal number

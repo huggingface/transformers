@@ -244,13 +244,6 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
         self.model_tester = FlaxLongT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         # check that gated gelu feed forward and different word embeddings work

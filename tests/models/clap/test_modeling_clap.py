@@ -165,13 +165,11 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapAudioModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ClapAudioModel does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -235,10 +233,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_features"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
@@ -270,12 +264,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapAudioModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -392,17 +380,11 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ClapTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -439,12 +421,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
@@ -512,13 +488,10 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "laion/clap-htsat-fused"
 
     def setUp(self):
         self.model_tester = ClapModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -645,12 +618,6 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = ClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @slow

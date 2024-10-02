@@ -147,15 +147,13 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "microsoft/xclip-base-patch32"
 
     def setUp(self):
         self.model_tester = XCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=XCLIPVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="X-CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -181,10 +179,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -213,12 +207,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/xclip-base-patch32"
-        model = XCLIPVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -410,17 +398,11 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "microsoft/xclip-base-patch32"
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XCLIPTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -453,12 +435,6 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/xclip-base-patch32"
-        model = XCLIPTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class XCLIPModelTester:
@@ -544,13 +520,10 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_attention_outputs = False
     test_torchscript = False
     maxdiff = None
+    pretrained_checkpoint = "microsoft/xclip-base-patch32"
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -683,12 +656,6 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = XCLIPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/xclip-base-patch32"
-        model = XCLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on a spaghetti video

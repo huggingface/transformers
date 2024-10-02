@@ -388,17 +388,11 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         else {}
     )
     model_split_percents = [0.5, 0.9]
+    pretrained_checkpoint = "facebook/data2vec-text-base"
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -466,12 +460,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/data2vec-text-base"
-        model = Data2VecTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """This is a regression test for https://github.com/huggingface/transformers/issues/1761

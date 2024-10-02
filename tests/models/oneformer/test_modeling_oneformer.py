@@ -244,6 +244,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    pretrained_checkpoint = "shi-labs/oneformer_ade20k_swin_tiny"
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -257,9 +258,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def setUp(self):
         self.model_tester = OneFormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OneFormerConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_oneformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -322,12 +320,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
             expected_arg_names = ["pixel_values", "task_inputs"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in ["shi-labs/oneformer_ade20k_swin_tiny"]:
-            model = OneFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
     def test_model_with_labels(self):
         size = (self.model_tester.min_size,) * 2

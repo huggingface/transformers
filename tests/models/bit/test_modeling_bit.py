@@ -170,15 +170,13 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/bit-50"
 
     def setUp(self):
         self.model_tester = BitModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=BitConfig, has_text_modality=False, common_properties=["num_channels"]
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Bit does not output attentions")
     def test_attention_outputs(self):
@@ -191,10 +189,6 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Bit does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -257,12 +251,6 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/bit-50"
-        model = BitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

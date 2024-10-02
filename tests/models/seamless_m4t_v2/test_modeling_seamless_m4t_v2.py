@@ -377,23 +377,11 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     all_generative_model_classes = (SeamlessM4Tv2ForSpeechToText,) if is_torch_available() else ()
 
     input_name = "input_features"
+    pretrained_checkpoint = "facebook/seamless-m4t-v2-large"
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4Tv2Config)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/seamless-m4t-v2-large"
-        model = SeamlessM4Tv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -633,23 +621,11 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
         else ()
     )
     all_generative_model_classes = (SeamlessM4Tv2ForTextToText,) if is_torch_available() else ()
+    pretrained_checkpoint = "facebook/seamless-m4t-v2-large"
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="text")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4Tv2Config)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/seamless-m4t-v2-large"
-        model = SeamlessM4Tv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

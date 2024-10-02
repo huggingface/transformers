@@ -246,6 +246,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Rwkv does not support head masking
+    pretrained_checkpoint = "RWKV/rwkv-4-169m-pile"
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
@@ -274,9 +275,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if not is_inside_interval:
             standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
             self.fail(self._formatMessage(msg, standardMsg))
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_rwkv_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -386,12 +384,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 list(self_attentions[0].shape[-3:]),
                 [batch_size, seq_len, config.hidden_size],
             )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "RWKV/rwkv-4-169m-pile"
-        model = RwkvModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_beam_sample_generate_dict_output(self):
         # This model has a custom attention output shape AND config flags, let's skip those checks

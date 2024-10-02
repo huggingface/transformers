@@ -574,6 +574,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     is_encoder_decoder = True
     # The small MT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "google/mt5-small"
 
     def setUp(self):
         self.model_tester = MT5ModelTester(self)
@@ -711,16 +712,9 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -830,12 +824,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_v1_1_resize_embeddings(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
         self.model_tester.check_resize_embeddings_t5_v1_1(config)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/mt5-small"
-        model = MT5Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
@@ -1038,13 +1026,6 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def setUp(self):
         self.model_tester = MT5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MT5Config, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_model_fp16_forward(self):

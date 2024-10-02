@@ -240,9 +240,6 @@ class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.model_tester = FlaxPegasusModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PegasusConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_use_cache_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:

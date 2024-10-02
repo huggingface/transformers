@@ -317,9 +317,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.model_tester = MegatronBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_megatron_bert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_megatron_bert_model(*config_and_inputs)

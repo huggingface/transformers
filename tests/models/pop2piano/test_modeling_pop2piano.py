@@ -517,21 +517,15 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_resize_embeddings = True
     test_model_parallel = False
     is_encoder_decoder = True
+    pretrained_checkpoint = "sweetcocoa/pop2piano"
 
     def setUp(self):
         self.model_tester = Pop2PianoModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig, d_model=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -603,12 +597,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_v1_1_resize_embeddings(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
         self.model_tester.check_resize_embeddings_pop2piano_v1_1(config)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "sweetcocoa/pop2piano"
-        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @require_onnx
     def test_export_to_onnx(self):

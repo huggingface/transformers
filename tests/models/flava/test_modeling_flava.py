@@ -168,13 +168,11 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip("Flava does not use input_ids")
     def test_inputs_embeds(self):
@@ -200,10 +198,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -330,12 +324,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaImageModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class FlavaTextModelTester:
     def __init__(
@@ -449,17 +437,11 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -493,12 +475,6 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaMultimodalModelTester:
@@ -596,19 +572,13 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_resize_embeddings = False
     test_torchscript = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -657,12 +627,6 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaMultimodalModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaImageCodebookTester:
@@ -720,14 +684,11 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = FlavaImageCodebookTester(self)
         self.config_tester = ConfigTester(self, config_class=FlavaImageCodebookConfig, has_text_modality=False)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -793,12 +754,6 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaImageCodebook.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 class FlavaModelTester:
     model_class = FlavaModel
@@ -837,9 +792,6 @@ class FlavaModelTester:
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def prepare_config_and_inputs_for_common(self):
         _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
@@ -928,13 +880,10 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "facebook/flava-full"
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
@@ -1077,13 +1026,6 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             multimodal_config = FlavaMultimodalConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.multimodal_config.to_dict(), multimodal_config.to_dict())
-
-    # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/flava-full"
-        model = FlavaModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class FlavaForPreTrainingTester(FlavaModelTester):

@@ -518,21 +518,15 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_resize_embeddings = True
     test_model_parallel = False
     is_encoder_decoder = True
+    pretrained_checkpoint = "google/long-t5-local-base"
 
     def setUp(self):
         self.model_tester = LongT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -585,12 +579,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/long-t5-local-base"
-        model = LongT5Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_export_to_onnx(self):
@@ -1031,13 +1019,6 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

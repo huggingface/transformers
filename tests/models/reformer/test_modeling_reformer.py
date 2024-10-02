@@ -503,9 +503,6 @@ class ReformerTesterMixin:
     Reformer Local and Reformer LSH run essentially the same tests
     """
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_reformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model(*config_and_inputs)
@@ -606,16 +603,11 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     test_headmasking = False
     test_torchscript = False
     test_sequence_classification_problem_types = True
+    pretrained_checkpoint = "google/reformer-crime-and-punishment"
 
     def setUp(self):
         self.model_tester = ReformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/reformer-crime-and-punishment"
-        model = ReformerModelWithLMHead.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1

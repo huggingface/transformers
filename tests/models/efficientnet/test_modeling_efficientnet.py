@@ -139,6 +139,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "google/efficientnet-b7"
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
@@ -149,9 +150,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             hidden_size=37,
             common_properties=["num_channels", "image_size", "hidden_dim"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="EfficientNet does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -164,10 +162,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @unittest.skip(reason="EfficientNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -203,12 +197,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/efficientnet-b7"
-        model = EfficientNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @is_pipeline_test
     @require_vision

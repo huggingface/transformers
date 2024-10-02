@@ -131,10 +131,6 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)

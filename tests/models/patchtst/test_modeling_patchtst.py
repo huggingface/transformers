@@ -181,9 +181,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             prediction_length=self.model_tester.prediction_length,
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 

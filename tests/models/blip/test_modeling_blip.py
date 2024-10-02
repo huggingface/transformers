@@ -156,13 +156,11 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Blip does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -188,10 +186,6 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -220,12 +214,6 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class BlipTextModelTester:
@@ -325,17 +313,11 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -368,12 +350,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)
@@ -445,13 +421,10 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -578,12 +551,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = BlipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -884,13 +851,10 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipTextRetrievalModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -1096,12 +1060,6 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             text_config = BlipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
@@ -1112,13 +1070,10 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -1311,12 +1266,6 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = BlipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

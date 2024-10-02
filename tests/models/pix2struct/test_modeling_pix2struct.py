@@ -148,15 +148,13 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "google/pix2struct-textcaps-base"
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Pix2StructVision does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -182,10 +180,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["flattened_patches"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
@@ -218,12 +212,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/pix2struct-textcaps-base"
-        model = Pix2StructVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Pix2StructTextModelTester:
@@ -324,17 +312,11 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "google/pix2struct-textcaps-base"
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
@@ -367,12 +349,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/pix2struct-textcaps-base"
-        model = Pix2StructTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Pix2StructModelTester:
@@ -429,6 +405,13 @@ class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = Pix2StructModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=Pix2StructConfig,
+            common_properties=["is_vqa", "pad_token_id", "eos_token_id", "decoder_start_token_id"],
+            # common_properties=["decoder_start_token_id", "is_vqa"],
+            has_text_modality=False,
+        )
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

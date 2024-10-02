@@ -257,13 +257,11 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_head_masking = False
     is_encoder_decoder = False
+    pretrained_checkpoint = "microsoft/deberta-v2-xlarge"
 
     def setUp(self):
         self.model_tester = DebertaV2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DebertaV2Config, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_deberta_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -288,12 +286,6 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_multiple_choice(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/deberta-v2-xlarge"
-        model = DebertaV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

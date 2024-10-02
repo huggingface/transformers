@@ -310,6 +310,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         else ()
     )
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
+    pretrained_checkpoint = "BridgeTower/bridgetower-base"
 
     is_training = False
     test_headmasking = False
@@ -338,13 +339,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.model_tester = BridgeTowerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_image_and_text_retrieval(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_and_text_retrieval(*config_and_inputs)
@@ -352,12 +346,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_masked_language_modeling(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_language_modeling(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "BridgeTower/bridgetower-base"
-        model = BridgeTowerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @slow
     def test_save_load_fast_init_from_base(self):

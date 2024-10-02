@@ -138,6 +138,7 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignVisionModelTester(self)
@@ -148,9 +149,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             common_properties=["num_channels", "image_size"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -175,10 +173,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -229,12 +223,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class AlignTextModelTester:
@@ -340,17 +328,11 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -387,12 +369,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class AlignModelTester:
@@ -454,13 +430,10 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "kakaobrain/align-base"
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -600,12 +573,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = AlignTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "kakaobrain/align-base"
-        model = AlignModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -335,17 +335,11 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    pretrained_checkpoint = "microsoft/wavlm-base-plus"
 
     def setUp(self):
         self.model_tester = WavLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WavLMConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -479,11 +473,6 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented for WavLM")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus")
-        self.assertIsNotNone(model)
 
 
 @require_torch

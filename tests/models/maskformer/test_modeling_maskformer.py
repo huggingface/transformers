@@ -209,6 +209,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
+    pretrained_checkpoint = "facebook/maskformer-swin-small-coco"
 
     def setUp(self):
         self.model_tester = MaskFormerModelTester(self)
@@ -234,9 +235,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 )
 
         return inputs_dict
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_maskformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -268,12 +266,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in ["facebook/maskformer-swin-small-coco"]:
-            model = MaskFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
     def test_model_with_labels(self):
         size = (self.model_tester.min_size,) * 2

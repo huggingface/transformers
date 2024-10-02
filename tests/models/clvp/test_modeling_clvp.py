@@ -180,10 +180,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.encoder_config_tester.run_common_tests()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_training(self):
         pass
@@ -297,10 +293,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         gc.collect()
         torch.cuda.empty_cache()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         if return_labels and model_class == ClvpForCausalLM:
             inputs_dict["labels"] = torch.zeros(
@@ -413,6 +405,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "susnato/clvp_dev"
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
@@ -423,10 +416,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         torch.cuda.empty_cache()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -536,12 +525,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
             config.save_pretrained(tmp_dir_name)
             decoder_config = ClvpDecoderConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.decoder_config.to_dict(), decoder_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "susnato/clvp_dev"
-        model = ClvpModelForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # Since Clvp has a lot of different models connected with each other it's better to test each of them individually along

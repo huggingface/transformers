@@ -172,6 +172,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    pretrained_checkpoint = "caidas/swin2SR-classical-sr-x2-64"
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -182,13 +183,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             has_text_modality=False,
             common_properties=["image_size", "patch_size", "num_channels"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_for_image_super_resolution(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -231,12 +225,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "caidas/swin2SR-classical-sr-x2-64"
-        model = Swin2SRModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     # overwriting because of `logit_scale` parameter
     def test_initialization(self):

@@ -367,17 +367,11 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "microsoft/unispeech-sat-base-plus"
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -558,11 +552,6 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_feed_forward_chunking(self):
         pass
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-base-plus")
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
@@ -574,19 +563,13 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    pretrained_checkpoint = "microsoft/unispeech-sat-large"
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
         self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -794,11 +777,6 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-large")
-        self.assertIsNotNone(model)
 
 
 @require_torch

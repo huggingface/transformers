@@ -188,6 +188,7 @@ class ModelTesterMixin:
     is_encoder_decoder = False
     has_attentions = True
     model_split_percents = [0.5, 0.7, 0.9]
+    pretrained_checkpoint = None
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -255,6 +256,13 @@ class ModelTesterMixin:
                 ).long()
 
         return inputs_dict
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4864,6 +4872,14 @@ class ModelTesterMixin:
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+
+    @slow
+    def test_model_from_pretrained(self):
+        self.assertIsNotNone(self.pretrained_checkpoint)
+        # Just check we can load at least one model from the checkpoint
+        for model_class in self.all_model_classes[0]:
+            model = model_class.from_pretrained(self.pretrained_checkpoint)
+            self.assertIsNotNone(model)
 
 
 global_rng = random.Random()

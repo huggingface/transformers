@@ -167,6 +167,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "facebook/timesformer-base-finetuned-k400"
 
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
@@ -185,9 +186,6 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
         return inputs_dict
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     @unittest.skip(reason="TimeSformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -201,19 +199,9 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_video_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_video_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/timesformer-base-finetuned-k400"
-        model = TimesformerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

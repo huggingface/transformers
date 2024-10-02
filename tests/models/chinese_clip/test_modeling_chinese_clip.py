@@ -318,6 +318,7 @@ class ChineseCLIPVisionModelTester:
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
+    pretrained_checkpoint = "OFA-Sys/chinese-clip-vit-base-patch16"
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -336,13 +337,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ChineseCLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -381,12 +375,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_hidden_states,
             encoder_attention_mask,
         )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
-        model = ChineseCLIPTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip
     def test_training(self):
@@ -429,15 +417,13 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "OFA-Sys/chinese-clip-vit-base-patch16"
 
     def setUp(self):
         self.model_tester = ChineseCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="CHINESE_CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -463,10 +449,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -495,12 +477,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
-        model = ChineseCLIPVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class ChineseCLIPModelTester:
@@ -570,15 +546,12 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    pretrained_checkpoint = "OFA-Sys/chinese-clip-vit-base-patch16"
 
     def setUp(self):
         text_kwargs = {"use_labels": False, "batch_size": 12}
         vision_kwargs = {"batch_size": 12}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -693,12 +666,6 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                     models_equal = False
 
             self.assertTrue(models_equal)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
-        model = ChineseCLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of Pikachu

@@ -152,17 +152,11 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
+    pretrained_checkpoint = "vinvino02/glpn-kitti"
 
     def setUp(self):
         self.model_tester = GLPNModelTester(self)
         self.config_tester = GLPNConfigTester(self, config_class=GLPNConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -304,12 +298,6 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "vinvino02/glpn-kitti"
-        model = GLPNModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

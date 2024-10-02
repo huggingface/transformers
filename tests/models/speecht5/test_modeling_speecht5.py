@@ -153,7 +153,7 @@ class SpeechT5ModelTester:
             decoder_ffn_dim=self.intermediate_size,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = SpeechT5Model(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
@@ -182,13 +182,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -323,7 +316,7 @@ class SpeechT5ForSpeechToTextTester:
             vocab_size=self.vocab_size,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = SpeechT5ForSpeechToText(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
@@ -381,9 +374,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -393,10 +383,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    def test_model_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -873,7 +859,7 @@ class SpeechT5ForTextToSpeechTester:
             speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = SpeechT5ForTextToSpeech(config=config).to(torch_device).eval()
 
         input_ids = inputs_dict["input_ids"]
@@ -901,9 +887,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -913,10 +896,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    def test_model_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_model_forward_with_labels(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -1418,7 +1397,7 @@ class SpeechT5ForSpeechToSpeechTester:
             speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model(self, config, inputs_dict):
         model = SpeechT5ForSpeechToSpeech(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
@@ -1447,9 +1426,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -1459,10 +1435,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    def test_model_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_model_forward_with_labels(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -1868,10 +1840,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

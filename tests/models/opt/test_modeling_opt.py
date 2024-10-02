@@ -239,9 +239,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester = OPTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OPTConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:

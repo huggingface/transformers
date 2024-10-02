@@ -511,6 +511,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = True
     test_missing_keys = False
     test_model_parallel = True
+    pretrained_checkpoint = "openai-community/gpt2"
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -544,9 +545,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         backend_empty_cache(torch_device)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_gpt2_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -740,12 +738,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "openai-community/gpt2"
-        model = GPT2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

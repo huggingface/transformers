@@ -157,15 +157,13 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     def setUp(self):
         self.model_tester = Blip2VisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=37
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="BLIP-2's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -191,10 +189,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -223,12 +217,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2VisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 class Blip2QFormerModelTester:
@@ -456,6 +444,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
@@ -514,12 +503,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             config.save_pretrained(tmp_dir_name)
             qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
@@ -715,6 +698,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    pretrained_checkpoint = "Salesforce/blip2-opt-2.7b"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -787,12 +771,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             config.save_pretrained(tmp_dir_name)
             qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip2-opt-2.7b"
-        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_get_text_features(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -947,10 +925,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Blip2TextModelWithProjectionTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
@@ -1114,10 +1088,6 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
         pass
@@ -1271,10 +1241,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

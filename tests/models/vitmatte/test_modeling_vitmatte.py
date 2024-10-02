@@ -143,6 +143,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "hustvl/vitmatte-small-composition-1k"
 
     def setUp(self):
         self.model_tester = VitMatteModelTester(self)
@@ -153,9 +154,6 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             hidden_size=37,
             common_properties=["hidden_size"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="VitMatte does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -184,16 +182,6 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="ViTMatte does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "hustvl/vitmatte-small-composition-1k"
-        model = VitMatteForImageMatting.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
     def test_retain_grad_hidden_states_attentions(self):

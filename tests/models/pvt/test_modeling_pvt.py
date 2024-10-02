@@ -166,17 +166,11 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    pretrained_checkpoint = "Zetatech/pvt-tiny-224"
 
     def setUp(self):
         self.model_tester = PvtModelTester(self)
         self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="Pvt does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -249,12 +243,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Zetatech/pvt-tiny-224"
-        model = PvtModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

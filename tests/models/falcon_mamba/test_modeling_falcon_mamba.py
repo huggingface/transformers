@@ -250,7 +250,7 @@ class FalconMambaModelTester:
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
 @require_torch
-# Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
+# Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache,hf-internal-testing/mamba-130m->tiiuae/falcon-mamba-7b
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (FalconMambaForCausalLM,) if is_torch_available() else ()
@@ -294,9 +294,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         if not is_inside_interval:
             standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
             self.fail(self._formatMessage(msg, standardMsg))
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
@@ -365,14 +362,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    @slow
-    # Ignore copy
-    def test_model_from_pretrained(self):
-        model = FalconMambaModel.from_pretrained(
-            "tiiuae/falcon-mamba-7b", torch_dtype=torch.float16, low_cpu_mem_usage=True
-        )
-        self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

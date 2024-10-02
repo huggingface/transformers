@@ -177,13 +177,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester = EsmFoldModelTester(self)
         self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     @unittest.skip(reason="Does not support attention outputs")
     def test_attention_outputs(self):
         pass

@@ -200,13 +200,11 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "apple/mobilevitv2-1.0-imagenet1k-256"
 
     def setUp(self):
         self.model_tester = MobileViTV2ModelTester(self)
         self.config_tester = MobileViTV2ConfigTester(self, config_class=MobileViTV2Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="MobileViTV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -224,10 +222,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -274,12 +268,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "apple/mobilevitv2-1.0-imagenet1k-256"
-        model = MobileViTV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

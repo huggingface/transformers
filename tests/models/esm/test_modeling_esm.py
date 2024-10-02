@@ -209,17 +209,11 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_sequence_classification_problem_types = True
     model_split_percents = [0.5, 0.8, 0.9]
+    pretrained_checkpoint = "facebook/esm2_t6_8M_UR50D"
 
     def setUp(self):
         self.model_tester = EsmModelTester(self)
         self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -238,12 +232,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_esm_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/esm2_t6_8M_UR50D"
-        model = EsmModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """This is a regression test for https://github.com/huggingface/transformers/issues/1761

@@ -173,9 +173,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = VitsModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     # TODO: @ydshieh
     @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
     def test_pipeline_feature_extraction(self):

@@ -226,6 +226,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "microsoft/swinv2-tiny-patch4-window8-256"
 
     def setUp(self):
         self.model_tester = Swinv2ModelTester(self)
@@ -236,13 +237,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             has_text_modality=False,
             common_properties=["image_size", "patch_size", "num_channels"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -430,12 +424,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/swinv2-tiny-patch4-window8-256"
-        model = Swinv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):

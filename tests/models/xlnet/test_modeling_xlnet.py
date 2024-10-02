@@ -170,7 +170,7 @@ class XLNetModelTester:
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-    def create_and_check_xlnet_base_model(
+    def create_and_check_model(
         self,
         config,
         input_ids_1,
@@ -540,6 +540,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     fx_compatible = False
     test_pruning = False
+    pretrained_checkpoint = "xlnet/xlnet-base-cased"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -568,14 +569,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = XLNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_xlnet_base_model(self):
-        self.model_tester.set_seed()
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
 
     def test_xlnet_base_model_use_mems(self):
         # checking that in auto-regressive mode, `use_mems` gives the same results
@@ -685,12 +678,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     [layer_attention.shape for layer_attention in iter_attentions],
                     [expected_shape] * len(iter_attentions),
                 )
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "xlnet/xlnet-base-cased"
-        model = XLNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

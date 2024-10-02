@@ -18,7 +18,7 @@ import collections
 import unittest
 
 from transformers import DonutSwinConfig
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -150,6 +150,7 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "naver-clova-ix/donut-base"
 
     def setUp(self):
         self.model_tester = DonutSwinModelTester(self)
@@ -160,13 +161,6 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             embed_dim=37,
             common_properties=["image_size", "patch_size", "num_channels"],
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="DonutSwin does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -327,12 +321,6 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "naver-clova-ix/donut-base"
-        model = DonutSwinModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

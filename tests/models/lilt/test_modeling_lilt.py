@@ -242,6 +242,7 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = False
     test_pruning = False
+    pretrained_checkpoint = "SCUT-DLVCLab/lilt-roberta-en-base"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -252,13 +253,6 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = LiltModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LiltConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -291,12 +285,6 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "SCUT-DLVCLab/lilt-roberta-en-base"
-        model = LiltModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

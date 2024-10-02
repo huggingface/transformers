@@ -187,15 +187,13 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    pretrained_checkpoint = "facebook/levit-128S"
 
     def setUp(self):
         self.model_tester = LevitModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=LevitConfig, has_text_modality=False, common_properties=["image_size", "num_channels"]
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Levit does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -269,10 +267,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 del inputs_dict["labels"]
 
         return inputs_dict
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -370,12 +364,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             )
 
                     loss.backward()
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/levit-128S"
-        model = LevitModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

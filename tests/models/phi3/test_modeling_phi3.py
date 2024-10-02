@@ -360,15 +360,6 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester = Phi3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Phi3Config, hidden_size=37)
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->Phi3,llama->phi3
     def test_phi3_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

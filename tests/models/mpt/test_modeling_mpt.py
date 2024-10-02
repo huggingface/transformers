@@ -372,13 +372,11 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
+    pretrained_checkpoint = "mosaicml/mpt-7b"
 
     def setUp(self):
         self.model_tester = MptModelTester(self)
         self.config_tester = MptConfigTester(self, config_class=MptConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_mpt_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -425,12 +423,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @unittest.skip(reason="For backward compatibility the lm_head is not in the model's state dict on the Hub.")
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "mosaicml/mpt-7b"
-        model = MptModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @slow

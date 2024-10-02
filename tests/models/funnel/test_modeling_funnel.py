@@ -394,13 +394,6 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = FunnelModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FunnelConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
@@ -441,9 +434,6 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FunnelModelTester(self, base=True)
         self.config_tester = ConfigTester(self, config_class=FunnelConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_base_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

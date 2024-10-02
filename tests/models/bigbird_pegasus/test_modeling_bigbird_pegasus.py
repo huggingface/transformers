@@ -309,9 +309,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         self.model_tester = BigBirdPegasusModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BigBirdPegasusConfig)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -809,9 +806,6 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
     ):
         self.model_tester = BigBirdPegasusStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=BigBirdPegasusConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

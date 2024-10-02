@@ -216,19 +216,13 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    pretrained_checkpoint = "shi-labs/dinat-mini-in1k-224"
 
     def setUp(self):
         self.model_tester = DinatModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=DinatConfig, embed_dim=37, common_properties=["patch_size", "num_channels"]
         )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -319,12 +313,6 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "shi-labs/dinat-mini-in1k-224"
-        model = DinatModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

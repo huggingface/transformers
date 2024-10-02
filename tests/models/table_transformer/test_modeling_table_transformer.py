@@ -241,9 +241,6 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         self.model_tester = TableTransformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=TableTransformerConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_table_transformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_table_transformer_model(*config_and_inputs)

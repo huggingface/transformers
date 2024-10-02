@@ -142,23 +142,11 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_inputs_embeds = False
     test_gradient_checkpointing = False
     test_torchscript = False
+    pretrained_checkpoint = "edbeeching/decision-transformer-gym-hopper-medium"
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
-        model = DecisionTransformerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

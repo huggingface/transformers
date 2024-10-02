@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import BlipTextConfig
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -129,17 +129,11 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    pretrained_checkpoint = "Salesforce/blip-vqa-base"
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip
     def test_training(self):
@@ -172,12 +166,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/blip-vqa-base"
-        model = BlipTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)
