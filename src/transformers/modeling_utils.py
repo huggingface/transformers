@@ -4520,7 +4520,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only)
+                state_dict = load_state_dict(
+                    shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
+                )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
