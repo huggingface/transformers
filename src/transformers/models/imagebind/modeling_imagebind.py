@@ -45,6 +45,7 @@ from .configuration_imagebind import (
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -56,7 +57,6 @@ def imagebind_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-# BaseModelOutputWithPooling + num_clips field for modalities which have clips (vision, audio)
 @dataclass
 class ImageBindTransformerOutput(ModelOutput):
     """
@@ -91,10 +91,10 @@ class ImageBindTransformerOutput(ModelOutput):
 
 
 @dataclass
-# CLIPTextModelOutput + normalized embeddings
 class ImageBindTextModelOutput(ModelOutput):
     """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
+    Base class for text model's outputs. This is [`CLIPTextModelOutput`] that also contains a pooling of the last hidden states
+    or normalized embeddings.
 
     Args:
         text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
