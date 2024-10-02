@@ -227,7 +227,8 @@ class ConfigTestUtils(unittest.TestCase):
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_attn_implementation_internal",
-            } | set(METADATA_FIELDS),
+            }
+            | set(METADATA_FIELDS),
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
