@@ -270,7 +270,7 @@ def get_docstring_indent(docstring):
 def merge_docstrings(original_docstring, updated_docstring):
     # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if "        Args:\n        " not in updated_docstring:
+    if not re.findall(r"\n\s*Args:\n", updated_docstring):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
