@@ -74,15 +74,12 @@ source $torch_ccl_path/env/setvars.sh
 
 Intel Extension for PyTorch (IPEX) provides performance optimizations for CPU training with both Float32 and BFloat16 (refer to the [single CPU section](./perf_train_cpu) to learn more).
 
-
 The following "Usage in Trainer" takes mpirun in Intel® MPI library as an example.
-
 
 ## Usage in Trainer
 To enable multi CPU distributed training in the Trainer with the ccl backend, users should add **`--ddp_backend ccl`** in the command arguments.
 
 Let's see an example with the [question-answering example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
-
 
 The following command enables training with 2 processes on one Xeon node, with one process running per one socket. The variables OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
 ```shell script
