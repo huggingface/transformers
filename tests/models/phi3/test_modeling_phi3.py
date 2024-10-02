@@ -16,10 +16,11 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
+from typing import List
 
 from parameterized import parameterized
 
-from transformers import Phi3Config, is_torch_available, set_seed
+from transformers import Phi3Config, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -42,6 +43,55 @@ if is_torch_available():
         Phi3ForTokenClassification,
         Phi3Model,
     )
+
+    end_of_text_token = 32000
+
+    class Phi3MiniWithStaticCache(torch.nn.Module):
+        def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
+            super().__init__()
+            self.model = model
+            self.cache = StaticCache(
+                config=model.config,
+                batch_size=batch_size,
+                max_cache_len=max_seq_len,
+                device=self.model.device,
+                dtype=self.model.dtype,
+            )
+
+        def forward(
+            self,
+            input_ids: torch.LongTensor = None,
+        ) -> torch.FloatTensor:
+            return self.model.forward(
+                input_ids=input_ids,
+                use_cache=True,
+                return_dict=True,
+                past_key_values=self.cache,
+            ).logits
+
+        @staticmethod
+        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
+            model = Phi3MiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
+
+            response_tokens = []
+
+            for input_pos in range(prompt_tokens.shape[-1]):
+                result = model.forward(
+                    input_ids=prompt_tokens[:, input_pos : input_pos + 1],
+                )
+                response_tokens.append(prompt_tokens[0][input_pos].item())
+
+            current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+            response_tokens.append(current_token)
+
+            while current_token != end_of_text_token and len(response_tokens) < max_seq_len:
+                result = model.forward(
+                    input_ids=torch.tensor([[current_token]], dtype=torch.long),
+                )
+                current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+                response_tokens.append(current_token)
+
+            return response_tokens
 
 
 class Phi3ModelTester:
@@ -392,6 +442,47 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @parameterized.expand([("longrope",)])
+    def test_model_rope_scaling_short_long_factor(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        n_factors = config.hidden_size // config.num_key_value_heads // 2
+        config.rope_scaling = {
+            "type": scaling_type,
+            "short_factor": [3.0 for _ in range(n_factors)],
+            "long_factor": [5.0 for _ in range(n_factors)],
+        }
+        input_tensor = ids_tensor([1, 4090], config.vocab_size)
+        model = Phi3ForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        generation_args_short = {
+            "max_length": config.original_max_position_embeddings,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+        }
+        output_with_short_factor = model.generate(input_tensor, **generation_args_short)
+        keys_with_short_factor = output_with_short_factor.past_key_values[0][0]
+        generation_args_long = {
+            "max_length": config.original_max_position_embeddings + 5,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        output_with_long_factor = model.generate(input_tensor, **generation_args_long)
+        keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
+        last_token_logits = output_with_long_factor.logits[-1][-1]
+        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
+        keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
+
+        # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-2, rtol=1e-2))
+        # Last token generated using long factor
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
+
 
 @slow
 @require_torch
@@ -429,7 +520,30 @@ class Phi3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Absolutely! Bananas and dragonfruits are both delicious fruits that can be combined in various ways to create tasty and nutrit"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for incorporating these fruits into your"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phi3_mini_4k_instruct_with_static_cache(self):
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+
+        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
@@ -467,7 +581,30 @@ class Phi3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and healthy ways. Here are some ideas:\n\n1."
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways. Here are some creative and healthy"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phi3_mini_128k_instruct_with_static_cache(self):
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-128k-instruct")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-128k-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+
+        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)

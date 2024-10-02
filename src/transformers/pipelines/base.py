@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import csv
 import importlib
 import json
@@ -45,6 +46,7 @@ from ..utils import (
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -218,7 +220,7 @@ def infer_framework_load_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
@@ -322,7 +324,7 @@ def infer_framework_from_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
@@ -349,7 +351,7 @@ def get_framework(model, revision: Optional[str] = None):
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
@@ -385,7 +387,7 @@ def get_default_model_and_revision(
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
     Args:
-        targeted_task (`Dict` ):
+        targeted_task (`Dict`):
            Dictionary representing the given task, that should contain default models
 
         framework (`str`, None)
@@ -873,6 +875,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 self.device = torch.device("cpu")
             elif is_torch_mlu_available():
                 self.device = torch.device(f"mlu:{device}")
+            elif is_torch_musa_available():
+                self.device = torch.device(f"musa:{device}")
             elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
             elif is_torch_npu_available():
@@ -896,22 +900,26 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         ):
             self.model.to(self.device)
 
-        # Update config and generation_config with task specific parameters
-        task_specific_params = self.model.config.task_specific_params
-        if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
-            if self.model.can_generate():
-                self.model.generation_config.update(**task_specific_params.get(task))
-
-        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
-        # forward params so that `generate` is aware of the pad token.
-        if (
-            self.tokenizer is not None
-            and self.model.can_generate()
-            and self.tokenizer.pad_token_id is not None
-            and self.model.generation_config.pad_token_id is None
-        ):
-            self.model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+        # If the model can generate, create a local generation config. This is done to avoid side-effects on the model
+        # as we apply local tweaks to the generation config.
+        if self.model.can_generate():
+            self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
+            self.generation_config = copy.deepcopy(self.model.generation_config)
+            # Update the generation config with task specific params if they exist
+            # NOTE: `prefix` is pipeline-specific and doesn't exist in the generation config.
+            task_specific_params = self.model.config.task_specific_params
+            if task_specific_params is not None and task in task_specific_params:
+                this_task_params = task_specific_params.get(task)
+                if "prefix" in this_task_params:
+                    self.prefix = this_task_params.pop("prefix")
+                self.generation_config.update(**this_task_params)
+            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
+            if (
+                self.tokenizer is not None
+                and self.tokenizer.pad_token_id is not None
+                and self.generation_config.pad_token_id is None
+            ):
+                self.generation_config.pad_token_id = self.tokenizer.pad_token_id
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
@@ -1041,6 +1049,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     yield
             elif self.device.type == "mlu":
                 with torch.mlu.device(self.device):
+                    yield
+            elif self.device.type == "musa":
+                with torch.musa.device(self.device):
                     yield
             else:
                 yield

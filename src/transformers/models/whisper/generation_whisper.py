@@ -25,7 +25,7 @@ from torch import nn
 
 from transformers.cache_utils import EncoderDecoderCache
 
-from ...generation.configuration_utils import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...generation.logits_process import (
     LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
@@ -126,12 +126,24 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
 
 
 def _pad_to_max_length(
-    current_segments, pad_token_id, device, padding="right", bos_token_tensor=None, cut_off_length=None
+    current_segments,
+    pad_token_id,
+    device,
+    padding_side="right",
+    padding="longest",
+    bos_token_tensor=None,
+    cut_off_length=None,
 ):
     max_total_length = 0
     sequences = []
-    if padding not in ["right", "left"]:
-        raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
+
+    if padding_side not in ["right", "left"]:
+        raise ValueError(f"`padding_side` must be either 'right' or 'left', not {padding_side}")
+
+    if padding not in ["longest", "max_length"]:
+        raise ValueError(f"`padding` must be either 'longest' or 'max_length', not {padding}")
+    elif padding == "max_length" and cut_off_length is None:
+        raise ValueError("`cut_off_length` must be specified when `padding='max_length'`")
 
     for current_segment_list in current_segments:
         if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
@@ -150,16 +162,17 @@ def _pad_to_max_length(
         else:
             sequences.append(torch.tensor([], device=device))
 
+    max_total_length = cut_off_length + 1 if padding == "max_length" else max_total_length
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
-        pad = (0, pad_length) if padding == "right" else (pad_length, 0)
+        pad = (0, pad_length) if padding_side == "right" else (pad_length, 0)
         sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
 
     sequences = torch.stack(sequences, dim=0)
     return sequences
 
 
-class WhisperGenerationMixin:
+class WhisperGenerationMixin(GenerationMixin):
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
@@ -672,6 +685,8 @@ class WhisperGenerationMixin:
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
                 is_shortform=is_shortform,
+                batch_size=batch_size,
+                attention_mask=attention_mask,
                 kwargs=kwargs,
             )
 
@@ -712,7 +727,7 @@ class WhisperGenerationMixin:
         )
 
         sequences = _pad_to_max_length(
-            final_segments, generation_config.pad_token_id, device=self.device, padding="right"
+            final_segments, generation_config.pad_token_id, device=self.device, padding_side="right"
         )
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
@@ -775,6 +790,8 @@ class WhisperGenerationMixin:
         return_token_timestamps,
         do_condition_on_prev_tokens,
         is_shortform,
+        batch_size,
+        attention_mask,
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -798,6 +815,22 @@ class WhisperGenerationMixin:
             for key in ["do_sample", "temperature", "num_beams"]:
                 if key in generate_kwargs:
                     del generate_kwargs[key]
+
+            cur_bsz = decoder_input_ids.shape[0]
+            if generation_config.cache_implementation == "static" and cur_bsz < batch_size:
+                segment_input = F.pad(segment_input, (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0)
+                decoder_input_ids = F.pad(
+                    decoder_input_ids, (0, 0, 0, batch_size - cur_bsz), value=generation_config.pad_token_id
+                )
+                if generate_kwargs.get("decoder_attention_mask") is not None:
+                    generate_kwargs["decoder_attention_mask"] = F.pad(
+                        generate_kwargs["decoder_attention_mask"], (0, 0, 0, batch_size - cur_bsz), value=True
+                    )
+                if generate_kwargs.get("encoder_outputs") is not None:
+                    generate_kwargs["encoder_outputs"] = F.pad(
+                        generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
+                    )
+
             seek_outputs = super().generate(
                 segment_input,
                 generation_config=generation_config,
@@ -806,6 +839,7 @@ class WhisperGenerationMixin:
                 prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
                 **generate_kwargs,
             )
 
@@ -819,6 +853,10 @@ class WhisperGenerationMixin:
                 generation_config=generation_config,
                 is_shortform=is_shortform,
             )
+
+            if cur_bsz < batch_size:
+                seek_sequences = seek_sequences[:cur_bsz]
+                seek_outputs = seek_outputs[:cur_bsz]
 
             # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
             # Loop over each decoded audio individually as each decoding can be of a different length
@@ -916,7 +954,9 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
-        def split_by_batch_index(values, key, batch_idx, is_shortform):
+        def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
+            if beam_indices is not None and key == "scores":
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -925,19 +965,32 @@ class WhisperGenerationMixin:
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
+                elif isinstance(values, EncoderDecoderCache):
+                    all_past_key_values = []
+                    for layer_idx in range(self.config.decoder_layers):
+                        layer_past_key_values = []
+                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
+                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
+                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
+                        all_past_key_values.append(tuple(layer_past_key_values))
+                    return tuple(all_past_key_values)
                 else:
-                    return tuple(tuple(w[batch_idx][None].cpu() for w in values[v]) for v in range(len(values)))
+                    all_past_key_values = []
+                    for v in range(len(values)):
+                        layer_past_key_values = []
+                        for w in values[v]:
+                            layer_past_key_values.append(w[batch_idx][None].cpu())
+                        all_past_key_values.append(tuple(layer_past_key_values))
+                    return tuple(all_past_key_values)
 
             return values[batch_idx].cpu()
 
         sequence_tokens = seek_outputs["sequences"]
-
-        if hasattr(seek_outputs, "past_key_values") and seek_outputs.past_key_values is not None:
-            if isinstance(seek_outputs["past_key_values"], EncoderDecoderCache):
-                seek_outputs.past_key_values = seek_outputs.past_key_values.to_legacy_cache()
-
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
+            {
+                k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
+                for k, v in seek_outputs.items()
+            }
             for i in range(sequence_tokens.shape[0])
         ]
 
@@ -947,13 +1000,15 @@ class WhisperGenerationMixin:
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key == "sequences":
+            if key in ["sequences", "beam_indices"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
-            if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
+            elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
                     torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
                 )
-            if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
+            elif key == "sequences_scores":
+                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+            elif key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 outputs[key] = tuple(
                     tuple(
                         torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
@@ -961,7 +1016,7 @@ class WhisperGenerationMixin:
                     )
                     for i in range(len(seek_outputs[0][key]))
                 )
-            if key == "past_key_values":
+            elif key == "past_key_values":
                 past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
@@ -1125,6 +1180,9 @@ class WhisperGenerationMixin:
         return return_dict_in_generate
 
     def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
+        if return_timestamps is None and hasattr(generation_config, "return_timestamps"):
+            return_timestamps = generation_config.return_timestamps
+
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
@@ -1368,7 +1426,7 @@ class WhisperGenerationMixin:
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            num_segment_frames (`int`, defaults to 3000):
+            num_segment_frames (`int`, *optional*, defaults to 3000):
                 The number of log-mel frames the model expects
 
         Return:
@@ -1613,11 +1671,14 @@ class WhisperGenerationMixin:
                 one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
                 prev_ids = prev_start_of_text * one_tensor[0] if prev_start_of_text is not None else None
 
+            padding = "max_length" if generation_config.cache_implementation == "static" else "longest"
+
             prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
                 device=device,
-                padding="left",
+                padding_side="left",
+                padding=padding,
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
             )
@@ -1639,8 +1700,8 @@ class WhisperGenerationMixin:
         max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
         if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
             raise ValueError(
-                f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-                f"is {max_new_tokens}. Thus, the combined length of "
+                f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+                f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
                 f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
                 f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
                 "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "

@@ -162,6 +162,7 @@ def _rescale_for_pil_conversion(image):
 def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
+    image_mode: Optional[str] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> "PIL.Image.Image":
     """
@@ -175,6 +176,8 @@ def to_pil_image(
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
             to `True` if the image type is a floating type and casting to `int` would result in a loss of precision,
             and `False` otherwise.
+        image_mode (`str`, *optional*):
+            The mode to use for the PIL image. If unset, will use the default mode for the input image type.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
@@ -207,7 +210,7 @@ def to_pil_image(
         image = rescale(image, 255)
 
     image = image.astype(np.uint8)
-    return PIL.Image.fromarray(image)
+    return PIL.Image.fromarray(image, mode=image_mode)
 
 
 # Logic adapted from torchvision resizing logic: https://github.com/pytorch/vision/blob/511924c1ced4ce0461197e5caa64ce5b9e558aab/torchvision/transforms/functional.py#L366
@@ -225,7 +228,7 @@ def get_resize_output_image_size(
     Args:
         input_image (`np.ndarray`):
             The image to resize.
-        size (`int` or `Tuple[int, int]` or List[int] or Tuple[int]):
+        size (`int` or `Tuple[int, int]` or List[int] or `Tuple[int]`):
             The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be matched to
             this.
 

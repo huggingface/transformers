@@ -34,7 +34,7 @@ def pull_message(step_log: dict):
         yield ChatMessage(
             role="assistant",
             metadata={"title": f"🛠️ Used tool {step_log['tool_call']['tool_name']}"},
-            content=content,
+            content=str(content),
         )
     if step_log.get("observation"):
         yield ChatMessage(role="assistant", content=f"```\n{step_log['observation']}\n```")
@@ -72,4 +72,4 @@ def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
             content={"path": step_log.to_string(), "mime_type": "audio/wav"},
         )
     else:
-        yield ChatMessage(role="assistant", content=step_log)
+        yield ChatMessage(role="assistant", content=str(step_log))
