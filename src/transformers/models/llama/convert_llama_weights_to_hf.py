@@ -91,7 +91,7 @@ NUM_SHARDS = {
     "405B-MP16": 16,
 }
 
-CONTEXT_LENGTH_FOR_VERSION = {"3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
+CONTEXT_LENGTH_FOR_VERSION = {"Guard-3": 131072, "3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
 
 DEFAULT_LLAMA_SPECIAL_TOKENS = {
     "3": [
@@ -135,7 +135,25 @@ DEFAULT_LLAMA_SPECIAL_TOKENS = {
         "<|python_tag|>",
     ]
     + [f"<|reserved_special_token_{i}|>" for i in range(3, 256 - 8)],
+    "Guard-3": [
+        "<|begin_of_text|>",
+        "<|end_of_text|>",
+        "<|reserved_special_token_0|>",
+        "<|reserved_special_token_1|>",
+        "<|finetune_right_pad_id|>",
+        "<|reserved_special_token_2|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|eom_id|>",  # end of message
+        "<|eot_id|>",  # end of turn
+        "<|python_tag|>",
+    ]
+    + [f"<|reserved_special_token_{i}|>" for i in range(3, 256 - 8)],
 }
+
+
+def is_llama_3(version):
+    return version in ["3", "3.1", "3.2", "Guard-3"]
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
@@ -174,7 +192,7 @@ def write_model(
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    if base > 10000.0 and float(llama_version) < 3:
+    if base > 10000.0 and not is_llama_3(llama_version):
         max_position_embeddings = 16384
     else:
         max_position_embeddings = CONTEXT_LENGTH_FOR_VERSION[llama_version]
@@ -303,7 +321,7 @@ def write_model(
                 "lm_head.weight": loaded["output.weight"],
             }
         else:
-            concat_dim = 0 if llama_version in ["3", "3.1", "3.2"] else 1
+            concat_dim = 0 if is_llama_3(llama_version) else 1
             state_dict = {
                 "model.norm.weight": loaded[0]["norm.weight"],
                 "model.embed_tokens.weight": torch.cat(
@@ -323,7 +341,7 @@ def write_model(
         ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
         multiple_of = params["multiple_of"] if "multiple_of" in params else 256
 
-        if llama_version in ["3", "3.1", "3.2"]:
+        if is_llama_3(llama_version):
             bos_token_id = 128000
 
             if instruct:
@@ -334,7 +352,7 @@ def write_model(
             bos_token_id = 1
             eos_token_id = 2
 
-        if llama_version in ["3.1", "3.2"]:
+        if llama_version in ["3.1", "3.2", "Guard-3"]:
             rope_scaling = {
                 "factor": 32.0 if llama_version == "3.2" else 8.0,
                 "low_freq_factor": 1.0,
@@ -395,7 +413,7 @@ def write_model(
 
 
 class Llama3Converter(TikTokenConverter):
-    def __init__(self, vocab_file, special_tokens=None, instruct=False, model_max_length=None, **kwargs):
+    def __init__(self, vocab_file, special_tokens=None, instruct=False, llama_version="3.2", **kwargs):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
 
@@ -410,12 +428,17 @@ class Llama3Converter(TikTokenConverter):
             t = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
             additional_kwargs["chat_template"] = t.chat_template
 
+        if llama_version in ["Guard-3"]:
+            from transformers import AutoTokenizer
+            t = AutoTokenizer.from_pretrained("meta-llama/Llama-Guard-3-1B")
+            additional_kwargs["chat_template"] = t.chat_template
+
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             model_input_names=["input_ids", "attention_mask"],
-            model_max_length=model_max_length,
+            model_max_length=CONTEXT_LENGTH_FOR_VERSION[llama_version],
             **additional_kwargs,
         )
 
@@ -423,9 +446,9 @@ class Llama3Converter(TikTokenConverter):
 def write_tokenizer(tokenizer_path, input_tokenizer_path, llama_version="2", special_tokens=None, instruct=False, push_to_hub=False):
     print("Converting the tokenizer.")
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    if llama_version in ["3", "3.1", "3.2"]:
+    if is_llama_3(llama_version):
         tokenizer = Llama3Converter(
-            input_tokenizer_path, special_tokens, instruct, model_max_length=CONTEXT_LENGTH_FOR_VERSION[llama_version]
+            input_tokenizer_path, special_tokens, instruct, llama_version,
         ).tokenizer
     else:
         tokenizer = tokenizer_class(input_tokenizer_path)
@@ -467,7 +490,7 @@ def main():
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
         "--llama_version",
-        choices=["1", "2", "3", "3.1", "3.2"],
+        choices=["1", "2", "3", "3.1", "3.2", "Guard-3"],
         default="1",
         type=str,
         help="Version of the Llama model to convert. Currently supports Llama1 and Llama2. Controls the context size",
