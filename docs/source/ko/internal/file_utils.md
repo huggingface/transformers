@@ -45,6 +45,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.cached_property
 
-## 기타 유틸리티 (Other Utilities) [[transformers.utils._LazyModule]]
+## 기타 유틸리티 [[transformers.utils._LazyModule]]
 
 [[autodoc]] utils._LazyModule
