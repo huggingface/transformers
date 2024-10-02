@@ -15,8 +15,6 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -24,8 +22,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import (
         AutoProcessor,
         BridgeTowerImageProcessor,
@@ -35,7 +31,7 @@ if is_vision_available():
 
 
 @require_vision
-class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = BridgeTowerProcessor
 
     def setUp(self):
@@ -56,17 +52,6 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     # Some kwargs tests are overriden from common tests to handle shortest_edge
     # and size_divisor behaviour
@@ -149,7 +134,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
