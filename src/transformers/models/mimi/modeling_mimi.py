@@ -1688,7 +1688,6 @@ class MimiModel(MimiPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-
         >>> model_id = "kyutai/mimi"
         >>> model = MimiModel.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)

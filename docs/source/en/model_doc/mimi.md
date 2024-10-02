@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-
 The Mimi model was proposed in [Moshi: a speech-text foundation model for real-time dialogue](https://kyutai.org/Moshi.pdf) by Alexandre Défossez, Laurent Mazaré, Manu Orsini, Amélie Royer, Patrick Pérez, Hervé Jégou, Edouard Grave and Neil Zeghidour. Mimi is a high-fidelity audio codec model developed by the Kyutai team, that combines semantic and acoustic information into audio tokens running at 12Hz and a bitrate of 1.1kbps. In other words, it can be used to map audio waveforms into “audio tokens”, known as “codebooks”.
 
 The abstract from the paper is the following:
@@ -29,7 +28,6 @@ Its architecture is based on [Encodec](model_doc/encodec) with several major dif
 * it uses a much lower frame-rate.
 * it uses additional transformers for encoding and decoding for better latent contextualization
 * it uses a different quantization scheme: one codebook is dedicated to semantic projection.
-
 
 ## Usage example 
 
@@ -56,7 +54,6 @@ Here is a quick example of how to encode and decode an audio using this model:
 ```
 
 This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe).
-
 The original code can be found [here](https://github.com/kyutai-labs/moshi).
 
 
