@@ -117,9 +117,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                 config.push_to_hub(tmp_repo, token=self._token)
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
+                self.assertEqual(config.to_dict(), new_config.to_dict())
             finally:
                 # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
