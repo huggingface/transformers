@@ -150,7 +150,9 @@ def convert_blip2_checkpoint(
     if "opt" in model_name:
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
     elif "itm" in model_name:
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
+        tokenizer = BertTokenizer.from_pretrained(
+            "bert-base-uncased", truncation_side="right", model_input_names=["input_ids", "attention_mask"]
+        )
         tokenizer.add_special_tokens({"bos_token": "[DEC]"})
     else:
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-xl")
