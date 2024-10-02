@@ -4892,10 +4892,16 @@ class Trainer:
                     "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
                 )
             dataloader_config.non_blocking = non_blocking
-        # this would have been updated above, no need for it anymore
-        accelerator_config.pop("gradient_accumulation_kwargs")
 
         kwargs_handlers = self._get_accelerator_kwargs_handlers()
+
+        # this would have been updated above, no need for it anymore
+        accelerator_config.pop("gradient_accumulation_kwargs")
+        accelerator_config.pop("autocast_kwargs")
+        accelerator_config.pop("fp8_recipe_kwargs")
+        accelerator_config.pop("profile_kwargs")
+        accelerator_config.pop("grad_scale_kwargs")
+        accelerator_config.pop("init_process_group_kwargs")
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
