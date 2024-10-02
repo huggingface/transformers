@@ -91,7 +91,8 @@ class DepthEstimationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout)
-        self.image_size = image.size
+        self.image_height = image.height
+        self.image_width = image.width
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
@@ -107,7 +108,7 @@ class DepthEstimationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         outputs = self.image_processor.post_process_depth_estimation(
             model_outputs,
-            [self.image_size[::-1]],
+            [(self.image_height, self.image_width)],
         )
 
         formatted_outputs = []
