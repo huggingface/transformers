@@ -65,47 +65,42 @@ def resize_classification_head(model, num_labels: int):
     return model
 
 
+def _load_timm_model(config, **kwargs):
+    pretrained_model_name_or_path = kwargs.pop("pretrained_model_name_or_path", None)
+    pretrained = kwargs.pop("pretrained", False)
+
+    # model_name passed into kwargs takes precedence
+    model_name = kwargs.pop("model_name", None)
+    if model_name is None and hasattr(config, "model_name"):
+        model_name = config.model_name
+    elif model_name is None and pretrained_model_name_or_path is not None:
+        model_name = pretrained_model_name_or_path
+    elif model_name is None:
+        raise ValueError("model_name must be specified in either the config or kwargs")
+
+    # If the pretrained_model_name_or_path is a timm checkpoint, and a local file, we load the checkpoint safetensors file as the model
+    if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(pretrained_model_name_or_path):
+        # Set pretrained to False to first create the model architecture from the model_name and then load in
+        # the weights from the safetensors file
+        model = timm.create_model(model_name=model_name, pretrained=False)
+        if pretrained:
+            weights_path = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
+            state_dict = load_state_dict(weights_path)
+            # Remove the prefix "model." from the keys
+            state_dict = {k.replace("timm_model.", ""): v for k, v in state_dict.items()}
+            model.load_state_dict(state_dict)
+    # If the pretrained_model_name_or_path is a timm checkpoint and matches a checkpoint on the hub, we use timm.create_model directly
+    else:
+        model = timm.create_model(model_name=model_name, pretrained=pretrained)
+    return model
+
+
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
     base_model_prefix = "timm_model"
     _no_split_modules = []
-
-    def __init__(self, config, **kwargs):
-        requires_backends(self, "timm")
-        super().__init__(config)
-        self.config = config
-
-        pretrained_model_name_or_path = kwargs.pop("pretrained_model_name_or_path", None)
-        pretrained = kwargs.pop("pretrained", False)
-
-        # model_name passed into kwargs takes precedence
-        model_name = kwargs.pop("model_name", None)
-        if model_name is None and hasattr(config, "model_name"):
-            model_name = config.model_name
-        elif model_name is None and pretrained_model_name_or_path is not None:
-            model_name = pretrained_model_name_or_path
-        elif model_name is None:
-            raise ValueError("model_name must be specified in either the config or kwargs")
-
-        # If the pretrained_model_name_or_path is a timm checkpoint, and a local file, we load the checkpoint safetensors file as the model
-        if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(
-            pretrained_model_name_or_path
-        ):
-            model = timm.create_model(model_name=model_name, pretrained=False)
-            if pretrained:
-                weights_path = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
-                state_dict = load_state_dict(weights_path)
-                # Remove the prefix "model." from the keys
-                state_dict = {k.replace("timm_model.", ""): v for k, v in state_dict.items()}
-                model.load_state_dict(state_dict)
-        # If the pretrained_model_name_or_path is a timm checkpoint and matches a checkpoint on the hub, we use timm.create_model directly
-        else:
-            model = timm.create_model(model_name=model_name, pretrained=pretrained)
-
-        self.timm_model = model
-        self.post_init()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -129,6 +124,11 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers.
     """
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config)
+        self.timm_model = _load_timm_model(config, **kwargs)
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
     def forward(
@@ -158,7 +158,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(config)
+        self.timm_model = _load_timm_model(config, **kwargs)
 
         # To enable resizing of classification head in the model
         if getattr(config, "num_labels") is not None:
@@ -213,7 +214,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            return (loss, logits)
+            return (loss, logits) if loss is not None else (logits,)
 
         return ImageClassifierOutput(
             loss=loss,
