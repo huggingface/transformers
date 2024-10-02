@@ -10,25 +10,27 @@ from tokenizers import processors
 from transformers import GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
 
 
+# fmt: off
 # `None` means we drop the key
 STATE_DICT_MAPPING = {
     # CausalLM keys
-    r"transformer.output_layer.weight": r"lm_head.weight",
+    r"transformer.output_layer.weight":                                               r"lm_head.weight",
     # Model keys
-    r"transformer.embedding.word_embeddings.weight": r"model.embed_tokens.weight",
-    r"transformer.rotary_pos_embed.inv_freq": None,
-    r"transformer.encoder.final_layernorm.weight": r"model.norm.weight",
+    r"transformer.embedding.word_embeddings.weight":                                  r"model.embed_tokens.weight",
+    r"transformer.rotary_pos_embed.inv_freq":                                         None,
+    r"transformer.encoder.final_layernorm.weight":                                    r"model.norm.weight",
     # Layers keys
-    r"transformer.encoder.layers.(\d+).input_layernorm.weight": r"model.layers.\1.input_layernorm.weight",
-    r"transformer.encoder.layers.(\d+).post_attention_layernorm.weight": r"model.layers.\1.post_attention_layernorm.weight",
+    r"transformer.encoder.layers.(\d+).input_layernorm.weight":                       r"model.layers.\1.input_layernorm.weight",
+    r"transformer.encoder.layers.(\d+).post_attention_layernorm.weight":              r"model.layers.\1.post_attention_layernorm.weight",
     # Attention keys
-    r"transformer.encoder.layers.(\d+).self_attention.dense.weight": r"model.layers.\1.self_attn.o_proj.weight",
+    r"transformer.encoder.layers.(\d+).self_attention.dense.weight":                  r"model.layers.\1.self_attn.o_proj.weight",
     # qkv_proj will later be split in q|k|v|_proj
     r"transformer.encoder.layers.(\d+).self_attention.query_key_value.(weight|bias)": r"model.layers.\1.self_attn.qkv_proj.\2",
     # MLP keys
-    r"transformer.encoder.layers.(\d+).mlp.dense_h_to_4h.weight": r"model.layers.\1.mlp.gate_up_proj.weight",
-    r"transformer.encoder.layers.(\d+).mlp.dense_4h_to_h.weight": r"model.layers.\1.mlp.down_proj.weight",
+    r"transformer.encoder.layers.(\d+).mlp.dense_h_to_4h.weight":                     r"model.layers.\1.mlp.gate_up_proj.weight",
+    r"transformer.encoder.layers.(\d+).mlp.dense_4h_to_h.weight":                     r"model.layers.\1.mlp.down_proj.weight",
 }
+# fmt: on
 
 
 def merge_safetensors(input_dir: str):
@@ -63,6 +65,8 @@ def convert_state_dict(original_state_dict: dict, config: GlmConfig):
 
     for old_key, value in original_state_dict.items():
         new_key = map_old_key_to_new(old_key)
+        if new_key == "":
+            continue
 
         if "qkv_proj." in new_key:
             q_proj, k_proj, v_proj = (
