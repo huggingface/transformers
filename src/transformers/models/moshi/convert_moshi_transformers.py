@@ -15,11 +15,10 @@
 """Convert Moshi checkpoints."""
 
 import argparse
-import sentencepiece
 
 import safetensors
+import sentencepiece
 import torch
-from tokenizers import decoders, normalizers, pre_tokenizers
 
 from transformers import (
     AutoFeatureExtractor,
@@ -30,13 +29,11 @@ from transformers import (
     PreTrainedTokenizerFast,
     logging,
 )
-from transformers.convert_slow_tokenizer import Converter, MoshiConverter, import_protobuf
-from transformers.utils import requires_backends
+from transformers.convert_slow_tokenizer import MoshiConverter
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.mimi")
-
 
 
 def assert_param_count(model_1, model_2):

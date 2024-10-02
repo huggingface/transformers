@@ -1406,8 +1406,6 @@ class MarkupLMConverter(Converter):
         return tokenizer
 
 
-
-
 class MoshiConverter(SpmConverter):
     handle_byte_fallback = True
 
@@ -1423,7 +1421,6 @@ class MoshiConverter(SpmConverter):
         with open(vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
-
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
@@ -1448,6 +1445,7 @@ class MoshiConverter(SpmConverter):
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = "first"
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():

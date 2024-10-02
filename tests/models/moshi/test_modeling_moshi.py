@@ -15,33 +15,32 @@
 """Testing suite for the PyTorch Moshi model."""
 
 import copy
-import math
-import unittest
 import tempfile
+import unittest
+
 import numpy as np
 import pytest
+from datasets import Audio, load_dataset
 from parameterized import parameterized
-from packaging import version
-from datasets import load_dataset, Audio
+
 from transformers import (
     MoshiConfig,
     PretrainedConfig,
-    set_seed,
 )
 from transformers.testing_utils import (
-    is_torch_available,
     is_flaky,
+    is_torch_available,
     require_torch,
+    require_torch_fp16,
     require_torch_sdpa,
     slow,
-    require_torch_fp16,
     torch_device,
 )
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -189,7 +188,6 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return logits_processor_kwargs
 
 
-
 class MoshiTester:
     def __init__(
         self,
@@ -275,7 +273,7 @@ class MoshiTester:
         self.mimi_num_key_value_heads = mimi_num_key_value_heads
         self.mimi_sliding_window = mimi_sliding_window
         self.sampling_rate = sampling_rate
-        
+
         self.num_hidden_states_types = 2
 
     def prepare_config_and_inputs(self, batch_size=None):
@@ -315,7 +313,7 @@ class MoshiTester:
             "use_cache": False,
             "sampling_rate": self.sampling_rate,
         }
-        
+
         config = MoshiConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -346,7 +344,6 @@ class MoshiTester:
 
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
@@ -368,13 +365,13 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 device=torch_device,
             )
         return inputs_dict
-    
+
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
         attention_mask = inputs_dict.pop("attention_mask").to(torch_device)
-        
-        # Make sure we only return `input_ids`. 
+
+        # Make sure we only return `input_ids`.
         # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
         # There are further tests to test that audio waveforms and codes are well generated.
         inputs_dict["return_audio_waveforms"] = False
@@ -382,7 +379,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         inputs_dict["concat_unconditional_inputs"] = False
 
         return config, input_ids, attention_mask, inputs_dict
-        
+
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):
@@ -402,7 +399,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
-        
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
         super()._check_outputs(output, input_ids, config, use_cache=True, num_return_sequences=num_return_sequences)
@@ -426,7 +423,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
-    
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):
@@ -466,7 +463,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-    
+
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_decoder_only(self):
         for model_class in self.all_generative_model_classes:
@@ -488,7 +485,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 max_new_tokens=5,
                 return_dict_in_generate=True,
                 output_scores=True,
-                **inputs_dict
+                **inputs_dict,
             )
 
             # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
@@ -500,20 +497,24 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 max_new_tokens=5,
                 return_dict_in_generate=True,
                 output_scores=True,
-                **inputs_dict
+                **inputs_dict,
             )
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
             # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
             outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds, max_new_tokens=5, return_dict_in_generate=True, output_scores=True, **inputs_dict
+                inputs_embeds=inputs_embeds,
+                max_new_tokens=5,
+                return_dict_in_generate=True,
+                output_scores=True,
+                **inputs_dict,
             )
             self.assertListEqual(
                 outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
                 outputs_from_embeds_wo_ids.sequences.tolist(),
             )
-            
+
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
     def test_generate_continue_from_past_key_values(self):
         pass
@@ -529,7 +530,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip("Moshi doesn't support contrastive generation yet.")
     def test_contrastive_generate_low_memory(self):
         pass
-    
+
     @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -558,7 +559,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             dummy_input = inputs_dict[model_class.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.bfloat16]:
                 dummy_input = dummy_input.to(torch.float16)
-                
+
             inputs_dict[model_class.main_input_name] = dummy_input
 
             # make sure that all models have enough positions for generation
@@ -603,11 +604,17 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
                 # Just test that a large cache works as expected
                 res_eager = model_eager.generate(
-                    **inputs_dict, max_new_tokens=max_new_tokens, do_sample=False, depth_decoder_do_sample=False,
+                    **inputs_dict,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    depth_decoder_do_sample=False,
                 )
 
                 res_sdpa = model_sdpa.generate(
-                    **inputs_dict, max_new_tokens=max_new_tokens, do_sample=False, depth_decoder_do_sample=False,
+                    **inputs_dict,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    depth_decoder_do_sample=False,
                 )
 
                 self.assertTrue(torch.allclose(res_eager.sequences, res_sdpa.sequences))
@@ -632,7 +639,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="The audio encoder has no gradients.")
     def test_training_gradient_checkpointing_use_reentrant(self):
-       pass
+        pass
 
     @unittest.skip(reason="The audio encoder has no gradients.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
@@ -643,38 +650,39 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             config, input_ids, _, _ = self._get_input_ids_and_config()
 
             model = model_class(config).to(torch_device).eval()
-            
-            input_values_length =  int(self.model_tester.seq_length*config.sampling_rate / config.audio_encoder.frame_rate)
+
+            input_values_length = int(
+                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder.frame_rate
+            )
 
             user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
             moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
-            
+
             user_audio_codes = model.audio_encoder.encode(user_input_values, num_quantizers=model.num_codebooks)[0]
             moshi_audio_codes = model.audio_encoder.encode(moshi_input_values, num_quantizers=model.num_codebooks)[0]
 
             outputs_from_audio_codes = model.generate(
                 input_ids, max_new_tokens=5, user_audio_codes=user_audio_codes, moshi_audio_codes=moshi_audio_codes
             )
-            
+
             outputs_from_audio_values = model.generate(
                 input_ids, max_new_tokens=5, user_input_values=user_input_values, moshi_input_values=moshi_input_values
             )
-            
-            self.assertTrue((outputs_from_audio_values.sequences==outputs_from_audio_codes.sequences).all())
-            self.assertTrue(torch.allclose(outputs_from_audio_codes.audio_sequences, outputs_from_audio_values.audio_sequences))
-            
-            
+
+            self.assertTrue((outputs_from_audio_values.sequences == outputs_from_audio_codes.sequences).all())
+            self.assertTrue(
+                torch.allclose(outputs_from_audio_codes.audio_sequences, outputs_from_audio_values.audio_sequences)
+            )
+
     def test_generate_depth_decoder_kwargs(self):
         # test sampling and beam search
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, input_dict = self._get_input_ids_and_config()
 
             model = model_class(config).to(torch_device).eval()
-            
-            model.generate(
-                input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True
-            )
-            
+
+            model.generate(input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True)
+
             model.generate(
                 input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True, depth_decoder_num_beams=5
             )
@@ -685,18 +693,23 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             config, input_ids, _, input_dict = self._get_input_ids_and_config()
 
             model = model_class(config).to(torch_device).eval()
-            
-            # check bs>1
-            model.generate(**model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False)
-            
-            # check same results from uncondtional or no inputs
-            outputs_from_unconditional = model.generate(**model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False)
-            outputs_from_none = model.generate(max_new_tokens=5)
-            
 
-            self.assertTrue((outputs_from_unconditional.sequences==outputs_from_none.sequences).all())
-            self.assertTrue(torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences))
-            
+            # check bs>1
+            model.generate(
+                **model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False
+            )
+
+            # check same results from uncondtional or no inputs
+            outputs_from_unconditional = model.generate(
+                **model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False
+            )
+            outputs_from_none = model.generate(max_new_tokens=5)
+
+            self.assertTrue((outputs_from_unconditional.sequences == outputs_from_none.sequences).all())
+            self.assertTrue(
+                torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences)
+            )
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:
@@ -721,97 +734,113 @@ class MoshiIntegrationTests(unittest.TestCase):
         # automatic decoding with librispeech
         speech_sample = dataset.sort("id")[0]["audio"]["array"]
         return speech_sample
-    
+
     @slow
     def test_moshika_conditional_greedy(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(torch_device)
-        inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(device=torch_device, dtype=torch.float16)
-        
+        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(
+            torch_device
+        )
+        inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(
+            device=torch_device, dtype=torch.float16
+        )
+
         user_audio_codes = model.audio_encoder.encode(**inputs, num_quantizers=8).audio_codes
 
-        input_ids = self.tokenizer.encode('<pad><pad><pad><pad><unk> Hello,<pad><unk>', return_tensors="pt").to(torch_device)
-        
+        input_ids = self.tokenizer.encode("<pad><pad><pad><pad><unk> Hello,<pad><unk>", return_tensors="pt").to(
+            torch_device
+        )
+
         # fmt: off
-        moshi_audio_codes = [[[1049, 127, 1880, 972, 972, 1156, 1913, 415, 1933], 
-                              [1700, 243, 91, 91, 91, 745, 1478, 638, 57], 
-                              [1626, 457, 457, 457, 457, 1839, 200, 2011, 1142], 
-                              [546, 290, 390, 390, 290, 1408, 1812, 1187, 1911], 
-                              [306, 306, 1314, 1314, 1314, 759, 796, 854, 1466], 
-                              [1443, 1443, 1030, 317, 347, 1178, 613, 1576, 2023], 
-                              [1871, 428, 1433, 1433, 1978, 1405, 1755, 820, 610], 
+        moshi_audio_codes = [[[1049, 127, 1880, 972, 972, 1156, 1913, 415, 1933],
+                              [1700, 243, 91, 91, 91, 745, 1478, 638, 57],
+                              [1626, 457, 457, 457, 457, 1839, 200, 2011, 1142],
+                              [546, 290, 390, 390, 290, 1408, 1812, 1187, 1911],
+                              [306, 306, 1314, 1314, 1314, 759, 796, 854, 1466],
+                              [1443, 1443, 1030, 317, 347, 1178, 613, 1576, 2023],
+                              [1871, 428, 1433, 1433, 1978, 1405, 1755, 820, 610],
                               [2008, 1744, 1511, 568, 1533, 550, 237, 1412, 1401]]]
         # fmt: on
-        
+
         moshi_audio_codes = torch.tensor(moshi_audio_codes, device=torch_device)
-        user_audio_codes = user_audio_codes[:, :, :moshi_audio_codes.shape[-1]]
-        
-        model_outputs = model.generate(user_audio_codes=user_audio_codes, moshi_audio_codes=moshi_audio_codes, input_ids=input_ids , do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=2)
+        user_audio_codes = user_audio_codes[:, :, : moshi_audio_codes.shape[-1]]
+
+        model_outputs = model.generate(
+            user_audio_codes=user_audio_codes,
+            moshi_audio_codes=moshi_audio_codes,
+            input_ids=input_ids,
+            do_sample=False,
+            depth_decoder_do_sample=False,
+            return_audio_codes=True,
+            max_new_tokens=2,
+        )
 
         expected_text_token = 452
-        expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810] # fmt: skip
+        expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810]  # fmt: skip
 
-        
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
 
-    
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float32).to(torch_device)
+        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float32).to(
+            torch_device
+        )
 
         expected_audio_codesum = 72065
-        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3] # fmt: skip
-        some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]] # fmt: skip
+        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3]  # fmt: skip
+        some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
-        model_outputs = model.generate(do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10)
-        
+        model_outputs = model.generate(
+            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+        )
+
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(
-            np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums)
-        )
-        
+        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
+
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
-    
     @slow
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float16).to(torch_device)
+        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         expected_audio_codesum = 72065
-        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3] # fmt: skip
+        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3]  # fmt: skip
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
-        model_outputs = model.generate(do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10)
-        
+        model_outputs = model.generate(
+            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+        )
+
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(
-            np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums)
-        )
-        
+        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
+
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
-    
     @slow
     @require_torch_fp16
     def test_moshika_greedy_unconditional_fp16(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(torch_device)
+        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         expected_audio_codesum = 72932
-        expected_text_tokens = [3, 3, 3, 0, 667, 263, 3, 3, 0, 705] # fmt: skip
+        expected_text_tokens = [3, 3, 3, 0, 667, 263, 3, 3, 0, 705]  # fmt: skip
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 347], [1871, 428], [2008, 2008]]  # fmt: skip
 
-        model_outputs = model.generate(do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10)
-        
+        model_outputs = model.generate(
+            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+        )
+
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(
-            np.abs(audio_code_sums - expected_audio_codesum) <= 2048
-        )
-        
+        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= 2048)
+
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())

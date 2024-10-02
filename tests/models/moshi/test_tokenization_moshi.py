@@ -18,24 +18,20 @@ import shutil
 import tempfile
 import unittest
 
-from huggingface_hub import hf_hub_download
-
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     AutoTokenizer,
     PreTrainedTokenizerFast,
 )
+from transformers.convert_slow_tokenizer import MoshiConverter
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    slow,
 )
-
-from transformers.convert_slow_tokenizer import Converter, MoshiConverter, import_protobuf
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -52,44 +48,42 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_slow_tokenizer = False
     test_rust_tokenizer = True
     from_pretrained_kwargs = {}
-    
+
     def setUp(self):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
         tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
-        bos_token="<s>",
-        unk_token="<unk>",
-        eos_token="</s>",
-    )
+            tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
+            bos_token="<s>",
+            unk_token="<unk>",
+            eos_token="</s>",
+        )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     @unittest.skip(reason="No slow tokenizer")
     def test_added_tokens_serialization(self):
         pass
-    
+
     @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
         pass
-    
+
     @unittest.skip(reason="No slow tokenizer")
     def test_encode_decode_with_spaces(self):
         pass
-    
 
-    
     def test_full_tokenizer(self):
         tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
-        bos_token="<s>",
-        unk_token="<unk>",
-        eos_token="</s>",
-    )
+            tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
+            bos_token="<s>",
+            unk_token="<unk>",
+            eos_token="</s>",
+        )
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -178,14 +172,13 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with tempfile.NamedTemporaryFile() as f:
             shutil.copyfile(SAMPLE_VOCAB, f.name)
             tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MoshiConverter(vocab_file=f.name).converted(),
-        bos_token="<s>",
-        unk_token="<unk>",
-        eos_token="</s>",
-    )
+                tokenizer_object=MoshiConverter(vocab_file=f.name).converted(),
+                bos_token="<s>",
+                unk_token="<unk>",
+                eos_token="</s>",
+            )
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
-
 
 
 @require_torch
@@ -205,18 +198,20 @@ class MoshiIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        long_attention_mask = [1]*21
+        long_attention_mask = [1] * 21
 
+        # fmt: off
         self.assertEqual(
             nested_simplify(inputs),
             {
                 "input_ids": [
                     [287, 547, 2359, 457, 297, 3708, 11488, 279, 11725, 263],
-                    [588, 478, 1442, 267, 260, 228, 188, 159, 228, 188, 185, 260, 260, 478, 1442, 260, 260, 260, 228, 188, 152], # fmt: skip
+                    [588, 478, 1442, 267, 260, 228, 188, 159, 228, 188, 185, 260, 260, 478, 1442, 260, 260, 260, 228, 188, 152],
                 ],
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], long_attention_mask],
             },
         )
+        # fmt: on
 
     def test_fast_special_tokens(self):
         fast_tokenizer = self.rust_tokenizer
@@ -238,12 +233,10 @@ class MoshiIntegrationTest(unittest.TestCase):
         self.assertEqual(rust_tokenizer.decode([353, 275, 272, 694], skip_special_tokens=True), "This is a test")
 
         # bytefallback showcase
-        bytefallback_tokens = [260, 235, 152, 163, 234, 184, 191, 13340, 235, 160, 163, 236, 180, 159, 234, 156, 179] # fmt: skip
+        bytefallback_tokens = [260, 235, 152, 163, 234, 184, 191, 13340, 235, 160, 163, 236, 180, 159, 234, 156, 179]  # fmt: skip
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), bytefallback_tokens)
         self.assertEqual(
-            rust_tokenizer.decode(
-                bytefallback_tokens, skip_special_tokens=True
-            ),
+            rust_tokenizer.decode(bytefallback_tokens, skip_special_tokens=True),
             "生活的真谛是",
         )
 
@@ -300,7 +293,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         input_text = "\t\t\t\t \n\n61"
         EXPECTED_IDS = [260, 13, 13, 13, 13, 260, 14, 14, 285, 265]
-        EXPECTED_TOKENS = ['▁', '<0x09>', '<0x09>', '<0x09>', '<0x09>', '▁', '<0x0A>', '<0x0A>', '6', '1']
+        EXPECTED_TOKENS = ["▁", "<0x09>", "<0x09>", "<0x09>", "<0x09>", "▁", "<0x0A>", "<0x0A>", "6", "1"]
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
