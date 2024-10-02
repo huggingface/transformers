@@ -141,7 +141,7 @@ class PipelineTesterMixin:
     pipeline_model_mapping = None
     supported_frameworks = ["pt", "tf"]
 
-    def run_task_tests(self, task, torch_dtype="float32"):
+    def run_task_tests(self, task, torch_dtype=None):
         """Run pipeline tests for a specific `task`
 
         Args:
@@ -195,7 +195,7 @@ class PipelineTesterMixin:
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
 
     def run_model_pipeline_tests(
-        self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype="float32"
+        self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype=None
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
 
@@ -239,7 +239,7 @@ class PipelineTesterMixin:
                 )
 
     def run_pipeline_test(
-        self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype="float32"
+        self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype=None
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
 
