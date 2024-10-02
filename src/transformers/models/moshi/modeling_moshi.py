@@ -1382,7 +1382,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = self # Ignore copy
+            base_model = self  # Ignore copy
             causal_mask_creation_function = getattr(
                 base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
             )
@@ -1919,7 +1919,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 device = model_inputs["input_ids"].device
 
             dtype = self.lm_head.weight.dtype
-            min_dtype = torch.finfo(dtype).min
 
             attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -1927,7 +1926,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 target_length=past_key_values.max_cache_len,
                 dtype=dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
@@ -1953,6 +1951,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     MOSHI_START_DOCSTRING,
 )
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["decoder.model.embed_tokens.weight", "decoder.lm_head.weight"]
     config_class = MoshiConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
@@ -2516,7 +2515,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 device = model_inputs["input_ids"].device
 
             dtype = self.decoder.dtype
-            min_dtype = torch.finfo(dtype).min
 
             attention_mask = self.decoder.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -2524,7 +2522,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 target_length=past_key_values.max_cache_len,
                 dtype=dtype,
                 device=device,
-                min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
