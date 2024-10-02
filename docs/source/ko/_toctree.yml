@@ -352,6 +352,8 @@
         title: (번역중) CANINE
       - local: in_translation
         title: (번역중) CodeGen
+      - local: model_doc/cohere
+        title: Cohere
       - local: in_translation
         title: (번역중) ConvBERT
       - local: in_translation
