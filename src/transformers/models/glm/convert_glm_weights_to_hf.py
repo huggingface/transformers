@@ -56,9 +56,9 @@ def map_old_key_to_new(old_key):
                 return None
         else:
             new_key, n_replace = re.subn(pattern, replacement, old_key)
-        # Early exit of the loop
-        if n_replace > 0:
-            return new_key
+            # Early exit of the loop
+            if n_replace > 0:
+                return new_key
         
     raise ValueError(f'Key: {old_key} could not be mapped (check the mapping).')
 
