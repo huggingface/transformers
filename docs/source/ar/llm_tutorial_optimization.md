@@ -308,7 +308,7 @@ $$ \textbf{O} = \text{Attn}(\mathbf{X}) = \mathbf{V} \times \text{Softmax}(\math
 
 باختصار، يكسر الاهتمام الفلاشي حساب \\( \mathbf{V} \times \operatorname{Softmax}(\mathbf{QK}^T\\)) ويحسب بدلاً من ذلك قطعًا أصغر من الإخراج عن طريق التكرار عبر العديد من خطوات حساب Softmax:
 
-$$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \times \operatorname{Softmax}(\mathbf{QK}^T_{i,j}) \text{ for multiple } i, j \text{ iterations} $$
+$$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \times \operatorname{Softmax}(\mathbf{QK}^T_{i,j}) \text{ for multiple } i, j \text{ iterations } $$
 
 مع \\( s^a_{ij} \\) و \\( s^b_{ij} \\) كونها بعض إحصائيات التطبيع softmax التي يجب إعادة حسابها لكل \\( i \\) و \\( j \\).
 
