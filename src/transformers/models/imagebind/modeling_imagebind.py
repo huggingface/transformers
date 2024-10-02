@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -42,20 +43,6 @@ from .configuration_imagebind import (
 
 
 logger = logging.get_logger(__name__)
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, tgt_seq_len, src_seq_len]`.
-    """
-    batch_size, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -1137,7 +1124,7 @@ class ImageBindTextTransformer(nn.Module):
 
         # If attention_mask update causal mask
         if attention_mask is not None:
-            attention_mask = _expand_mask(attention_mask, dtype)
+            attention_mask = AttentionMaskConverter._expand_mask(attention_mask, dtype)
             return mask + attention_mask
         return mask
 
