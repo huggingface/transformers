@@ -496,6 +496,7 @@ class ImageBindConfig(PretrainedConfig):
         self.audio_config = ImageBindAudioConfig(**audio_config) if isinstance(audio_config, dict) else audio_config
 
         self.projection_dim = projection_dim
+        self.initializer_factor = 1.0
 
     @classmethod
     # Copied from transformers.models.clip.configuration_clip.CLIPConfig.from_text_vision_configs with CLIP->ImageBind, clip->imagebind
