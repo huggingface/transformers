@@ -90,9 +90,10 @@ image_sizes = [(image.height, image.width) for image in images]
 outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 
 for output in outputs:
-    keypoints = output["keypoints"]
-    scores = output["scores"]
-    descriptors = output["descriptors"]
+    for keypoints, scores, descriptors in zip(output["keypoints"], output["scores"], output["descriptors"]):
+        print(f"Keypoints: {keypoints}")
+        print(f"Scores: {scores}")
+        print(f"Descriptors: {descriptors}")
 ```
 
 You can then print the keypoints on the image of your choice to visualize the result:
