@@ -57,6 +57,7 @@ from transformers.generation import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
+from transformers.generation.configuration_utils import METADATA_FIELDS
 from transformers.testing_utils import TOKEN, USER, is_staging_test, torch_device
 
 
@@ -700,7 +701,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = GenerationConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
@@ -720,7 +721,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = GenerationConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
@@ -739,7 +740,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = GenerationConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
@@ -759,7 +760,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = GenerationConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.

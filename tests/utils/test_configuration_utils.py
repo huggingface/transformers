@@ -26,7 +26,7 @@ from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import AutoConfig, BertConfig, GPT2Config
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import METADATA_FIELDS, PretrainedConfig
 from transformers.testing_utils import TOKEN, USER, is_staging_test
 
 
@@ -117,7 +117,9 @@ class ConfigPushToHubTester(unittest.TestCase):
                 config.push_to_hub(tmp_repo, token=self._token)
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
-                self.assertEqual(config.to_dict(), new_config.to_dict())
+                for k, v in config.to_dict().items():
+                    if k not in METADATA_FIELDS:
+                        self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
@@ -135,7 +137,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
@@ -152,7 +154,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
@@ -170,7 +172,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
-                    if k != "transformers_version":
+                    if k not in METADATA_FIELDS:
                         self.assertEqual(v, getattr(new_config, k))
             finally:
                 # Always (try to) delete the repo.
