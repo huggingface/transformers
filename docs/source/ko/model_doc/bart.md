@@ -195,7 +195,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - encode
     - decode
 
-## FlaxBartForSequenceClassification
+## FlaxBartForSequenceClassification[[transformers.FlaxBartForSequenceClassification]]
 
 [[autodoc]] FlaxBartForSequenceClassification
     - __call__
