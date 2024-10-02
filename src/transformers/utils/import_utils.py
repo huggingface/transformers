@@ -149,7 +149,8 @@ try:
     _is_optimum_quanto_available = True
 except importlib.metadata.PackageNotFoundError:
     _is_optimum_quanto_available = False
-_compressed_tensors_available = _is_package_available("compressed_tensors")
+# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
+_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
