@@ -783,7 +783,12 @@ class PretrainedConfig(PushToHubMixin):
         return json.loads(text)
 
     def __eq__(self, other):
-        return isinstance(other, PretrainedConfig) and (self.__dict__ == other.__dict__)
+        if not isinstance(other, PretrainedConfig):
+            return False
+
+        self_without_metadata = self.to_json_string(use_diff=False, ignore_metadata=True)
+        other_without_metadata = other.to_json_string(use_diff=False, ignore_metadata=True)
+        return self_without_metadata == other_without_metadata
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -822,7 +827,7 @@ class PretrainedConfig(PushToHubMixin):
                     serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
-                or key == "transformers_version"
+                or key in METADATA_FIELDS
                 or value != default_config_dict[key]
                 or (key in class_config_dict and value != class_config_dict[key])
             ):
@@ -870,7 +875,8 @@ class PretrainedConfig(PushToHubMixin):
             # Deal with nested configs like CLIP
             if isinstance(value, PretrainedConfig):
                 value = value.to_dict()
-                del value["transformers_version"]
+                for key in METADATA_FIELDS:
+                    value.pop(key, None)
 
             output[key] = value
 
@@ -908,8 +914,14 @@ class PretrainedConfig(PushToHubMixin):
             config_dict = self.to_dict()
 
         if ignore_metadata:
+            # top level metadata
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
+            # nested metadata
+            for value in config_dict.values():
+                if isinstance(value, PretrainedConfig):
+                    for metadata_field in METADATA_FIELDS:
+                        value.pop(metadata_field, None)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
