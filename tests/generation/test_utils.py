@@ -62,13 +62,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import (
-        DynamicCache,
-        DynamicSlidingWindowCache,
-        EncoderDecoderCache,
-        QuantoQuantizedCache,
-        StaticCache,
-    )
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1726,10 +1720,7 @@ class GenerationTesterMixin:
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            if getattr(config, "sliding_window", None) is not None:
-                inputs["past_key_values"] = DynamicSlidingWindowCache(config.sliding_window, outputs_cached.past_key_values)
-            else:
-                inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["past_key_values"] = outputs_cached.past_key_values
             new_attention_len = outputs_cached.sequences.shape[-1]
             if config.is_encoder_decoder:
                 inputs["decoder_input_ids"] = outputs_cached.sequences
@@ -1819,12 +1810,7 @@ class GenerationTesterMixin:
                         )
 
             new_cache = new_results.past_key_values
-            if cache_cls == DynamicSlidingWindowCache:
-                legacy_cache_converted = cache_cls.from_legacy_cache(
-                    config.sliding_window, legacy_results.past_key_values
-                )
-            else:
-                legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
+            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
                     # TODO: @raushan, please look into this for new cache format
