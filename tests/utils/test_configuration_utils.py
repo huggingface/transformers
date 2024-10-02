@@ -346,7 +346,8 @@ class ConfigTestUtils(unittest.TestCase):
             with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
 
-        # However, if the user loads a pretrained config with generation parameters, we should not raise an exception.
+        # However, if the user loads a pretrained config with generation parameters, we should not raise an exception
+        # at save time
         config = AutoConfig.from_pretrained("openai/whisper-small")
         self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)  # sanity check: has gen params
         with tempfile.TemporaryDirectory() as tmp_dir:
