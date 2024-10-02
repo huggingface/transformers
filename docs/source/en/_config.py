@@ -12,3 +12,17 @@ black_avoid_patterns = {
     "{model_class}": "FakeModelClass",
     "{object_class}": "FakeObjectClass",
 }
+
+extensions = [
+    'sphinxcontrib.redirects'
+]
+
+redirects = {
+    "components/training/pytorch": "https://www.kubeflow.org/docs/components/training/user-guides/pytorch/",
+    "components/starter/install": "https://www.kubeflow.org/docs/started/installing-kubeflow/",
+    "components/starter/kubectl": "https://kubernetes.io/docs/tasks/tools/",
+    "components/starter/volumeclaim": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+    "components/starter/storage": "https://kubernetes.io/docs/concepts/storage/storage-classes/",
+    "components/cpuunits": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu"
+
+}
