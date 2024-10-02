@@ -42,6 +42,7 @@ from ..utils import (
     ModelOutput,
     is_accelerate_available,
     is_hqq_available,
+    is_optimum_quanto_available,
     is_quanto_available,
     is_torchdynamo_compiling,
     logging,
@@ -1674,10 +1675,10 @@ class GenerationMixin:
                 )
                 cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
-                if cache_config.backend == "quanto" and not is_quanto_available():
+                if cache_config.backend == "quanto" and not (is_optimum_quanto_available() or is_quanto_available()):
                     raise ImportError(
-                        "You need to install `quanto` in order to use KV cache quantization with quanto backend. "
-                        "Please install it via  with `pip install quanto`"
+                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
+                        "Please install it via  with `pip install optimum-quanto`"
                     )
                 elif cache_config.backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
