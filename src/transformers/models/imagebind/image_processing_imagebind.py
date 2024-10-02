@@ -75,6 +75,30 @@ def make_batched_videos(videos) -> List[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+def image_to_video(pixel_values: torch.FloatTensor, time_dim: int = 2, num_frames: int = 2):
+        """
+        Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
+        time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
+        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `num_frames` to get
+        shape (B, N, C, H, W).
+        """
+        # Add time dimension at specified dim index
+        pixel_values = [
+            np.expand_dims(pixel_value, axis=time_dim-1)
+            for pixel_value in pixel_values
+        ]
+
+        pixel_values_videos = []
+        # Repeat image across the time dimension num_frames.
+        for pixel_value in pixel_values:
+            if pixel_value.shape[time_dim-1] == 1:
+                new_shape = [1] * len(pixel_value)+1
+                new_shape[time_dim] = num_frames
+                pixel_value = pixel_value.repeat(new_shape)
+                pixel_values_videos.append(pixel_value)
+        return pixel_values
+
+
 # Copy from models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
 def uniform_chunk_sampling(
     total_duration: float, chunk_duration: float, num_chunks: int
@@ -770,6 +794,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 data_format=data_format,
                 input_data_format=input_data_format,
             )
+            pixel_values = image_to_video(pixel_values, num_frames=num_frames_per_chunk)
         else:
             pixel_values = []
             for video in videos:
