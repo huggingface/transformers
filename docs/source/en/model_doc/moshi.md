@@ -72,7 +72,7 @@ This implementation has two main aims:
 
 It is designed for intermediate use. We strongly recommend using the original [implementation](https://github.com/kyutai-labs/moshi) to infer the model in real-time streaming.
 
-<Tip>
+</Tip>
 
 **1. Model generation**
 
@@ -100,6 +100,8 @@ To follow the example of the following image, "Hello, I'm Moshi" could be transf
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/moshi_text_sync.png">
 </div>
+
+</Tip>
 
 
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
