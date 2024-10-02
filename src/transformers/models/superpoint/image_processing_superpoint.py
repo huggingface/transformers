@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -35,12 +35,11 @@ from ...utils import TensorType, logging, requires_backends
 if is_torch_available():
     import torch
 
+if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
-
 
 if is_vision_available():
     import PIL
-
 
 logger = logging.get_logger(__name__)
 
