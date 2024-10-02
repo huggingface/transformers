@@ -1,14 +1,10 @@
 name: Self-hosted runner (benchmark)
 
 on:
-  schedule:
-    - cron: "17 2 * * *"
-  workflow_call:
-
-env:
-  HF_HOME: /mnt/cache
-  TF_FORCE_GPU_ALLOW_GROWTH: true
-
+  push:
+    branches: [main]
+  pull_request:
+    types: [ opened, labeled, reopened, synchronize ]
 
 jobs:
   benchmark:
@@ -17,27 +13,34 @@ jobs:
       group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --privileged --ipc host
     steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: |
-          git fetch && git checkout ${{ github.sha }}
+      - name: Get repo
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Get repo
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install benchmark script dependencies
+        run: python3 -m pip install -r benchmark/requirements.txt
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]"
 
-      - name: Benchmark (daily)
-        if: github.event_name == 'schedule'
+      - name: Run benchmark
         working-directory: /transformers
         run: |
-          python3 -m pip install optimum-benchmark>=0.3.0
-          HF_TOKEN=${{ secrets.TRANSFORMERS_BENCHMARK_TOKEN }} python3 benchmark/benchmark.py --repo_id hf-internal-testing/benchmark_results --path_in_repo $(date +'%Y-%m-%d') --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
-
-      - name: Benchmark (merged to main event)
-        if: github.event_name == 'push' && github.ref_name == 'main'
-        working-directory: /transformers
-        run: |
-          python3 -m pip install optimum-benchmark>=0.3.0
-          HF_TOKEN=${{ secrets.TRANSFORMERS_BENCHMARK_TOKEN }} python3 benchmark/benchmark.py --repo_id hf-internal-testing/benchmark_results_merge_event --path_in_repo $(date +'%Y-%m-%d') --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            commit_id=$(echo "${{ github.event.pull_request.head.sha }}")
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            commit_id=$GITHUB_SHA
+          fi
+          commit_msg=$(git show -s --format=%s | cut -c1-70)
+          python3 benchmark/llama.py "${{ github.head_ref || github.ref_name }}" "$commit_id" "$commit_msg"
