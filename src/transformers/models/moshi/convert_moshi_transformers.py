@@ -15,6 +15,7 @@
 """Convert Moshi checkpoints."""
 
 import argparse
+import sentencepiece
 
 import safetensors
 import torch
@@ -29,64 +30,13 @@ from transformers import (
     PreTrainedTokenizerFast,
     logging,
 )
-from transformers.convert_slow_tokenizer import Converter, SpmConverter, import_protobuf
+from transformers.convert_slow_tokenizer import Converter, MoshiConverter, import_protobuf
 from transformers.utils import requires_backends
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.mimi")
 
-
-class MoshiConverter(SpmConverter):
-    handle_byte_fallback = True
-
-    def __init__(self, vocab_file, model_max_length=None, **kwargs):
-        requires_backends(self, "protobuf")
-
-        Converter.__init__(self, vocab_file)
-
-        # from .utils import sentencepiece_model_pb2 as model_pb2
-        model_pb2 = import_protobuf()
-
-        m = model_pb2.ModelProto()
-        with open(vocab_file, "rb") as f:
-            m.ParseFromString(f.read())
-        self.proto = m
-
-        tokenizer = self.converted()
-
-        self.tokenizer = PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            chat_template=None,
-            unk_token="<unk>",
-            model_input_names=["input_ids", "attention_mask"],
-            model_max_length=model_max_length,
-            clean_up_tokenization_spaces=False,
-        )
-
-    def normalizer(self, proto):
-        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        _normalizers = [
-            normalizers.Replace(" ", "▁"),
-        ]
-        if not precompiled_charsmap:
-            return normalizers.Sequence(_normalizers)
-        else:
-            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
-
-    def decoder(self, replacement, add_prefix_space):
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
-        if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-        return decoders.Sequence(sequence)
-
-    def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
 
 
 def assert_param_count(model_1, model_2):
@@ -285,8 +235,8 @@ def convert_checkpoint(
         temp=0.7,
         top_k=25,
         cache_implementation="sliding_window",
-        pad_token_id=config.audio_vocab_size,
-        bos_token_id=config.audio_vocab_size,
+        pad_token_id=config.vocab_size,
+        bos_token_id=config.vocab_size,
     )
     generation_config.depth_decoder_config = depth_decoder_generation_config.to_diff_dict()
 
@@ -329,14 +279,22 @@ if __name__ == "__main__":
 
     # convert tokenizer
     if args.tokenizer_vocab_path:
-        tokenizer = MoshiConverter(args.tokenizer_vocab_path).tokenizer
-
+        original_tokenizer = sentencepiece.SentencePieceProcessor(args.tokenizer_vocab_path)
+        tokenizer = MoshiConverter(args.tokenizer_vocab_path).converted()
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=tokenizer,
+            chat_template=None,
+            unk_token="<unk>",
+            model_input_names=["input_ids", "attention_mask"],
+            clean_up_tokenization_spaces=False,
+            bos_token_id=original_tokenizer.bos_id(),
+            eos_token_id=original_tokenizer.eos_id(),
+            pad_token_id=original_tokenizer.pad_id(),
+        )
         if args.test_tokenizer:
-            import sentencepiece
             import tqdm
             from datasets import load_dataset
 
-            original_tokenizer = sentencepiece.SentencePieceProcessor(args.tokenizer_vocab_path)
             dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
             for item in tqdm.tqdm(dataset["validation"]):
                 string = item["code"]

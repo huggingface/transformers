@@ -48,6 +48,9 @@ class MoshiConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
+        audio_vocab_size (`int`, *optional*):
+            Vocabulary size of the audio part of model. Defines the number of different tokens that can be
+            represented by the `audio_codes` passed when calling the Moshi models.
         max_position_embeddings (`int`, *optional*, defaults to 3000):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -57,6 +60,8 @@ class MoshiConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
             The attention head dimension.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -66,19 +71,19 @@ class MoshiConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         ffn_dim (`int`, *optional*, defaults to 22528):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-08):
+            The epsilon used by the rms normalization layers.
         num_codebooks (`int`, *optional*, defaults to 8):
             The number of audio codebooks for each audio channels.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-8):
-            The epsilon used by the rms normalization layers.
         depth_hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer of the depth decoder.
         depth_num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of depth decoder layers.
-        depth_num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the depth decoder block.
-        depth_max_position_embeddings (`int`, *optional*, defaults to 8):
+        depth_max_position_embeddings (`int`, *optional*, defaults to 9):
             The maximum sequence length that the depth decoder model might ever be used with. Typically, set this to the
             number of codebooks.
+        depth_num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the depth decoder block.
         depth_ffn_dim (`int`, *optional*, defaults to 5632):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the depth decoder block. Must be even.
         depth_head_dim (`int`, *optional*, defaults to `depth_hidden_size // depth_num_attention_heads`):
@@ -88,8 +93,9 @@ class MoshiConfig(PretrainedConfig):
             If it is not specified, will default to `depth_num_key_value_heads`.
         depth_sliding_window (`int`, *optional*, defaults to 8):
             Sliding window attention window size. If not specified, will default to `8`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether input and output word embeddings should be tied.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -98,28 +104,19 @@ class MoshiConfig(PretrainedConfig):
 
     Example:
 
-    ```python # TODO(YL): update
+    ```python
     >>> from transformers import (
     ...     MoshiConfig,
-    ...     EncodecConfig,
     ...     MoshiForConditionalGeneration,
     ... )
 
-    >>> # Initializing text encoder, audio encoder, and decoder model configurations
-    >>> audio_encoder_config = EncodecConfig()
-
-    >>> configuration = MoshiConfig.from_sub_models_config(
-    ...     audio_encoder_config
-    ... )
+    >>> configuration = MoshiConfig()
 
     >>> # Initializing a MoshiForConditionalGeneration (with random weights) from the kmhf/hf-moshiko style configuration
     >>> model = MoshiForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    >>> config_text_encoder = model.config.text_encoder
-    >>> config_audio_encoder = model.config.audio_encoder
-    >>> config_decoder = model.config.decoder
 
     >>> # Saving the model, including its configuration
     >>> model.save_pretrained("moshi-model")
@@ -140,7 +137,7 @@ class MoshiConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
-        audio_vocab_size=None,  # TODO
+        audio_vocab_size=None,
         max_position_embeddings=3000,
         rope_theta=10000.0,
         hidden_act="silu",
@@ -154,7 +151,7 @@ class MoshiConfig(PretrainedConfig):
         num_codebooks=8,
         depth_hidden_size=1024,
         depth_num_hidden_layers=6,
-        depth_max_position_embeddings=8,
+        depth_max_position_embeddings=9,
         depth_num_attention_heads=16,
         depth_ffn_dim=5632,
         depth_head_dim=None,
