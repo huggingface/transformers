@@ -20,7 +20,7 @@ import datasets
 import numpy as np
 import requests
 from datasets import load_dataset
-from huggingface_hub import ImageSegmentationOutput
+from huggingface_hub import ImageSegmentationOutputElement
 from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
@@ -171,7 +171,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ImageSegmentationOutput)
+            compare_pipeline_output_to_hub_spec(single_output, ImageSegmentationOutputElement)
 
     @require_tf
     @unittest.skip(reason="Image segmentation not implemented in TF")

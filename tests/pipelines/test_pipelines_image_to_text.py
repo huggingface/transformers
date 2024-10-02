@@ -15,7 +15,7 @@
 import unittest
 
 import requests
-from huggingface_hub import ImageToTextOutputElement
+from huggingface_hub import ImageToTextOutput
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import ImageToTextPipeline, pipeline
@@ -106,7 +106,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
         )
 
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutputElement)
+            compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutput)
 
     @require_torch
     def test_small_model_pt(self):
