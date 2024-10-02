@@ -928,22 +928,10 @@ def pipeline(
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
 
-    load_tokenizer = (
-        type(model_config) in TOKENIZER_MAPPING
-        or model_config.tokenizer_class is not None
-        or isinstance(tokenizer, str)
-    )
-    load_feature_extractor = (
-        type(model_config) in FEATURE_EXTRACTOR_MAPPING
-        or feature_extractor is not None
-        or isinstance(feature_extractor, str)
-    )
-    load_image_processor = (
-        type(model_config) in IMAGE_PROCESSOR_MAPPING
-        or image_processor is not None
-        or isinstance(image_processor, str)
-    )
-    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None or isinstance(processor, str)
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+    load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
+    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
 
     # Check that pipeline class required loading
     load_tokenizer = load_tokenizer and pipeline_class._load_tokenizer
