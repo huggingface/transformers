@@ -326,8 +326,8 @@
         title: (번역중) BERT
       - local: in_translation
         title: (번역중) BertGeneration
-      - local: in_translation
-        title: (번역중) BertJapanese
+      - local: 일본어 Bert
+        title: BertJapanese
       - local: in_translation
         title: (번역중) Bertweet
       - local: in_translation
