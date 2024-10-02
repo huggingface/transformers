@@ -15,17 +15,21 @@ from transformers import GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
 STATE_DICT_MAPPING = {
     # CausalLM keys
     r"transformer.output_layer.weight":                                               r"lm_head.weight",
+
     # Model keys
     r"transformer.embedding.word_embeddings.weight":                                  r"model.embed_tokens.weight",
     r"transformer.rotary_pos_embed.inv_freq":                                         None,
     r"transformer.encoder.final_layernorm.weight":                                    r"model.norm.weight",
+
     # Layers keys
     r"transformer.encoder.layers.(\d+).input_layernorm.weight":                       r"model.layers.\1.input_layernorm.weight",
     r"transformer.encoder.layers.(\d+).post_attention_layernorm.weight":              r"model.layers.\1.post_attention_layernorm.weight",
+
     # Attention keys
     r"transformer.encoder.layers.(\d+).self_attention.dense.weight":                  r"model.layers.\1.self_attn.o_proj.weight",
     # qkv_proj will later be split in q|k|v|_proj
     r"transformer.encoder.layers.(\d+).self_attention.query_key_value.(weight|bias)": r"model.layers.\1.self_attn.qkv_proj.\2",
+
     # MLP keys
     r"transformer.encoder.layers.(\d+).mlp.dense_h_to_4h.weight":                     r"model.layers.\1.mlp.gate_up_proj.weight",
     r"transformer.encoder.layers.(\d+).mlp.dense_4h_to_h.weight":                     r"model.layers.\1.mlp.down_proj.weight",
@@ -54,6 +58,8 @@ def map_old_key_to_new(old_key):
         # Early exit of the loop
         if n_replace > 0:
             return new_key
+        
+    raise ValueError(f'Key: {old_key} could not be mapped.')
 
 
 def convert_state_dict(original_state_dict: dict, config: GlmConfig):
