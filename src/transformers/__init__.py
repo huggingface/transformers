@@ -600,6 +600,7 @@ _import_structure = {
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
         "MusicgenConfig",
+        "MusicgenDecoderConfig",
     ],
     "models.moshi": [
         "MoshiConfig",
