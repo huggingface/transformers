@@ -522,6 +522,35 @@ TYPE_TO_FILE_TYPE = {
 }
 
 
+def get_new_part(class_name, base_class):
+    """
+    When MyClassNameAttention inherits from MistralAttention, we need
+    to process the name to properly find dependencies.
+
+    Here we take what is the same (Attention) and what is different
+    when finding the dependencies.
+    """
+    # Find the common suffix between the two class names
+    common_suffix_len = 0
+
+    # Compare the strings from the end to find the length of the common suffix
+    for i in range(1, min(len(class_name), len(base_class)) + 1):
+        if class_name[-i] == base_class[-i]:
+            common_suffix_len += 1
+        else:
+            break
+
+    # Remove the common suffix from the class_name
+    if common_suffix_len > 0:
+        new_part = class_name[:-common_suffix_len]
+    else:
+        new_part = class_name
+
+    # Convert the remaining new part to snake_case
+    snake_case = re.sub(r'(?<!^)(?=[A-Z])', '_', new_part).lower()
+
+    return snake_case
+
 class ModularConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
 
@@ -645,13 +674,34 @@ class ModularConverterTransformer(CSTTransformer):
                     self.given_new_name,
                 )
                 visited_module[super_file_name] = class_finder
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
+
+            elif visited_module[super_file_name].class_dependency_mapping.get(class_name, []) == []:
+                # so, maybe standard renaming did not work (the class name is different)
+                potential_given_name = get_new_part(class_name, super_class)
+                del visited_module[super_file_name]
+                class_finder = find_classes_in_file(
+                    self.transformers_imports[super_file_name],
+                    model_name,
+                    potential_given_name,
+                    self.model_name,
+                    potential_given_name,
+                )
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
+
             else:  # we are re-using the previously parsed data
                 class_finder = visited_module[super_file_name]
 
-            list_dependencies = {
-                dep: class_finder.class_start_line.get(dep, 1000)
-                for dep in class_finder.class_dependency_mapping.get(class_name, [])
-            }
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
 
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
             start_insert_idx = self.global_scope_index
@@ -686,8 +736,8 @@ class ModularConverterTransformer(CSTTransformer):
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
                 raise ValueError(
-                    f"{class_name} we were unable to find dependencies for it (based on inheriting from {super_class})"
-                    "   Here are all the dependencies that we found in you modular file: {class_finder.class_dependency_mapping}."
+                    f"We were unable to find dependencies for {class_name} (based on inheriting from {super_class})"
+                    f"   Here are all the global dependencies that we found in you modular file: {list(class_finder.class_dependency_mapping.keys())}."
                     f"   This usually means that the name of `{class_name}` does not match the pattern of `{super_class}`"
                 )
 
