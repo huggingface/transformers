@@ -686,7 +686,9 @@ class ModularConverterTransformer(CSTTransformer):
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
                 raise ValueError(
-                    f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)"
+                    f"{class_name} we were unable to find dependencies for it (based on inheriting from {super_class})"
+                    "   Here are all the dependencies that we found in you modular file: {class_finder.class_dependency_mapping}."
+                    f"   This usually means that the name of `{class_name}` does not match the pattern of `{super_class}`"
                 )
 
         # Now, if a class was defined without parents, we look for the name
