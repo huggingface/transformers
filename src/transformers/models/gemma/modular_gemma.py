@@ -264,7 +264,7 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
             spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )
-        del self.add_prefix_space # this is not need for gemma
+        del self.add_prefix_space  # this is not need for gemma
         del self.legacy
 
     def get_spm_processor(self):
