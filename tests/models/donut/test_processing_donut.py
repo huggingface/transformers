@@ -14,16 +14,32 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
-from transformers import DonutProcessor
+from transformers import DonutImageProcessor, DonutProcessor, XLMRobertaTokenizerFast
+from transformers.testing_utils import (
+    require_torch,
+    require_vision,
+)
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
-class DonutProcessorTest(unittest.TestCase):
+class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "naver-clova-ix/donut-base"
+    processor_class = DonutProcessor
 
     def setUp(self):
         self.processor = DonutProcessor.from_pretrained(self.from_pretrained_id)
+        self.tmpdirname = tempfile.mkdtemp()
+
+        image_processor = DonutImageProcessor()
+        tokenizer = XLMRobertaTokenizerFast.from_pretrained(self.from_pretrained_id)
+
+        processor = DonutProcessor(image_processor, tokenizer)
+
+        processor.save_pretrained(self.tmpdirname)
 
     def test_token2json(self):
         expected_json = {
@@ -49,3 +65,30 @@ class DonutProcessorTest(unittest.TestCase):
         actual_json = self.processor.token2json(sequence)
 
         self.assertDictEqual(actual_json, expected_json)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs() * 2
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 7)

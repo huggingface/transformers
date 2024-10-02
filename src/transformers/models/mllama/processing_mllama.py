@@ -19,19 +19,9 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     BatchEncoding,
     PreTokenizedInput,
