@@ -962,7 +962,14 @@ def is_auto_awq_available():
 
 
 def is_quanto_available():
+    logger.warning_once(
+        "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
+    )
     return _quanto_available
+
+
+def is_optimum_quanto_available():
+    return _is_package_available("optimum.quanto")
 
 
 def is_compressed_tensors_available():
