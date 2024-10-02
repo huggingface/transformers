@@ -16,16 +16,16 @@ rendered properly in your Markdown viewer.
 -->
 
 
-# ExecuTorch
+# ExecuTorch [[executorch]]
 
-[`ExecuTorch`](https://github.com/pytorch/executorch) is an end-to-end solution for enabling on-device inference capabilities across mobile and edge devices including wearables, embedded devices and microcontrollers. It is part of the PyTorch ecosystem and supports the deployment of PyTorch models with a focus on portability, productivity, and performance.
+[`ExecuTorch`](https://github.com/pytorch/executorch) 는 웨어러블, 임베디드 장치, 마이크로컨트롤러를 포함한 모바일 및 엣지 장치에서 온디바이스 추론 기능을 가능하게 하는 종합 솔루션입니다. PyTorch 생태계에 속해있으며, 이식성, 생산성, 성능에 중점을 둔 PyTorch 모델 배포를 지원합니다.
 
-ExecuTorch introduces well defined entry points to perform model, device, and/or use-case specific optimizations such as backend delegation, user-defined compiler transformations, memory planning, and more. The first step in preparing a PyTorch model for execution on an edge device using ExecuTorch is to export the model. This is achieved through the use of a PyTorch API called [`torch.export`](https://pytorch.org/docs/stable/export.html).
+ExecuTorch는 백엔드 위임, 사용자 정의 컴파일러 변환, 메모리 계획 등 모델, 장치 또는 특정 유즈케이스 맞춤 최적화를 수행할 수 있는 진입점을 명확하게 정의합니다. ExecuTorch를 사용해 엣지 장치에서 PyTorch 모델을 실행하는 첫 번째 단계는 모델을 익스포트하는 것입니다. 이 작업은 PyTorch API인 [`torch.export`](https://pytorch.org/docs/stable/export.html)를 사용하여 수행합니다.
 
 
-## ExecuTorch Integration
+## ExecuTorch 통합 [[transformers.TorchExportableModuleWithStaticCache]]
 
-An integration point is being developed to ensure that 🤗 Transformers can be exported using `torch.export`. The goal of this integration is not only to enable export but also to ensure that the exported artifact can be further lowered and optimized to run efficiently in `ExecuTorch`, particularly for mobile and edge use cases.
+`torch.export`를 사용하여 🤗 Transformers를 익스포트 할 수 있도록 하는 통합 지점이 개발 되고 있습니다. 이 통합의 목표는 익스포트 뿐만 아니라, 익스포트한 아티팩트가 `ExecuTorch`에서 효율적으로 실행될 수 있도록 더 축소되고 최적화될 수 있도록 하는 것입니다. 특히 모바일 및 엣지 유즈케이스에 중점을 두고 있습니다.
 
 [[autodoc]] integrations.executorch.TorchExportableModuleWithStaticCache
     - forward
