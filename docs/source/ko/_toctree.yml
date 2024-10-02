@@ -306,6 +306,8 @@
       title: (번역중) Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: ExecuTorch
+      title: ExecuTorch
     - local: in_translation
       title: (번역중) Feature Extractor
     - local: in_translation
