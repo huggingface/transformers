@@ -171,7 +171,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ImageSegmentationOutputElement)
+            for output_element in single_output:
+                compare_pipeline_output_to_hub_spec(output_element, ImageSegmentationOutputElement)
 
     @require_tf
     @unittest.skip(reason="Image segmentation not implemented in TF")

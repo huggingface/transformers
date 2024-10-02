@@ -125,7 +125,8 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ImageClassificationOutputElement)
+            for output_element in single_output:
+                compare_pipeline_output_to_hub_spec(output_element, ImageClassificationOutputElement)
 
     @require_torch
     def test_small_model_pt(self):

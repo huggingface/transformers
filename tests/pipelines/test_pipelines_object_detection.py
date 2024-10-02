@@ -104,9 +104,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
                     },
                 )
+                compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
 
-        for single_output in batch_outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ObjectDetectionOutputElement)
 
     @require_tf
     @unittest.skip(reason="Object detection not implemented in TF")
