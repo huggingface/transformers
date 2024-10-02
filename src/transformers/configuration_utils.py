@@ -557,7 +557,6 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         config = cls.from_dict(config_dict, **kwargs)
-        config._original_object_hash = hash(config)  # config object loaded from external source -> store hash
         return config
 
     @classmethod
