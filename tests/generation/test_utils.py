@@ -2205,7 +2205,7 @@ class GenerationTesterMixin:
             self.assertTrue((results_dynamic ==results_sliding_dynamic).all())
 
 
-    @parameterized.expand([False, True])
+    @parameterized.expand([(False,), (True,)])
     @pytest.mark.generate
     def test_generate_continue_from_dynamic_sliding_window_cache(self, add_more_tokens_than_window: bool):
         """
