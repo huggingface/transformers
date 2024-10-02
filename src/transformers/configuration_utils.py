@@ -315,7 +315,8 @@ class PretrainedConfig(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-        # If we load the object from an external source, we need to store the original object hash
+        # If we load the object from an external source, we need to store the original object hash. (The hash can't
+        # be set here -- some classes overload __init__ and modify the instance after calling super().__init__)
         self._original_object_hash = None
 
     def __hash__(self):

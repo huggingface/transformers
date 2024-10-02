@@ -485,7 +485,8 @@ class GenerationConfig(PushToHubMixin):
         # Validate the values of the attributes
         self.validate(is_init=True)
 
-        # If we load the object from an external source, we need to store the original object hash
+        # If we load the object from an external source, we need to store the original object hash. (The hash can't
+        # be set here -- some classes overload __init__ and modify the instance after calling super().__init__)
         self._original_object_hash = None
 
     def __hash__(self):
