@@ -1342,7 +1342,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         >>> # interpolate to original size
         >>> post_processed_output = image_processor.post_process_depth_estimation(
         ...     outputs,
-        ...     source_sizes=[image.size[::-1]],
+        ...     source_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction

@@ -1125,7 +1125,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> # interpolate to original size
         >>> post_processed_output = image_processor.post_process_depth_estimation(
         ...     outputs,
-        ...     target_sizes=[image.size[::-1]],
+        ...     target_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction

@@ -133,7 +133,7 @@ Let's post-process the results to remove any padding and resize the depth map to
 >>> # to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
 >>> post_processed_output = image_processor.post_process_depth_estimation(
 ...     outputs,
-...     source_sizes=[image.size[::-1]],
+...     source_sizes=[(image.height, image.width)],
 ... )
 
 >>> predicted_depth = post_processed_output[0]
@@ -149,7 +149,7 @@ Let's post-process the results to remove any padding and resize the depth map to
 ...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 &gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
 ...     outputs,
-...     source_sizes=[image.size[::-1]],
+...     source_sizes=[(image.height, image.width)],
 ...     outputs_flipped=outputs_flipped,
 ... )
 </code></pre>

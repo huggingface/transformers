@@ -82,7 +82,7 @@ If you want to do the pre- and post-processing yourself, here's how to do that:
 >>> # interpolate to original size and visualize the prediction
 >>> post_processed_output = image_processor.post_process_depth_estimation(
 ...     outputs,
-...     target_sizes=[image.size[::-1]],
+...     target_sizes=[(image.height, image.width)],
 ... )
 
 >>> predicted_depth = post_processed_output[0]
