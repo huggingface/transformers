@@ -14,23 +14,22 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BertJapanese
+# 일본어 BERT (BertJapanese) [[bertjapanese]]
 
-## Overview
+## 개요 [[overview]]
 
-The BERT models trained on Japanese text.
+일본어 문장에 학습된 BERT 모델 입니다.
 
-There are models with two different tokenization methods:
+각각 서로 다른 토큰화 방법을 사용하는 두 모델:
 
-- Tokenize with MeCab and WordPiece. This requires some extra dependencies, [fugashi](https://github.com/polm/fugashi) which is a wrapper around [MeCab](https://taku910.github.io/mecab/).
-- Tokenize into characters.
+- MeCab와 WordPiece를 사용하여 토큰화합니다. 이를 위해 추가 의존성 [fugashi](https://github.com/polm/fugashi)이 필요합니다. (이는 [MeCab](https://taku910.github.io/mecab/)의 래퍼입니다.)
+- 문자 단위로 토큰화합니다.
 
-To use *MecabTokenizer*, you should `pip install transformers["ja"]` (or `pip install -e .["ja"]` if you install
-from source) to install dependencies.
+*MecabTokenizer*를 사용하려면, 의존성을 설치하기 위해 `pip install transformers["ja"]` (또는 소스에서 설치하는 경우 `pip install -e .["ja"]`) 명령을 실행해야 합니다.
 
-See [details on cl-tohoku repository](https://github.com/cl-tohoku/bert-japanese).
+자세한 내용은 [cl-tohoku 리포지토리](https://github.com/cl-tohoku/bert-japanese)에서 확인하세요.
 
-Example of using a model with MeCab and WordPiece tokenization:
+MeCab과 WordPiece 토큰화를 사용하는 모델 예시:
 
 ```python
 >>> import torch
@@ -50,7 +49,7 @@ Example of using a model with MeCab and WordPiece tokenization:
 >>> outputs = bertjapanese(**inputs)
 ```
 
-Example of using a model with Character tokenization:
+문자 토큰화를 사용하는 모델 예시:
 
 ```python
 >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
@@ -67,14 +66,12 @@ Example of using a model with Character tokenization:
 >>> outputs = bertjapanese(**inputs)
 ```
 
-This model was contributed by [cl-tohoku](https://huggingface.co/cl-tohoku).
-
 <Tip> 
 
-This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for 
-API reference information.  
+이는 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](https://huggingface.co/docs/transformers/main/en/model_doc/bert)를 참조하세요.
+이 모델은 [cl-tohoku](https://huggingface.co/cl-tohoku)께서 기여하였습니다.
 
-</Tip>
+</Tip> 
 
 
 ## BertJapaneseTokenizer
