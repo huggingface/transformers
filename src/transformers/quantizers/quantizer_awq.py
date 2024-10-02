@@ -64,7 +64,9 @@ class AwqQuantizer(HfQuantizer):
                 )
         else:
             if not torch.cuda.is_available():
-                raise RuntimeError("GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU")
+                raise RuntimeError(
+                    "GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU"
+                )
 
             if device_map is None:
                 logger.warning_once(
