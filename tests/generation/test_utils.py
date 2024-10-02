@@ -2024,7 +2024,8 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
-    @parameterized.expand([{"do_sample": False}, {'do_sample': False, 'top_k': 2, 'penalty_alpha': 0.5}])
+    
+    @parameterized.expand([({"do_sample": False},), ({'do_sample': False, 'top_k': 2, 'penalty_alpha': 0.5},)])
     @pytest.mark.generate
     def test_generate_with_dynamic_sliding_window_cache(self, generation_kwargs: dict):
         """
@@ -2053,7 +2054,7 @@ class GenerationTesterMixin:
             results_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache)
             results_sliding_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_sliding_cache)
 
-            self.assertTrue((results_dynamic ==results_sliding_dynamic).all())
+            self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
 
 
     @parameterized.expand([(False,), (True,)])
@@ -2088,7 +2089,7 @@ class GenerationTesterMixin:
             results_dynamic, dynamic_cache = out_dynamic.sequences, out_dynamic.past_key_values
             results_sliding_dynamic, dynamic_sliding_cache = out_sliding_dynamic.sequences, out_sliding_dynamic.past_key_values
 
-            self.assertTrue((results_dynamic ==results_sliding_dynamic).all())
+            self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
 
             bs = results_dynamic.shape[0]
             num_added_tokens = 2 if not add_more_tokens_than_window else 4
@@ -2098,7 +2099,7 @@ class GenerationTesterMixin:
             out_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache)
             out_sliding_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_sliding_cache)
 
-            self.assertTrue((out_dynamic.sequences == out_sliding_dynamic.sequences).all())
+            self.assertListEqual(out_dynamic.sequences.tolist(), out_sliding_dynamic.sequences.tolist())
 
     def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
         batch_size = main_input.shape[0]
