@@ -14,23 +14,22 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BERTweet
+# BERTweet [[bertweet]]
 
-## Overview
+## 개요 [[overview]]
 
-The BERTweet model was proposed in [BERTweet: A pre-trained language model for English Tweets](https://www.aclweb.org/anthology/2020.emnlp-demos.2.pdf) by Dat Quoc Nguyen, Thanh Vu, Anh Tuan Nguyen.
+BERTweet 모델은 Dat Quoc Nguyen, Thanh Vu, Anh Tuan Nguyen에 의해 [BERTweet: 영어 트윗을 위해 사전 학습된 언어 모델](https://www.aclweb.org/anthology/2020.emnlp-demos.2.pdf) 에서 제안되었습니다.
 
-The abstract from the paper is the following:
+해당 논문의 초록 :
 
-*We present BERTweet, the first public large-scale pre-trained language model for English Tweets. Our BERTweet, having
-the same architecture as BERT-base (Devlin et al., 2019), is trained using the RoBERTa pre-training procedure (Liu et
-al., 2019). Experiments show that BERTweet outperforms strong baselines RoBERTa-base and XLM-R-base (Conneau et al.,
-2020), producing better performance results than the previous state-of-the-art models on three Tweet NLP tasks:
-Part-of-speech tagging, Named-entity recognition and text classification.*
+*영어 트윗을 위한 최초의 공개 대규모 사전 학습된 언어 모델인 BERTweet을 소개합니다. 
+BERTweet은 BERT-base(Devlin et al., 2019)와 동일한 아키텍처를 가지고 있으며, RoBERTa 사전 학습 절차(Liu et al., 2019)를 사용하여 학습되었습니다. 
+실험 결과, BERTweet은 강력한 기준 모델인 RoBERTa-base 및 XLM-R-base(Conneau et al., 2020)의 성능을 능가하여 세 가지 트윗 NLP 작업(품사 태깅, 개체명 인식, 텍스트 분류)에서 이전 최신 모델보다 더 나은 성능을 보여주었습니다.*
 
-This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The original code can be found [here](https://github.com/VinAIResearch/BERTweet).
+이 모델은 [dqnguyen](https://huggingface.co/dqnguyen) 께서 기여하셨습니다. 원본 코드는 [여기](https://github.com/VinAIResearch/BERTweet).에서 확인할 수 있습니다.
 
-## Usage example
+
+## 사용 예시 [[usage-example]]
 
 ```python
 >>> import torch
@@ -38,13 +37,13 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 
 >>> bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
 
->>> # For transformers v4.x+:
+>>> # 트랜스포머 버전 4.x 이상 :
 >>> tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base", use_fast=False)
 
->>> # For transformers v3.x:
+>>> # 트랜스포머 버전 3.x 이상:
 >>> # tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
 
->>> # INPUT TWEET IS ALREADY NORMALIZED!
+>>> # 입력된 트윗은 이미 정규화되었습니다!
 >>> line = "SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:"
 
 >>> input_ids = torch.tensor([tokenizer.encode(line)])
@@ -59,11 +58,10 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 
 <Tip> 
 
-This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for 
-API reference information.  
+이 구현은 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](bert) 를 참조하세요.
 
 </Tip>
 
-## BertweetTokenizer
+## Bertweet 토큰화(BertweetTokenizer) [[transformers.BertweetTokenizer]]
 
 [[autodoc]] BertweetTokenizer
