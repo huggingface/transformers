@@ -461,8 +461,10 @@ class ImageBindAttention(nn.Module):
         self.qkv_proj = nn.Linear(self.embed_dim, self.embed_dim * 3)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+        self.add_kv_bias = config.add_kv_bias
+
         # Create bias parameters for key and value sequences.
-        if config.add_kv_bias:
+        if self.add_kv_bias:
             self.k_bias = nn.Parameter(torch.empty((1, 1, self.embed_dim)))
             self.v_bias = nn.Parameter(torch.empty((1, 1, self.embed_dim)))
         else:
@@ -488,7 +490,7 @@ class ImageBindAttention(nn.Module):
         query_states = query_states * self.scale
 
         # Add key/value biases if necessary
-        if self.k_bias is not None and self.v_bias is not None:
+        if self.add_kv_bias:
             # Repeat bias along batch dimension (first)
             key_states = torch.cat([key_states, self.k_bias.repeat(batch_size, 1, 1)], dim=1)
             value_states = torch.cat([value_states, self.v_bias.repeat(batch_size, 1, 1)], dim=1)
@@ -665,6 +667,12 @@ class ImageBindEncoderLayer(nn.Module):
 class ImageBindPostProcessor(nn.Module):
     """
     Post-processes ImageBind embeddings by using a normalize layer followed by an optional logit scaling layer.
+
+    Args:
+        config (Union[ImageBindTextConfig, ImageBindVisionConfig,ImageBindAudioConfig]): A configuration object that contains
+                initialization values for logit scaling.
+        dim (int, optional): The dimension along which to normalize the logits. Default is -1, which indicates the last dimension.
+        max_logit_scale (float, optional): The maximum value to which the logit scale can be clipped. Default is 100.
     """
 
     def __init__(
@@ -708,17 +716,22 @@ class ImageBindPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
+        layer_factor = (2 * self.config.num_hidden_layers) ** -0.5
+
+        def init_projection(proj, embed_dim):
+            nn.init.normal_(proj.weight, std=embed_dim**-0.5 * factor)
+
         if isinstance(module, ImageBindTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+
         elif isinstance(module, (ImageBindVisionEmbeddings, ImageBindAudioEmbeddings)):
-            factor = self.config.initializer_factor
             nn.init.normal_(module.cls_token, std=module.config.hidden_size**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.projection.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embeddings, std=module.config.initializer_range * factor)
+
         elif isinstance(module, ImageBindAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            in_proj_std = (module.embed_dim**-0.5) * layer_factor * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.qkv_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
@@ -726,69 +739,32 @@ class ImageBindPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(module.k_bias, std=in_proj_std)
             if module.v_bias is not None:
                 nn.init.normal_(module.v_bias, std=in_proj_std)
+
         elif isinstance(module, ImageBindMlp):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * layer_factor * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ImageBindModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.vision_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.audio_projection.weight,
-                std=module.audio_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-
-            configs = [self.config.text_config, self.config.vision_config, self.config.audio_config]
-            modalities = ["text", "vision", "audio"]
-            for config, modality in zip(configs, modalities):
-                logit_scale_init_value, learnable_logit_scale = (
-                    config.logit_scale_init_value,
-                    config.learnable_logit_scale,
-                )
-                if logit_scale_init_value is not None and learnable_logit_scale:
-                    logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * factor
-                    postprocessor = getattr(module, f"{modality}_postprocessor")
-                    postprocessor.log_logit_scale = nn.Parameter(logit_scale)
-
-        elif isinstance(module, ImageBindVisionModelWithProjection):
-            nn.init.normal_(
-                module.vision_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-            logit_scale_init_value = self.config.logit_scale_init_value
-            learnable_logit_scale = self.config.learnable_logit_scale
-            if logit_scale_init_value is not None and learnable_logit_scale:
-                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
-                module.vision_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
-        elif isinstance(module, ImageBindTextModelWithProjection):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-            logit_scale_init_value = self.config.logit_scale_init_value
-            learnable_logit_scale = self.config.learnable_logit_scale
-            if logit_scale_init_value is not None and learnable_logit_scale:
-                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
-                module.text_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
-        elif isinstance(module, ImageBindAudioModelWithProjection):
-            nn.init.normal_(
-                module.audio_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-            logit_scale_init_value = self.config.logit_scale_init_value
-            learnable_logit_scale = self.config.learnable_logit_scale
-            if logit_scale_init_value is not None and learnable_logit_scale:
-                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
-                module.audio_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
-
+            init_projection(module.text_projection, module.text_embed_dim)
+            init_projection(module.vision_projection, module.vision_embed_dim)
+            init_projection(module.audio_projection, module.audio_embed_dim)
+            for config, modality in zip(
+                [self.config.text_config, self.config.vision_config, self.config.audio_config],
+                ["text", "vision", "audio"],
+            ):
+                if config.logit_scale_init_value is not None and config.learnable_logit_scale:
+                    logit_scale = torch.ones([]) * np.log(config.logit_scale_init_value) * factor
+                    getattr(module, f"{modality}_postprocessor").log_logit_scale = nn.Parameter(logit_scale)
+        elif isinstance(
+            module,
+            (ImageBindVisionModelWithProjection, ImageBindTextModelWithProjection, ImageBindAudioModelWithProjection),
+        ):
+            modality = module.__class__.__name__.replace("ModelWithProjection", "").lower()
+            init_projection(getattr(module, f"{modality}_projection"), self.config.hidden_size)
+            if self.config.logit_scale_init_value is not None and self.config.learnable_logit_scale:
+                logit_scale = torch.ones([]) * np.log(self.config.logit_scale_init_value) * factor
+                getattr(module, f"{modality}_postprocessor").log_logit_scale = nn.Parameter(logit_scale)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

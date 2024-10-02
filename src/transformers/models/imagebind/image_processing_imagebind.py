@@ -89,7 +89,7 @@ def image_to_video(pixel_values: torch.FloatTensor, time_dim: int = 2, num_frame
     # Repeat image across the time dimension num_frames.
     for pixel_value in pixel_values:
         if pixel_value.shape[time_dim - 1] == 1:
-            new_shape = [1] * len(pixel_value) + 1
+            new_shape = [1] * len(pixel_value.shape) + 1
             new_shape[time_dim] = num_frames
             pixel_value = pixel_value.repeat(new_shape)
             pixel_values_videos.append(pixel_value)
