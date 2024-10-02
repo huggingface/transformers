@@ -42,6 +42,8 @@ from .utils import (
 )
 
 
+METADATA_FIELDS = ["_original_object_hash", "_commit_hash", "transformers_version"]
+
 logger = logging.get_logger(__name__)
 
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
@@ -313,6 +315,12 @@ class PretrainedConfig(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
+        # Finally, store the original hash of the object (to detect post-loading changes)
+        self._original_object_hash = hash(self)
+
+    def __hash__(self):
+        return hash(self.to_json_string(use_diff=False, ignore_metadata=True))
+
     @property
     def name_or_path(self) -> str:
         return getattr(self, "_name_or_path", None)
@@ -380,12 +388,17 @@ class PretrainedConfig(PushToHubMixin):
 
         non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            raise ValueError(
+            error_message = (
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
                 "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
                 f"\nNon-default generation parameters: {str(non_default_generation_parameters)}"
             )
+            # If the user was resposible for setting these, raise an exception. Otherwise, don't crash (warn).
+            if hash(self) != self._original_object_hash:
+                raise ValueError(error_message)
+            else:
+                warnings.warn(error_message, UserWarning)
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -542,7 +555,8 @@ class PretrainedConfig(PushToHubMixin):
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
-        return cls.from_dict(config_dict, **kwargs)
+        config = cls.from_dict(config_dict, **kwargs)
+        return config
 
     @classmethod
     def get_config_dict(
@@ -736,6 +750,7 @@ class PretrainedConfig(PushToHubMixin):
         for key in to_remove:
             kwargs.pop(key, None)
 
+        config._original_object_hash = hash(config)  # `from_dict` is a valid initializer and has post __init__ changes
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
             return config, kwargs
@@ -869,7 +884,7 @@ class PretrainedConfig(PushToHubMixin):
 
         return output
 
-    def to_json_string(self, use_diff: bool = True) -> str:
+    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -877,6 +892,8 @@ class PretrainedConfig(PushToHubMixin):
             use_diff (`bool`, *optional*, defaults to `True`):
                 If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
                 is serialized to JSON string.
+            ignore_metadata (`bool`, *optional*, defaults to `False`):
+                Whether to ignore the metadata fields present in the instance
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -885,6 +902,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        if ignore_metadata:
+            for metadata_field in METADATA_FIELDS:
+                config_dict.pop(metadata_field, None)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):

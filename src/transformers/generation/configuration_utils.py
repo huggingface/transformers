@@ -485,8 +485,11 @@ class GenerationConfig(PushToHubMixin):
         # Validate the values of the attributes
         self.validate(is_init=True)
 
+        # Finally, store the original hash of the object (to detect post-loading changes)
+        self._original_object_hash = hash(self)
+
     def __hash__(self):
-        return hash(self.to_json_string(ignore_metadata=True))
+        return hash(self.to_json_string(use_diff=False, ignore_metadata=True))
 
     def __eq__(self, other):
         if not isinstance(other, GenerationConfig):
@@ -1055,11 +1058,9 @@ class GenerationConfig(PushToHubMixin):
 
         if kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config, unused_kwargs
         else:
             config = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
 
     @classmethod
@@ -1096,6 +1097,7 @@ class GenerationConfig(PushToHubMixin):
         config = cls(**{**config_dict, **kwargs})
         unused_kwargs = config.update(**kwargs)
 
+        config._original_object_hash = hash(config)  # `from_dict` is a valid initializer and has post __init__ changes
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
             return config, unused_kwargs
@@ -1256,7 +1258,7 @@ class GenerationConfig(PushToHubMixin):
             ):
                 generation_config.return_dict_in_generate = True
 
-        # Hash to detect whether the instance was modified
+        # `from_model_config` is a valid initializer and has post __init__ changes
         generation_config._original_object_hash = hash(generation_config)
         return generation_config
 

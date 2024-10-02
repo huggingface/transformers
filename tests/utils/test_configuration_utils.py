@@ -333,3 +333,23 @@ class ConfigTestUtils(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             PretrainedConfig.from_pretrained("bert-base-uncased")
+
+    def test_saving_untouched_config_with_generation_parameters(self):
+        """
+        We don't want to save generation parameters in the model config. However, if a pretrained config has generation
+        paremeters, we don't want to throw exceptions -- the user has done nothing incorrect, so lower them to
+        warnings. Tests that this behavior persists.
+        """
+        # Saving a model config with a user-defined generation config will raise an exception.
+        config = BertConfig(min_length=3)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError):
+                config.save_pretrained(tmp_dir)
+
+        # However, if the user loads a pretrained config with generation parameters, we should not raise an exception.
+        config = AutoConfig.from_pretrained("openai/whisper-small")
+        self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)  # sanity check: has gen params
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertWarns(UserWarning) as cm:
+                config.save_pretrained(tmp_dir)
+        self.assertIn("non-default generation parameters are set in the model config", str(cm.warning))
