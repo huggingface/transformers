@@ -235,7 +235,7 @@ MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=feature_extractor,
+...     processing_class=feature_extractor,
 ...     compute_metrics=compute_metrics,
 ... )
 

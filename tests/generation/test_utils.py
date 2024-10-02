@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
     require_auto_gptq,
-    require_quanto,
+    require_optimum_quanto,
     require_torch,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -1941,7 +1941,7 @@ class GenerationTesterMixin:
             self.assertTrue(len(results.past_key_values.key_cache) == num_hidden_layers)
             self.assertTrue(results.past_key_values.key_cache[0].shape == cache_shape)
 
-    @require_quanto
+    @require_optimum_quanto
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:

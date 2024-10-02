@@ -621,14 +621,20 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             else:
                 if image_outputs is not None:
                     special_image_mask = (
-                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                        (input_ids == self.config.image_token_index)
+                        .unsqueeze(-1)
+                        .expand_as(inputs_embeds)
+                        .to(inputs_embeds.device)
                     )
                     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
                 if video_outputs is not None:
                     special_image_mask = (
-                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                        (input_ids == self.config.video_token_index)
+                        .unsqueeze(-1)
+                        .expand_as(inputs_embeds)
+                        .to(inputs_embeds.device)
                     )
                     video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
