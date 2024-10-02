@@ -18,7 +18,7 @@ STATE_DICT_MAPPING = {
 
     # Model keys
     r"transformer.embedding.word_embeddings.weight":                                  r"model.embed_tokens.weight",
-    r"transformer.rotary_pos_embed.inv_freq":                                         None,
+    r"transformer.rotary_pos_emb.inv_freq":                                           None,
     r"transformer.encoder.final_layernorm.weight":                                    r"model.norm.weight",
 
     # Layers keys
