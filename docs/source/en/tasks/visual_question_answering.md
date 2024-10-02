@@ -18,14 +18,14 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. 
-The input to models supporting this task is typically a combination of an image and a question, and the output is an 
+Visual Question Answering (VQA) is the task of answering open-ended questions based on an image.
+The input to models supporting this task is typically a combination of an image and a question, and the output is an
 answer expressed in natural language.
 
 Some noteworthy use case examples for VQA include:
 * Accessibility applications for visually impaired individuals.
 * Education: posing questions about visual materials presented in lectures or textbooks. VQA can also be utilized in interactive museum exhibits or historical sites.
-* Customer service and e-commerce: VQA can enhance user experience by letting users ask questions about products. 
+* Customer service and e-commerce: VQA can enhance user experience by letting users ask questions about products.
 * Image retrieval: VQA models can be used to retrieve images with specific characteristics. For example, the user can ask "Is there a dog?" to find all images with dogs from a set of images.
 
 In this guide you'll learn how to:
@@ -36,15 +36,15 @@ In this guide you'll learn how to:
 
 ## Fine-tuning ViLT
 
-ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for 
-Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier 
-head is placed on top (a linear layer on top of the final hidden state of the `[CLS]` token) and randomly initialized. 
+ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for
+Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier
+head is placed on top (a linear layer on top of the final hidden state of the `[CLS]` token) and randomly initialized.
 Visual Question Answering is thus treated as a **classification problem**.
 
-More recent models, such as BLIP, BLIP-2, and InstructBLIP, treat VQA as a generative task. Later in this guide we 
-illustrate how to use them for zero-shot VQA inference. 
+More recent models, such as BLIP, BLIP-2, and InstructBLIP, treat VQA as a generative task. Later in this guide we
+illustrate how to use them for zero-shot VQA inference.
 
-Before you begin, make sure you have all the necessary libraries installed. 
+Before you begin, make sure you have all the necessary libraries installed.
 
 ```bash
 pip install -q transformers datasets
@@ -67,15 +67,15 @@ Let's define the model checkpoint as a global variable.
 
 ## Load the data
 
-For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset. 
+For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset.
 You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
 
-As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the 
-same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the 
+As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the
+same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the
 tutorial with your custom data, check out how to [Create an image dataset](https://huggingface.co/docs/datasets/image_dataset#loading-script)
-guide in the 🤗 Datasets documentation.  
+guide in the 🤗 Datasets documentation.
 
-Let's load the first 200 examples from the validation split and explore the dataset's features:  
+Let's load the first 200 examples from the validation split and explore the dataset's features:
 
 ```python
 >>> from datasets import load_dataset
@@ -104,20 +104,20 @@ Let's take a look at an example to understand the dataset's features:
    0.30000001192092896]}}
 ```
 
-The features relevant to the task include: 
+The features relevant to the task include:
 * `question`: the question to be answered from the image
 * `image_id`: the path to the image the question refers to
 * `label`: the annotations
 
-We can remove the rest of the features as they won't be necessary: 
+We can remove the rest of the features as they won't be necessary:
 
-```py 
+```py
 >>> dataset = dataset.remove_columns(['question_type', 'question_id', 'answer_type'])
 ```
 
-As you can see, the `label` feature contains several answers to the same question (called `ids` here) collected by different human annotators. 
-This is because the answer to a question can be subjective. In this case, the question is "where is he looking?". Some people 
-annotated this with "down", others with "at table", another one with "skateboard", etc. 
+As you can see, the `label` feature contains several answers to the same question (called `ids` here) collected by different human annotators.
+This is because the answer to a question can be subjective. In this case, the question is "where is he looking?". Some people
+annotated this with "down", others with "at table", another one with "skateboard", etc.
 
 Take a look at the image and consider which answer would you give:
 
@@ -132,14 +132,14 @@ Take a look at the image and consider which answer would you give:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/vqa-example.png" alt="VQA Image Example"/>
 </div>
 
-Due to the questions' and answers' ambiguity, datasets like this are treated as a multi-label classification problem (as 
-multiple answers are possibly valid). Moreover, rather than just creating a one-hot encoded vector, one creates a 
+Due to the questions' and answers' ambiguity, datasets like this are treated as a multi-label classification problem (as
+multiple answers are possibly valid). Moreover, rather than just creating a one-hot encoded vector, one creates a
 soft encoding, based on the number of times a certain answer appeared in the annotations.
 
-For instance, in the example above, because the answer "down" is selected way more often than other answers, it has a 
-score (called `weight` in the dataset) of 1.0, and the rest of the answers have scores < 1.0. 
+For instance, in the example above, because the answer "down" is selected way more often than other answers, it has a
+score (called `weight` in the dataset) of 1.0, and the rest of the answers have scores < 1.0.
 
-To later instantiate the model with an appropriate classification head, let's create two dictionaries: one that maps 
+To later instantiate the model with an appropriate classification head, let's create two dictionaries: one that maps
 the label name to an integer and vice versa:
 
 ```py
@@ -150,10 +150,10 @@ the label name to an integer and vice versa:
 >>> unique_labels = list(set(flattened_labels))
 
 >>> label2id = {label: idx for idx, label in enumerate(unique_labels)}
->>> id2label = {idx: label for label, idx in label2id.items()} 
+>>> id2label = {idx: label for label, idx in label2id.items()}
 ```
 
-Now that we have the mappings, we can replace the string answers with their ids, and flatten the dataset for a more convenient further preprocessing. 
+Now that we have the mappings, we can replace the string answers with their ids, and flatten the dataset for a more convenient further preprocessing.
 
 ```python
 >>> def replace_ids(inputs):
@@ -172,21 +172,21 @@ Now that we have the mappings, we can replace the string answers with their ids,
 
 ## Preprocessing data
 
-The next step is to load a ViLT processor to prepare the image and text data for the model. 
+The next step is to load a ViLT processor to prepare the image and text data for the model.
 [`ViltProcessor`] wraps a BERT tokenizer and ViLT image processor into a convenient single processor:
 
-```py 
+```py
 >>> from transformers import ViltProcessor
 
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
 ```
 
-To preprocess the data we need to encode the images and questions using the [`ViltProcessor`]. The processor will use 
-the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attention_mask` and `token_type_ids` for the text data. 
+To preprocess the data we need to encode the images and questions using the [`ViltProcessor`]. The processor will use
+the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attention_mask` and `token_type_ids` for the text data.
 As for images, the processor will leverage [`ViltImageProcessor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
 
-All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
-prepare the target labels. In this representation, each element corresponds to a possible answer (label). For correct answers, the element holds 
+All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to
+prepare the target labels. In this representation, each element corresponds to a possible answer (label). For correct answers, the element holds
 their respective score (weight), while the remaining elements are set to zero.
 
 The following function applies the `processor` to the images and questions and formats the labels as described above:
@@ -197,13 +197,13 @@ The following function applies the `processor` to the images and questions and f
 >>> def preprocess_data(examples):
 ...     image_paths = examples['image_id']
 ...     images = [Image.open(image_path) for image_path in image_paths]
-...     texts = examples['question']    
+...     texts = examples['question']
 
 ...     encoding = processor(images, texts, padding="max_length", truncation=True, return_tensors="pt")
 
 ...     for k, v in encoding.items():
 ...           encoding[k] = v.squeeze()
-    
+
 ...     targets = []
 
 ...     for labels, scores in zip(examples['label.ids'], examples['label.weights']):
@@ -211,15 +211,15 @@ The following function applies the `processor` to the images and questions and f
 
 ...         for label, score in zip(labels, scores):
 ...             target[label] = score
-      
+
 ...         targets.append(target)
 
 ...     encoding["labels"] = targets
-    
+
 ...     return encoding
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.map`] function. You can speed up `map` by 
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.map`] function. You can speed up `map` by
 setting `batched=True` to process multiple elements of the dataset at once. At this point, feel free to remove the columns you don't need.
 
 ```py
@@ -241,7 +241,7 @@ As a final step, create a batch of examples using [`DefaultDataCollator`]:
 
 ## Train the model
 
-You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels 
+You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels
 along with the label mappings:
 
 ```py
@@ -282,14 +282,14 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     data_collator=data_collator,
 ...     train_dataset=processed_dataset,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 ```
 
 3. Call [`~Trainer.train`] to finetune your model.
 
 ```py
->>> trainer.train() 
+>>> trainer.train()
 ```
 
 Once training is completed, share your model to the Hub with the [`~Trainer.push_to_hub`] method to share your final model on the 🤗 Hub:
@@ -309,7 +309,7 @@ way to try out your fine-tuned model for inference is to use it in a [`Pipeline`
 >>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_200")
 ```
 
-The model in this guide has only been trained on 200 examples, so don't expect a lot from it. Let's see if it at least 
+The model in this guide has only been trained on 200 examples, so don't expect a lot from it. Let's see if it at least
 learned something from the data and take the first example from the dataset to illustrate inference:
 
 ```py
@@ -352,13 +352,13 @@ Predicted answer: down
 
 ## Zero-shot VQA
 
-The previous model treated VQA as a classification task. Some recent models, such as BLIP, BLIP-2, and InstructBLIP approach 
-VQA as a generative task. Let's take [BLIP-2](../model_doc/blip-2) as an example. It introduced a new visual-language pre-training 
-paradigm in which any combination of pre-trained vision encoder and LLM can be used (learn more in the [BLIP-2 blog post](https://huggingface.co/blog/blip-2)). 
-This enables achieving state-of-the-art results on multiple visual-language tasks including visual question answering. 
+The previous model treated VQA as a classification task. Some recent models, such as BLIP, BLIP-2, and InstructBLIP approach
+VQA as a generative task. Let's take [BLIP-2](../model_doc/blip-2) as an example. It introduced a new visual-language pre-training
+paradigm in which any combination of pre-trained vision encoder and LLM can be used (learn more in the [BLIP-2 blog post](https://huggingface.co/blog/blip-2)).
+This enables achieving state-of-the-art results on multiple visual-language tasks including visual question answering.
 
-Let's illustrate how you can use this model for VQA. First, let's load the model. Here we'll explicitly send the model to a 
-GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically: 
+Let's illustrate how you can use this model for VQA. First, let's load the model. Here we'll explicitly send the model to a
+GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically:
 
 ```py
 >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
@@ -370,9 +370,9 @@ GPU, if available, which we didn't need to do earlier when training, as [`Traine
 >>> model.to(device)
 ```
 
-The model takes image and text as input, so let's use the exact same image/question pair from the first example in the VQA dataset: 
+The model takes image and text as input, so let's use the exact same image/question pair from the first example in the VQA dataset:
 
-```py 
+```py
 >>> example = dataset[0]
 >>> image = Image.open(example['image_id'])
 >>> question = example['question']
@@ -381,7 +381,7 @@ The model takes image and text as input, so let's use the exact same image/quest
 To use BLIP-2 for visual question answering task, the textual prompt has to follow a specific format: `Question: {} Answer:`.
 
 ```py
->>> prompt = f"Question: {question} Answer:" 
+>>> prompt = f"Question: {question} Answer:"
 ```
 
 Now we need to preprocess the image/prompt with the model's processor, pass the processed input through the model, and decode the output:
@@ -392,10 +392,9 @@ Now we need to preprocess the image/prompt with the model's processor, pass the 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10)
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 >>> print(generated_text)
-"He is looking at the crowd" 
+"He is looking at the crowd"
 ```
 
-As you can see, the model recognized the crowd, and the direction of the face (looking down), however, it seems to miss 
-the fact the crowd is behind the skater. Still, in cases where acquiring human-annotated datasets is not feasible, this 
+As you can see, the model recognized the crowd, and the direction of the face (looking down), however, it seems to miss
+the fact the crowd is behind the skater. Still, in cases where acquiring human-annotated datasets is not feasible, this
 approach can quickly produce useful results.
- 

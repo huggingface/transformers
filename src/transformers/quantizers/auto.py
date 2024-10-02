@@ -108,7 +108,7 @@ class AutoQuantizationConfig:
         quantization_config_dict = model_config.quantization_config
         quantization_config = cls.from_dict(quantization_config_dict)
         # Update with potential kwargs that are passed through from_pretrained.
-        quantization_config.update(kwargs)
+        quantization_config.update(**kwargs)
         return quantization_config
 
 

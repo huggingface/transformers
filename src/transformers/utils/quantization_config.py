@@ -1105,7 +1105,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.sparsity_config = None
 
         # parse from dict to load nested QuantizationScheme objects
-        if config_groups:
+        if config_groups or kv_cache_scheme:
             self.quantization_config = QuantizationConfig.parse_obj(
                 {
                     "config_groups": config_groups,
