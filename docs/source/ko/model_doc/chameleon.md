@@ -46,7 +46,7 @@ alt="drawing" width="600"/>
 
 ### 단일 이미지 추론 [[single-image-inference]]
 
-Chameleon은 게이티드 모델이므로 Hugging Face Hub에 대한 액세스 권한이 있고 토큰으로 로그인했는지 확인하세요. 다음은 모델을 로드하고 반정밀도(`torch.bfloat16`)로 추론하는 방법입니다:
+Chameleon은 게이티드(gated) 모델이므로 Hugging Face Hub에 대한 액세스 권한이 있고 토큰으로 로그인했는지 확인하세요. 다음은 모델을 로드하고 반정밀도(`torch.bfloat16`)로 추론하는 방법입니다:
 
 ```python
 from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
@@ -118,7 +118,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 bitsandbytes는 CUDA 이외의 여러 백엔드를 지원하도록 리팩터링되고 있습니다. 현재 ROCm(AMD GPU) 및 Intel CPU 구현이 성숙 단계이며, Intel XPU는 진행 중이고 Apple Silicon 지원은 Q4/Q1에 예상됩니다. 설치 지침 및 최신 백엔드 업데이트는 [이 링크](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend)를 방문하세요.
 
-전체 공개 전에 버그를 식별하는 데 도움이 되는 피드백을 환영합니다! 자세한 내용과 피드백 링크는 [이 문서](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends)를 확인하세요.
+전체 공개 전에 버그를 식별하는 데 도움이 되는 피드백을 환영합니다! 자세한 내용과 피드백은 [이 문서](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends)를 확인하세요.
 
 </Tip>
 
@@ -139,7 +139,7 @@ model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b
 
 ### Flash-Attention 2와 SDPA를 사용하여 생성 속도 향상 [[use-flash-attention-2-and-sdpa-to-further-speed-up-generation]]
 
-이 모델은 최적화를 위해 Flash-Attention 2와 PyTorch의 [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)를 모두 지원합니다. SDPA는 모델을 로드할 때 기본 옵션입니다. Flash Attention 2로 전환하려면 먼저 flash-attn을 설치해야 합니다. 해당 패키지 설치에 대해서는 [원본 저장소](https://github.com/Dao-AILab/flash-attention)를 참고하십시오. 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
+이 모델은 최적화를 위해 Flash-Attention 2와 PyTorch의 [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)를 모두 지원합니다. SDPA는 모델을 로드할 때 기본 옵션입니다. Flash Attention 2로 전환하려면 먼저 flash-attn을 설치해야 합니다. 해당 패키지 설치에 대해서는 [원본 리포지토리](https://github.com/Dao-AILab/flash-attention)를 참고하십시오. 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
 
 ```python
 from transformers import ChameleonForConditionalGeneration
