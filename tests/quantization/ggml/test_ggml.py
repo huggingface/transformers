@@ -533,7 +533,8 @@ class GgufIntegrationTests(unittest.TestCase):
             self.stablelm2_model_id,
             gguf_file=self.fp16_stablelm2_model_id,
             torch_dtype=torch.float16,
-            # it needs to use the original model config as quantized one is different
+            # for precise comparison it is required to use the original model config
+            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
             # and it highly influences on the output results
             config=original_model.config,
         )
@@ -549,6 +550,32 @@ class GgufIntegrationTests(unittest.TestCase):
             tokenizer.decode(converted_out[0], skip_special_tokens=True),
             tokenizer.decode(original_out[0], skip_special_tokens=True),
         )
+
+    def test_stablelm_weights_conversion_fp16(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.original_stablelm2_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.stablelm2_model_id,
+            gguf_file=self.fp16_stablelm2_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            # for precise comparison it is required to use the original model config
+            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
+            # and it highly influences on the output results
+            config=original_model.config,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
 
     def test_tokenization_xnli(self):
         import tqdm
