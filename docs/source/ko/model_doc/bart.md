@@ -163,7 +163,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 </pt>
 <tf>
 
-## TFBartModel
+## TFBartModel[[transformers.TFBartModel]]
 
 [[autodoc]] TFBartModel
     - call
