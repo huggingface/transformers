@@ -1283,7 +1283,7 @@ class GitModel(GitPreTrainedModel):
             past_key_values_length = (
                 past_key_values[0][0].shape[2]
                 if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
+                else past_key_values.get_past_seen_tokens()
             )
 
         # Prepare head mask if needed
@@ -1611,7 +1611,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
+            past_length = past_key_values.get_past_seen_tokens()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

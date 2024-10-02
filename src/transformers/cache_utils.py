@@ -64,7 +64,7 @@ class Cache(torch.nn.Module):
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
     
-    def get_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
+    def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the number of already processed tokens. For all Cache classes except SlidingWindow caches, this is the same as
         `get_seq_length()`. However, with sliding window we can process more tokens than the cache size. A layer index can be optionally passed.
         """
@@ -583,7 +583,7 @@ class DynamicSlidingWindowCache(DynamicCache):
         # We overwrite the field and maintain a list of size `num_hidden_layers` to accurately reflect the seen tokens at each layer during `update`
         self._seen_tokens = [0]*num_hidden_layers if num_hidden_layers is not None else []
 
-    def get_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
+    def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
         """This needs to be overriden because the number of processed tokens may be larger than the cache length."""
         if len(self._seen_tokens) <= layer_idx:
             return 0
