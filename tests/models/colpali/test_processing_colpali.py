@@ -1,49 +1,89 @@
-from typing import Generator, cast
+import shutil
+import tempfile
+import unittest
 
-import pytest
 import torch
-from PIL import Image
 
+from transformers import GemmaTokenizer
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
+from transformers.testing_utils import get_tests_dir, require_torch, require_vision
+from transformers.utils import is_vision_available
+from transformers.utils.dummy_vision_objects import SiglipImageProcessor
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
-@pytest.fixture(scope="module")
-def colpali_processor_path() -> str:
-    return "vidore/colpali-v1.2-hf"
+if is_vision_available():
+    from transformers import (
+        ColPaliProcessor,
+        PaliGemmaProcessor,
+        SiglipImageProcessor,
+    )
+
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
-@pytest.fixture(scope="module")
-def processor_from_pretrained(colpali_processor_path: str) -> Generator[ColPaliProcessor, None, None]:
-    yield cast(ColPaliProcessor, ColPaliProcessor.from_pretrained(colpali_processor_path))
+@require_vision
+class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = ColPaliProcessor
 
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor.image_seq_length = 0
+        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor.save_pretrained(self.tmpdirname)
 
-def test_load_processor_from_pretrained(processor_from_pretrained: ColPaliProcessor):
-    assert isinstance(processor_from_pretrained, ColPaliProcessor)
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
 
+    @require_torch
+    @require_vision
+    def test_process_images(self):
+        # Processor configuration
+        image_input = self.prepare_image_inputs()
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
+        image_processor.image_seq_length = 14
 
-def test_process_images(processor_from_pretrained: ColPaliProcessor):
-    # Create a dummy image
-    image = Image.new("RGB", (16, 16), color="black")
-    images = [image]
+        # Get the processor
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+        )
 
-    # Process the image
-    batch_feature = processor_from_pretrained.process_images(images)
+        # Process the image
+        batch_feature = processor.process_images(image_input)
 
-    # Assertions
-    assert "pixel_values" in batch_feature
-    assert batch_feature["pixel_values"].shape == torch.Size([1, 3, 448, 448])
+        # Assertions
+        self.assertIn("pixel_values", batch_feature)
+        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 3, 448, 448]))
 
+    @require_torch
+    @require_vision
+    def test_process_queries(self):
+        # Inputs
+        queries = [
+            "Is attention really all you need?",
+            "Are Benjamin, Antoine, Merve, and Jo best friends?",
+        ]
 
-def test_process_queries(processor_from_pretrained: ColPaliProcessor):
-    queries = [
-        "Is attention really all you need?",
-        "Are Benjamin, Antoine, Merve, and Jo best friends?",
-    ]
+        # Processor configuration
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
+        image_processor.image_seq_length = 14
 
-    # Process the queries
-    batch_encoding = processor_from_pretrained.process_queries(queries)
+        # Get the processor
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+        )
 
-    # Assertions
-    assert "input_ids" in batch_encoding
-    assert isinstance(batch_encoding["input_ids"], torch.Tensor)
-    assert cast(torch.Tensor, batch_encoding["input_ids"]).shape[0] == len(queries)
+        # Process the image
+        batch_feature = processor.process_queries(queries)
+
+        # Assertions
+        self.assertIn("input_ids", batch_feature)
+        self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
+        self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
