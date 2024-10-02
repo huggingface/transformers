@@ -121,7 +121,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] BartConfig
     - all
 
-## BartTokenizer
+## BartTokenizer[[transformers.BartTokenizer]]
 
 [[autodoc]] BartTokenizer
     - all
