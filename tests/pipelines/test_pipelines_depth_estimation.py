@@ -97,7 +97,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         )
 
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, DepthEstimationOutputElement)
+            compare_pipeline_output_to_hub_spec(single_output, DepthEstimationOutput)
 
     @require_tf
     @unittest.skip(reason="Depth estimation is not implemented in TF")
