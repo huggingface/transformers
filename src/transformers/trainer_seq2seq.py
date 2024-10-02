@@ -29,7 +29,10 @@ from .utils import logging
 
 if TYPE_CHECKING:
     from .data.data_collator import DataCollator
+    from .feature_extraction_utils import FeatureExtractionMixin
+    from .image_processing_utils import BaseImageProcessor
     from .modeling_utils import PreTrainedModel
+    from .processing_utils import ProcessorMixin
     from .tokenization_utils_base import PreTrainedTokenizerBase
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
@@ -48,6 +51,9 @@ class Seq2SeqTrainer(Trainer):
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        processing_class: Optional[
+            Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
+        ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
         callbacks: Optional[List["TrainerCallback"]] = None,
@@ -61,6 +67,7 @@ class Seq2SeqTrainer(Trainer):
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             tokenizer=tokenizer,
+            processing_class=processing_class,
             model_init=model_init,
             compute_metrics=compute_metrics,
             callbacks=callbacks,

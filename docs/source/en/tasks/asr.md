@@ -281,7 +281,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor,
+...     processing_class=processor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )
