@@ -365,21 +365,21 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] DynamicCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reorder_cache
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] DynamicSlidingWindowCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reorder_cache
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] QuantizedCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
 
 [[autodoc]] QuantoQuantizedCache
 
@@ -387,7 +387,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] SinkCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reorder_cache
 
 [[autodoc]] OffloadedCache
@@ -397,17 +397,17 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] StaticCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reset
 
 [[autodoc]] OffloadedStaticCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reset
 
 [[autodoc]] HybridCache
     - update
-    - get_seq_length
+    - get_past_seen_tokens
     - reset
 
 [[autodoc]] SlidingWindowCache
@@ -415,7 +415,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - reset
 
 [[autodoc]] EncoderDecoderCache
-    - get_seq_length
+    - get_past_seen_tokens
     - to_legacy_cache
     - from_legacy_cache
     - reset

@@ -1558,8 +1558,8 @@ class GenerationMixin:
             past_length = 0
             if not isinstance(cache, Cache):
                 past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
-                past_length = cache.get_seq_length()
+            elif hasattr(cache, "get_past_seen_tokens") and cache.get_past_seen_tokens() is not None:
+                past_length = cache.get_past_seen_tokens()
 
             # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
             # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
@@ -2818,7 +2818,7 @@ class GenerationMixin:
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None or (
                 isinstance(model_kwargs["past_key_values"], (Cache, EncoderDecoderCache))
-                and model_kwargs["past_key_values"].get_seq_length() == 0
+                and model_kwargs["past_key_values"].get_past_seen_tokens() == 0
             ):
                 # prepare inputs
                 model_kwargs["use_cache"] = True

@@ -1379,7 +1379,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
                         "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
                         "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
                     )
-            past_seen_tokens = past_key_values.get_seq_length()
+            past_seen_tokens = past_key_values.get_past_seen_tokens()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
