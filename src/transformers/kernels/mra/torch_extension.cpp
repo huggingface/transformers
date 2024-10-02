@@ -1,7 +1,12 @@
 #include <torch/extension.h>
 #include <ATen/ATen.h>
-#include "cuda_launch.h"  // Assuming this header contains CUDA kernel function declarations
+#include "cuda_launch.h"
 #include <vector>
+
+// Helper function to ensure tensors are on the correct device (CUDA)
+void check_cuda(const at::Tensor& tensor) {
+  TORCH_CHECK(tensor.is_cuda(), "Tensor must be a CUDA tensor.");
+}
 
 // Forward declaration of CUDA kernels
 std::vector<at::Tensor> index_max_kernel(
@@ -37,14 +42,16 @@ at::Tensor scatter_kernel(
   int B_num_block
 );
 
-// C++ interface for calling CUDA kernels
+// C++ interface for calling CUDA kernels with error checks
 std::vector<at::Tensor> index_max(
   at::Tensor index_vals,
   at::Tensor indices,
   int A_num_block,
   int B_num_block
 ) {
-  // Call the CUDA kernel and return the result
+  check_cuda(index_vals);
+  check_cuda(indices);
+  
   return index_max_kernel(
     index_vals,
     indices,
@@ -58,7 +65,10 @@ at::Tensor mm_to_sparse(
   at::Tensor dense_B,
   at::Tensor indices
 ) {
-  // Call the CUDA kernel and return the result
+  check_cuda(dense_A);
+  check_cuda(dense_B);
+  check_cuda(indices);
+  
   return mm_to_sparse_kernel(
     dense_A,
     dense_B,
@@ -72,7 +82,10 @@ at::Tensor sparse_dense_mm(
   at::Tensor dense_B,
   int A_num_block
 ) {
-  // Call the CUDA kernel and return the result
+  check_cuda(sparse_A);
+  check_cuda(indices);
+  check_cuda(dense_B);
+  
   return sparse_dense_mm_kernel(
     sparse_A,
     indices,
@@ -87,7 +100,9 @@ at::Tensor reduce_sum(
   int A_num_block,
   int B_num_block
 ) {
-  // Call the CUDA kernel and return the result
+  check_cuda(sparse_A);
+  check_cuda(indices);
+  
   return reduce_sum_kernel(
     sparse_A,
     indices,
@@ -101,7 +116,9 @@ at::Tensor scatter(
   at::Tensor indices,
   int B_num_block
 ) {
-  // Call the CUDA kernel and return the result
+  check_cuda(dense_A);
+  check_cuda(indices);
+  
   return scatter_kernel(
     dense_A,
     indices,
@@ -109,7 +126,7 @@ at::Tensor scatter(
   );
 }
 
-// Bindings for the Python module using Pybind11
+// Pybind11 bindings for Python interface
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("index_max", &index_max, "index_max (CUDA)");
   m.def("mm_to_sparse", &mm_to_sparse, "mm_to_sparse (CUDA)");
