@@ -4825,31 +4825,31 @@ class Trainer:
             self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
             self.repo.git_push()
 
-    def _get_accelerator_kwargs_handler(self):
-        kwargs_handler = []
+    def _get_accelerator_kwargs_handlers(self):
+        kwargs_handlers = []
         if self.args.accelerator_config.autocast_kwargs is not None:
             autocast_kwargs = AutocastKwargs(**self.args.accelerator_config.autocast_kwargs)
-            kwargs_handler.append(autocast_kwargs)
+            kwargs_handlers.append(autocast_kwargs)
 
         if self.args.accelerator_config.fp8_recipe_kwargs is not None:
             fp8_recipe_kwargs = FP8RecipeKwargs(**self.args.accelerator_config.fp8_recipe_kwargs)
-            kwargs_handler.append(fp8_recipe_kwargs)
+            kwargs_handlers.append(fp8_recipe_kwargs)
 
         if self.args.accelerator_config.profile_kwargs is not None:
             profile_kwargs = ProfileKwargs(**self.args.accelerator_config.profile_kwargs)
-            kwargs_handler.append(profile_kwargs)
+            kwargs_handlers.append(profile_kwargs)
 
         if self.args.accelerator_config.grad_scale_kwargs is not None:
             grad_scale_kwargs = GradScalerKwargs(**self.args.accelerator_config.grad_scale_kwargs)
-            kwargs_handler.append(grad_scale_kwargs)
+            kwargs_handlers.append(grad_scale_kwargs)
 
         if self.args.accelerator_config.init_process_group_kwargs is not None:
             init_process_group_kwargs = InitProcessGroupKwargs(
                 **self.args.accelerator_config.init_process_group_kwargs
             )
-            kwargs_handler.append(init_process_group_kwargs)
+            kwargs_handlers.append(init_process_group_kwargs)
 
-        return kwargs_handler if len(kwargs_handler) > 0 else None
+        return kwargs_handlers if len(kwargs_handlers) > 0 else None
 
     def create_accelerator_and_postprocess(self):
         grad_acc_kwargs = {}
