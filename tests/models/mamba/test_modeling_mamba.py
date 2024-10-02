@@ -143,25 +143,6 @@ class MambaModelTester:
         config.vocab_size = 300
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
     def create_and_check_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = MambaModel(config=config)
@@ -439,6 +420,30 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @unittest.skip("The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
+
+    def test_dtype_mismatch_handled_in_cache(self):
+        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
+        model = MambaModel(config)
+        model.to(torch_device).to(torch.float16)
+        model.eval()
+
+        # Create cache with float32 dtype
+        cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
+
+        # If code is correct, no error occurs and test passes
+        outputs = model(
+            input_ids,
+            cache_params=cache_params,
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+
+        self.assertIsNotNone(outputs)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+        )
 
 
 @require_torch
