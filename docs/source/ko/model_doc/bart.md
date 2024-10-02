@@ -27,52 +27,44 @@ rendered properly in your Markdown viewer.
 
 ## 오버뷰[[overview]]
 
-The Bart model was proposed in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation,
-Translation, and Comprehension](https://arxiv.org/abs/1910.13461) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan
-Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer on 29 Oct, 2019.
+Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer가 발표한 [BART: 자연어 생성, 번역, 이해를 위한 잡음 제거 seq2seq 사전 훈련](https://arxiv.org/abs/1910.13461)이라는 논문에서 소개되었습니다.
 
-According to the abstract,
+논문의 초록에 따르면,
 
-- Bart uses a standard seq2seq/machine translation architecture with a bidirectional encoder (like BERT) and a
-  left-to-right decoder (like GPT).
-- The pretraining task involves randomly shuffling the order of the original sentences and a novel in-filling scheme,
-  where spans of text are replaced with a single mask token.
-- BART is particularly effective when fine tuned for text generation but also works well for comprehension tasks. It
-  matches the performance of RoBERTa with comparable training resources on GLUE and SQuAD, achieves new
-  state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
-  of up to 6 ROUGE.
+- Bart는 양방향 인코더(BERT와 유사)와 왼쪽에서 오른쪽으로 디코딩하는 디코더(GPT와 유사)를 사용하는 표준 seq2seq/기계 번역 아키텍처를 사용합니다.
+- 사전 훈련 작업은 원래 문장의 순서를 무작위로 섞고, 텍스트의 일부 구간을 단일 마스크 토큰으로 대체하는 새로운 인필링(in-filling) 방식을 포함합니다.
+- BART는 특히 텍스트 생성을 위한 미세 조정에 효과적이지만 이해 작업에도 잘 작동합니다. GLUE와 SQuAD에서 비슷한 훈련 리소스로 RoBERTa의 성능과 일치하며, 추상적 대화, 질의응답, 요약 작업 등에서 최대 6 ROUGE 점수의 향상을 보이며 새로운 최고 성능을 달성했습니다.
 
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/bart).
+이 모델은 [sshleifer](https://huggingface.co/sshleifer)에 의해 기여 되었습니다. 저자의 코드는 [이곳](https://github.com/pytorch/fairseq/tree/master/examples/bart)에서 확인할 수 있습니다.
 
 ## 사용 팁:[[usage-tips]]
 
-- BART is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-- Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of the following transformations are applied on the pretraining tasks for the encoder:
+- BART는 절대 위치 임베딩을 사용하는 모델이므로 일반적으로 입력을 왼쪽보다는 오른쪽에 패딩하는 것이 좋습니다.
+- 인코더와 디코더가 있는 seq2seq 모델입니다. 인코더에는 손상된 버전의 토큰이 입력되고, 디코더에는 원래 토큰이 입력됩니다(단, 일반적인 트랜스포머 디코더처럼 미래 단어를 숨기는 마스크가 있습니다). 사전 훈련 작업에서 인코더에 적용되는 변환들의 구성은 다음과 같습니다:
 
-  * mask random tokens (like in BERT)
-  * delete random tokens
-  * mask a span of k tokens with a single mask token (a span of 0 tokens is an insertion of a mask token)
-  * permute sentences
-  * rotate the document to make it start at a specific token
+사전 훈련 작업에서 인코더에 적용되는 변환들의 구성은 다음과 같습니다:
+
+  * 무작위 토큰 마스킹 (BERT 처럼)
+  * 무작위 토큰 삭제
+  * k개 토큰의 범위를 단일 마스크 토큰으로 마스킹 (0개 토큰의 범위는 마스크 토큰의 삽입을 의미)
+  * 문장 순서 뒤섞기
+  * 특정 토큰에서 시작하도록 문서 회전
 
 ## 구현 노트[[implementation-notes]]
 
-- Bart doesn't use `token_type_ids` for sequence classification. Use [`BartTokenizer`] or
-  [`~BartTokenizer.encode`] to get the proper splitting.
-- The forward pass of [`BartModel`] will create the `decoder_input_ids` if they are not passed.
-  This is different than some other modeling APIs. A typical use case of this feature is mask filling.
+- Bart는 시퀀스 분류에 `token_type_ids`를 사용하지 않는다. 적절하게 나누기 위해서 [`BartTokenizer`]나
+  [`~BartTokenizer.encode`]를 사용한다.
+- [`BartModel`]의 정방향 전달은 `decoder_input_ids`가 전달되지 않으면 `decoder_input_ids`를 자동으로 생성할 것입니다. 이는 다른 일부 모델링 API와 다른 점이라 할 수 있습니다. 이 기능의 일반적인 사용 사례는 마스크 채우기(mask filling)입니다.
 - Model predictions are intended to be identical to the original implementation when
   `forced_bos_token_id=0`. This only works, however, if the string you pass to
   [`fairseq.encode`] starts with a space.
-- [`~generation.GenerationMixin.generate`] should be used for conditional generation tasks like
-  summarization, see the example in that docstrings.
-- Models that load the *facebook/bart-large-cnn* weights will not have a `mask_token_id`, or be able to perform
-  mask-filling tasks.
+  모델 예측은 `forced_bos_token_id=0`일 때 기존 구현과 동일하게 작동하도록 의도되었습니다. 하지만, [fairseq.encode]에 전달하는 문자열이 공백으로 시작할 때만 이 기능이 작동합니다.
+- [`~generation.GenerationMixin.generate`]는 요약과 같은 조건부 생성 작업에 사용되어야 합니다. 자세한 내용은 해당 문서의 예제를 참조하세요.
+- *facebook/bart-large-cnn* 가중치를 로드하는 모델은 `mask_token_id`가 없거나, 마스크 채우기 작업을 수행할 수 없습니다.
 
 ## 마스크 채우기[[mask-filling]]
 
-The `facebook/bart-base` and `facebook/bart-large` checkpoints can be used to fill multi-token masks.
+`facebook/bart-base`와 `facebook/bart-large` 체크포인트는 멀티 토큰 마스크를 채우는데 사용될 수 있습니다.
 
 ```python
 from transformers import BartForConditionalGeneration, BartTokenizer
@@ -89,40 +81,40 @@ assert tok.batch_decode(generated_ids, skip_special_tokens=True) == [
 
 ## 리소스[[resources]]
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BART. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목록(🌎로 표시됨) 입니다. 여기에 포함될 자료를 제출하고 싶으시다면 PR(Pull Request)를 열어주세요. 리뷰 해드리겠습니다! 자료는 기존 자료를 복제하는 대신 새로운 내용을 담고 있어야 합니다.
 
 <PipelineTag pipeline="summarization"/>
 
-- A blog post on [Distributed Training: Train BART/T5 for Summarization using 🤗 Transformers and Amazon SageMaker](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq).
-- A notebook on how to [finetune BART for summarization with fastai using blurr](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/posts/2021-05-25-mbart-sequence-classification-with-blurr.ipynb). 🌎
-- A notebook on how to [finetune BART for summarization in two languages with Trainer class](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb). 🌎
-- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
-- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
-- [`FlaxBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization).
-- An example of how to train [`BartForConditionalGeneration`] with a Hugging Face `datasets` object can be found in this [forum discussion](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904)
-- [Summarization](https://huggingface.co/course/chapter7/5?fw=pt#summarization) chapter of the 🤗 Hugging Face course.
-- [Summarization task guide](../tasks/summarization)
+- [분산형 학습: 🤗 Transformers와 Amazon SageMaker를 이용하여 요약하기 위한 BART/T5 학습](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq)에 대한 블로그 포스트.
+- [blurr를 이용하여 fastai로 요약하기 위한 BART를 미세 조정](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/posts/2021-05-25-mbart-sequence-classification-with-blurr.ipynb)하는 방법에 대한 노트북. 🌎
+- [Trainer 클래스를 사용하여 두 언어로 요약하기 위한 BART를 미세 조정](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb)하는 방법에 대한 노트북. 🌎
+- 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)에서는  [`BartForConditionalGeneration`]이 지원됩니다.
+- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)에서 지원됩니다.
+- 이 [예제 스크립트에서는](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization)[`FlaxBartForConditionalGeneration`]이 지원됩니다.
+- Hugging Face `datasets` 객체를 활용하여 [`BartForConditionalGeneration`]을 학습시키는 방법의 예는 이 [포럼 토론](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904)에서 찾을 수 있습니다.
+- 🤗 Hugging Face 코스의 [요약](https://huggingface.co/course/chapter7/5?fw=pt#summarization)장.
+- [요약 작업 가이드](../tasks/summarization)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
-- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
+- [`BartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)을 참고하세요.
+- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참고하세요.
+- [`FlaxBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)을 참고 하세요.
+- 🤗 Hugging Face 코스의 [마스크 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 챕터.
+- [마스크 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="translation"/>
 
-- A notebook on how to [finetune mBART using Seq2SeqTrainer for Hindi to English translation](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb). 🌎
-- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
-- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
-- [Translation task guide](../tasks/translation)
+- [Seq2SeqTrainer를 이용하여 인도어를 영어로 번역하는 mBART를 미세 조정](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb)하는 방법에 대한 가이드. 🌎
+- [`BartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)을 참고하세요.
+- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)을 참고 하세요.
+- [번역 작업 가이드](../tasks/translation)
 
-See also:
-- [Text classification task guide](../tasks/sequence_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Distilled checkpoints](https://huggingface.co/models?search=distilbart) are described in this [paper](https://arxiv.org/abs/2010.13002).
+추가적으로 볼 것들:
+- [텍스트 분류 작업 가이드](../tasks/sequence_classification)
+- [질문 답변 작업 가이드](../tasks/question_answering)
+- [인과적 언어 모델링 작업 가이드](../tasks/language_modeling)
+- 이 [논문](https://arxiv.org/abs/2010.13002)에서는 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
 
 ## BartConfig
 
