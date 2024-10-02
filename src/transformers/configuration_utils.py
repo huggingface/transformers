@@ -857,21 +857,22 @@ class PretrainedConfig(PushToHubMixin):
         Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        self_dict = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
-            output["model_type"] = self.__class__.model_type
-        if "_auto_class" in output:
-            del output["_auto_class"]
-        if "_attn_implementation_internal" in output:
-            del output["_attn_implementation_internal"]
+            self_dict["model_type"] = self.__class__.model_type
+        if "_auto_class" in self_dict:
+            del self_dict["_auto_class"]
+        if "_attn_implementation_internal" in self_dict:
+            del self_dict["_attn_implementation_internal"]
 
         for key in METADATA_FIELDS:
-            output.pop(key, None)
+            self_dict.pop(key, None)
 
         # Transformers version when serializing the model
-        output["transformers_version"] = __version__
+        self_dict["transformers_version"] = __version__
 
-        for key, value in output.items():
+        output = {}
+        for key, value in self_dict.items():
             # Deal with nested configs like CLIP
             if isinstance(value, PretrainedConfig):
                 value = value.to_dict()
@@ -919,7 +920,7 @@ class PretrainedConfig(PushToHubMixin):
                 config_dict.pop(metadata_field, None)
             # nested metadata
             for value in config_dict.values():
-                if isinstance(value, PretrainedConfig):
+                if isinstance(value, dict):
                     for metadata_field in METADATA_FIELDS:
                         value.pop(metadata_field, None)
 
