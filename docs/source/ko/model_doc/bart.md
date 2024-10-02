@@ -116,7 +116,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 - [인과적 언어 모델링 작업 가이드](../tasks/language_modeling)
 - 이 [논문](https://arxiv.org/abs/2010.13002)에서는 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
 
-## BartConfig
+## BartConfig[[transformers.BartConfig]]
 
 [[autodoc]] BartConfig
     - all
