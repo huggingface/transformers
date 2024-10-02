@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from typing import Optional
 
 import numpy as np
@@ -99,8 +100,20 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
-        raise ValueError(f"Architecture {architecture} not supported")
+    model_size = ""
+    # extract the number of params from file name as architectures can differ ;
+    # eg. for falcon : `...falcon-7b-...`
+    if "falcon" in architecture:
+        gguf_file_name = gguf_checkpoint_path.split("/")[-1].lower()
+        m = re.search(r"-\d+b-", gguf_file_name)  # regex to catch `-7b-`
+        if m is None:
+            raise ValueError(
+                f"From file name, cannot determine the number of parameters for {architecture} architecture"
+            )
+        model_size = m.group().strip("-")  # only keeps `7b`
+
+    if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
+        raise ValueError(f"Architecture {architecture + model_size} not supported")
 
     # List all key-value pairs in a columnized format
     for gguf_key, field in reader.fields.items():
@@ -146,17 +159,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             )
 
     if return_tensors:
-        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture]
+        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
-            renamed_tensor_name = tensor.name
-
-            for tensor_name_mapping in GGUF_TO_TRANSFORMERS_MAPPING["tensors"]:
-                if tensor_name_mapping in renamed_tensor_name:
-                    renamed_tensor_name = renamed_tensor_name.replace(
-                        tensor_name_mapping, GGUF_TO_TRANSFORMERS_MAPPING["tensors"][tensor_name_mapping]
-                    )
-
             name = tensor.name
 
             weights = dequantize(tensor.data, tensor.tensor_type)
