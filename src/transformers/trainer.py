@@ -438,7 +438,10 @@ class Trainer:
                 raise ValueError(
                     "You cannot specify both `tokenizer` and `processing_class` at the same time. Please use `processing_class`."
                 )
-            logger.warning("`tokenizer` is now deprecated, please use `processing_class` instead.")
+            warnings.warn(
+                "`tokenizer` is now deprecated and will be removed in v5, please use `processing_class` instead.",
+                FutureWarning,
+            )
             processing_class = tokenizer
 
         if model is None:
