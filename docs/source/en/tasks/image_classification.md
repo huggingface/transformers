@@ -317,7 +317,7 @@ At this point, only three steps remain:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 

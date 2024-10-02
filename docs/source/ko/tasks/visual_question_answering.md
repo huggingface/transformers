@@ -35,7 +35,7 @@ VQA의 주요 사용 사례는 다음과 같습니다:
 ## ViLT 미세 조정 [[finetuning-vilt]]
 
 ViLT는 Vision Transformer (ViT) 내에 텍스트 임베딩을 포함하여 비전/자연어 사전훈련(VLP; Vision-and-Language Pretraining)을 위한 기본 디자인을 제공합니다.
-ViLT 모델은 비전 트랜스포머(ViT)에 텍스트 임베딩을 넣어 비전/언어 사전훈련(VLP; Vision-and-Language Pre-training)을 위한 기본적인 디자인을 갖췄습니다. 이 모델은 여러 다운스트림 작업에 사용할 수 있습니다. VQA 태스크에서는 (`[CLS]` 토큰의 최종 은닉 상태 위에 선형 레이어인) 분류 헤더가 있으며 무작위로 초기화됩니다. 
+ViLT 모델은 비전 트랜스포머(ViT)에 텍스트 임베딩을 넣어 비전/언어 사전훈련(VLP; Vision-and-Language Pre-training)을 위한 기본적인 디자인을 갖췄습니다. 이 모델은 여러 다운스트림 작업에 사용할 수 있습니다. VQA 태스크에서는 (`[CLS]` 토큰의 최종 은닉 상태 위에 선형 레이어인) 분류 헤더가 있으며 무작위로 초기화됩니다.
 따라서 여기에서 시각적 질의응답은 **분류 문제**로 취급됩니다.
 
 최근의 BLIP, BLIP-2, InstructBLIP와 같은 모델들은 VQA를 생성형 작업으로 간주합니다. 가이드의 후반부에서는 이런 모델들을 사용하여 제로샷 VQA 추론을 하는 방법에 대해 설명하겠습니다.
@@ -104,7 +104,7 @@ Dataset({
 
 나머지 특성들은 필요하지 않기 때문에 삭제해도 됩니다:
 
-```py 
+```py
 >>> dataset = dataset.remove_columns(['question_type', 'question_id', 'answer_type'])
 ```
 
@@ -137,7 +137,7 @@ Dataset({
 >>> unique_labels = list(set(flattened_labels))
 
 >>> label2id = {label: idx for idx, label in enumerate(unique_labels)}
->>> id2label = {idx: label for label, idx in label2id.items()} 
+>>> id2label = {idx: label for label, idx in label2id.items()}
 ```
 
 이제 매핑이 완료되었으므로 문자열 답변을 해당 id로 교체하고, 데이터세트의 더 편리한 후처리를 위해 편평화 할 수 있습니다.
@@ -159,10 +159,10 @@ Dataset({
 
 ## 데이터 전처리 [[preprocessing-data]]
 
-다음 단계는 모델을 위해 이미지와 텍스트 데이터를 준비하기 위해 ViLT 프로세서를 가져오는 것입니다. 
+다음 단계는 모델을 위해 이미지와 텍스트 데이터를 준비하기 위해 ViLT 프로세서를 가져오는 것입니다.
 [`ViltProcessor`]는 BERT 토크나이저와 ViLT 이미지 프로세서를 편리하게 하나의 프로세서로 묶습니다:
 
-```py 
+```py
 >>> from transformers import ViltProcessor
 
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
@@ -181,13 +181,13 @@ Dataset({
 >>> def preprocess_data(examples):
 ...     image_paths = examples['image_id']
 ...     images = [Image.open(image_path) for image_path in image_paths]
-...     texts = examples['question']    
+...     texts = examples['question']
 
 ...     encoding = processor(images, texts, padding="max_length", truncation=True, return_tensors="pt")
 
 ...     for k, v in encoding.items():
 ...           encoding[k] = v.squeeze()
-    
+
 ...     targets = []
 
 ...     for labels, scores in zip(examples['label.ids'], examples['label.weights']):
@@ -195,11 +195,11 @@ Dataset({
 
 ...         for label, score in zip(labels, scores):
 ...             target[label] = score
-      
+
 ...         targets.append(target)
 
 ...     encoding["labels"] = targets
-    
+
 ...     return encoding
 ```
 
@@ -264,14 +264,14 @@ Dataset({
 ...     args=training_args,
 ...     data_collator=data_collator,
 ...     train_dataset=processed_dataset,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 ```
 
 3. [`~Trainer.train`]을 호출하여 모델을 미세 조정하세요:
 
 ```py
->>> trainer.train() 
+>>> trainer.train()
 ```
 
 훈련이 완료되면, [`~Trainer.push_to_hub`] 메소드를 사용하여 🤗 Hub에 모델을 공유하세요:
@@ -349,7 +349,7 @@ Predicted answer: down
 
 모델은 이미지와 텍스트를 입력으로 받으므로, VQA 데이터세트의 첫 번째 예제에서와 동일한 이미지/질문 쌍을 사용해 보겠습니다:
 
-```py 
+```py
 >>> example = dataset[0]
 >>> image = Image.open(example['image_id'])
 >>> question = example['question']
@@ -358,7 +358,7 @@ Predicted answer: down
 BLIP-2를 시각적 질의응답 작업에 사용하려면 텍스트 프롬프트가 `Question: {} Answer:` 형식을 따라야 합니다.
 
 ```py
->>> prompt = f"Question: {question} Answer:" 
+>>> prompt = f"Question: {question} Answer:"
 ```
 
 이제 모델의 프로세서로 이미지/프롬프트를 전처리하고, 처리된 입력을 모델을 통해 전달하고, 출력을 디코드해야 합니다:
@@ -369,7 +369,7 @@ BLIP-2를 시각적 질의응답 작업에 사용하려면 텍스트 프롬프�
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10)
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 >>> print(generated_text)
-"He is looking at the crowd" 
+"He is looking at the crowd"
 ```
 
 보시다시피 모델은 군중을 인식하고, 얼굴의 방향(아래쪽을 보고 있음)을 인식했지만, 군중이 스케이터 뒤에 있다는 사실을 놓쳤습니다. 그러나 사람이 직접 라벨링한 데이터셋을 얻을 수 없는 경우에, 이 접근법은 빠르게 유용한 결과를 생성할 수 있습니다.
