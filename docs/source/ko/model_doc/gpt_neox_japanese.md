@@ -14,20 +14,22 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GPT-NeoX-Japanese
+# GPT-NeoX-Japanese [[gpt-neox-japanese]]
 
-## Overview
+## 개요 [[overview]]
 
-We introduce GPT-NeoX-Japanese, which is an autoregressive language model for Japanese, trained on top of [https://github.com/EleutherAI/gpt-neox](https://github.com/EleutherAI/gpt-neox).
-Japanese is a unique language with its large vocabulary and a combination of hiragana, katakana, and kanji writing scripts.
-To address this distinct structure of the Japanese language, we use a [special sub-word tokenizer](https://github.com/tanreinama/Japanese-BPEEncoder_V2). We are very grateful to *tanreinama* for open-sourcing this incredibly helpful tokenizer.
-Following the recommendations from Google's research on [PaLM](https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html), we have removed bias parameters from transformer blocks, achieving better model performance. Please refer [this article](https://medium.com/ml-abeja/training-a-better-gpt-2-93b157662ae4) in detail.
 
-Development of the model was led by [Shinya Otani](https://github.com/SO0529), [Takayoshi Makabe](https://github.com/spider-man-tm), [Anuj Arora](https://github.com/Anuj040), and [Kyo Hattori](https://github.com/go5paopao) from [ABEJA, Inc.](https://www.abejainc.com/). For more information on this model-building activity, please refer [here (ja)](https://tech-blog.abeja.asia/entry/abeja-gpt-project-202207).
+일본어를 위한 자동회귀 언어 모델인 GPT-NeoX-Japanese를 소개합니다. 이 모델은 [https://github.com/EleutherAI/gpt-neox](https://github.com/EleutherAI/gpt-neox](https://github.com/EleutherAI/gpt-neox) 에서 학습되었습니다. 일본어는 많은 어휘와 히라가나, 가타카나, 한자의 조합으로 이루어진 독특한 언어입니다. 이러한 일본어의 독특한 구조를 해결하기 위해 [특수 서브워드 토크나이저](https://github.com/tanreinama/Japanese-BPEEncoder_V2)를 사용했습니다. 이 유용한 토크나이저를 오픈소스로 제공해 준 *tanreinama*에게 매우 감사드립니다.
 
-### Usage example
+이 모델은 Google의 [PaLM](https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html) 연구 권장 사항을 따르며, 트랜스포머 블록에서 편향 파라미터를 제거하여 모델 성능을 향상시켰습니다. 자세한 내용은 [이 기사](https://medium.com/ml-abeja/training-a-better-gpt-2-93b157662ae4) 를 참조하세요.
 
-The `generate()` method can be used to generate text using GPT NeoX Japanese model.
+모델 개발은 [ABEJA, Inc.](https://www.abejainc.com/)의 [신야 오타니](https://github.com/SO0529), [타카요시 마카베](https://github.com/spider-man-tm), [안주 아로라](https://github.com/Anuj040), [쿄 하토리](https://github.com/go5paopao)에 의해 주도되었습니다. 이 모델 개발 활동에 대한 자세한 내용은 [여기](https://tech-blog.abeja.asia/entry/abeja-gpt-project-202207).를 참조하세요.
+
+
+
+### 사용 예시 [[usage-example]]
+
+`generate()` 메서드를 사용하면 GPT NeoX Japanese 모델을 통해 텍스트를 생성할 수 있습니다.
 
 ```python
 >>> from transformers import GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseTokenizer
@@ -51,24 +53,24 @@ The `generate()` method can be used to generate text using GPT NeoX Japanese mod
 人とAIが協調するためには、AIと人が共存し、AIを正しく理解する必要があります。
 ```
 
-## Resources
+## 자료 [[resources]]
 
-- [Causal language modeling task guide](../tasks/language_modeling)
+- [일상 언어 모델링 작업 가이드 ](../tasks/language_modeling)
 
-## GPTNeoXJapaneseConfig
+## GPTNeoXJapanese 설정 (GPTNeoXJapaneseConfig) [[transformers.GPTNeoXJapaneseConfig]]
 
 [[autodoc]] GPTNeoXJapaneseConfig
 
-## GPTNeoXJapaneseTokenizer
+## GPTNeoXJapanese토큰화 (GPTNeoXJapaneseTokenizer) [[transformers.GPTNeoXJapaneseTokenizer]]
 
 [[autodoc]] GPTNeoXJapaneseTokenizer
 
-## GPTNeoXJapaneseModel
+## GPTNeoXJapaneseModel [[transformers.GPTNeoXJapaneseModel]]
 
 [[autodoc]] GPTNeoXJapaneseModel
     - forward
 
-## GPTNeoXJapaneseForCausalLM
+## 일상 LLM 을 위한 GPTNeoXJapanese(GPTNeoXJapaneseForCausalLM) [[transformers.GPTNeoXJapaneseForCausalLM]]
 
 [[autodoc]] GPTNeoXJapaneseForCausalLM
     - forward
