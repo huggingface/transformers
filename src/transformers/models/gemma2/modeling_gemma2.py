@@ -42,7 +42,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1058,10 +1057,6 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        if labels is None and not is_torchdynamo_compiling():
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
         if self.config.final_logit_softcapping is not None:
