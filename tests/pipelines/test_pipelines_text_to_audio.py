@@ -250,7 +250,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
         self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, tokenizer, torch_dtype="float32"):
         speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return speech_generator, ["This is a test", "Another test"]
 

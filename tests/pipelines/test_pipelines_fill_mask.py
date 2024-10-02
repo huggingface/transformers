@@ -251,7 +251,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         unmasker.tokenizer.pad_token = None
         self.run_pipeline_test(unmasker, [])
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, tokenizer, torch_dtype="float32"):
         if tokenizer is None or tokenizer.mask_token_id is None:
             self.skipTest(reason="The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
 

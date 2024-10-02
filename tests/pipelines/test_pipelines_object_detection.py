@@ -53,7 +53,7 @@ else:
 class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, processor, torch_dtype="float32"):
         object_detector = ObjectDetectionPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 

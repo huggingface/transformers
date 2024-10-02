@@ -67,7 +67,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, processor, torch_dtype="float32"):
         image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
