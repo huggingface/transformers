@@ -396,12 +396,12 @@ class DPTModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]
+        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]["predicted_depth"]
         expected_shape = torch.Size((384, 384))
         self.assertTrue(predicted_depth.shape == expected_shape)
 
         predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])
-        predicted_depth_l = predicted_depth_l[0]
+        predicted_depth_l = predicted_depth_l[0]["predicted_depth"]
         expected_shape = torch.Size((500, 500))
         self.assertTrue(predicted_depth_l.shape == expected_shape)
 

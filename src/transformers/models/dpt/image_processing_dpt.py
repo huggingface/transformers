@@ -476,7 +476,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self,
         outputs: "DepthEstimatorOutput",
         target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[TensorType]:
+    ) -> List[Dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -489,7 +489,8 @@ class DPTImageProcessor(BaseImageProcessor):
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[TensorType]`: A list of tensors representing the processed depth predictions.
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
         """
         requires_backends(self, "torch")
 
@@ -508,6 +509,6 @@ class DPTImageProcessor(BaseImageProcessor):
                     depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
                 ).squeeze()
 
-            results.append(depth)
+            results.append({"predicted_depth": depth})
 
         return results

@@ -126,7 +126,7 @@ Pass the prepared inputs through the model:
 ...     outputs = model(pixel_values)
 ```
 
-Let's post-process the results to remove any padding and resize the depth map to match the original image size. The `post_process_depth_estimation` outputs a list of dicts containing the `"predicted_depth"` and the `"depth"` image visualization.
+Let's post-process the results to remove any padding and resize the depth map to match the original image size. The `post_process_depth_estimation` outputs a list of dicts containing the `"predicted_depth"`.
 
 ```py
 >>> # ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument
@@ -136,7 +136,7 @@ Let's post-process the results to remove any padding and resize the depth map to
 ...     source_sizes=[(image.height, image.width)],
 ... )
 
->>> predicted_depth = post_processed_output[0]
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
 >>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
 >>> depth = depth.detach().cpu().numpy() * 255
 >>> depth = Image.fromarray(depth.astype("uint8"))

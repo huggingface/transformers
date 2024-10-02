@@ -456,7 +456,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
         outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
         do_remove_padding: Optional[Union[bool, None]] = None,
-    ) -> List[TensorType]:
+    ) -> List[Dict[str, TensorType]]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -479,7 +479,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 
         Returns:
-            `List[TensorType]`: A list of tensors representing the processed depth predictions.
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
         """
         requires_backends(self, "torch")
 
@@ -507,9 +508,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             )
 
         if outputs_flipped is not None:
-            predicted_depth = torch.stack([predicted_depth, outputs_flipped.predicted_depth], dim=1)
-        else:
-            predicted_depth = predicted_depth.unsqueeze(1)
+            predicted_depth = (predicted_depth + torch.flip(outputs_flipped.predicted_depth, dims=[-1])) / 2
+
+        predicted_depth = predicted_depth.unsqueeze(1)
 
         # Zoe Depth model adds padding around the images to fix the boundary artifacts in the output depth map
         # The padding length is `int(np.sqrt(img_h/2) * fh)` for the height and similar for the width
@@ -523,7 +524,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
         source_sizes = [None] * len(predicted_depth) if source_sizes is None else source_sizes
         for depth, target_size, source_size in zip(predicted_depth, target_sizes, source_sizes):
-            # depth.shape = [1 if not flip else 2, H, W]
+            # depth.shape = [1, H, W]
             if source_size is not None:
                 pad_h = pad_w = 0
 
@@ -544,10 +545,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                     depth = depth[:, :, :, pad_w:-pad_w]
 
                 depth = depth.squeeze(1)
-            # depth.shape = [1 if not flip else 2, H, W]
-            if outputs_flipped is not None:
-                depth, depth_flipped = depth.chunk(2)
-                depth = (depth + torch.flip(depth_flipped, dims=[-1])) / 2
             # depth.shape = [1, H, W]
             if target_size is not None:
                 target_size = [target_size[0], target_size[1]]
@@ -556,6 +553,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 )
             depth = depth.squeeze()
             # depth.shape = [H, W]
-            results.append(depth)
+            results.append({"predicted_depth": depth})
 
         return results

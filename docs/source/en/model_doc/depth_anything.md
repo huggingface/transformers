@@ -91,7 +91,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 ...     target_sizes=[(image.height, image.width)],
 ... )
 
->>> predicted_depth = post_processed_output[0]
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
 >>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
 >>> depth = depth.detach().cpu().numpy() * 255
 >>> depth = Image.fromarray(depth.astype("uint8"))

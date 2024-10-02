@@ -295,6 +295,8 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         )
 
         for img, out, out_l in zip(images, outputs, outputs_large):
+            out = out["predicted_depth"]
+            out_l = out_l["predicted_depth"]
             out_l_reduced = torch.nn.functional.interpolate(
                 out_l.unsqueeze(0).unsqueeze(1), size=img.size[::-1], mode="bicubic", align_corners=False
             )
@@ -319,6 +321,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
 
         expected_slices = torch.tensor(self.expected_slice_post_processing[pad_input, flip_aug]).to(torch_device)
         for img, out, expected_slice in zip(images, outputs, expected_slices):
+            out = out["predicted_depth"]
             self.assertTrue(img.size == out.shape[::-1])
             self.assertTrue(torch.allclose(expected_slice, out[:3, :3], rtol=1e-3))
 

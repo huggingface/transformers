@@ -80,7 +80,7 @@ Alternatively, one can also perform inference using the classes:
 ...     source_sizes=[(image.height, image.width)],
 ... )
 
->>> predicted_depth = post_processed_output[0]
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
 >>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
 >>> depth = depth.detach().cpu().numpy() * 255
 >>> depth = Image.fromarray(depth.astype("uint8"))
