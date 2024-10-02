@@ -1824,7 +1824,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_past_seen_tokens()
+                past_length = (
+                    cache_position[0] if cache_position is not None else past_key_values.get_past_seen_tokens()
+                )
             else:
                 past_length = past_key_values[0][0].shape[2]
 
@@ -2105,7 +2107,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_past_seen_tokens()
+                past_length = (
+                    cache_position[0] if cache_position is not None else past_key_values.get_past_seen_tokens()
+                )
             else:
                 past_length = past_key_values[0][0].shape[2]
 

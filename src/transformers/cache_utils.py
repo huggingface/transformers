@@ -63,7 +63,7 @@ class Cache(torch.nn.Module):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
-    
+
     def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the number of already processed tokens. For all Cache classes except SlidingWindow caches, this is the same as
         `get_seq_length()`. However, with sliding window we can process more tokens than the cache size. A layer index can be optionally passed.
@@ -581,7 +581,7 @@ class DynamicSlidingWindowCache(DynamicCache):
         super().__init__(num_hidden_layers)
         self.sliding_window = sliding_window
         # We overwrite the field and maintain a list of size `num_hidden_layers` to accurately reflect the seen tokens at each layer during `update`
-        self._seen_tokens = [0]*num_hidden_layers if num_hidden_layers is not None else []
+        self._seen_tokens = [0] * num_hidden_layers if num_hidden_layers is not None else []
 
     def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
         """This needs to be overriden because the number of processed tokens may be larger than the cache length."""
@@ -669,7 +669,9 @@ class DynamicSlidingWindowCache(DynamicCache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["DynamicSlidingWindowCache"], num_hidden_layers: int) -> "DynamicSlidingWindowCache":
+    def from_batch_splits(
+        cls, splits: List["DynamicSlidingWindowCache"], num_hidden_layers: int
+    ) -> "DynamicSlidingWindowCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls(splits[0].sliding_window, num_hidden_layers)
@@ -687,6 +689,7 @@ class DynamicSlidingWindowCache(DynamicCache):
 
     from_legacy_cache = None
     to_legacy_cache = None
+
 
 class OffloadedCache(DynamicCache):
     """

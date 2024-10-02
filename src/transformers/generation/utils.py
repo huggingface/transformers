@@ -28,7 +28,6 @@ from torch.nn import functional as F
 from ..cache_utils import (
     Cache,
     DynamicCache,
-    DynamicSlidingWindowCache,
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
@@ -4605,7 +4604,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
             return torch.cat(data, dim=0)
         # New cache format
         elif isinstance(data[0], (DynamicCache, EncoderDecoderCache)):
-            return data[0].__class__.from_batch_splits(data)
+            return data[0].__class__.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
