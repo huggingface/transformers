@@ -1442,6 +1442,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+    
+    @require_torch
+    def test_chunking_parameter_passthrough(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+            chunk_length_s=10.0,
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2, unused_parameter = "unused")
+        assert output["unused_parameter"] == "unused"
 
     @require_torch
     def test_return_timestamps_ctc_fast(self):
