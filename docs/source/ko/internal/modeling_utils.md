@@ -42,7 +42,7 @@ rendered properly in your Markdown viewer.
 [[autodoc]] modeling_utils.SequenceSummary
    - forward
 
-## PyTorch 도우미 함수 [[transformers.apply_chunking_to_forward]]
+## PyTorch 헬퍼(helper) 함수 [[transformers.apply_chunking_to_forward]]
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
