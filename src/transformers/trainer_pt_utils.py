@@ -1320,6 +1320,42 @@ class AcceleratorConfig:
         },
     )
 
+    autocast_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to customize how torch.autocast behaves, see [`class accelerate.AutocastKwargs`]."
+        },
+    )
+
+    fp8_recipe_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to customize the initialization of the recipe for FP8 mixed precision training, "
+            "see [`class accelerate.utils.FP8RecipeKwargs`]."
+        },
+    )
+
+    profile_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to customize the initialization of the profiler, see [`class accelerate.ProfileKwargs`]."
+        },
+    )
+
+    grad_scale_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to customize the behavior of mixed precision, see [`class accelerate.GradScalerKwargs`]."
+        },
+    )
+
+    init_process_group_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to configure initialization of the distributed processes, see [`class accelerate.InitProcessGroupKwargs`]."
+        },
+    )
+
     @classmethod
     def from_json_file(cls, json_file):
         # Check if exists
