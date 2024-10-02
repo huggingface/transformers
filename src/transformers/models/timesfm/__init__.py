@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .timesfm import (
+        from .modeling_timesfm import (
             TimesFMModel,
             TimesFMPreTrainedModel,
         )
