@@ -1142,7 +1142,7 @@ Using multiple GPUs with ZeRO-3 for generation requires synchronizing the GPUs b
 For Transformers>=4.28, if `synced_gpus` is automatically set to `True` if multiple GPUs are detected during generation.
 
 ### Non-Trainer Sequence Parallelism
-DeepSpeed sequence parallelism, also known as [DeepSpeed Ulysses](https://github.com/microsoft/DeepSpeed/blob/master/blogs/deepspeed-ulysses/README.md), is compatible with HuggingFace Transformers by adding 'sequence_parallel_size' and 'data_parallel_size' to the DeepSpeed configuration. Additionally, it's required that the user’s script correctly shard the input data along the sequence dimension.
+DeepSpeed sequence parallelism, also known as [DeepSpeed Ulysses](https://github.com/microsoft/DeepSpeed/blob/master/blogs/deepspeed-ulysses/README.md), is a distributed training technique targeting long context LLM problems. Sequence parallelism would allow for a virtually indefinite growth in sequence length and model size with an increase in GPUs, unlimited by single GPU memory. DeepSpeed sequence parallelism is compatible with HuggingFace Transformers by adding 'sequence_parallel_size' and 'data_parallel_size' to the DeepSpeed configuration. Additionally, it's required that the user’s script correctly shard the input data along the sequence dimension.
 
 ```py
 ds_config {
