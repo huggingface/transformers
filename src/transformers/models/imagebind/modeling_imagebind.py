@@ -1014,7 +1014,7 @@ class ImageBindTextTransformer(nn.Module):
     ) -> Union[Tuple, ImageBindTransformerOutput]:
         r"""
         Returns:
-
+            Union[Tuple, ImageBindTransformerOutput]
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1029,12 +1029,6 @@ class ImageBindTextTransformer(nn.Module):
         input_ids = input_ids.view(-1, input_shape[-1])
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        batch_size, seq_len = input_shape
-
-        attention_mask = self._build_attention_mask(
-            attention_mask, batch_size, seq_len, hidden_states.dtype, hidden_states.device
-        )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1064,19 +1058,6 @@ class ImageBindTextTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-    def _build_attention_mask(self, attention_mask, batch_size, seq_len, dtype, device=None):
-        # Build causal mask
-        mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype, device=device)
-        mask.fill_(torch.finfo(dtype).min)
-        mask.triu_(1)
-        mask = mask.unsqueeze(1)  # expand mask
-
-        # If attention_mask update causal mask
-        if attention_mask is not None:
-            attention_mask = AttentionMaskConverter._expand_mask(attention_mask, dtype)
-            return mask + attention_mask
-        return mask
 
 
 @add_start_docstrings(
@@ -1162,7 +1143,7 @@ class ImageBindVisionTransformer(nn.Module):
     ) -> Union[Tuple, ImageBindTransformerOutput]:
         r"""
         Returns:
-
+            Union[Tuple, ImageBindTransformerOutput]: 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1286,7 +1267,7 @@ class ImageBindAudioTransformer(nn.Module):
     ) -> Union[Tuple, ImageBindTransformerOutput]:
         r"""
         Returns:
-
+            Union[Tuple, ImageBindTransformerOutput]
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
