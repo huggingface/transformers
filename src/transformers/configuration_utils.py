@@ -315,8 +315,8 @@ class PretrainedConfig(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-        # Finally, store the original hash of the object (to detect post-loading changes)
-        self._original_object_hash = hash(self)
+        # If we load the object from an external source, we need to store the original object hash
+        self._original_object_hash = None
 
     def __hash__(self):
         return hash(self.to_json_string(use_diff=False, ignore_metadata=True))
@@ -556,6 +556,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         config = cls.from_dict(config_dict, **kwargs)
+        config._original_object_hash = hash(config)  # config object loaded from external source -> store hash
         return config
 
     @classmethod
@@ -750,7 +751,7 @@ class PretrainedConfig(PushToHubMixin):
         for key in to_remove:
             kwargs.pop(key, None)
 
-        config._original_object_hash = hash(config)  # `from_dict` is a valid initializer and has post __init__ changes
+        config._original_object_hash = hash(config)  # config object loaded from external source -> store hash
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
             return config, kwargs
@@ -771,7 +772,9 @@ class PretrainedConfig(PushToHubMixin):
 
         """
         config_dict = cls._dict_from_json_file(json_file)
-        return cls(**config_dict)
+        config = cls(**config_dict)
+        config._original_object_hash = hash(config)  # config object loaded from external source -> store hash
+        return config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
