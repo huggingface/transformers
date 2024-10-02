@@ -1456,7 +1456,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         n_repeats = 2
         audio_tiled = np.tile(audio, n_repeats)
-        output = speech_recognizer([audio_tiled], batch_size=2, unused_parameter = "unused")
+        output = speech_recognizer([audio_tiled], batch_size=2, unused_parameter="unused")
         assert output["unused_parameter"] == "unused"
 
     @require_torch
