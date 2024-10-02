@@ -52,7 +52,7 @@ def merge_safetensors(input_dir: str):
 def map_old_key_to_new(old_key):
     for pattern, replacement in STATE_DICT_MAPPING.items():
         if replacement is None:
-            if re.search(pattern, old_key):
+            if re.fullmatch(pattern, old_key):
                 return None
         else:
             new_key, n_replace = re.subn(pattern, replacement, old_key)
