@@ -202,15 +202,18 @@ class WhisperGenerationMixin(GenerationMixin):
             # since the beam search strategy chooses the most probable sequences at the end of the search.
             # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
             weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            weight_length = weight_length if num_input_ids is None else weight_length + num_input_ids
 
             # beam search takes `decoder_input_ids` into account in the `beam_indices` length
             # but forgot to shift the beam_indices by the number of `decoder_input_ids`
-            weight_length = weight_length if num_input_ids is None else weight_length + num_input_ids
+            beam_indices = torch.zeros_like(generate_outputs.beam_indices[:, :weight_length])
+            # we actually shif the beam indices here
+            beam_indices[:, num_input_ids:] = generate_outputs.beam_indices[:, : weight_length - num_input_ids]
+
             weights = weights[:, :, :weight_length]
 
             # If beam index is still -1, it means that the associated token id is EOS
             # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
-            beam_indices = generate_outputs.beam_indices[:, :weight_length]
             beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
 
             # Select the cross attention from the right beam for each output sequences
