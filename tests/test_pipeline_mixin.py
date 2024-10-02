@@ -192,10 +192,6 @@ class PipelineTesterMixin:
                 else:
                     raise ValueError(f"Unknown processor class: {cls_name}")
 
-            # If no image processor or feature extractor is found, we still need to test the pipeline with None
-            image_processor_names = image_processor_names or [None]
-            feature_extractor_names = feature_extractor_names or [None]
-
             # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
             processor_names = PROCESSOR_MAPPING_NAMES.get(model_type, None)
@@ -270,6 +266,13 @@ class PipelineTesterMixin:
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
         # `run_pipeline_test`.
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
+
+        # If no image processor or feature extractor is found, we still need to test the pipeline with None
+        # otherwise for any empty list we might skip all the tests
+        tokenizer_names = tokenizer_names or [None]
+        image_processor_names = image_processor_names or [None]
+        feature_extractor_names = feature_extractor_names or [None]
+        processor_names = processor_names or [None]
 
         test_cases = [
             {
