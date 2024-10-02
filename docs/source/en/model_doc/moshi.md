@@ -35,14 +35,14 @@ Moshi deals with 3 streams of information:
 2. Moshi's audio
 3. Moshi's textual output
 
-Similarly to [`Musicgen`], audio is represented with audio codebooks, which can be interpreted like tokens. The main difference between text tokens and audio codebooks is that audio codebooks introduce an additional dimension of information.
+Similarly to [`~MusicgenModel`], audio is represented with audio codebooks, which can be interpreted like tokens. The main difference between text tokens and audio codebooks is that audio codebooks introduce an additional dimension of information.
 Text tokens are typically of dim `(batch_size, sequence_length)` but audio tokens are of dim `(batch_size, num_codebooks, sequence_length)`.
 
 Moshi's made of 3 components:
 
 **1. The main decoder (Helium in the paper)**
 
-It corresponds to [`MoshiForCausalLM`]. It is strictly a classic text LLM, that uses an architecture similar to `Gemma`. In other words, it takes text tokens, embeds them, pass them through the decoder and a language head, to get text logits.
+It corresponds to [`MoshiForCausalLM`]. It is strictly a classic text LLM, that uses an architecture similar to [` ~GemmaForCausalLM`]. In other words, it takes text tokens, embeds them, pass them through the decoder and a language head, to get text logits.
 
 **2. The depth decoder**
 
@@ -54,7 +54,7 @@ Note that each timestamp - i.e each codebook - gets its own set of Linear Layers
 
 **3. [`MimiModel`]**
 
-It's the audio encoder from Kyutai, that has recently been integrated to transformers, which is used to "tokenize" audio. It has the same use that `Encodec` has in `Musicgen`.
+It's the audio encoder from Kyutai, that has recently been integrated to transformers, which is used to "tokenize" audio. It has the same use that [`~EncodecModel`] has in [`~MusicgenModel`].
 
 
 ## Tips:

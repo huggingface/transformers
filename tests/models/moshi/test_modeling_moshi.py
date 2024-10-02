@@ -17,7 +17,6 @@
 import copy
 import tempfile
 import unittest
-import inspect
 
 import numpy as np
 import pytest
@@ -539,12 +538,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
-    
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # NOTE: left-padding results in small numerical differences. This is expected.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
 
         # Then, test left-padding
 
@@ -556,7 +554,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model.generation_config.use_cache = False
 
             # Without padding
-            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[:, -1, :]
+            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[
+                :, -1, :
+            ]
 
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
@@ -568,18 +568,23 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
 
             padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            
-            padding = torch.ones((pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device) * config.audio_vocab_size
-            padded_moshi_audio_codes =  torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
-            padded_user_audio_codes =  torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
-            
+
+            padding = (
+                torch.ones(
+                    (pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device
+                )
+                * config.audio_vocab_size
+            )
+            padded_moshi_audio_codes = torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
+            padded_user_audio_codes = torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
+
             model_kwargs = {
                 "input_ids": padded_input_ids,
                 "attention_mask": padded_attention_mask,
                 "moshi_audio_codes": padded_moshi_audio_codes,
                 "user_audio_codes": padded_user_audio_codes,
             }
-            
+
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
