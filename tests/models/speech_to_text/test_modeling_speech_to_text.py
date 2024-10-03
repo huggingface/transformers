@@ -282,8 +282,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     test_pruning = False
     test_missing_keys = False
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)

@@ -94,7 +94,6 @@ if is_torch_available():
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
-    input_name = "input_ids"
     max_new_tokens = 3
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
@@ -1254,11 +1253,11 @@ class GenerationTesterMixin:
                 "output_hidden_states": True,
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
-                "use_cache": getattr(config, "use_cache"),  # Some models don't support the cache
+                "use_cache": getattr(config, "use_cache", False),  # Some models don't support the cache
+                "dola_layers": "low",
             }
-            generation_kwargs.update({"dola_layers": "low"})
             output_dola = model.generate(**generation_kwargs, **inputs_dict)
-            self._check_outputs(output_dola, main_input, model.config, use_cache=getattr(config, "use_cache"))
+            self._check_outputs(output_dola, main_input, model.config, use_cache=getattr(config, "use_cache", False))
 
     @pytest.mark.generate
     def test_assisted_decoding_sample(self):

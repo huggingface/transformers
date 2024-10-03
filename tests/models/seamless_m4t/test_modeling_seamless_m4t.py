@@ -360,8 +360,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (SeamlessM4TForSpeechToText,) if is_torch_available() else ()
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="speech")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4TConfig)
