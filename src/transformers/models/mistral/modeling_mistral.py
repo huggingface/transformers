@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
@@ -899,6 +899,15 @@ class MistralModel(MistralPreTrainedModel):
             config=self.config,
             past_key_values=past_key_values,
         )
+
+            if isinstance(past_key_values, DynamicSlidingWindowCache):
+                current_cache_length = past_key_values.get_seq_length()
+                if sequence_length + current_cache_length > self.config.sliding_window:
+                    target_length = sequence_length + self.config.sliding_window - 1
+                else:
+                    target_length = current_cache_length + sequence_length
+                # Slice the causal mask to get only relevant part of the same shape as the keys/values
+                causal_mask = causal_mask[:, :, :, -target_length:]
 
         if (
             self.config._attn_implementation == "sdpa"

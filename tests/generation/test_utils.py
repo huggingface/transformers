@@ -64,7 +64,13 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import DynamicCache, DynamicSlidingWindowCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
+    from transformers.cache_utils import (
+        DynamicCache,
+        DynamicSlidingWindowCache,
+        EncoderDecoderCache,
+        QuantoQuantizedCache,
+        StaticCache,
+    )
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -2198,12 +2204,18 @@ class GenerationTesterMixin:
 
             dynamic_cache = DynamicCache()
             dynamic_sliding_cache = DynamicSlidingWindowCache(config.sliding_window)
-            
-            results_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache)
-            results_sliding_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_sliding_cache)
+
+            results_dynamic = model.generate(
+                input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache
+            )
+            results_sliding_dynamic = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                **all_generation_kwargs,
+                past_key_values=dynamic_sliding_cache,
+            )
 
             self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
-
 
     @parameterized.expand([(False,), (True,)])
     @pytest.mark.generate
@@ -2230,12 +2242,22 @@ class GenerationTesterMixin:
 
             dynamic_cache = DynamicCache()
             dynamic_sliding_cache = DynamicSlidingWindowCache(config.sliding_window)
-            
-            out_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache)
-            out_sliding_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_sliding_cache)
+
+            out_dynamic = model.generate(
+                input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache
+            )
+            out_sliding_dynamic = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                **all_generation_kwargs,
+                past_key_values=dynamic_sliding_cache,
+            )
 
             results_dynamic, dynamic_cache = out_dynamic.sequences, out_dynamic.past_key_values
-            results_sliding_dynamic, dynamic_sliding_cache = out_sliding_dynamic.sequences, out_sliding_dynamic.past_key_values
+            results_sliding_dynamic, dynamic_sliding_cache = (
+                out_sliding_dynamic.sequences,
+                out_sliding_dynamic.past_key_values,
+            )
 
             self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
 
@@ -2244,8 +2266,10 @@ class GenerationTesterMixin:
             added_tokens = ids_tensor((bs, num_added_tokens), vocab_size=config.vocab_size)
             input_ids = torch.cat([results_dynamic, added_tokens], dim=-1)
 
-            out_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache)
-            out_sliding_dynamic = model.generate(input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_sliding_cache)
+            out_dynamic = model.generate(input_ids, **all_generation_kwargs, past_key_values=dynamic_cache)
+            out_sliding_dynamic = model.generate(
+                input_ids, **all_generation_kwargs, past_key_values=dynamic_sliding_cache
+            )
 
             self.assertListEqual(out_dynamic.sequences.tolist(), out_sliding_dynamic.sequences.tolist())
 
