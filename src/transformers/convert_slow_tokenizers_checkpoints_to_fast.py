@@ -34,7 +34,7 @@ TOKENIZER_CLASSES = {
         transformers,
         "LlamaTokenizerFast"
         if name == "Phi3Tokenizer"
-        else ("PreTrainedTokenizerFast" if name == "SiglipTokenizerFast" else name + "Fast"),
+        else ("PreTrainedTokenizerFast" if name == "SiglipTokenizer" else name + "Fast"),
     )
     for name in SLOW_TO_FAST_CONVERTERS
 }
