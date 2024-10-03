@@ -365,17 +365,14 @@ class DynamicCache(Cache):
     def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        if num_hidden_layers is None:
-            self.key_cache: List[torch.Tensor] = []
-            self.value_cache: List[torch.Tensor] = []
-        else:
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        if num_hidden_layers is not None:
             warnings.warn(
                 "The `num_hidden_layers` argument is deprecated and will be removed in v4.47.0. There is no need to "
                 "pass this argument anymore.",
                 UserWarning,
             )
-            self.key_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
-            self.value_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
