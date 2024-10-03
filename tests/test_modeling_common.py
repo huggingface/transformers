@@ -4458,7 +4458,7 @@ class ModelTesterMixin:
                             break
                     if not has_fa2:
                         raise ValueError("The FA2 model should have FA2 layers")
-    
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
