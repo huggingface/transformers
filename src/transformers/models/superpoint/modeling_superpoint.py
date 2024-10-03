@@ -258,9 +258,6 @@ class SuperPointInterestPointDecoder(nn.Module):
         # Convert (y, x) to (x, y)
         keypoints = torch.flip(keypoints, [1]).float()
 
-        # Convert to relative coordinates
-        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
-
         return keypoints, scores
 
 
@@ -450,7 +447,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -487,6 +484,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             scores[i, : _scores.shape[0]] = _scores
             descriptors[i, : _descriptors.shape[0]] = _descriptors
             mask[i, : _scores.shape[0]] = 1
+
+        # Convert to relative coordinates
+        keypoints[:, :] = keypoints[:, :] / torch.tensor([width, height], device=keypoints.device)
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:

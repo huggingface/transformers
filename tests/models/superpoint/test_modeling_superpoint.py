@@ -281,7 +281,7 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
         expected_scores_image0_values = torch.tensor(
             [0.0064, 0.0139, 0.0591, 0.0727, 0.5170, 0.0175, 0.1526, 0.2057, 0.0335]
         ).to(torch_device)
-        expected_descriptors_image0_value = torch.tensor(0.0449).to(torch_device)
+        expected_descriptors_image0_value = torch.tensor(-0.1095).to(torch_device)
         predicted_keypoints_image0_values = outputs.keypoints[0, :3]
         predicted_scores_image0_values = outputs.scores[0, :9]
         predicted_descriptors_image0_value = outputs.descriptors[0, 0, 0]
