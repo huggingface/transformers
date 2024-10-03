@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   reply-and-trigger:
-    if: contains(github.event.comment.body,'/pytest')
+#    if: contains(github.event.comment.body,'/pytest')
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
