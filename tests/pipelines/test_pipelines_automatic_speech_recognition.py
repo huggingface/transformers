@@ -1199,7 +1199,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer_2 = AutomaticSpeechRecognitionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
-        output_2 = speech_recognizer_2(ds[0]["audio"])
+        output_2 = speech_recognizer_2(ds[40]["audio"])
         self.assertEqual(output, output_2)
 
         # either use generate_kwargs or set the model's generation_config
@@ -1211,7 +1211,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             generate_kwargs={"task": "transcribe", "language": "<|it|>"},
         )
-        output_3 = speech_translator(ds[0]["audio"])
+        output_3 = speech_translator(ds[40]["audio"])
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
 
     @slow
