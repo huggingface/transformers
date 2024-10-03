@@ -1581,17 +1581,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             requested_attn_implementation = config._attn_implementation_internal
 
         # Composite models consisting of several PretrainedModels have to specify attention impl as a dict
-        # where keys are sub-config names. But most people will specify one `str` which means that should dispatch
-        # for all sub-models or do not specify anything (`None`).
-        # Below we check is a models is composite and manually prepare a dict of attn impl if not already passed as a dict.
-        # Later each sub-model will dispatch with its own attn impl, by calling `_from_config(attn_impl="sdpa/FA2/eager")`
-        # If any of sub-models don't support requested attn, an error will be raised
+        # where keys are sub-config names. But most people will specify one `str` which means that should dispatch it
+        # for all sub-models.
+        # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
+        # Later each sub-module will dispatch with its own attn impl, by calling `_from_config(attn_impl="sdpa/FA2/eager")`
+        # If any of sub-modules doesm't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
         sub_configs = {
             key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
         }
-        if sub_configs and all(
-            name not in cls.__name__.lower() for name in ["chameleon", "dbrx"]
-        ):  # so we have a composite model
+        if sub_configs and all(name not in cls.__name__.lower() for name in ["dbrx"]):
             attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 attn_implementation_per_subconfig[key] = (
@@ -1600,8 +1598,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else requested_attn_implementation.get(key)
                 )
 
-            config._attn_implementation = attn_implementation_per_subconfig
-            requested_attn_implementation = config._attn_implementation
+            # Some models have nested configs where text config holds vision config
+            # inside itself. So we don't set their attn implementation as dicts and leave
+            # everything as it was. There are only 3 models like that (Qwen2_VL, GIT, Chameleon)
+            # and all of them support all attn implementations
+            if len(attn_implementation_per_subconfig.keys()) != 1:
+                config._attn_implementation = attn_implementation_per_subconfig
+                requested_attn_implementation = config._attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(

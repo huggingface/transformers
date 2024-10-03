@@ -4452,7 +4452,6 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
     def test_flash_attn_2_can_dispatch_composite_models(self):
         """
         Tests if composite models can dispatch on FA2 if the sub-models supports FA2.

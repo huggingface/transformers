@@ -1086,14 +1086,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        if hasattr(config, "text_config"):
-            config = config.get_text_config()
-            config._attn_implementation = (
-                config._attn_implementation if config._attn_implementation is not None else "eager"
-            )
-            logger.warning_once(
-                "If you are loading Qwen2Model directly, make sure to load with `config.text_config` in the ipnut arguments"
-            )
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
@@ -1433,11 +1425,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2VisionTransformerPretrainedModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+            config.vision_config, attn_implementation=config._attn_implementation
         )
-        self.model = Qwen2VLModel._from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.model = Qwen2VLModel._from_config(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.padding_side = "left"  # set it to left by default, user can use setter to change padding_sides

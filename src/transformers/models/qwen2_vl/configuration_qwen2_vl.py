@@ -17,8 +17,6 @@
 import os
 from typing import Union
 
-from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -130,8 +128,6 @@ class Qwen2VLConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         vision_config (`Dict`, *optional*):
             The config for the visual encoder initialization.
-        text_config (`Dict`, *optional*):
-            The config for the language model initialization.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -206,7 +202,6 @@ class Qwen2VLConfig(PretrainedConfig):
         max_window_layers=80,
         attention_dropout=0.0,
         vision_config=None,
-        text_config=None,
         rope_scaling=None,
         **kwargs,
     ):
@@ -214,31 +209,6 @@ class Qwen2VLConfig(PretrainedConfig):
             self.vision_config = Qwen2VLVisionConfig(**vision_config)
         elif vision_config is None:
             self.vision_config = Qwen2VLVisionConfig()
-
-        self.text_config = (
-            Qwen2Config(**text_config)
-            if isinstance(text_config, dict)
-            else Qwen2Config(
-                vocab_size=vocab_size,
-                hidden_size=hidden_size,
-                intermediate_size=intermediate_size,
-                num_hidden_layers=num_hidden_layers,
-                num_attention_heads=num_attention_heads,
-                num_key_value_heads=num_key_value_heads,
-                hidden_act=hidden_act,
-                max_position_embeddings=max_position_embeddings,
-                initializer_range=initializer_range,
-                rms_norm_eps=rms_norm_eps,
-                use_cache=use_cache,
-                tie_word_embeddings=tie_word_embeddings,
-                rope_theta=rope_theta,
-                use_sliding_window=use_sliding_window,
-                sliding_window=sliding_window,
-                max_window_layers=max_window_layers,
-                attention_dropout=attention_dropout,
-                rope_scaling=rope_scaling,
-            )
-        )
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

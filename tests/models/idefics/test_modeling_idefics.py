@@ -567,6 +567,10 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
+    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch

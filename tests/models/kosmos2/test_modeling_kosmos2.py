@@ -512,6 +512,10 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
+    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
