@@ -44,5 +44,3 @@ The original code can be found [here](https://github.com/tomlimi/MYTE).
 
 [[autodoc]] MyT5Tokenizer
 
-<frameworkcontent>
-<pt>
