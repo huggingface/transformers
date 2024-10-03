@@ -427,7 +427,7 @@ class DynamicCache(Cache):
                 self.value_cache.append([])
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
-        elif self.key_cache[layer_idx] == []:  # fills previously skipped layers; checking for tensor causes errors
+        elif len(self.key_cache[layer_idx]) == 0:  # fills previously skipped layers; checking for tensor causes errors
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
@@ -439,7 +439,11 @@ class DynamicCache(Cache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
-        is_empty_layer = self.key_cache == [] or len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] == []
+        is_empty_layer = (
+            len(self.key_cache) == 0  # no cache in any layer
+            or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
+            or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
+        )
         layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
         return layer_seq_length
 
