@@ -589,6 +589,7 @@ IDEFICS2_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 @add_start_docstrings(
     "The bare Idefics2 Model outputting raw hidden-states without any specific head on top.",
     IDEFICS2_START_DOCSTRING,
@@ -999,10 +1000,15 @@ class Idefics2PerceiverLayer(nn.Module):
         self.n_latents = config.perceiver_config.resampler_n_latents
         self.depth = config.perceiver_config.resampler_depth
         self.rms_norm_eps = config.text_config.rms_norm_eps
+        attn_implementation = (
+            config._attn_implementation["perceiver_config"]
+            if config._attn_implementation["perceiver_config"] is not None
+            else "eager"
+        )
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[attn_implementation](config, layer_idx=layer_idx)
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
             hidden_size=config.text_config.hidden_size,
@@ -1086,7 +1092,6 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     _supports_sdpa = False
-    _is_composite = False
 
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -1151,9 +1156,7 @@ class Idefics2Connector(nn.Module):
             output_size=config.text_config.hidden_size,
             hidden_act=config.text_config.hidden_act,
         )
-        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(
-            config, attn_implementation=config._attn_implementation["perceiver_config"]
-        )
+        self.perceiver_resampler = Idefics2PerceiverResampler(config)
 
     def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)

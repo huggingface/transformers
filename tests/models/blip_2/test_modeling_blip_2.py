@@ -456,11 +456,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-
-    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
@@ -491,6 +487,10 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     @unittest.skip(reason="There's no base Blip2Model")
     def test_save_load_fast_init_to_base(self):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
     def test_forward_signature(self):
@@ -720,11 +720,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-
-    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -769,6 +765,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
     def test_forward_signature(self):

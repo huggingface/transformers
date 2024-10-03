@@ -445,11 +445,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-
-    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = BlipModelTester(self)
@@ -472,6 +468,10 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for Blip
@@ -809,11 +809,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-
-    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = BlipVQAModelTester(self)
@@ -884,6 +880,10 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
 
 @require_torch
 class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
@@ -894,11 +894,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-
-    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = BlipTextRetrievalModelTester(self)
@@ -921,6 +917,10 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
     def test_forward_signature(self):

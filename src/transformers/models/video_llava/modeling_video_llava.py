@@ -126,7 +126,6 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _is_composite = True
     _supports_cache_class = True
 
     def _init_weights(self, module):

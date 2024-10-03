@@ -322,7 +322,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _is_composite = True
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -543,9 +542,6 @@ class InstructBlipVideoEncoder(nn.Module):
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = InstructBlipVideoVisionConfig
-
-    # Ignore copy
-    _is_composite = False
 
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__(config)
@@ -1094,8 +1090,6 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     Querying Transformer (Q-Former), used in InstructBlipVideo. Slightly modified from BLIP-2 as it also takes the
     instruction as input.
     """
-
-    _is_composite = True
 
     def __init__(self, config: InstructBlipVideoQFormerConfig):
         super().__init__(config)

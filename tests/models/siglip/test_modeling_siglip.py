@@ -71,12 +71,62 @@ if is_vision_available():
 
 
 class SiglipModelTesterMixin(ModelTesterMixin):
+    def test_sdpa_can_dispatch_composite_models(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            # SigLip has one shared cls attr for all models, so we assign both submodels heer
+            vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
+
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "text_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+
+            if hasattr(model_sdpa.config, "text_config"):
+                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
+                self.assertTrue(
+                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                )
+            else:
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                raise ValueError("The SDPA model should have SDPA attention layers")
+
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
         use_attention_mask_options: Tuple[bool, ...] = (True, False),
         logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
-        is_composite: bool = True,
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -132,39 +182,6 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                     attn_implementation="eager",
                 )
                 model_eager = model_eager.eval().to(torch_device)
-
-            if not is_composite:
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-            else:
-                # SigLip has one shared cls attr for all models, so we assign both submodels heer
-                vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
-
-                # `None` as it is the requested one which will be assigned to each sub-config
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
-                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
-
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
-                self.assertTrue(
-                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
-                )
-
-            for name, submodule in model_eager.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
-
-            has_sdpa = False
-            for name, submodule in model_sdpa.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-            if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                raise ValueError("The SDPA model should have SDPA attention layers")
 
             # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving the model each time,
             # but it would be nicer to have an efficient way to use parameterized.expand
@@ -415,8 +432,11 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
             use_attention_mask_options=(False,),
-            is_composite=False,
         )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
 
 class SiglipTextModelTester:
@@ -578,8 +598,11 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
             use_attention_mask_options=(False, True),
-            is_composite=False,
         )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
 
 class SiglipModelTester:
@@ -648,6 +671,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    _is_composite = True
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
@@ -870,6 +894,10 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             use_attention_mask_options=(False, True),
         )
 
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
     def __init__(self, parent):
@@ -907,6 +935,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = SiglipForImageClassificationModelTester(self)
@@ -941,8 +970,12 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,), is_composite=False
+            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,)
         )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
 
 # We will verify our results on an image of cute cats

@@ -1596,7 +1596,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _is_composite = True
 
     def __init__(
         self,

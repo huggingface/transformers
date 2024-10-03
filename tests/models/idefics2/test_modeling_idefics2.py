@@ -21,7 +21,6 @@ import unittest
 from io import BytesIO
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -41,7 +40,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -183,6 +181,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)
@@ -330,64 +329,31 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
-            self.skipTest(
-                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
-            )
-
-        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
-        if torch_dtype == "float16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bfloat16":
-            torch_dtype = torch.bfloat16
-        elif torch_dtype == "float32":
-            torch_dtype = torch.float32
-
+    def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                # see https://github.com/huggingface/transformers/pull/32238
-                # we put `None` because that is the requested attn implementation, which will dispatch to SDPA internally if available
-                perceiver_attn = None if model.connector.perceiver_resampler._supports_sdpa else "eager"
                 vision_attn = None if model.vision_model._supports_sdpa else "eager"
                 self.assertTrue(
                     model_sdpa.config._attn_implementation
                     == {"text_config": None, "perceiver_config": None, "vision_config": None}
                 )
                 self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == perceiver_attn)
 
-                # Also test that nothing break if we request SDPA explicitly
-                # If the model supports sdpa (i.e. one of sub-models supports it) we'll raise error because we
-                # explicitly asked for SDPA, in comparison to above when SDPA dispatches by default is it is available.
-                with self.assertRaises(ValueError):
-                    _ = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch_dtype,
-                    attn_implementation="eager",
-                )
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-
                 self.assertTrue(
                     model_eager.config._attn_implementation
                     == {"text_config": "eager", "perceiver_config": "eager", "vision_config": "eager"}
                 )
                 self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.connector.perceiver_resampler.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -400,7 +366,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         has_sdpa = True
                         break
-                if not has_sdpa:
+                if not has_sdpa and model_sdpa.config.model_type != "falcon":
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
 

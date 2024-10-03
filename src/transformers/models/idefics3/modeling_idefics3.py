@@ -824,17 +824,19 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.vocab_size = self.config.text_config.vocab_size
 
         self.vision_model = Idefics3VisionTransformer._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
         self.connector = Idefics3Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.text_model = AutoModel.from_config(
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
+        )
 
         self.image_seq_len = int(
             ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = "flash_attention_2" in config._attn_implementation.values()
 
         self.post_init()
 

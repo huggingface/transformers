@@ -1385,9 +1385,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
-    # Composite models consisting of several PretrainedModels
-    _is_composite = False
-
     # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
     _supports_cache_class = False
     _supports_static_cache = False
@@ -1592,7 +1589,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         sub_configs = {
             key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
         }
-        if sub_configs:  # so we have a composite model
+        if sub_configs and all(
+            name not in cls.__name__.lower() for name in ["chameleon", "dbrx"]
+        ):  # so we have a composite model
             attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 attn_implementation_per_subconfig[key] = (
@@ -1601,9 +1600,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else requested_attn_implementation.get(key)
                 )
 
-            if cls._is_composite:  # some composite models don't use attn impl, e.g. VQ-VAE
-                config._attn_implementation = attn_implementation_per_subconfig
-                requested_attn_implementation = config._attn_implementation
+            config._attn_implementation = attn_implementation_per_subconfig
+            requested_attn_implementation = config._attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(

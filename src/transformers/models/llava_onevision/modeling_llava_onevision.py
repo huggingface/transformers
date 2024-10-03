@@ -364,7 +364,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
 
         self.multi_modal_projector = LlavaOnevisionMultiModalProjector(config)
@@ -373,7 +373,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         self.post_init()
 

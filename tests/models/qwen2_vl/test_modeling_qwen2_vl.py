@@ -226,6 +226,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Qwen2VLVisionText2TextModelTester(self)

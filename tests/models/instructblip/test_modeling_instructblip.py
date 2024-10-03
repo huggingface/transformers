@@ -460,11 +460,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-
-    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
-    supports_sdpa = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
@@ -533,6 +529,10 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         model_name = "Salesforce/instructblip-flan-t5-xl"
         model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip("InstructBlip doesn't support SPDA with this particulr LM bacbone")
+    def test_sdpa_can_dispatch_composite_models(self):
+        pass
 
 
 # We will verify our results on an image of cute cats

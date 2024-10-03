@@ -410,7 +410,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _is_composite = True
 
     _no_split_modules = [
         "Blip2Attention",
@@ -711,9 +710,6 @@ class Blip2Encoder(nn.Module):
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = Blip2VisionConfig
-
-    # Ignore copy
-    _is_composite = False
 
     def __init__(self, config: Blip2VisionConfig):
         super().__init__(config)
@@ -1251,8 +1247,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     """
     Querying Transformer (Q-Former), used in BLIP-2.
     """
-
-    _is_composite = False
 
     def __init__(self, config: Blip2QFormerConfig):
         super().__init__(config)
