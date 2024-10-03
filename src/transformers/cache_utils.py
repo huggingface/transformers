@@ -2,6 +2,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -361,11 +362,20 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
         super().__init__()
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        if num_hidden_layers is None:
+            self.key_cache: List[torch.Tensor] = []
+            self.value_cache: List[torch.Tensor] = []
+        else:
+            warnings.warn(
+                "The `num_hidden_layers` argument is deprecated and will be removed in v4.47.0. There is no need to "
+                "pass this argument anymore.",
+                UserWarning,
+            )
+            self.key_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
+            self.value_cache: List[torch.Tensor] = [[] for _ in range(num_hidden_layers)]
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -460,9 +470,17 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
+    ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
+        if num_hidden_layers is not None:
+            warnings.warn(
+                "The `num_hidden_layers` argument is deprecated and will be removed in v4.47.0. There is no need to "
+                "pass this argument anymore.",
+                UserWarning,
+            )
         cache = cls()
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
@@ -486,9 +504,17 @@ class DynamicCache(Cache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+    def batch_split(
+        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
+    ) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
+        if num_hidden_layers is not None:
+            warnings.warn(
+                "The `num_hidden_layers` argument is deprecated and will be removed in v4.47.0. There is no need to "
+                "pass this argument anymore.",
+                UserWarning,
+            )
         out = []
         for i in range(0, full_batch_size, split_size):
             current_split = DynamicCache()
@@ -499,9 +525,15 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+    def from_batch_splits(cls, splits: List["DynamicCache"], num_hidden_layers: int = None) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
+        if num_hidden_layers is not None:
+            warnings.warn(
+                "The `num_hidden_layers` argument is deprecated and will be removed in v4.47.0. There is no need to "
+                "pass this argument anymore.",
+                UserWarning,
+            )
         cache = cls()
         for idx in range(len(splits[0])):
             key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
