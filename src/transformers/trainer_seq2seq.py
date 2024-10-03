@@ -25,6 +25,7 @@ from .generation.configuration_utils import GenerationConfig
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .utils import logging
+from .utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -43,6 +44,7 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
+    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Union["PreTrainedModel", nn.Module] = None,
@@ -50,7 +52,6 @@ class Seq2SeqTrainer(Trainer):
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
         ] = None,
@@ -66,7 +67,6 @@ class Seq2SeqTrainer(Trainer):
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
             processing_class=processing_class,
             model_init=model_init,
             compute_metrics=compute_metrics,
