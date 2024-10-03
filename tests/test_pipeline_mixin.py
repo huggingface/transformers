@@ -33,7 +33,6 @@ from huggingface_hub import (
     ImageSegmentationInput,
     ImageToTextInput,
     ObjectDetectionInput,
-    VisualQuestionAnsweringInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -45,7 +44,6 @@ from transformers.pipelines import (
     ImageSegmentationPipeline,
     ImageToTextPipeline,
     ObjectDetectionPipeline,
-    VisualQuestionAnsweringPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
