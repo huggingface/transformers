@@ -907,7 +907,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+                "You must specify exactly one of input_ids or inputs_embeds"
             )
 
         if self.gradient_checkpointing and self.training:

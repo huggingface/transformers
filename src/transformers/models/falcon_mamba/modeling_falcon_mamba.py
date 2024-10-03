@@ -651,7 +651,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+                "You must specify exactly one of input_ids or inputs_embeds"
             )
 
         if inputs_embeds is None:
