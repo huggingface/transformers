@@ -36,6 +36,7 @@ class GgufIntegrationTests(unittest.TestCase):
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
     t5_model_id = "repetitio/flan-t5-small"
+    original_t5_model_id = "google/flan-t5-small"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -62,6 +63,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
+    fp16_t5_model_id = "flan-t5-small-f16.gguf"
     q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
 
     example_text = "Hello"
@@ -342,6 +344,20 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    def test_t5_f16(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.fp16_t5_model_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id, gguf_file=self.fp16_t5_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
+
+        text = tokenizer(T5_EXAMPLE_TEXT, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Wie ich er?"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
     def test_t5_q8_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.q8_0_t5_model_id)
         model = AutoModelForSeq2SeqLM.from_pretrained(
@@ -355,6 +371,32 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Wie ich er?"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_t5_weights_conversion_fp16(self):
+        quantized_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id,
+            gguf_file=self.fp16_t5_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+        original_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.original_t5_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        quantized_state_dict = quantized_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for (quantized_name, quantized_param), (original_name, original_param) in zip(
+            quantized_state_dict.items(), original_state_dict.items()
+        ):
+            if (
+                "SelfAttention" in quantized_name
+                and "SelfAttention" in original_name
+            ):
+                self.assertTrue(quantized_param.shape == original_param.shape)
+                torch.testing.assert_close(quantized_param, original_param)
 
     def test_tokenization_xnli(self):
         import tqdm
