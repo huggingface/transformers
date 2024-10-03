@@ -1883,15 +1883,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="vasista22/whisper-hindi-large-v2",
             device=torch_device,
         )
-        # Original model wasn't trained with timestamps and has incorrect generation config
-        pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
         # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
+        # Original model wasn't trained with timestamps and has incorrect generation config
         out = pipe(
             audio,
             return_timestamps=True,
+            generate_kwargs={"generation_config":GenerationConfig.from_pretrained("openai/whisper-large-v2")}
         )
         self.assertEqual(
             out,
