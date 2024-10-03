@@ -743,7 +743,7 @@ class Trainer:
         return self.processing_class
 
     @tokenizer.setter
-    def tokenizer(self, processing_class) -> Optional[PreTrainedTokenizerBase]:
+    def tokenizer(self, processing_class) -> None:
         logger.warning(
             "Trainer.tokenizer is now deprecated. You should use `Trainer.processing_class = processing_class` instead."
         )
