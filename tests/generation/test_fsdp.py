@@ -42,9 +42,9 @@ if is_torch_available():
         "The quick brown fox jumps over the lazy dog.",
     ]
 
-
     def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
         """Manage the creation and destruction of the distributed process group for the wrapped function."""
+
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             torch.distributed.init_process_group(world_size=torch.cuda.device_count())
             try:
@@ -54,7 +54,6 @@ if is_torch_available():
                 torch.distributed.destroy_process_group()
 
         return wrapped
-
 
     @manage_process_group
     def fsdp_generate():
