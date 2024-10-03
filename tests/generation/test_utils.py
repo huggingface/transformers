@@ -120,12 +120,15 @@ class GenerationTesterMixin:
         }
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            config.pad_token_id = (
-                config.eos_token_id if isinstance(config.eos_token_id, int) else config.eos_token_id[0]
+        text_gen_config = config.get_text_config()
+        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
+            text_gen_config.pad_token_id = (
+                text_gen_config.eos_token_id
+                if isinstance(text_gen_config.eos_token_id, int)
+                else text_gen_config.eos_token_id[0]
             )
-        config.eos_token_id = None
-        config.forced_eos_token_id = None
+        text_gen_config.eos_token_id = None
+        text_gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
 
@@ -402,7 +405,7 @@ class GenerationTesterMixin:
     def test_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
@@ -416,7 +419,7 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
@@ -447,7 +450,7 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -478,7 +481,7 @@ class GenerationTesterMixin:
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
@@ -492,7 +495,7 @@ class GenerationTesterMixin:
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(
@@ -524,7 +527,7 @@ class GenerationTesterMixin:
     def test_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
 
@@ -540,7 +543,7 @@ class GenerationTesterMixin:
     def test_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
@@ -574,7 +577,7 @@ class GenerationTesterMixin:
     def test_beam_search_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -639,7 +642,7 @@ class GenerationTesterMixin:
     def test_beam_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
@@ -681,7 +684,7 @@ class GenerationTesterMixin:
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
@@ -738,7 +741,7 @@ class GenerationTesterMixin:
     def test_group_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             # check `generate()` and `group_beam_search()` are equal
@@ -770,7 +773,7 @@ class GenerationTesterMixin:
     def test_group_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_diverse_beam_kwargs()
@@ -806,7 +809,7 @@ class GenerationTesterMixin:
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
 
@@ -863,7 +866,7 @@ class GenerationTesterMixin:
     def test_constrained_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             model = model_class(config).to(torch_device).eval()
 
@@ -915,7 +918,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -945,7 +948,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1100,7 +1103,7 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1174,7 +1177,7 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1227,7 +1230,7 @@ class GenerationTesterMixin:
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # Encoder-decoder models are not supported
             if config.is_encoder_decoder:
@@ -1251,11 +1254,11 @@ class GenerationTesterMixin:
                 "output_hidden_states": True,
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
-                "use_cache": hasattr(config, "use_cache"),  # Some models don't support the cache
+                "use_cache": getattr(config, "use_cache"),  # Some models don't support the cache
             }
             generation_kwargs.update({"dola_layers": "low"})
             output_dola = model.generate(**generation_kwargs, **inputs_dict)
-            self._check_outputs(output_dola, main_input, model.config, use_cache=hasattr(config, "use_cache"))
+            self._check_outputs(output_dola, main_input, model.config, use_cache=getattr(config, "use_cache"))
 
     @pytest.mark.generate
     def test_assisted_decoding_sample(self):
@@ -1284,7 +1287,7 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1829,7 +1832,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            main_input = inputs_dict[self.input_name]
+            main_input = inputs_dict[model_class.main_input_name]
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
