@@ -22,10 +22,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -324,7 +325,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
             value_states,
             causal_mask,
             tgt_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -855,7 +856,7 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
     """The QWEN2AUDIO model which consists of a audio backbone and a language model.""",
     QWEN2AUDIO_START_DOCSTRING,
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
+class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config, attn_implementation=config._attn_implementation)
@@ -1328,13 +1329,10 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         outputs: ModelOutput,
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
-        standardize_cache_format: bool = False,
         num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
         # update past_key_values keeping its naming used in model code
-        cache_name, cache = self._extract_past_from_model_output(
-            outputs, standardize_cache_format=standardize_cache_format
-        )
+        cache_name, cache = self._extract_past_from_model_output(outputs)
         model_kwargs[cache_name] = cache
         if getattr(outputs, "state", None) is not None:
             model_kwargs["state"] = outputs.state

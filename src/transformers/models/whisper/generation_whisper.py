@@ -25,7 +25,7 @@ from torch import nn
 
 from transformers.cache_utils import EncoderDecoderCache
 
-from ...generation.configuration_utils import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...generation.logits_process import (
     LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
@@ -172,7 +172,7 @@ def _pad_to_max_length(
     return sequences
 
 
-class WhisperGenerationMixin:
+class WhisperGenerationMixin(GenerationMixin):
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
@@ -686,6 +686,7 @@ class WhisperGenerationMixin:
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
                 is_shortform=is_shortform,
                 batch_size=batch_size,
+                attention_mask=attention_mask,
                 kwargs=kwargs,
             )
 
@@ -790,6 +791,7 @@ class WhisperGenerationMixin:
         do_condition_on_prev_tokens,
         is_shortform,
         batch_size,
+        attention_mask,
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -837,6 +839,7 @@ class WhisperGenerationMixin:
                 prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
                 **generate_kwargs,
             )
 
@@ -951,7 +954,9 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
-        def split_by_batch_index(values, key, batch_idx, is_shortform):
+        def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
+            if beam_indices is not None and key == "scores":
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -982,7 +987,10 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
+            {
+                k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
+                for k, v in seek_outputs.items()
+            }
             for i in range(sequence_tokens.shape[0])
         ]
 
@@ -992,13 +1000,15 @@ class WhisperGenerationMixin:
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key == "sequences":
+            if key in ["sequences", "beam_indices"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
-            if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
+            elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
                     torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
                 )
-            if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
+            elif key == "sequences_scores":
+                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+            elif key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 outputs[key] = tuple(
                     tuple(
                         torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
@@ -1006,7 +1016,7 @@ class WhisperGenerationMixin:
                     )
                     for i in range(len(seek_outputs[0][key]))
                 )
-            if key == "past_key_values":
+            elif key == "past_key_values":
                 past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
@@ -1170,6 +1180,9 @@ class WhisperGenerationMixin:
         return return_dict_in_generate
 
     def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
+        if return_timestamps is None and hasattr(generation_config, "return_timestamps"):
+            return_timestamps = generation_config.return_timestamps
+
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
@@ -1687,8 +1700,8 @@ class WhisperGenerationMixin:
         max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
         if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
             raise ValueError(
-                f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-                f"is {max_new_tokens}. Thus, the combined length of "
+                f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+                f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
                 f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
                 f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
                 "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
