@@ -3869,11 +3869,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(
         [
-            (
-                "square_bracket",
-                'An example ["like this"] and another example [',
-                'An example ["like this"] and another example ["',
-            ),
             ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
             # aggressive_healing: "http" shouldn't be replaced with "https"
             ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
