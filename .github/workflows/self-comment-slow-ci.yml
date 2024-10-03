@@ -27,6 +27,7 @@ jobs:
         run: |
           echo "${{ github.head_ref }}"
           echo "${{ github.ref }}"
+          echo "${{ github.sha }}"
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
