@@ -30,7 +30,6 @@ python utils/check_repo.py
 
 It has no auto-fix mode.
 """
-import json
 import os
 import re
 import sys
@@ -1074,8 +1073,6 @@ def check_all_objects_are_documented():
             + "\n - ".join(undocumented_objs)
         )
     check_model_type_doc_match()
-    with open('/home/lysandre/file.txt', 'w+') as f:
-        f.write(json.dumps(documented_methods_map))
     check_public_method_exists(documented_methods_map)
 
 
