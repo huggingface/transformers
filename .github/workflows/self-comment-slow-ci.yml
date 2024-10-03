@@ -29,6 +29,7 @@ jobs:
           echo "${{ github.head_ref }}"
           echo "${{ github.ref }}"
           echo "${{ github.sha }}"
+          echo "${{ github.event.pull_request.number }}"
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
