@@ -2437,7 +2437,11 @@ class GenerationMixin:
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
-        tail_ids = input_ids[:, -1].tolist()
+        try:
+            tail_ids = input_ids[:, -1].tolist()
+        except IndexError:
+            tail_ids = torch.squeeze(input_ids, dim=0).tolist()
+
         space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
