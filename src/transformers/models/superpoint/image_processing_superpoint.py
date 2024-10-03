@@ -307,11 +307,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 )
             image_sizes = target_sizes
 
-        masked_keypoints = outputs.keypoints.clone()
-
-        for keypoints, image_size in zip(masked_keypoints, image_sizes):
-            keypoints[:, 0] = keypoints[:, 0] * image_size[1]
-            keypoints[:, 1] = keypoints[:, 1] * image_size[0]
+        # Flip the image sizes to (width, height) and convert keypoints to absolute coordinates
+        image_sizes = torch.flip(image_sizes, [1])
+        masked_keypoints = outputs.keypoints * image_sizes[:, None]
 
         # Convert masked_keypoints to int
         masked_keypoints = masked_keypoints.to(torch.int32)
