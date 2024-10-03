@@ -551,6 +551,7 @@ class DynamicCache(Cache):
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
+# TODO: (cyril) Make this the default for models with sliding window once `generate` no longer returns Cache as tuples
 class DynamicSlidingWindowCache(DynamicCache):
     """
     A cache that grows dynamically as more tokens are generated, but will stop growing if the sequence length is bigger than the sliding window.
