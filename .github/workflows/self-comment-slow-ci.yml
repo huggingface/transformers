@@ -32,7 +32,7 @@ jobs:
           echo "${{ github.event.pull_request }}"
           echo "${{ github.event.issue.pull_request != null }}"
           echo "${{ github.event.pull_request != null }}"
-          ecjp "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}"
+          echo "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}"
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
