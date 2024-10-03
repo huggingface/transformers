@@ -13,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shutil
+import tempfile
 import unittest
 from io import BytesIO
+from typing import Optional
 
 import requests
 
@@ -22,16 +25,30 @@ from transformers import Idefics2Processor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
 
+    from transformers import (
+        AutoProcessor,
+        Idefics2Processor,
+    )
+
 
 @require_torch
 @require_vision
-class Idefics2ProcessorTest(unittest.TestCase):
+class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Idefics2Processor
+
     def setUp(self):
-        self.processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
+        self.tmpdirname = tempfile.mkdtemp()
+
+        processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
+
+        processor.save_pretrained(self.tmpdirname)
+
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -49,22 +66,35 @@ class Idefics2ProcessorTest(unittest.TestCase):
                 ).content
             )
         )
-        self.bos_token = self.processor.tokenizer.bos_token
-        self.image_token = self.processor.image_token.content
-        self.fake_image_token = self.processor.fake_image_token.content
+        self.bos_token = processor.tokenizer.bos_token
+        self.image_token = processor.image_token.content
+        self.fake_image_token = processor.fake_image_token.content
 
-        self.bos_token_id = self.processor.tokenizer.convert_tokens_to_ids(self.bos_token)
-        self.image_token_id = self.processor.tokenizer.convert_tokens_to_ids(self.image_token)
-        self.fake_image_token_id = self.processor.tokenizer.convert_tokens_to_ids(self.fake_image_token)
-        self.image_seq_len = self.processor.image_seq_len
+        self.bos_token_id = processor.tokenizer.convert_tokens_to_ids(self.bos_token)
+        self.image_token_id = processor.tokenizer.convert_tokens_to_ids(self.image_token)
+        self.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(self.fake_image_token)
+        self.image_seq_len = processor.image_seq_len
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def get_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
-        old_image_splitting = self.processor.image_processor.do_image_splitting
+        tokenizer = self.get_tokenizer()
+        processor = self.get_processor()
 
-        self.processor.image_processor.do_image_splitting = False
+        processor.image_processor.do_image_splitting = False
 
         # Test that a single image is processed correctly
-        inputs = self.processor(images=self.image1)
+        inputs = processor(images=self.image1)
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
         self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 653, 980))
         # fmt: on
@@ -73,10 +103,10 @@ class Idefics2ProcessorTest(unittest.TestCase):
         image_str = "<image>"
         text_str = "In this image, we see"
         text = image_str + text_str
-        inputs = self.processor(text=text, images=self.image1)
+        inputs = processor(text=text, images=self.image1)
 
         # fmt: off
-        tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
+        tokenized_sentence = tokenizer(text_str, add_special_tokens=False)
         expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
@@ -95,11 +125,11 @@ class Idefics2ProcessorTest(unittest.TestCase):
         ]
         images = [[self.image1], [self.image2, self.image3]]
 
-        inputs = self.processor(text=text, images=images, padding=True)
+        inputs = processor(text=text, images=images, padding=True)
 
         # fmt: off
-        tokenized_sentence_1 = self.processor.tokenizer(text_str_1, add_special_tokens=False)
-        tokenized_sentence_2 = self.processor.tokenizer(text_str_2, add_special_tokens=False)
+        tokenized_sentence_1 = tokenizer(text_str_1, add_special_tokens=False)
+        tokenized_sentence_2 = tokenizer(text_str_2, add_special_tokens=False)
         expected_input_ids_1 = [self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
         # Pad the first input to match the second input
@@ -117,15 +147,13 @@ class Idefics2ProcessorTest(unittest.TestCase):
         self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 2, 767, 980))
         # fmt: on
 
-        self.processor.image_processor.do_image_splitting = old_image_splitting
-
     def test_process_interleaved_images_prompts_image_splitting(self):
-        old_image_splitting = self.processor.image_processor.do_image_splitting
-
-        self.processor.image_processor.do_image_splitting = True
+        processor = self.get_processor()
+        tokenizer = self.get_tokenizer()
+        processor.image_processor.do_image_splitting = True
 
         # Test that a single image is processed correctly
-        inputs = self.processor(images=self.image1)
+        inputs = processor(images=self.image1)
         self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 653, 980))
         self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 653, 980))
         # fmt: on
@@ -134,10 +162,10 @@ class Idefics2ProcessorTest(unittest.TestCase):
         image_str = "<image>"
         text_str = "In this image, we see"
         text = image_str + text_str
-        inputs = self.processor(text=text, images=self.image1)
+        inputs = processor(text=text, images=self.image1)
 
         # fmt: off
-        tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
+        tokenized_sentence = tokenizer(text_str, add_special_tokens=False)
         expected_input_ids = [[self.bos_token_id] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
@@ -156,11 +184,11 @@ class Idefics2ProcessorTest(unittest.TestCase):
         ]
         images = [[self.image1], [self.image2, self.image3]]
 
-        inputs = self.processor(text=text, images=images, padding=True)
+        inputs = processor(text=text, images=images, padding=True)
 
         # fmt: off
-        tokenized_sentence_1 = self.processor.tokenizer(text_str_1, add_special_tokens=False)
-        tokenized_sentence_2 = self.processor.tokenizer(text_str_2, add_special_tokens=False)
+        tokenized_sentence_1 = tokenizer(text_str_1, add_special_tokens=False)
+        tokenized_sentence_2 = tokenizer(text_str_2, add_special_tokens=False)
         expected_input_ids_1 = [self.bos_token_id] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + [self.fake_image_token_id] + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + [self.fake_image_token_id]
         # Pad the first input to match the second input
@@ -178,22 +206,22 @@ class Idefics2ProcessorTest(unittest.TestCase):
         self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 10, 767, 980))
         # fmt: on
 
-        self.processor.image_processor.do_image_splitting = old_image_splitting
-
     def test_add_special_tokens_processor(self):
+        processor = self.get_processor()
+        tokenizer = self.get_tokenizer()
         image_str = "<image>"
         text_str = "In this image, we see"
         text = text_str + image_str
 
-        n_image_repeat = 5 if self.processor.image_processor.do_image_splitting else 1
+        n_image_repeat = 5 if processor.image_processor.do_image_splitting else 1
 
         # fmt: off
-        inputs = self.processor(text=text, images=self.image1, add_special_tokens=False)
-        tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
+        inputs = processor(text=text, images=self.image1, add_special_tokens=False)
+        tokenized_sentence = tokenizer(text_str, add_special_tokens=False)
         expected_input_ids = [tokenized_sentence["input_ids"] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * n_image_repeat + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
-        inputs = self.processor(text=text, images=self.image1)
+        inputs = processor(text=text, images=self.image1)
         expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * n_image_repeat + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
@@ -222,7 +250,7 @@ class Idefics2ProcessorTest(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "And who is that?"}]},
         ]
 
-        processor = self.processor
+        processor = self.get_processor()
         # Make short sequence length to test that the fake tokens are added correctly
         rendered = processor.apply_chat_template(messages, add_generation_prompt=True)
 
@@ -233,3 +261,27 @@ class Idefics2ProcessorTest(unittest.TestCase):
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
+
+    # Override as Idefics2Processor needs image tokens in prompts
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer <image>"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer <image>"]
+        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
+            batch_size - 2
+        )
+
+    # Override as PixtralProcessor needs nested images to work properly with batched inputs
+    @require_vision
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        if batch_size is None:
+            return super().prepare_image_inputs()
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return [[super().prepare_image_inputs()]] * batch_size
