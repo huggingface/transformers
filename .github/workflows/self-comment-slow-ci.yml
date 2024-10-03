@@ -12,7 +12,7 @@ on:
   pull_request:
 concurrency:
   # But this will cancel the current job no ? Because they have the same PR number ... (any comment even not the target one)
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, '/pytest') }}
   cancel-in-progress: ${{ (github.event.issue.pull_request != null || github.event.pull_request != null) && contains(github.event.comment.body, '/pytest') }}
 
 jobs:
