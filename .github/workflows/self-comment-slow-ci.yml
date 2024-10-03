@@ -68,17 +68,17 @@ jobs:
           echo "Running the specific job because /pytest was found"
           # Add the logic to trigger your specific job here
 
-      - name: Update Check Run Status
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
-            -f "target_url=$GITHUB_RUN_URL" -f "state=success" -f "description=Custom CI job" -f "context=pytest/custom-tests"
+#      - name: Update Check Run Status
+#        env:
+#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+#        run: |
+#          gh api \
+#            --method POST \
+#            -H "Accept: application/vnd.github+json" \
+#            -H "X-GitHub-Api-Version: 2022-11-28" \
+#            /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+#            -f "target_url=$GITHUB_RUN_URL" -f "state=success" -f "description=Custom CI job" -f "context=pytest/custom-tests"
       
 
   run_if_label_matches:
