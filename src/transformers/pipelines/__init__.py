@@ -647,7 +647,7 @@ def pipeline(
             `model` is not specified or not a string, then the default feature extractor for `config` is loaded (if it
             is a string). However, if `config` is also not given or not a string, then the default feature extractor
             for the given `task` will be loaded.
-        image_procesor (`str` or [`BaseImageProcessor`], *optional*):
+        image_processor (`str` or [`BaseImageProcessor`], *optional*):
             The image processor that will be used by the pipeline to preprocess images for the model. This can be a
             model identifier or an actual image processor inheriting from [`BaseImageProcessor`].
 
