@@ -118,8 +118,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = UnivNetModelTester(self)
         self.config_tester = ConfigTester(

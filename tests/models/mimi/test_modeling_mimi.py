@@ -170,7 +170,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
-    input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
