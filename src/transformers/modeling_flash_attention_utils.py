@@ -179,6 +179,8 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
 
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
+flash_241 = is_flash_attn_greater_or_equal("2.4.1")
+deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
 
 def _flash_attention_forward(
     query_states: torch.Tensor,
@@ -194,6 +196,11 @@ def _flash_attention_forward(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: bool = None,
+    cu_seqlens_q: Optional[torch.LongTensor] = None,
+    cu_seqlens_k: Optional[torch.LongTensor] = None,
+    max_seqlen_in_batch_q: int = 0,
+    max_seqlen_in_batch_k: int = 0,
+    batch_size: int = 2,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -232,9 +239,9 @@ def _flash_attention_forward(
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
-    if is_flash_attn_greater_or_equal("2.4.1"):
+    if flash_241:
         if deterministic is None:
-            deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+            deterministic = deterministic_g
         flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
@@ -267,15 +274,7 @@ def _flash_attention_forward(
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (torch.diff(position_ids, dim=-1) >= 0).all() and query_length != 1:
-        batch_size = query_states.size(0)
-        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
-            query_states, key_states, value_states, position_ids
-        )
-
-        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
+    elif position_ids is not None and max_seqlen_in_batch_q is not None:
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,
