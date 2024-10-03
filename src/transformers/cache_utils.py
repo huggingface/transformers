@@ -620,7 +620,7 @@ class OffloadedCache(DynamicCache):
         # Update the cache
         if len(self.key_cache) < layer_idx:
             raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
-        if len(self.key_cache) == layer_idx:
+        elif len(self.key_cache) == layer_idx:
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
             self.original_device.append(key_states.device)
