@@ -2437,9 +2437,9 @@ class GenerationMixin:
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
-        try:
+        if(input_ids.size(dim=1) != 0):
             tail_ids = input_ids[:, -1].tolist()
-        except IndexError:
+        else:
             tail_ids = torch.squeeze(input_ids, dim=0).tolist()
 
         space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
@@ -2454,6 +2454,7 @@ class GenerationMixin:
 
             # apply bias for alternatives (extensions) to the tail token
             seq_bias = {(tokenizer.convert_tokens_to_ids(alt_tok),): 10.0 for alt_tok in vocab_trie.extensions(prefix=tail_tok)}
+
             if len(seq_bias) == 1:
                 continue  # skip if there are no token alternatives to heal with
 
@@ -2462,11 +2463,13 @@ class GenerationMixin:
             generation_config.update(sequence_bias=seq_bias)
 
             trimmed_ids = batch_ids[:-1]
-            # if the prompt is a single (non-pad) token, regenerate from bos
-            if len(batch_ids[batch_ids != pad_token_id]) == 1 and len(trimmed_ids) > 0:
-                trimmed_ids[-1] = bos_token_id
-            else:
+
+            if(trimmed_ids.size(dim = 0) == 0):
                 continue
+
+            # if the prompt is a single (non-pad) token, regenerate from bos
+            if len(batch_ids[batch_ids != pad_token_id]) == 1:
+                trimmed_ids[-1] = bos_token_id
 
             input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=generation_config)
 
