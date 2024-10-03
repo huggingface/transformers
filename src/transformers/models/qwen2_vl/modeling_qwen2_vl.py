@@ -1181,7 +1181,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
-                "You must specific exactly one of input_ids or inputs_embeds"
+                "You must specify exactly one of input_ids or inputs_embeds"
             )
 
         if self.gradient_checkpointing and self.training:
