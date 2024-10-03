@@ -125,7 +125,7 @@ dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> processor = SpeechT5Processor.from_pretrained(checkpoint)
 ```
 
-### Text cleanup for SpeechT5 tokenization 
+### Text cleanup for SpeechT5 tokenization
 
 
 まずはテキストデータをクリーンアップすることから始めます。テキストを処理するには、プロセッサのトークナイザー部分が必要です。
@@ -442,7 +442,7 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 ターゲット シーケンスの長さが奇数である可能性がある場合、データ照合機能はバッチの最大長を切り捨てて、
 2の倍数。
 
-```py 
+```py
 >>> data_collator = TTSDataCollatorWithPadding(processor=processor)
 ```
 
@@ -458,7 +458,7 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 
 `use_cache=True`オプションは、勾配チェックポイントと互換性がありません。トレーニングのために無効にします。
 
-```py 
+```py
 >>> model.config.use_cache = False
 ```
 
@@ -501,7 +501,7 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
 ...     data_collator=data_collator,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 ```
 これで、トレーニングを開始する準備が整いました。トレーニングには数時間かかります。 GPU に応じて、
@@ -567,7 +567,7 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 
 ```py
 >>> from IPython.display import Audio
->>> Audio(output['audio'], rate=output['sampling_rate']) 
+>>> Audio(output['audio'], rate=output['sampling_rate'])
 ```
 
 ### Run inference manually
@@ -583,14 +583,14 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 
 テスト データセットから例を選択して、スピーカーの埋め込みを取得します。
 
-```py 
+```py
 >>> example = dataset["test"][304]
 >>> speaker_embeddings = torch.tensor(example["speaker_embeddings"]).unsqueeze(0)
 ```
 
 入力テキストを定義し、トークン化します。
 
-```py 
+```py
 >>> text = "hallo allemaal, ik praat nederlands. groetjes aan iedereen!"
 >>> inputs = processor(text=text, return_tensors="pt")
 ```

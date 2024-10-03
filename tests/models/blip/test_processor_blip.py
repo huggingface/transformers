@@ -15,21 +15,22 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoProcessor, BertTokenizer, BlipImageProcessor, BlipProcessor, PreTrainedTokenizerFast
 
 
 @require_vision
-class BlipProcessorTest(unittest.TestCase):
+class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = BlipProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -48,17 +49,6 @@ class BlipProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
         processor = BlipProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
@@ -149,3 +139,29 @@ class BlipProcessorTest(unittest.TestCase):
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 24)

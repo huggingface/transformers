@@ -155,14 +155,18 @@ class OptimizerNames(ExplicitEnum):
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     ADAMW_TORCH_4BIT = "adamw_torch_4bit"
+    ADEMAMIX = "ademamix"
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    ADEMAMIX_8BIT = "ademamix_8bit"
     LION_8BIT = "lion_8bit"
     LION = "lion_32bit"
     PAGED_ADAMW = "paged_adamw_32bit"
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_ADEMAMIX = "paged_ademamix_32bit"
+    PAGED_ADEMAMIX_8BIT = "paged_ademamix_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
@@ -178,6 +182,8 @@ class OptimizerNames(ExplicitEnum):
     LOMO = "lomo"
     ADALOMO = "adalomo"
     GROKADAMW = "grokadamw"
+    SCHEDULE_FREE_ADAMW = "schedule_free_adamw"
+    SCHEDULE_FREE_SGD = "schedule_free_sgd"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -616,7 +622,7 @@ class TrainingArguments:
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
         optim_args (`str`, *optional*):
-            Optional arguments that are supplied to AnyPrecisionAdamW.
+            Optional arguments that are supplied to optimizers such as AnyPrecisionAdamW, AdEMAMix, and GaLore.
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
@@ -677,9 +683,9 @@ class TrainingArguments:
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-            - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+            - `"end"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and a
               draft of a model card when the [`~Trainer.save_model`] method is called.
-            - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and
+            - `"every_save"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and
               a draft of a model card each time there is a model save. The pushes are asynchronous to not block
               training, and in case the save are very frequent, a new push is only attempted if the previous one is
               finished. A last push is made with the final model at the end of training.
@@ -701,8 +707,12 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
-            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
-            that need inputs, predictions and references for scoring calculation in Metric class.
+            This argument is deprecated. Use `include_for_metrics` instead, e.g, `include_for_metrics = ["inputs"]`.
+        include_for_metrics (`List[str]`, *optional*, defaults to `[]`):
+            Include additional data in the `compute_metrics` function if needed for metrics computation.
+            Possible options to add to `include_for_metrics` list:
+            - `"inputs"`: Input data passed to the model, intended for calculating input dependent metrics.
+            - `"loss"`: Loss values computed during evaluation, intended for calculating loss dependent metrics.
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
@@ -1356,7 +1366,17 @@ class TrainingArguments:
         },
     )
     include_inputs_for_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+        default=False,
+        metadata={
+            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
+        },
+    )
+    include_for_metrics: List[str] = field(
+        default_factory=list,
+        metadata={
+            "help": "List of strings to specify additional data to include in the `compute_metrics` function."
+            "Options: 'inputs', 'loss'."
+        },
     )
     eval_do_concat_batches: bool = field(
         default=True,
@@ -2057,6 +2077,12 @@ class TrainingArguments:
                 "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
+
+        if self.include_inputs_for_metrics:
+            logger.warning(
+                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
+            )
+            self.include_for_metrics.append("inputs")
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -2828,9 +2854,9 @@ class TrainingArguments:
             strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
                 Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-                - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+                - `"end"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`]) and a
                 draft of a model card when the [`~Trainer.save_model`] method is called.
-                - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`])
+                - `"every_save"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`])
                   and
                 a draft of a model card each time there is a model save. The pushes are asynchronous to not block
                 training, and in case the save are very frequent, a new push is only attempted if the previous one is

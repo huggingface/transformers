@@ -16,7 +16,12 @@ import tempfile
 import unittest
 
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
-from transformers.testing_utils import require_gguf, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_gguf,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 
@@ -33,8 +38,15 @@ class GgufIntegrationTests(unittest.TestCase):
     imatrix_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
+    qwen2_moe_model_id = "RichardErkhov/Qwen_-_Qwen1.5-MoE-A2.7B-Chat-gguf"
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
+    phi3_model_id = "microsoft/Phi-3-mini-4k-instruct-gguf"
+    bloom_model_id = "afrideva/bloom-560m-GGUF"
+    original_bloom_model_id = "bigscience/bloom-560m"
+    falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
+    falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
+    original_flacon7b_model_id = "tiiuae/falcon-7b"
     t5_model_id = "repetitio/flan-t5-small"
     original_t5_model_id = "google/flan-t5-small"
 
@@ -59,10 +71,17 @@ class GgufIntegrationTests(unittest.TestCase):
     iq4_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_XS.gguf"
     iq4_nl_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_NL.gguf"
 
+    q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
+    q4_0_qwen2_moe_model_id = "Qwen1.5-MoE-A2.7B-Chat.Q4_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
+    fp16_bloom_model_id = "bloom-560m.fp16.gguf"
+    q8_bloom_model_id = "bloom-560m.q8_0.gguf"
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
+    q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
+    fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
+    q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
     fp16_t5_model_id = "flan-t5-small-f16.gguf"
     q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
 
@@ -302,7 +321,10 @@ class GgufIntegrationTests(unittest.TestCase):
     def test_mistral_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id, device_map="auto", torch_dtype=torch.float16
+            self.mistral_model_id,
+            gguf_file=self.q4_0_mistral_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -314,13 +336,43 @@ class GgufIntegrationTests(unittest.TestCase):
     def test_qwen2_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.qwen2_model_id, gguf_file=self.q4_0_qwen2_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.qwen2_model_id, gguf_file=self.q4_0_qwen2_model_id, device_map="auto", torch_dtype=torch.float16
+            self.qwen2_model_id,
+            gguf_file=self.q4_0_qwen2_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_qwen2_moe_q4_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen2_moe_model_id, gguf_file=self.q4_0_qwen2_moe_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.qwen2_moe_model_id,
+            gguf_file=self.q4_0_qwen2_moe_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello everyone, I'm a newbie here and would like"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_phi3_q4_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I've been reading about the impact of"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_llama3_q4_0_tokenizer(self):
@@ -335,7 +387,10 @@ class GgufIntegrationTests(unittest.TestCase):
     def test_llama3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.llama3_model_id, gguf_file=self.q4_llama3_model_id, device_map="auto", torch_dtype=torch.float16
+            self.llama3_model_id,
+            gguf_file=self.q4_llama3_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -343,6 +398,62 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_bloom_fp16(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.bloom_model_id, gguf_file=self.fp16_bloom_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.bloom_model_id,
+            gguf_file=self.fp16_bloom_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I just want to say that I am very"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_bloom_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.bloom_model_id, gguf_file=self.q8_bloom_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.bloom_model_id,
+            gguf_file=self.q8_bloom_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I just want to say that I am very"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_bloom_weights_conversion_fp16(self):
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.bloom_model_id,
+            gguf_file=self.fp16_bloom_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.original_bloom_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        quantized_state_dict = quantized_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for (quantized_name, quantized_param), (original_name, original_param) in zip(
+            quantized_state_dict.items(), original_state_dict.items()
+        ):
+            if (
+                "self_attention.query_key_value" in quantized_name
+                and "self_attention.query_key_value" in original_name
+            ):
+                self.assertTrue(quantized_param.shape == original_param.shape)
+                torch.testing.assert_close(quantized_param, original_param)
 
     def test_t5_f16(self):
         tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.fp16_t5_model_id)
@@ -397,6 +508,58 @@ class GgufIntegrationTests(unittest.TestCase):
             ):
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
+
+    @unittest.skip(reason="Heavy memory")
+    def test_falcon40b_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.falcon40b_model_id, gguf_file=self.q2_k_falcon40b_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.falcon40b_model_id,
+            gguf_file=self.q2_k_falcon40b_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello All,\nI am new to this forum."
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_falcon7b_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.falcon7b_model_id, gguf_file=self.q2_k_falcon7b_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.falcon7b_model_id,
+            gguf_file=self.q2_k_falcon7b_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello All,\nI am new to this forum."
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_falcon7b_weights_conversion_fp16(self):
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.falcon7b_model_id,
+            gguf_file=self.fp16_falcon7b_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.original_flacon7b_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        quantized_state_dict = quantized_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in quantized_state_dict:
+                self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
 
     def test_tokenization_xnli(self):
         import tqdm

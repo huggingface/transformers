@@ -28,6 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask_for_sdpa,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -908,7 +909,7 @@ BERT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.FloatTensor` of shape `({0})`or `(batch_size, sequence_length, target_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1023,7 +1024,7 @@ class BertModel(BertPreTrainedModel):
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, target_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -1093,7 +1094,7 @@ class BertModel(BertPreTrainedModel):
         )
 
         # Expand the attention mask
-        if use_sdpa_attention_masks:
+        if use_sdpa_attention_masks and attention_mask.dim() == 2:
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
             if self.config.is_decoder:
@@ -1120,7 +1121,7 @@ class BertModel(BertPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
 
-            if use_sdpa_attention_masks:
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
                 # Expand the attention mask for SDPA.
                 # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
                 encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
@@ -1280,7 +1281,7 @@ class BertForPreTraining(BertPreTrainedModel):
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
 )
-class BertLMHeadModel(BertPreTrainedModel):
+class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
