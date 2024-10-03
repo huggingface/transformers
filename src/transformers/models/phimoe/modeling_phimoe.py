@@ -64,7 +64,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PhimoeConfig"
 
 
-
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
     gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
@@ -1131,7 +1130,10 @@ class PhimoeModel(PhimoePreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, seq_len=position_ids[0][-1] + 1)
+        kv_seq_len = hidden_states.shape[-2]
+        if past_key_values is not None:
+            kv_seq_len += past_key_values.get_usable_length(kv_seq_len)
+        position_embeddings = self.rotary_emb(hidden_states, seq_len=kv_seq_len)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
