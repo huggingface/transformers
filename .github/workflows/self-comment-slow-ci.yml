@@ -33,6 +33,7 @@ jobs:
           echo "${{ github.event.issue.pull_request != null }}"
           echo "${{ github.event.pull_request != null }}"
           echo "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, '/pytest') }}"
+          sleep 15m
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
