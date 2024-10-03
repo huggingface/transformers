@@ -26,6 +26,7 @@ jobs:
       - name: Trigger specific job
         run: |
           echo "${{ github.head_ref }}"
+          echo "${{ github.ref }}"
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
