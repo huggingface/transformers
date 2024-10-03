@@ -2459,8 +2459,10 @@ class GenerationMixin:
 
             trimmed_ids = batch_ids[:-1]
             # if the prompt is a single (non-pad) token, regenerate from bos
-            if len(batch_ids[batch_ids != pad_token_id]) == 1:
+            if len(batch_ids[batch_ids != pad_token_id]) == 1 and len(trimmed_ids) > 0:
                 trimmed_ids[-1] = bos_token_id
+            else:
+                continue
 
             input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=generation_config)
 
