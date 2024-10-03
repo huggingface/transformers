@@ -172,8 +172,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
-        # Padding side can be in TextKwargs but is not accepted by the tokenizer
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
 

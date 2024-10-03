@@ -30,9 +30,7 @@ logger = logging.get_logger(__name__)
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {},
         "images_kwargs": {},
     }
 
