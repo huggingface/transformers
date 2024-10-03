@@ -1236,63 +1236,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    @require_torch_sdpa
-    def test_sdpa_can_dispatch_composite_models(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
-                text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
-                decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
-
-                # `None` as it is the requested one which will be assigned to each sub-config
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
-                self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
-                self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
-                self.assertTrue(
-                    model_sdpa.config._attn_implementation
-                    == {
-                        "audio_encoder": None,
-                        "text_encoder": None,
-                        "decoder": None,
-                    }
-                )
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-
-                self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
-                self.assertTrue(
-                    model_eager.config._attn_implementation
-                    == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}
-                )
-
-                for name, submodule in model_eager.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
     def test_tie_model_weights(self):
         pass
@@ -1954,6 +1897,63 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     do_sample=False,
                     use_cache=True,
                 )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
+                text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
+                decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
+                self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
+                self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+                self.assertTrue(
+                    model_sdpa.config._attn_implementation
+                    == {
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                        "decoder": None,
+                    }
+                )
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+
+                self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation
+                    == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}
+                )
+
+                for name, submodule in model_eager.named_modules():
+                    if "SdpaAttention" in submodule.__class__.__name__:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    if "SdpaAttention" in submodule.__class__.__name__:
+                        has_sdpa = True
+                        break
+                if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa

@@ -395,8 +395,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         self.vision_tower = AutoModel.from_config(
             config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
-        self.multi_modal_projector = LlavaNextVideoMultiModalProjector(config)
 
+        self.multi_modal_projector = LlavaNextVideoMultiModalProjector(config)
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 

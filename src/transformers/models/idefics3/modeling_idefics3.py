@@ -625,7 +625,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
     def _init_weights(self, module):
         std = (
-            self.config.initializer_range
+            self.config.text_config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )

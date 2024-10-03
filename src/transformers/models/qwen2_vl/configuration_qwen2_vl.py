@@ -130,6 +130,8 @@ class Qwen2VLConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         vision_config (`Dict`, *optional*):
             The config for the visual encoder initialization.
+        text_config (`Dict`, *optional*):
+            The config for the language model initialization.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -215,7 +217,7 @@ class Qwen2VLConfig(PretrainedConfig):
 
         self.text_config = (
             Qwen2Config(**text_config)
-            if text_config is not None
+            if isinstance(text_config, dict)
             else Qwen2Config(
                 vocab_size=vocab_size,
                 hidden_size=hidden_size,
