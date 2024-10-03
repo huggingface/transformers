@@ -302,7 +302,7 @@ def main():
             tokenizer, data_args, model.config.decoder_start_token_id, training_args.tpu_num_cores
         ),
         compute_metrics=compute_metrics_fn,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
 
     all_metrics = {}
