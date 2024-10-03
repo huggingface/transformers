@@ -816,13 +816,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
 
-    # Previously, pipelines support only `tokenizer`, `feature_extractor`, and `image_processor`.
-    # As we start adding `processor`, we want to avoid loading processor for some pipelines, that don't require it,
-    # because, for example, use `image_processor` and `tokenizer` separately.
-    # However, we want to enable it for new pipelines. Moreover, this allow us to granularly control loading components
-    # and avoid loading tokenizer/image_processor/feature_extractor twice: once as a separate object
-    # and once in the processor. The following flags a set this way for backward compatibility ans might be overridden
-    # in specific Pipeline class.
+    # Historically we have pipelines working with `tokenizer`, `feature_extractor`, and `image_processor`
+    # as separate processing components. While we have `processor` class that combines them, some pipelines
+    # might still operate with these components separately.
+    # With the addition of `processor` to `pipeline`, we want to avoid:
+    #  - loading `processor` for pipelines that still work with `image_processor` and `tokenizer` separately;
+    #  - loading `image_processor`/`tokenizer` as a separate component while we operate only with `processor`,
+    #    because `processor` will load required sub-components by itself.
+    # Below flags allow granular control over loading components and set to be backward compatible with current
+    # pipelines logic. You may override these flags when creating your pipeline. For example, for
+    # `zero-shot-object-detection` pipeline which operates with `processor` you should set `_load_processor=True`
+    # and all the rest flags to `False` to avoid unnecessary loading of the components.
     _load_processor = False
     _load_image_processor = True
     _load_feature_extractor = True
