@@ -20,7 +20,7 @@ from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
 from PIL import Image
 
 from transformers import SapiensConfig, SapiensForSemanticSegmentation, SapiensImageProcessor
@@ -62,6 +62,225 @@ SEGMENTATIONS_LABEL_TO_ID = {
     "Tongue": 27,
 }
 SEGMENTATIONS_ID_TO_LABEL = {v: k for k, v in SEGMENTATIONS_LABEL_TO_ID.items()}
+
+CHECKPOINTS = {
+    "sapiens-pretrain-0.3b": {
+        "repo_id": "facebook/sapiens-pretrain-0.3b",
+        "repo_id_torchscript": "facebook/sapiens-pretrain-0.3b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pretrain-0.3b-bfloat16"
+    },
+    "sapiens-pretrain-0.6b": {
+        "repo_id": "facebook/sapiens-pretrain-0.6b",
+        "repo_id_torchscript": "facebook/sapiens-pretrain-0.6b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pretrain-0.6b-bfloat16"
+    },
+    "sapiens-pretrain-1b": {
+        "repo_id": "facebook/sapiens-pretrain-1b",
+        "repo_id_torchscript": "facebook/sapiens-pretrain-1b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pretrain-1b-bfloat16"
+    },
+    "sapiens-pretrain-2b": {
+        "repo_id": "facebook/sapiens-pretrain-2b",
+        "repo_id_torchscript": "facebook/sapiens-pretrain-2b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pretrain-2b-bfloat16"
+    },
+    "sapiens-pose-0.3b": {
+        "repo_id": "facebook/sapiens-pose-0.3b",
+        "repo_id_torchscript": "facebook/sapiens-pose-0.3b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pose-0.3b-bfloat16",
+        "config": {
+            "num_labels": 308,
+            "num_heads": 16,
+            "num_hidden_layers": 24,
+            "hidden_size": 1024,
+            "deconv_out_channels": [768, 768],
+            "deconv_kernel_sizes": [4, 4],
+            "conv_out_channels": [768, 768],
+            "conv_kernel_sizes": [1, 1],
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-pose-0.6b": {
+        "repo_id": "facebook/sapiens-pose-0.6b",
+        "repo_id_torchscript": "facebook/sapiens-pose-0.6b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pose-0.6b-bfloat16",
+        "config": {
+            "num_labels": 308,
+            "num_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_size": 1280,
+            "deconv_out_channels": [768, 768],
+            "deconv_kernel_sizes": [4, 4],
+            "conv_out_channels": [768, 768],
+            "conv_kernel_sizes": [1, 1],
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-pose-1b": {
+        "repo_id": "facebook/sapiens-pose-1b",
+        "repo_id_torchscript": "facebook/sapiens-pose-1b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-pose-1b-bfloat16",
+        "config": {
+            "num_labels": 308,
+            "num_heads": 24,
+            "num_hidden_layers": 40,
+            "hidden_size": 1536,
+            "deconv_out_channels": [768, 768],
+            "deconv_kernel_sizes": [4, 4],
+            "conv_out_channels": [768, 768],
+            "conv_kernel_sizes": [1, 1],
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-seg-0.3b": {
+        "repo_id": "facebook/sapiens-seg-0.3b",
+        "repo_id_torchscript": "facebook/sapiens-seg-0.3b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-seg-0.3b-bfloat16",
+        "config": {
+            "num_labels": 28,
+            "num_heads": 16,
+            "num_hidden_layers": 24,
+            "hidden_size": 1024,
+            "label2id": SEGMENTATIONS_LABEL_TO_ID,
+            "id2label": SEGMENTATIONS_ID_TO_LABEL,
+        },
+    },
+    "sapiens-seg-0.6b": {
+        "repo_id": "facebook/sapiens-seg-0.6b",
+        "repo_id_torchscript": "facebook/sapiens-seg-0.6b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-seg-0.6b-bfloat16",
+        "config": {
+            "num_labels": 28,
+            "num_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_size": 1280,
+            "label2id": SEGMENTATIONS_LABEL_TO_ID,
+            "id2label": SEGMENTATIONS_ID_TO_LABEL,
+        },
+    },
+    "sapiens-seg-1b": {
+        "repo_id": "facebook/sapiens-seg-1b",
+        "repo_id_torchscript": "facebook/sapiens-seg-1b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-seg-1b-bfloat16",
+        "config": {
+            "num_labels": 28,
+            "num_heads": 24,
+            "num_hidden_layers": 40,
+            "hidden_size": 1536,
+            "label2id": SEGMENTATIONS_LABEL_TO_ID,
+            "id2label": SEGMENTATIONS_ID_TO_LABEL,
+        },
+    },
+    "sapiens-depth-0.3b": {
+        "repo_id": "facebook/sapiens-depth-0.3b",
+        "repo_id_torchscript": "facebook/sapiens-depth-0.3b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-depth-0.3b-bfloat16",
+        "config": {
+            "num_labels": 1,
+            "num_heads": 16,
+            "num_hidden_layers": 24,
+            "hidden_size": 1024,
+            "deconv_out_channels": [384, 384, 384, 384],
+            "deconv_kernel_sizes": [4, 4, 4, 4],
+            "conv_out_channels": [384, 384],
+            "conv_kernel_sizes": [1, 1],
+        },
+    },
+    "sapiens-depth-0.6b": {
+        "repo_id": "facebook/sapiens-depth-0.6b",
+        "repo_id_torchscript": "facebook/sapiens-depth-0.6b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-depth-0.6b-bfloat16",
+        "config": {
+            "num_labels": 1,
+            "num_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_size": 1280,
+            "deconv_out_channels": [384, 384, 384, 384],
+            "deconv_kernel_sizes": [4, 4, 4, 4],
+            "conv_out_channels": [384, 384],
+            "conv_kernel_sizes": [1, 1],
+        },
+    },
+    "sapiens-depth-1b": {
+        "repo_id": "facebook/sapiens-depth-1b",
+        "repo_id_torchscript": "facebook/sapiens-depth-1b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-depth-1b-bfloat16",
+        "config": {
+            "num_labels": 1,
+            "num_heads": 24,
+            "num_hidden_layers": 40,
+            "hidden_size": 1536,
+            "deconv_out_channels": [384, 384, 384, 384],
+            "deconv_kernel_sizes": [4, 4, 4, 4],
+            "conv_out_channels": [384, 384],
+            "conv_kernel_sizes": [1, 1],
+        },
+    },
+    "sapiens-depth-2b": {
+        "repo_id": "facebook/sapiens-depth-2b",
+        "repo_id_torchscript": "facebook/sapiens-depth-2b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-depth-2b-bfloat16",
+        "config": {
+            "num_labels": 1,
+            "num_heads": 32,
+            "num_hidden_layers": 48,
+            "hidden_size": 1920,
+            "deconv_out_channels": [384, 384, 384, 384],
+            "deconv_kernel_sizes": [4, 4, 4, 4],
+            "conv_out_channels": [384, 384],
+            "conv_kernel_sizes": [1, 1],
+        },
+    },
+    "sapiens-normal-0.3b": {
+        "repo_id": "facebook/sapiens-normal-0.3b",
+        "repo_id_torchscript": "facebook/sapiens-normal-0.3b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-normal-0.3b-bfloat16",
+        "config": {
+            "num_labels": 3,
+            "num_heads": 16,
+            "num_hidden_layers": 24,
+            "hidden_size": 1024,
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-normal-0.6b": {
+        "repo_id": "facebook/sapiens-normal-0.6b",
+        "repo_id_torchscript": "facebook/sapiens-normal-0.6b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-normal-0.6b-bfloat16",
+        "config": {
+            "num_labels": 3,
+            "num_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_size": 1280,
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-normal-1b": {
+        "repo_id": "facebook/sapiens-normal-1b",
+        "repo_id_torchscript": "facebook/sapiens-normal-1b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-normal-1b-bfloat16",
+        "config": {
+            "num_labels": 3,
+            "num_heads": 24,
+            "num_hidden_layers": 40,
+            "hidden_size": 1536,
+            "num_heads": 24,
+            "patch_embeddings_padding": 2,
+        },
+    },
+    "sapiens-normal-2b": {
+        "repo_id": "facebook/sapiens-normal-2b",
+        "repo_id_torchscript": "facebook/sapiens-normal-2b-torchscript",
+        "repo_id_bfloat16": "facebook/sapiens-normal-2b-bfloat16",
+        "config": {
+            "num_labels": 3,
+            "num_heads": 32,
+            "num_hidden_layers": 48,
+            "hidden_size": 1920,
+            "patch_embeddings_padding": 2,
+        },
+    }
+}
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -141,187 +360,185 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
+def convert_sapiens_checkpoint(model_name, save_dir):
     """
     Copy/paste/tweak model's weights to our Sapiens structure.
     """
 
-    all_params = {
-        "segmentation-body-0.3b": {
-            "config": {
-                "num_labels": 28,
-                "num_heads": 16,
-                "num_hidden_layers": 24,
-                "hidden_size": 1024,
-                "label2id": SEGMENTATIONS_LABEL_TO_ID,
-                "id2label": SEGMENTATIONS_ID_TO_LABEL,
-            },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_0.3b/sapiens_0.3b_goliath_best_goliath_mIoU_7673_epoch_194.pth",
-        },
-        "segmentation-body-0.6b": {
-            "config": {
-                "num_labels": 28,
-                "num_heads": 16,
-                "num_hidden_layers": 32,
-                "hidden_size": 1280,
-                "label2id": SEGMENTATIONS_LABEL_TO_ID,
-                "id2label": SEGMENTATIONS_ID_TO_LABEL,
-            },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_0.6b/sapiens_0.6b_goliath_best_goliath_mIoU_7777_epoch_178.pth",
-        },
-        "segmentation-body-1b": {
-            "config": {
-                "num_labels": 28,
-                "num_heads": 24,
-                "num_hidden_layers": 40,
-                "hidden_size": 1536,
-                "label2id": SEGMENTATIONS_LABEL_TO_ID,
-                "id2label": SEGMENTATIONS_ID_TO_LABEL,
-            },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_1b/sapiens_1b_goliath_best_goliath_mIoU_7994_epoch_151.pth",
-        },
-        "segmentation-body-2b": {
-            "config": {
-                "num_labels": 28,
-                "num_heads": 32,
-                "num_hidden_layers": 48,
-                "hidden_size": 1920,
-                "label2id": SEGMENTATIONS_LABEL_TO_ID,
-                "id2label": SEGMENTATIONS_ID_TO_LABEL,
-            },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_2b/sapiens_2b_goliath_best_goliath_mIoU_8179_epoch_181.pth",
-        },
-        "segmentation-face-1b": {
-            "config": {
-                "num_labels": 19,
-                "num_heads": 24,
-                "num_hidden_layers": 40,
-                "hidden_size": 1536,
-            },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_1b/sapiens_1b_seg_face_epoch_200.pth",
-        },
-        "normal-estimation-0.3b": {
-            "config": {
-                "num_labels": 3,
-                "num_heads": 16,
-                "num_hidden_layers": 24,
-                "hidden_size": 1024,
-                "patch_embeddings_padding": 2,
-            },
-            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.3b/sapiens_0.3b_normal_render_people_epoch_66.pth",
-        },
-        "normal-estimation-0.6b": {
-            "config": {
-                "num_labels": 3,
-                "num_heads": 16,
-                "num_hidden_layers": 32,
-                "hidden_size": 1280,
-                "patch_embeddings_padding": 2,
-            },
-            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.6b/sapiens_0.6b_normal_render_people_epoch_200.pth",
-        },
-        "normal-estimation-1b": {
-            "config": {
-                "num_labels": 3,
-                "num_heads": 24,
-                "num_hidden_layers": 40,
-                "hidden_size": 1536,
-                "num_heads": 24,
-                "patch_embeddings_padding": 2,
-            },
-            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_1b/sapiens_1b_normal_render_people_epoch_115.pth",
-        },
-        "normal-estimation-2b": {
-            "config": {
-                "num_labels": 3,
-                "num_heads": 32,
-                "num_hidden_layers": 48,
-                "hidden_size": 1920,
-                "patch_embeddings_padding": 2,
-            },
-            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_2b/sapiens_2b_normal_render_people_epoch_70.pth",
-        },
-        "depth-estimation-0.3b": {
-            "config": {
-                "num_labels": 1,
-                "num_heads": 16,
-                "num_hidden_layers": 24,
-                "hidden_size": 1024,
-                "deconv_out_channels": [384, 384, 384, 384],
-                "deconv_kernel_sizes": [4, 4, 4, 4],
-                "conv_out_channels": [384, 384],
-                "conv_kernel_sizes": [1, 1],
-            },
-            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.3b/sapiens_0.3b_render_people_epoch_100.pth",
-        },
-        "depth-estimation-0.6b": {
-            "config": {
-                "num_labels": 1,
-                "num_heads": 16,
-                "num_hidden_layers": 32,
-                "hidden_size": 1280,
-                "deconv_out_channels": [384, 384, 384, 384],
-                "deconv_kernel_sizes": [4, 4, 4, 4],
-                "conv_out_channels": [384, 384],
-                "conv_kernel_sizes": [1, 1],
-            },
-            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.6b/sapiens_0.6b_render_people_epoch_70.pth",
-        },
-        "depth-estimation-1b": {
-            "config": {
-                "num_labels": 1,
-                "num_heads": 24,
-                "num_hidden_layers": 40,
-                "hidden_size": 1536,
-                "deconv_out_channels": [384, 384, 384, 384],
-                "deconv_kernel_sizes": [4, 4, 4, 4],
-                "conv_out_channels": [384, 384],
-                "conv_kernel_sizes": [1, 1],
-            },
-            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_1b/sapiens_1b_render_people_epoch_88.pth",
-        },
-        "depth-estimation-2b": {
-            "config": {
-                "num_labels": 1,
-                "num_heads": 32,
-                "num_hidden_layers": 48,
-                "hidden_size": 1920,
-                "deconv_out_channels": [384, 384, 384, 384],
-                "deconv_kernel_sizes": [4, 4, 4, 4],
-                "conv_out_channels": [384, 384],
-                "conv_kernel_sizes": [1, 1],
-            },
-            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_2b/sapiens_2b_render_people_epoch_25.pth",
-        },
-        "pose-estimation-1b": {
-            "config": {
-                "num_labels": 308,
-                "num_heads": 24,
-                "num_hidden_layers": 40,
-                "hidden_size": 1536,
-                "deconv_out_channels": [768, 768],
-                "deconv_kernel_sizes": [4, 4],
-                "conv_out_channels": [768, 768],
-                "conv_kernel_sizes": [1, 1],
-                "patch_embeddings_padding": 2,
-            },
-            # original checkpoint can't be loaded without mmengine installed,
-            # using a resaved version with `state_dict` only
-            "checkpoint_local_path": "sapiens_host/pose/checkpoints/sapiens_1b/sapiens_1b_goliath_best_goliath_AP_640-resaved.pth",
-        },
-    }
-    checkpoint_params = all_params[model_name]
+    # all_params = {
+    #     "segmentation-body-0.3b": {
+    #         "config": {
+    #             "num_labels": 28,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 24,
+    #             "hidden_size": 1024,
+    #             "label2id": SEGMENTATIONS_LABEL_TO_ID,
+    #             "id2label": SEGMENTATIONS_ID_TO_LABEL,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_0.3b/sapiens_0.3b_goliath_best_goliath_mIoU_7673_epoch_194.pth",
+    #     },
+    #     "segmentation-body-0.6b": {
+    #         "config": {
+    #             "num_labels": 28,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 32,
+    #             "hidden_size": 1280,
+    #             "label2id": SEGMENTATIONS_LABEL_TO_ID,
+    #             "id2label": SEGMENTATIONS_ID_TO_LABEL,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_0.6b/sapiens_0.6b_goliath_best_goliath_mIoU_7777_epoch_178.pth",
+    #     },
+    #     "segmentation-body-1b": {
+    #         "config": {
+    #             "num_labels": 28,
+    #             "num_heads": 24,
+    #             "num_hidden_layers": 40,
+    #             "hidden_size": 1536,
+    #             "label2id": SEGMENTATIONS_LABEL_TO_ID,
+    #             "id2label": SEGMENTATIONS_ID_TO_LABEL,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_1b/sapiens_1b_goliath_best_goliath_mIoU_7994_epoch_151.pth",
+    #     },
+    #     "segmentation-body-2b": {
+    #         "config": {
+    #             "num_labels": 28,
+    #             "num_heads": 32,
+    #             "num_hidden_layers": 48,
+    #             "hidden_size": 1920,
+    #             "label2id": SEGMENTATIONS_LABEL_TO_ID,
+    #             "id2label": SEGMENTATIONS_ID_TO_LABEL,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_2b/sapiens_2b_goliath_best_goliath_mIoU_8179_epoch_181.pth",
+    #     },
+    #     "segmentation-face-1b": {
+    #         "config": {
+    #             "num_labels": 19,
+    #             "num_heads": 24,
+    #             "num_hidden_layers": 40,
+    #             "hidden_size": 1536,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_1b/sapiens_1b_seg_face_epoch_200.pth",
+    #     },
+    #     "normal-estimation-0.3b": {
+    #         "config": {
+    #             "num_labels": 3,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 24,
+    #             "hidden_size": 1024,
+    #             "patch_embeddings_padding": 2,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.3b/sapiens_0.3b_normal_render_people_epoch_66.pth",
+    #     },
+    #     "normal-estimation-0.6b": {
+    #         "config": {
+    #             "num_labels": 3,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 32,
+    #             "hidden_size": 1280,
+    #             "patch_embeddings_padding": 2,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.6b/sapiens_0.6b_normal_render_people_epoch_200.pth",
+    #     },
+    #     "normal-estimation-1b": {
+    #         "config": {
+    #             "num_labels": 3,
+    #             "num_heads": 24,
+    #             "num_hidden_layers": 40,
+    #             "hidden_size": 1536,
+    #             "num_heads": 24,
+    #             "patch_embeddings_padding": 2,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_1b/sapiens_1b_normal_render_people_epoch_115.pth",
+    #     },
+    #     "normal-estimation-2b": {
+    #         "config": {
+    #             "num_labels": 3,
+    #             "num_heads": 32,
+    #             "num_hidden_layers": 48,
+    #             "hidden_size": 1920,
+    #             "patch_embeddings_padding": 2,
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_2b/sapiens_2b_normal_render_people_epoch_70.pth",
+    #     },
+    #     "depth-estimation-0.3b": {
+    #         "config": {
+    #             "num_labels": 1,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 24,
+    #             "hidden_size": 1024,
+    #             "deconv_out_channels": [384, 384, 384, 384],
+    #             "deconv_kernel_sizes": [4, 4, 4, 4],
+    #             "conv_out_channels": [384, 384],
+    #             "conv_kernel_sizes": [1, 1],
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.3b/sapiens_0.3b_render_people_epoch_100.pth",
+    #     },
+    #     "depth-estimation-0.6b": {
+    #         "config": {
+    #             "num_labels": 1,
+    #             "num_heads": 16,
+    #             "num_hidden_layers": 32,
+    #             "hidden_size": 1280,
+    #             "deconv_out_channels": [384, 384, 384, 384],
+    #             "deconv_kernel_sizes": [4, 4, 4, 4],
+    #             "conv_out_channels": [384, 384],
+    #             "conv_kernel_sizes": [1, 1],
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.6b/sapiens_0.6b_render_people_epoch_70.pth",
+    #     },
+    #     "depth-estimation-1b": {
+    #         "config": {
+    #             "num_labels": 1,
+    #             "num_heads": 24,
+    #             "num_hidden_layers": 40,
+    #             "hidden_size": 1536,
+    #             "deconv_out_channels": [384, 384, 384, 384],
+    #             "deconv_kernel_sizes": [4, 4, 4, 4],
+    #             "conv_out_channels": [384, 384],
+    #             "conv_kernel_sizes": [1, 1],
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_1b/sapiens_1b_render_people_epoch_88.pth",
+    #     },
+    #     "depth-estimation-2b": {
+    #         "config": {
+    #             "num_labels": 1,
+    #             "num_heads": 32,
+    #             "num_hidden_layers": 48,
+    #             "hidden_size": 1920,
+    #             "deconv_out_channels": [384, 384, 384, 384],
+    #             "deconv_kernel_sizes": [4, 4, 4, 4],
+    #             "conv_out_channels": [384, 384],
+    #             "conv_kernel_sizes": [1, 1],
+    #         },
+    #         "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_2b/sapiens_2b_render_people_epoch_25.pth",
+    #     },
+    #     "pose-estimation-1b": {
+    #         "config": {
+    #             "num_labels": 308,
+    #             "num_heads": 24,
+    #             "num_hidden_layers": 40,
+    #             "hidden_size": 1536,
+    #             "deconv_out_channels": [768, 768],
+    #             "deconv_kernel_sizes": [4, 4],
+    #             "conv_out_channels": [768, 768],
+    #             "conv_kernel_sizes": [1, 1],
+    #             "patch_embeddings_padding": 2,
+    #         },
+    #         # original checkpoint can't be loaded without mmengine installed,
+    #         # using a resaved version with `state_dict` only
+    #         "checkpoint_local_path": "sapiens_host/pose/checkpoints/sapiens_1b/sapiens_1b_goliath_best_goliath_AP_640-resaved.pth",
+    #     },
+    # }
+    checkpoint_params = CHECKPOINTS[model_name]
     config_params = checkpoint_params["config"]
     config_params["intermediate_size"] = config_params["hidden_size"] * 4
 
     # define default Sapiens configuration
     config = SapiensConfig(**config_params)
 
-    with torch.device(args.device):
-        model = SapiensForSemanticSegmentation(config).eval()
-
-    full_checkpoint_path = Path(checkpoints_dir) / checkpoint_params["checkpoint_local_path"]
-    state_dict = torch.load(full_checkpoint_path, map_location=args.device, weights_only=True)["state_dict"]
+    checkpoint_directory = snapshot_download(checkpoint_params["repo_id"], local_dir=f"checkpoints/{model_name}")
+    path = list(Path(checkpoint_directory).glob("*.pth"))[0]
+    state_dict = torch.load(path, map_location=args.device, weights_only=True, mmap=True)["state_dict"]
 
     # rename state dict keys
     is_pose_model = "pose" in model_name
@@ -336,7 +553,10 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     split_qkv_to_query_key_values_(state_dict)
 
     # load model and state dict
-    model.load_state_dict(state_dict)
+    with torch.device("meta"):
+        model = SapiensForSemanticSegmentation(config).eval()
+
+    model.load_state_dict(state_dict, assign=True, strict=True)
 
     # Check outputs on an image, prepared by SapiensImageProcessor
     image_processor = SapiensImageProcessor(
@@ -375,15 +595,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="segmentation-body-2b",
+        default="sapiens-normal-0.3b",
         type=str,
         help="Name of the model you'd like to convert.",
-    )
-    parser.add_argument(
-        "--checkpoints_dir",
-        default="/home/ubuntu/projects/sapiens/sapiens_host/",
-        type=str,
-        help="Path to the directory containing the Sapiens checkpoints.",
     )
     parser.add_argument(
         "--save_dir",
@@ -404,5 +618,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_sapiens_checkpoint(args.model_name, args.checkpoints_dir, args.save_dir)
-
+    convert_sapiens_checkpoint(args.model_name, args.save_dir)

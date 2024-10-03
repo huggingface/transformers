@@ -55,14 +55,17 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "google/sapiens-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
+
 # TODO: outputs docstrings
 @dataclass
 class SapiensOutputWithFeatureMap(BaseModelOutput):
     last_feature_map: Optional[torch.FloatTensor] = None
 
+
 @dataclass
 class SapiensModelOutputWithPooledOutput(SapiensOutputWithFeatureMap):
     pooler_output: Optional[torch.FloatTensor] = None
+
 
 @dataclass
 class SapiensForSemanticSegmentationOutput(ModelOutput):
@@ -72,6 +75,7 @@ class SapiensForSemanticSegmentationOutput(ModelOutput):
     last_feature_map: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 
 class SapiensEmbeddings(nn.Module):
     """
