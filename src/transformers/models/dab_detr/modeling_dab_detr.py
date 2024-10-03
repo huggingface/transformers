@@ -56,7 +56,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DABDETRConfig"
-_CHECKPOINT_FOR_DOC = "IDEA/dab_detr-base"
+_CHECKPOINT_FOR_DOC = "IDEA-Research/dab_detr-base"
 
 
 @dataclass
@@ -277,7 +277,7 @@ class DABDETRConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DABDETRConfig):
         super().__init__()
 
         self.config = config
@@ -330,7 +330,7 @@ class DABDETRSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DABDETRConfig):
         super().__init__()
         self.config = config
         self.embedding_dim = config.d_model / 2
@@ -579,7 +579,7 @@ class DABDETRAttention(nn.Module):
     different to v.
     """
 
-    def __init__(self, config, bias: bool = True, is_cross: bool = False):
+    def __init__(self, config: DABDETRConfig, bias: bool = True, is_cross: bool = False):
         super().__init__()
         self.config = config
         self.embed_dim = config.d_model * 2 if is_cross else config.d_model
@@ -692,7 +692,7 @@ class DABDETREncoderLayer(nn.Module):
     def __init__(self, config: DABDETRConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = self.self_attn = DetrAttention(
+        self.self_attn = DetrAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -938,8 +938,8 @@ class DABDETRDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with DetrMLPPredictionHead->MLP
-class MLP(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with DetrMLPPredictionHead->DABDETRMLP
+class DABDETRMLP(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
@@ -1080,7 +1080,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.query_scale = MLP(config.d_model, config.d_model, config.d_model, 2)
+        self.query_scale = DABDETRMLP(config.d_model, config.d_model, config.d_model, 2)
         self.layers = nn.ModuleList([DABDETREncoderLayer(config) for _ in range(config.encoder_layers)])
         self.norm = nn.LayerNorm(config.d_model) if config.normalize_before else None
 
@@ -1137,7 +1137,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        for _, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1211,15 +1211,15 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
 
         self.query_scale_type = config.query_scale_type
         if self.query_scale_type == "cond_elewise":
-            self.query_scale = MLP(d_model, d_model, d_model, 2)
+            self.query_scale = DABDETRMLP(d_model, d_model, d_model, 2)
         elif self.query_scale_type == "cond_scalar":
-            self.query_scale = MLP(d_model, d_model, 1, 2)
+            self.query_scale = DABDETRMLP(d_model, d_model, 1, 2)
         elif self.query_scale_type == "fix_elewise":
             self.query_scale = nn.Embedding(config.decoder_layers, d_model)
         else:
             raise NotImplementedError("Unknown query_scale_type: {}".format(self.query_scale_type))
 
-        self.ref_point_head = MLP(config.query_dim // 2 * d_model, d_model, d_model, 2)
+        self.ref_point_head = DABDETRMLP(config.query_dim // 2 * d_model, d_model, d_model, 2)
 
         self.bbox_embed = None
         self.d_model = d_model
@@ -1227,7 +1227,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         self.decoder_bbox_embed_diff_each_layer = config.decoder_bbox_embed_diff_each_layer
 
         if self.decoder_modulate_hw_attn:
-            self.ref_anchor_head = MLP(d_model, d_model, 2, 2)
+            self.ref_anchor_head = DABDETRMLP(d_model, d_model, 2, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1653,7 +1653,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         # DAB-DETR encoder-decoder model
         self.model = DABDETRModel(config)
 
-        _bbox_embed = MLP(config.d_model, config.d_model, 4, 3)
+        _bbox_embed = DABDETRMLP(config.d_model, config.d_model, 4, 3)
         # Object detection heads
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
 
@@ -1718,13 +1718,12 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        >>>     outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
-        ...     0
-        ... ]
+        >>> target_sizes = torch.tensor([(image.height, image.width)])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
