@@ -1,9 +1,6 @@
 name: PR comment github action tests
 
 on:
-  workflow_dispatch:
-    branches-ignore:
-      - main
   issue_comment:
     types: 
       - created
@@ -13,10 +10,10 @@ on:
   pull_request_review_comment:
     types: [created, deleted]
   pull_request:
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  # But this will cancel the current job no ? Because they have the same PR number ...
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: ${{ github.event.issue.pull_request }} || ${{ github.event.pull_request }}
 
 jobs:
   reply-and-trigger:
@@ -30,6 +27,9 @@ jobs:
           echo "${{ github.ref }}"
           echo "${{ github.sha }}"
           echo "${{ github.event.pull_request.number }}"
+          echo "${{ github.event.issue.number }}"
+          echo "${{ github.event.issue.pull_request }}"
+          echo "${{ github.event.pull_request }}"          
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
