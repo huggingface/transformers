@@ -14,26 +14,26 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image Processor
+# 이미지 프로세서 [[image-processor]]
 
-An image processor is in charge of preparing input features for vision models and post processing their outputs. This includes transformations such as resizing, normalization, and conversion to PyTorch, TensorFlow, Flax and Numpy tensors. It may also include model specific post-processing such as converting logits to segmentation masks.
+이미지 프로세서는 비전 모델의 입력 특성을 준비하고 출력값을 후처리하는 역할을 합니다. 여기에는 크기 조정, 정규화, PyTorch, TensorFlow, Flax, Numpy 텐서로의 변환과 같은 변환 작업이 포함됩니다. 또한, 로짓(logits)을 세그멘테이션 마스크로 변환하는 등 모델별 후처리가 포함될 수 있습니다.
 
 
-## ImageProcessingMixin
+## ImageProcessingMixin [[transformers.ImageProcessingMixin]]
 
 [[autodoc]] image_processing_utils.ImageProcessingMixin
     - from_pretrained
     - save_pretrained
 
-## BatchFeature
+## BatchFeature [[transformers.BatchFeature]]
 
 [[autodoc]] BatchFeature
 
-## BaseImageProcessor
+## BaseImageProcessor [[transformers.BaseImageProcessor]]
 
 [[autodoc]] image_processing_utils.BaseImageProcessor
 
 
-## BaseImageProcessorFast
+## BaseImageProcessorFast [[transformers.BaseImageProcessorFast]]
 
 [[autodoc]] image_processing_utils_fast.BaseImageProcessorFast
