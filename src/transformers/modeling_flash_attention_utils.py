@@ -179,8 +179,10 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
 
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
+
 flash_241 = is_flash_attn_greater_or_equal("2.4.1")
 deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+
 
 def _flash_attention_forward(
     query_states: torch.Tensor,

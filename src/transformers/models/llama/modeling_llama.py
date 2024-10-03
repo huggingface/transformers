@@ -499,7 +499,7 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        batch_size=query_states.size(0)
+        batch_size = query_states.size(0)
         query_states = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
         key_states = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
         value_states = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
@@ -519,7 +519,7 @@ class LlamaFlashAttention2(LlamaAttention):
             cu_seqlens_k=cu_seq_lens_k,
             max_seqlen_in_batch_q=max_length_q if isinstance(max_length_q, int) else max_length_q.item(),
             max_seqlen_in_batch_k=max_length_k if isinstance(max_length_k, int) else max_length_k.item(),
-            batch_size=batch_size
+            batch_size=batch_size,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
