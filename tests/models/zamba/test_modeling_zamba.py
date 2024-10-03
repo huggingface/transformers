@@ -472,7 +472,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             return model_kwargs
 
         for model_class in decoder_only_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
@@ -640,6 +640,7 @@ class ZambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
 
     @classmethod
+    @slow
     def setUpClass(cls):
         model_id = "Zyphra/Zamba-7B-v1"
         cls.model = ZambaForCausalLM.from_pretrained(

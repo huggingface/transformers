@@ -44,6 +44,8 @@ class ZambaConfig(PretrainedConfig):
             model has a output word embedding layer.
         hidden_size (`int`, *optional*, defaults to 3712):
             Dimension of the hidden representations.
+        attention_hidden_size (`int`, *optional*):
+            Dimension of the hidden representations of the inputs to the Attention layer.
         intermediate_size (`int`, *optional*, defaults to 14848):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 76):
@@ -51,6 +53,8 @@ class ZambaConfig(PretrainedConfig):
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
+        attention_head_dim (`int`, *optional*):
+            Dimension of the attention head in the Transformer decoder.
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -124,9 +128,11 @@ class ZambaConfig(PretrainedConfig):
         vocab_size=32000,
         tie_word_embeddings=True,
         hidden_size=3712,
+        attention_hidden_size=None,
         intermediate_size=14848,
         num_hidden_layers=76,
         num_attention_heads=16,
+        attention_head_dim=None,
         num_key_value_heads=16,
         n_mamba_heads=2,
         hidden_act="gelu",
@@ -157,9 +163,17 @@ class ZambaConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.tie_word_embeddings = tie_word_embeddings
         self.hidden_size = hidden_size
+        if attention_hidden_size is None:
+            self.attention_hidden_size = 2 * hidden_size
+        else:
+            self.attention_hidden_size = attention_hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        if attention_head_dim is None:
+            self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
+        else:
+            self.attention_head_dim = attention_head_dim
         self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
@@ -188,6 +202,10 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_proj_bias = mamba_proj_bias
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
+
+        assert (
+            self.mamba_expand * self.hidden_size
+        ) % self.n_mamba_heads == 0, "`intermediate_size` should be divisible by `n_mamba_heads`."
 
         super().__init__(
             pad_token_id=pad_token_id,

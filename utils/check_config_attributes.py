@@ -44,7 +44,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "Qwen2Config": ["use_sliding_window"],
     "Qwen2MoeConfig": ["use_sliding_window"],
     "Qwen2VLConfig": ["use_sliding_window"],
-    "Gemma2Config": ["tie_word_embeddings"],
+    # `cache_implementation` should be in the default generation config, but we don't yet support per-model
+    # generation configs (TODO joao)
+    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -134,6 +136,13 @@ SPECIAL_CASES_TO_ALLOW = {
         "tie_word_embeddings",
         "attn_layer_offset",
         "attn_layer_period",
+    ],
+    "MllamaTextConfig": [
+        "initializer_range",
+    ],
+    "MllamaVisionConfig": [
+        "initializer_range",
+        "supported_aspect_ratios",
     ],
 }
 
