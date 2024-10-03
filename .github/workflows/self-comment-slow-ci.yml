@@ -12,6 +12,7 @@ on:
       - main
   pull_request_review_comment:
     types: [created, deleted]
+  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
