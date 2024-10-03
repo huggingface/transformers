@@ -386,7 +386,8 @@ class PretrainedConfig(PushToHubMixin):
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
                 "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
                 "This warning will become an exception in the future.",
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}", UserWarning
+                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
