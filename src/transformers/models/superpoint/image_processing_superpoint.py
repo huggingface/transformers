@@ -279,21 +279,21 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_detection(
         self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, List[Tuple]]
-    ):
+    ) -> List[Dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
 
         Args:
             outputs ([`SuperPointKeypointDescriptionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Raw outputs of the model containing keypoints in a relative (x, y) format, with scores and descriptors.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. This must be the original
                 image size (before any processing).
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints, scores and descriptors for
-            an image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
+            to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
         """
         if len(outputs.mask) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
