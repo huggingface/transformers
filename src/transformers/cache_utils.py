@@ -614,7 +614,7 @@ class OffloadedCache(DynamicCache):
             self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
-        if len(self.key_cache) <= layer_idx:
+        if len(self.key_cache) < layer_idx:
             raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
         if len(self.key_cache) == layer_idx:
             self.key_cache.append(key_states)
@@ -675,9 +675,9 @@ class QuantizedCache(DynamicCache):
         if layer_idx == 0:
             self._seen_tokens += key_states.shape[-2]
 
-        if len(self.key_cache) <= layer_idx:
+        if len(self.key_cache) < layer_idx:
             raise ValueError("QuantizedCache does not support model usage where layers are skipped. Use DynamicCache.")
-        elif len(self.key_cache) <= layer_idx:
+        elif len(self.key_cache) == layer_idx:
             self._quantized_key_cache.append(self._quantize(key_states.contiguous(), axis=self.axis_key))
             self._quantized_value_cache.append(self._quantize(value_states.contiguous(), axis=self.axis_value))
             self.key_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
