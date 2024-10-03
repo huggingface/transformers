@@ -2073,11 +2073,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
             mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
-                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
 
-                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
-                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
-                between the next token probability before and after adding the new embeddings.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities won't be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
@@ -2175,11 +2175,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
             mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
-                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
 
-                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
-                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
-                between the next token probability before and after adding the new embeddings.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities will not be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
 
@@ -2240,15 +2240,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         )
 
         if new_num_tokens > old_num_tokens and not mean_resizing:
+            # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
             self._init_weights(new_embeddings)
 
         elif new_num_tokens > old_num_tokens and mean_resizing:
-            # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
-            # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
-            # distribution that has old embeddings' mean and covariance. as described in this article:
-            # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            # initialize new embeddings  (in particular added tokens). The new embeddings will be initialized
+            # from a multivariate normal distribution that has old embeddings' mean and covariance.
+            # as described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
             logger.warning_once(
-                "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
                 "To disable this, use `mean_resizing=False`"
             )
@@ -2327,11 +2327,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vocab_size` else `vocab_size, lm_head_dim`.
             mean_resizing (`bool`):
                 Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
-                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `initializer_range`.
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
 
-                Setting `mean_resizing` to `True` is useful when increasing the size of the embedding for language models.
-                Where the generated tokens will not be affected by the added embeddings because this will reduce the kl-divergence
-                between the next token probability before and after adding the new embeddings.
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities will not be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
                 Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
@@ -2380,15 +2380,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         )
 
         if new_num_tokens > old_num_tokens and not mean_resizing:
+            # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
             self._init_weights(new_lm_head)
 
         elif new_num_tokens > old_num_tokens and mean_resizing:
-            # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
-            # than `old_num_tokens`. The new embeddings will be sampled from a multivariate normal
-            # distribution that has old embeddings' mean and covariance. as described in this article:
-            # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            # initialize new lm_head weights (in particular added tokens). The new lm_head weights
+            # will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance.
+            # as described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
             logger.warning_once(
-                "The new embeddings will be sampled from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "The new lm_head weights will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
                 "To disable this, use `mean_resizing=False`"
             )
