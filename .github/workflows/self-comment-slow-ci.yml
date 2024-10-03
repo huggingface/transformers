@@ -29,7 +29,9 @@ jobs:
           echo "${{ github.event.pull_request.number }}"
           echo "${{ github.event.issue.number }}"
           echo "${{ github.event.issue.pull_request }}"
-          echo "${{ github.event.pull_request }}"          
+          echo "${{ github.event.pull_request }}"
+          echo "${{ github.event.issue.pull_request != null }}"
+          echo "${{ github.event.pull_request != null }}"
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
