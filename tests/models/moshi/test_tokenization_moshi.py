@@ -247,7 +247,7 @@ class MoshiIntegrationTest(unittest.TestCase):
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [2769, 260, 260, 11725])
         self.assertEqual(rust_tokenizer.decode([2769, 260, 260, 11725], skip_special_tokens=True), "Hi   Hello")
 
-        # TODO: @ArthurZucker 
+        # TODO: @ArthurZucker
         # self.assertEqual(rust_tokenizer.encode(""), [])
 
         # self.assertEqual(rust_tokenizer.encode(" "), [260, 260])
