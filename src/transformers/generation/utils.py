@@ -854,12 +854,19 @@ class GenerationMixin:
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            processors.append(
-                EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=generation_config.encoder_repetition_penalty,
-                    encoder_input_ids=encoder_input_ids,
+            if len(encoder_input_ids.shape) == 2:
+                processors.append(
+                    EncoderRepetitionPenaltyLogitsProcessor(
+                        penalty=generation_config.encoder_repetition_penalty,
+                        encoder_input_ids=encoder_input_ids,
+                    )
                 )
-            )
+            else:
+                warnings.warn(
+                    "Passing `encoder_repetition_penalty` requires some form of `input_ids` to be passed to "
+                    "`generate`, ignoring the argument.",
+                    UserWarning,
+                )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
@@ -868,12 +875,19 @@ class GenerationMixin:
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            processors.append(
-                EncoderNoRepeatNGramLogitsProcessor(
-                    generation_config.encoder_no_repeat_ngram_size,
-                    encoder_input_ids,
+            if len(encoder_input_ids.shape) == 2:
+                processors.append(
+                    EncoderNoRepeatNGramLogitsProcessor(
+                        generation_config.encoder_no_repeat_ngram_size,
+                        encoder_input_ids,
+                    )
                 )
-            )
+            else:
+                warnings.warn(
+                    "Passing `encoder_no_repeat_ngram_size` requires some form of `input_ids` to be passed to "
+                    "`generate`, ignoring the argument.",
+                    UserWarning,
+                )
         if generation_config.bad_words_ids is not None:
             processors.append(
                 NoBadWordsLogitsProcessor(
