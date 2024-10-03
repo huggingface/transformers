@@ -1891,7 +1891,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         out = pipe(
             audio,
             return_timestamps=True,
-            generate_kwargs={"generation_config":GenerationConfig.from_pretrained("openai/whisper-large-v2")}
+            generate_kwargs={"generation_config": GenerationConfig.from_pretrained("openai/whisper-large-v2")},
         )
         self.assertEqual(
             out,
