@@ -94,6 +94,7 @@ class TFSpeech2TextModelTester:
         pad_token_id=1,
         bos_token_id=0,
         scale_embedding=False,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -120,6 +121,7 @@ class TFSpeech2TextModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.scale_embedding = scale_embedding
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
@@ -161,6 +163,7 @@ class TFSpeech2TextModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             scale_embedding=self.scale_embedding,
+            attn_implementation=self.attn_implementation,
         )
 
     def prepare_config_and_inputs_for_common(self):
