@@ -39,6 +39,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -148,6 +149,9 @@ class ZambaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+ALL_LAYERNORM_LAYERS.append(ZambaRMSNorm)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -841,15 +845,10 @@ class ZambaMambaMixer(nn.Module):
 # fmt: on
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Zamba
 class ZambaMLP(nn.Module):
-    """
-    Adapted from transformers.models.gemma.modeling_gemma.GemmaMLP, with the flipped convention:
-    `up_proj` <-> `gate_proj`.
-    """
-
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -857,8 +856,8 @@ class ZambaMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)) * self.gate_proj(x))
+    def forward(self, hidden_state):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 class ZambaAttentionDecoderLayer(nn.Module):
@@ -1006,7 +1005,7 @@ class HybridLayer(nn.Module):
         super().__init__()
         self.shared_transf = shared_transf
         self.linear = linear
-        self.mamba = mamba
+        self.mamba_decoder = mamba
 
     def forward(
         self,
@@ -1059,7 +1058,7 @@ class HybridLayer(nn.Module):
 
         transformer_hidden_states = self.linear(transformer_hidden_states)
 
-        layer_outputs = self.mamba(
+        layer_outputs = self.mamba_decoder(
             hidden_states,
             transformer_hidden_states=transformer_hidden_states,
             attention_mask=attention_mask,
@@ -1227,7 +1226,7 @@ class ZambaModel(ZambaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.block = ZambaAttentionDecoderLayer(config)
+        block = ZambaAttentionDecoderLayer(config)
         mamba_layers = []
         linear_layers = []
         self.layers_block_type = config.layers_block_type
@@ -1237,17 +1236,32 @@ class ZambaModel(ZambaPreTrainedModel):
             elif config.layers_block_type[i] == "hybrid":
                 linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
                 mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-        self.mamba_layers = nn.ModuleList(mamba_layers)
-        self.linear_layers = nn.ModuleList(linear_layers)
-
-        mamba_layers = iter(self.mamba_layers)
-        linear_layers = iter(self.linear_layers)
-        self.layers = []
-        for layer_type in self.layers_block_type:
+        mamba_layers = iter(mamba_layers)
+        linear_layers = iter(linear_layers)
+        layers = []
+        self._tied_weights_keys = []
+        for layer_id, layer_type in enumerate(self.layers_block_type):
             if layer_type == "hybrid":
-                self.layers.append(HybridLayer(self.block, next(linear_layers), next(mamba_layers)))
+                prefix_name = f"layers.{layer_id}."
+                tied_keys = [
+                    "shared_transf.self_attn.q_proj.weight",
+                    "shared_transf.self_attn.k_proj.weight",
+                    "shared_transf.self_attn.v_proj.weight",
+                    "shared_transf.self_attn.o_proj.weight",
+                    "shared_transf.feed_forward.gate_proj.weight",
+                    "shared_transf.feed_forward.up_proj.weight",
+                    "shared_transf.feed_forward.down_proj.weight",
+                    "shared_transf.input_layernorm.weight",
+                    "shared_transf.pre_ff_layernorm.weight",
+                    # 'linear.weight',
+                    # 'mamba.input_layernorm.weight',
+                    # *['mamba.mamba.' + m_layer for m_layer in mamba_layer_keys]
+                ]
+                self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
+                layers.append(HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
-                self.layers.append(next(mamba_layers))
+                layers.append(next(mamba_layers))
+        self.layers = nn.ModuleList(layers)
 
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1417,11 +1431,10 @@ class ZambaModel(ZambaPreTrainedModel):
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
 class ZambaForCausalLM(ZambaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config: ZambaConfig):
         super().__init__(config)
         self.model = ZambaModel(config)
+        self._tied_weights_keys = ["lm_head.weight", *self.model._tied_weights_keys]
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1619,12 +1632,12 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
     """,
     ZAMBA_START_DOCSTRING,
 )
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Zamba, MIXTRAL->ZAMBA
 class ZambaForSequenceClassification(ZambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ZambaModel(config)
+        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

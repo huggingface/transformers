@@ -50,7 +50,7 @@ class ZambaConfig(PretrainedConfig):
             Number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 16):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -127,7 +127,7 @@ class ZambaConfig(PretrainedConfig):
         intermediate_size=14848,
         num_hidden_layers=76,
         num_attention_heads=16,
-        num_key_value_heads=None,
+        num_key_value_heads=16,
         n_mamba_heads=2,
         hidden_act="gelu",
         hidden_mamba_act="silu",
