@@ -185,7 +185,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     weights = reverse_reshape_weights(weights, num_heads, n_embed)
                 else:
                     weights = reverse_reshape_bias(weights, num_heads, n_embed)
-            
+
             bid = None
             if architecture in ("t5", "t5encoder"):
                 for chunk in name.split("."):

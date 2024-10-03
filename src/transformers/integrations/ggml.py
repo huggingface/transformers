@@ -258,7 +258,6 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
-  
     "tokenizer": {
         "ggml.bos_token_id": "bos_token_id",
         "ggml.eos_token_id": "eos_token_id",
