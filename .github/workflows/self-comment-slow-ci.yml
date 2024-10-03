@@ -1,0 +1,253 @@
+name: PR comment github action tests
+
+on:
+  workflow_dispatch:
+    branches-ignore:
+      - main
+  issue_comment:
+    types: 
+      - created
+      - labeled
+    branches-ignore:
+      - main
+  pull_request_review_comment:
+    types: [created, deleted]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
+
+jobs:
+  reply-and-trigger:
+    if: contains(github.event.comment.body,'/pytest')
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Set up GitHub CLI
+        uses: actions/checkout@v4
+
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            -f "body=This comment contains /pytest, running the specified job..."
+
+      - name: Create  Run
+        id: create_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Custom CI job" -f "context=pytest/custom-tests"
+      - name: Trigger specific job
+        run: |
+          echo "Running the specific job because /pytest was found"
+          # Add the logic to trigger your specific job here
+
+      - name: Update Check Run Status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=success" -f "description=Custom CI job" -f "context=pytest/custom-tests"
+      
+
+  run_if_label_matches:
+    if: github.event.label.name == 'run-slow'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'The label was run-slow'
+
+  pr_commented:
+      # This job only runs for pull request comments
+      name: PR comment
+      if: ${{ github.event.issue.pull_request }}
+      runs-on: ubuntu-latest
+      steps:
+        - run: |
+            echo A comment on PR $NUMBER
+      env:
+        NUMBER: ${{ github.event.issue.number }}
+
+  testing-stuff-around:
+      if:  contains(github.event.comment.html_url, '/pull/') #  uf the comments come from pull request, exclude those from issue.
+      runs-on:  ubuntu-22.04
+      steps:
+        - name: say hello
+          if: contains(github.event.comment.body, '/pytest')   # check the comment if it contains the keywords
+          run: |
+            echo say hello
+        - name: test
+          if: contains(github.event.comment.body, '/test')  # check the comment if it contains the keywords
+          run: |
+            echo test
+        
+
+  find_models_to_run:
+      runs-on: ubuntu-22.04
+      name: Find models to run slow tests
+      # Triggered only if the required label `run-slow` is added
+      if: github.event.issue.pull_request && contains(github.event.comment.body,'/pytest')
+      outputs:
+        models: ${{ steps.models_to_run.outputs.models }}
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: "0"
+            ref: ${{ github.event.pull_request.head.sha }}
+
+        - name: Get commit message
+          run: |
+            echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
+
+        - name: Parse comment and set machine type
+          if: github.event_name == 'issue_comment'
+          run: |
+            COMMENT=${{ github.event.comment.body }}
+            if [[ "$COMMENT" == *"--device"* ]]; then
+              DEVICE=$(echo "$COMMENT" | grep -oP '(?<=--device\s)\S+')
+              echo "machine_type=${DEVICE}" >> $GITHUB_OUTPUT
+            fi
+
+        - name: Get models to run slow tests
+          run: |
+            echo "${{ env.commit_message }}"
+            python -m pip install GitPython
+            python utils/pr_slow_ci_models.py --commit_message "${{ env.commit_message }}" | tee output.txt
+            echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
+
+        - name: Models to run slow tests
+          id: models_to_run
+          run: |
+            echo "${{ env.models }}"
+            echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
+
+  run_models_gpu:
+    name: Run all tests for the model
+    if: ${{ needs.find_models_to_run.outputs.models != '[]' || github.event_name == 'issue_comment' }}
+    needs: find_models_to_run
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.find_models_to_run.outputs.models) || '[]' }}
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Parse command from PR comment
+        if: ${{ github.event_name == 'issue_comment' }}
+        id: parse_command
+        run: |
+          comment="${{ github.event.comment.body }}"
+          if [[ "$comment" =~ /run[[:space:]]+pytest ]]; then
+            export pytest_command=$(echo "$comment" | sed -n 's/\/run[[:space:]]\+pytest[[:space:]]\+\(.*\)/\1/p')
+            echo "pytest_command=$pytest_command" >> $GITHUB_ENV
+          else
+            echo "Invalid command. Exiting."
+            exit 1
+        env:
+          pytest_command: ""
+
+      - name: Echo input and matrix info
+        if: ${{ github.event_name == 'pull_request' || env.pytest_command != '' }}
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+
+      - name: Echo folder ${{ matrix.folders }}
+        if: ${{ github.event_name == 'pull_request' || env.pytest_command != '' }}
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git fetch origin pull/${{ github.event.pull_request.number }}/head:pull/${{ github.event.pull_request.number }}/merge && git checkout pull/${{ github.event.pull_request.number }}/merge
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: |
+          export CUDA_VISIBLE_DEVICES="$(python3 utils/set_cuda_devices_for_ci.py --test_folder ${{ matrix.folders }})"
+          echo $CUDA_VISIBLE_DEVICES
+          python3 -m pytest -v -rsfE --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+
+
+      - name: Run custom tests from comment
+        working-directory: /transformers
+        if: ${{ github.event_name == 'issue_comment' && env.pytest_command != '' }}
+        run: |
+          export CUDA_VISIBLE_DEVICES="$(python3 utils/set_cuda_devices_for_ci.py)"
+          echo $CUDA_VISIBLE_DEVICES
+          python3 -m pytest -v ${{ env.pytest_command }}
+
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
+
+      - name: Make sure report directory exists
+        shell: bash
+        run: |
+          mkdir -p /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          echo "hello" > /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
