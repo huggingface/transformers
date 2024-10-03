@@ -617,6 +617,9 @@ def set_initialized_submodules(model, state_dict_keys):
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
         loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
+        # When checking if the root module is loaded all state_dict_keys must be used.
+        if module_name == "":
+            loaded_keys = set(state_dict_keys)
         if loaded_keys.issuperset(module.state_dict()):
             module._is_hf_initialized = True
         else:
