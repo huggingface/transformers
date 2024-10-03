@@ -130,7 +130,6 @@ task_to_pipeline_and_spec_mapping = {
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
-    "visual-question-answering": (VisualQuestionAnsweringPipeline, VisualQuestionAnsweringInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 

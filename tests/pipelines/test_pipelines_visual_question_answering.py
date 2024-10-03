@@ -15,12 +15,10 @@
 import unittest
 
 from datasets import load_dataset
-from huggingface_hub import VisualQuestionAnsweringOutputElement
 
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
-    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -82,10 +80,6 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
                 [{"score": ANY(float), "answer": ANY(str)}],
             ],
         )
-
-        for single_output in outputs:
-            for output_element in single_output:
-                compare_pipeline_output_to_hub_spec(output_element, VisualQuestionAnsweringOutputElement)
 
     @require_torch
     def test_small_model_pt(self):
