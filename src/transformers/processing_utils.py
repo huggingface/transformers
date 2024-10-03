@@ -307,6 +307,17 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
         }
 
     ```
+
+    For Python 3.8 compatibility, when inheriting from this class and overriding one of the kwargs,
+    you need to manually update the __annotations__ dictionary. This can be done as follows:
+
+    ```python
+    class CustomProcessorKwargs(ProcessingKwargs, total=False):
+        images_kwargs: CustomImagesKwargs
+
+    CustomProcessorKwargs.__annotations__["images_kwargs"] = CustomImagesKwargs  # python 3.8 compatibility
+    ```python
+
     """
 
     common_kwargs: CommonKwargs = {
@@ -809,6 +820,8 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        used_keys = set()
+
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
@@ -835,18 +848,29 @@ class ProcessorMixin(PushToHubMixin):
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
-                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
                 if kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
-        # if something remains in kwargs, it belongs to common after flattening
-        if set(kwargs) & set(default_kwargs):
-            # here kwargs is dictionary-based since it shares keys with default set
-            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+                    used_keys.add(modality_key)
+
+        # Determine if kwargs is a flat dictionary or contains nested dictionaries
+        if any(key in default_kwargs for key in kwargs):
+            # kwargs is dictionary-based, and some keys match modality names
+            for modality, subdict in kwargs.items():
+                if modality in default_kwargs:
+                    for subkey, subvalue in subdict.items():
+                        if subkey not in used_keys:
+                            output_kwargs[modality][subkey] = subvalue
+                            used_keys.add(subkey)
         else:
-            # here it's a flat dict
-            output_kwargs["common_kwargs"].update(kwargs)
+            # kwargs is a flat dictionary
+            for key in kwargs:
+                if key not in used_keys:
+                    output_kwargs["common_kwargs"][key] = kwargs[key]
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:

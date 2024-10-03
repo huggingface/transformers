@@ -14,13 +14,12 @@
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 import requests
 import torch
 
-from transformers.testing_utils import (
-    require_vision,
-)
+from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -248,27 +247,11 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     # Override as PixtralProcessor needs nested images to work properly with batched inputs
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = [self.prepare_image_inputs()] * 2
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            do_rescale=True,
-            rescale_factor=-1,
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertTrue(
-            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
-            and len(inputs[self.text_input_name][1]) < 76
-        )
+    @require_vision
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        if batch_size is None:
+            return super().prepare_image_inputs()
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return [[super().prepare_image_inputs()]] * batch_size

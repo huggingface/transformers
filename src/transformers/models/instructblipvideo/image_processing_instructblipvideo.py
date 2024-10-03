@@ -57,8 +57,11 @@ def make_batched_videos(videos) -> List[VideoInput]:
         elif len(videos[0].shape) == 4:
             return [list(video) for video in videos]
 
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
+    elif is_valid_image(videos):
+        if isinstance(videos, PIL.Image.Image):
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
 

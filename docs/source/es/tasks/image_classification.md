@@ -160,7 +160,7 @@ Al llegar a este punto, solo quedan tres pasos:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ... )
 
 >>> trainer.train()
