@@ -2030,7 +2030,9 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
-    @parameterized.expand([({"do_sample": False},), ({"do_sample": False, "top_k": 2, "penalty_alpha": 0.5},)])
+    @parameterized.expand(
+        [({"do_sample": False},), ({"do_sample": False, "top_k": 2, "penalty_alpha": 0.5, "low_memory": True},)]
+    )
     @pytest.mark.generate
     def test_generate_with_dynamic_sliding_window_cache(self, generation_kwargs: dict):
         """
@@ -2068,20 +2070,25 @@ class GenerationTesterMixin:
 
             self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
 
-    @parameterized.expand([(False,), (True,)])
+    @parameterized.expand([(3, 1), (3, 4), (14, 5)])
     @pytest.mark.generate
-    def test_generate_continue_from_dynamic_sliding_window_cache(self, add_more_tokens_than_window: bool):
+    def test_generate_continue_from_dynamic_sliding_window_cache(self, sliding_window: int, additional_tokens: int):
         """
-        Tests if we can correctly continue generation with DynamicSlidingWindowCache, even after the cache is "full" (bigger than sliding
-        window), and we provide more than 1 new token to add to the cache.
+        Tests if we can correctly continue generation with DynamicSlidingWindowCache.
+        - First case tests that we can continue if the cache is already full, and we add less tokens than the sliding window
+        - Second case tests that we can continue if the cache is already full, and we add more tokens that the sliding window
+        - Third case tests that we can continue if the cache is not full, and we add tokens so that the new input is bigger than the sliding window
         """
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, _, _, _ = self._get_input_ids_and_config()
             if getattr(config, "sliding_window", None) is None:
                 self.skipTest(reason="This model does not support sliding window.")
 
+            # We need to be sure to always have shape (2, 7) for the different test assumptions to hold
+            input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
+
             # Make sure we will go beyond the sliding window
-            config.sliding_window = 3
+            config.sliding_window = sliding_window
             model = model_class(config).to(torch_device).eval()
             all_generation_kwargs = {
                 "do_sample": False,
@@ -2094,14 +2101,9 @@ class GenerationTesterMixin:
             dynamic_cache = DynamicCache()
             dynamic_sliding_cache = DynamicSlidingWindowCache(config.sliding_window)
 
-            out_dynamic = model.generate(
-                input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache
-            )
+            out_dynamic = model.generate(input_ids, **all_generation_kwargs, past_key_values=dynamic_cache)
             out_sliding_dynamic = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                **all_generation_kwargs,
-                past_key_values=dynamic_sliding_cache,
+                input_ids, **all_generation_kwargs, past_key_values=dynamic_sliding_cache
             )
 
             results_dynamic, dynamic_cache = out_dynamic.sequences, out_dynamic.past_key_values
@@ -2113,8 +2115,7 @@ class GenerationTesterMixin:
             self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
 
             bs = results_dynamic.shape[0]
-            num_added_tokens = 2 if not add_more_tokens_than_window else 4
-            added_tokens = ids_tensor((bs, num_added_tokens), vocab_size=config.vocab_size)
+            added_tokens = ids_tensor((bs, additional_tokens), vocab_size=config.vocab_size)
             input_ids = torch.cat([results_dynamic, added_tokens], dim=-1)
 
             out_dynamic = model.generate(input_ids, **all_generation_kwargs, past_key_values=dynamic_cache)
