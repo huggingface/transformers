@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 from typing import Any, Callable
 
 from transformers import is_torch_available
@@ -24,7 +25,6 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    import argparse
     import functools
 
     import torch
