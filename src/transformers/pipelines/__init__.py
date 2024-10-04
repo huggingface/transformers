@@ -711,6 +711,12 @@ def pipeline(
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
 
+    Note:
+        While there are such optional arguments as `tokenizer`, `feature_extractor`, `image_processor`, and `processor`,
+        they shouldn't be specified all at once. If these components are not provided, `pipeline` will try to load
+        required ones automatically. In case you want to provide these components explicitly, please refer to a
+        specific pipeline in order to get more details regarding what components are required.
+
     Returns:
         [`Pipeline`]: A suitable pipeline for the task.
 
