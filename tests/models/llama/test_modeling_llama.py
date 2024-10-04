@@ -319,6 +319,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # used in `test_torch_compile`
     _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
 
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
+
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
@@ -874,7 +877,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
