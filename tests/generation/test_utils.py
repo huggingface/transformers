@@ -1849,11 +1849,18 @@ class GenerationTesterMixin:
             if config.is_encoder_decoder:
                 cache_cls = EncoderDecoderCache
                 past_key_values = cache_cls(DynamicCache(), DynamicCache())
+                past_key_values = cache_cls(DynamicCache(), DynamicCache())
             else:
                 cache_cls = DynamicCache
                 past_key_values = cache_cls()
 
-            new_results = model.generate(past_key_values=past_key_values, **generation_kwargs, **inputs_dict)
+            new_results = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                **generation_kwargs,
+                **inputs_dict,
+            )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being
             # different
