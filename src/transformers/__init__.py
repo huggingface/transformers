@@ -591,6 +591,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.molmo": ["MolmoConfig"],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -2776,6 +2777,13 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForConditionalGeneration",
+            "MolmoPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.mpnet"].extend(
         [
             "MPNetForMaskedLM",
@@ -5422,6 +5430,9 @@ if TYPE_CHECKING:
     )
     from .models.mobilevitv2 import (
         MobileViTV2Config,
+    )
+    from .models.molmo import (
+        MolmoConfig,
     )
     from .models.mpnet import (
         MPNetConfig,
