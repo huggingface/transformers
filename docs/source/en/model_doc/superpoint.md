@@ -101,12 +101,12 @@ You can then print the keypoints on the image of your choice to visualize the re
 import matplotlib.pyplot as plt
 
 plt.axis("off")
-plt.imshow(image)
+plt.imshow(image_1)
 plt.scatter(
-    keypoints[:, 0],
-    keypoints[:, 1],
-    c=scores * 100,
-    s=scores * 50,
+    outputs[0]["keypoints"][:, 0],
+    outputs[0]["keypoints"][:, 1],
+    c=outputs[0]["scores"] * 100,
+    s=outputs[0]["scores"] * 50,
     alpha=0.8
 )
 plt.savefig(f"output_image.png")
