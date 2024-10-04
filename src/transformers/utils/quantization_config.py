@@ -51,6 +51,7 @@ class AWQLinearVersion(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
     EXLLAMA = "exllama"
+    IPEX = "ipex"
 
     @staticmethod
     def from_str(version: str):
@@ -61,6 +62,8 @@ class AWQLinearVersion(str, Enum):
             return AWQLinearVersion.GEMV
         elif version == "exllama":
             return AWQLinearVersion.EXLLAMA
+        elif version == "ipex":
+            return AWQLinearVersion.IPEX
         else:
             raise ValueError(f"Unknown AWQLinearVersion {version}")
 
@@ -830,18 +833,20 @@ class AwqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        if not torch.cuda.is_available():
-            raise ValueError("AWQ is only available on GPU")
-
         if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
             raise ValueError(
                 f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
         self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA]:
+        if self.version not in [
+            AWQLinearVersion.GEMM,
+            AWQLinearVersion.GEMV,
+            AWQLinearVersion.EXLLAMA,
+            AWQLinearVersion.IPEX,
+        ]:
             raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA] - not recognized version {self.version}"
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {self.version}"
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
