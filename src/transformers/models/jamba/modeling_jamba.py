@@ -51,7 +51,6 @@ from ...utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
-    is_torchdynamo_compiling,
 )
 from .configuration_jamba import JambaConfig
 
@@ -1543,12 +1542,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        if labels is None and not is_torchdynamo_compiling:
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
-        # TODO: remove the float() operations in v4.46
-        logits = logits.float()
 
         loss = None
         if labels is not None:
