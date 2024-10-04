@@ -2466,7 +2466,7 @@ class GenerationMixin:
 
             trimmed_ids = batch_ids[:-1]
 
-            if trimmed_ids.size(dim=0) == 0:
+            if trimmed_ids.numel() == 0:
                 continue
 
             # if the prompt is a single (non-pad) token, regenerate from bos
