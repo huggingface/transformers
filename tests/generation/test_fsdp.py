@@ -50,7 +50,6 @@ if is_torch_available():
             try:
                 return func(*args, **kwargs)
             finally:
-                torch.distributed.barrier()
                 torch.distributed.destroy_process_group()
 
         return wrapped
