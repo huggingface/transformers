@@ -179,6 +179,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
                     continue
                 if "ffn_gate_inp_shexp" in name:
+                    # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
+                    # quantized one is (2048)
                     weights = np.expand_dims(weights, axis=0)
 
             if architecture == "bloom" and "attn_qkv" in name:
