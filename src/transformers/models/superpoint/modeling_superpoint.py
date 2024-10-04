@@ -489,7 +489,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             mask[i, : _scores.shape[0]] = 1
 
         # Convert to relative coordinates
-        keypoints[:, :] = keypoints[:, :] / torch.tensor([width, height], device=keypoints.device)
+        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
