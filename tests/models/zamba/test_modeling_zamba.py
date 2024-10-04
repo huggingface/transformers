@@ -446,6 +446,18 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    def _get_input_ids_and_config(self):
+                config_and_inputs = self.model_tester.prepare_config_and_inputs()
+                (
+                    config,
+                    input_ids,
+                    input_mask,
+                    sequence_labels,
+                    token_labels,
+                    choice_labels,
+                ) = config_and_inputs
+                return config, input_ids, input_mask
+
     def test_left_padding_compatibility(self):
         r"""
         Overriding the test_left_padding_compatibility test as the mamba layers accentuate the numerical differences
@@ -472,7 +484,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             return model_kwargs
 
         for model_class in decoder_only_classes:
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
