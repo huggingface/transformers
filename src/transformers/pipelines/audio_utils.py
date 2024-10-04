@@ -31,14 +31,10 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     ]
 
     try:
-        with subprocess.Popen(
-            ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE
-        ) as ffmpeg_process:
+        with subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as ffmpeg_process:
             output_stream = ffmpeg_process.communicate(bpayload)
     except FileNotFoundError as error:
-        raise ValueError(
-            "ffmpeg was not found but is required to load audio files from filename"
-        ) from error
+        raise ValueError("ffmpeg was not found but is required to load audio files from filename") from error
     out_bytes = output_stream[0]
     audio = np.frombuffer(out_bytes, np.float32)
     if audio.shape[0] == 0:
@@ -55,7 +51,7 @@ def ffmpeg_microphone(
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    ffmpeg_additional_args: Optional[list] = [],
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
@@ -77,7 +73,8 @@ def ffmpeg_microphone(
             for how to specify and list input devices.
         ffmpeg_additional_args (`list`, *optional*):
             Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
-            process.
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
 
     Returns:
         A generator yielding audio chunks of `chunk_length_s` seconds as `bytes` objects of length
@@ -90,9 +87,7 @@ def ffmpeg_microphone(
     elif format_for_conversion == "f32le":
         size_of_sample = 4
     else:
-        raise ValueError(
-            f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`"
-        )
+        raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     system = platform.system()
 
@@ -105,6 +100,8 @@ def ffmpeg_microphone(
     elif system == "Windows":
         format_ = "dshow"
         input_ = ffmpeg_input_device or _get_microphone_name()
+
+    ffmpeg_additional_args = [] if ffmpeg_additional_args is None else ffmpeg_additional_args
 
     ffmpeg_command = [
         "ffmpeg",
@@ -141,7 +138,7 @@ def ffmpeg_microphone_live(
     stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    ffmpeg_additional_args: Optional[list] = [],
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
@@ -164,9 +161,14 @@ def ffmpeg_microphone_live(
         format_for_conversion (`str`, *optional*, defaults to `f32le`):
             The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
             could also be used.
+        ffmpeg_input_device (`str`, *optional*):
+            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
+            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
+            for how to specify and list input devices.
         ffmpeg_additional_args (`list`, *optional*):
             Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
-            process.
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
 
     Return:
         A generator yielding dictionaries of the following form
@@ -187,7 +189,7 @@ def ffmpeg_microphone_live(
         chunk_s,
         format_for_conversion=format_for_conversion,
         ffmpeg_input_device=ffmpeg_input_device,
-        ffmpeg_additional_args=ffmpeg_additional_args,
+        ffmpeg_additional_args=[] if ffmpeg_additional_args is None else ffmpeg_additional_args,
     )
 
     if format_for_conversion == "s16le":
@@ -197,9 +199,7 @@ def ffmpeg_microphone_live(
         dtype = np.float32
         size_of_sample = 4
     else:
-        raise ValueError(
-            f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`"
-        )
+        raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     if stride_length_s is None:
         stride_length_s = chunk_length_s / 6
@@ -211,9 +211,7 @@ def ffmpeg_microphone_live(
     stride_right = int(round(sampling_rate * stride_length_s[1])) * size_of_sample
     audio_time = datetime.datetime.now()
     delta = datetime.timedelta(seconds=chunk_s)
-    for item in chunk_bytes_iter(
-        microphone, chunk_len, stride=(stride_left, stride_right), stream=True
-    ):
+    for item in chunk_bytes_iter(microphone, chunk_len, stride=(stride_left, stride_right), stream=True):
         # Put everything back in numpy scale
         item["raw"] = np.frombuffer(item["raw"], dtype=dtype)
         item["stride"] = (
@@ -228,9 +226,7 @@ def ffmpeg_microphone_live(
         yield item
 
 
-def chunk_bytes_iter(
-    iterator, chunk_len: int, stride: Tuple[int, int], stream: bool = False
-):
+def chunk_bytes_iter(iterator, chunk_len: int, stride: Tuple[int, int], stream: bool = False):
     """
     Reads raw bytes from an iterator and does chunks of length `chunk_len`. Optionally adds `stride` to each chunks to
     get overlaps. `stream` is used to return partial results even if a full `chunk_len` is not yet available.
@@ -271,18 +267,14 @@ def _ffmpeg_stream(ffmpeg_command, buflen: int):
     """
     bufsize = 2**24  # 16Mo
     try:
-        with subprocess.Popen(
-            ffmpeg_command, stdout=subprocess.PIPE, bufsize=bufsize
-        ) as ffmpeg_process:
+        with subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=bufsize) as ffmpeg_process:
             while True:
                 raw = ffmpeg_process.stdout.read(buflen)
                 if raw == b"":
                     break
                 yield raw
     except FileNotFoundError as error:
-        raise ValueError(
-            "ffmpeg was not found but is required to stream audio files from filename"
-        ) from error
+        raise ValueError("ffmpeg was not found but is required to stream audio files from filename") from error
 
 
 def _get_microphone_name():
@@ -292,20 +284,14 @@ def _get_microphone_name():
     command = ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", ""]
 
     try:
-        ffmpeg_devices = subprocess.run(
-            command, text=True, stderr=subprocess.PIPE, encoding="utf-8"
-        )
-        microphone_lines = [
-            line for line in ffmpeg_devices.stderr.splitlines() if "(audio)" in line
-        ]
+        ffmpeg_devices = subprocess.run(command, text=True, stderr=subprocess.PIPE, encoding="utf-8")
+        microphone_lines = [line for line in ffmpeg_devices.stderr.splitlines() if "(audio)" in line]
 
         if microphone_lines:
             microphone_name = microphone_lines[0].split('"')[1]
             print(f"Using microphone: {microphone_name}")
             return f"audio={microphone_name}"
     except FileNotFoundError:
-        print(
-            "ffmpeg was not found. Please install it or make sure it is in your system PATH."
-        )
+        print("ffmpeg was not found. Please install it or make sure it is in your system PATH.")
 
     return "default"
