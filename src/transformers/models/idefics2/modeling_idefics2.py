@@ -602,7 +602,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_cache_class = True
-    _is_composite = True
 
     def _init_weights(self, module):
         std = (
@@ -649,7 +648,6 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     _supports_sdpa = False
-    _is_composite = False
 
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__(config)

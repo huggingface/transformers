@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
@@ -493,6 +494,15 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -769,6 +779,15 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
     def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        pass
+
+    @unittest.skip("Blip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_generate(self):
         pass
 
     def test_forward_signature(self):

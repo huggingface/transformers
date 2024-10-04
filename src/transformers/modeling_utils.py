@@ -1589,7 +1589,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         sub_configs = {
             key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
         }
-        if sub_configs and all(name not in cls.__name__.lower() for name in ["dbrx"]):
+        if sub_configs and "dbrx" not in cls.__name__.lower():
             attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 attn_implementation_per_subconfig[key] = (

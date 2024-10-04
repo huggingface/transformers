@@ -2032,8 +2032,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    _is_composite = True
-
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size

@@ -22,11 +22,21 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
-from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    IS_ROCM_SYSTEM,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    is_torch_available,
+    is_vision_available,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -507,6 +517,15 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        pass
+
+    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
+    def test_eager_matches_sdpa_generate(self):
+        pass
 
     @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
     def test_sdpa_can_dispatch_composite_models(self):

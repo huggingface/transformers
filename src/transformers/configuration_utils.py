@@ -771,7 +771,7 @@ class PretrainedConfig(PushToHubMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        for attr in copy.deepcopy(self.__dict__):
+        for attr in self.__dict__:
             yield attr
 
     def to_diff_dict(self) -> Dict[str, Any]:

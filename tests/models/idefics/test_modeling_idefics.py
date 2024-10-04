@@ -16,12 +16,15 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
     is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -309,6 +312,12 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
@@ -563,11 +572,17 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model = IdeficsModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+
     @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
-    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
+    @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_flash_attn_2_can_dispatch_composite_models(self):
         pass
 

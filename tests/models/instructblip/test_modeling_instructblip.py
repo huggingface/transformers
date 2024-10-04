@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -532,6 +533,15 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @unittest.skip("InstructBlip doesn't support SPDA with this particulr LM bacbone")
     def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @unittest.skip("InstructBlip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        pass
+
+    @unittest.skip("InstructBlip doesn't support SPDA with this particulr LM bacbone")
+    def test_eager_matches_sdpa_generate(self):
         pass
 
 

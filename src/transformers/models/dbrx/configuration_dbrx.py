@@ -14,7 +14,8 @@
 # limitations under the License.
 """DBRX model configuration"""
 
-from typing import Any, Optional
+import copy
+from typing import Any, Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -23,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PretrainedConfig):
+class DbrxAttentionConfig:
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
@@ -49,7 +50,6 @@ class DbrxAttentionConfig(PretrainedConfig):
         rope_theta: float = 10000.0,
         **kwargs: Any,
     ):
-        super().__init__(**kwargs)
         self.attn_pdrop = attn_pdrop
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
@@ -61,25 +61,20 @@ class DbrxAttentionConfig(PretrainedConfig):
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["attn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        if hasattr(self.__class__, "model_type"):
+            output["model_type"] = self.__class__.model_type
+        return output
 
 
-class DbrxFFNConfig(PretrainedConfig):
+class DbrxFFNConfig:
     """Configuration class for Dbrx FFN.
 
     [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
@@ -128,22 +123,17 @@ class DbrxFFNConfig(PretrainedConfig):
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["ffn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        if hasattr(self.__class__, "model_type"):
+            output["model_type"] = self.__class__.model_type
+        return output
 
 
 class DbrxConfig(PretrainedConfig):
@@ -256,3 +246,19 @@ class DbrxConfig(PretrainedConfig):
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = super().to_dict()
+
+        for key, value in output.items():
+            if key in ["ffn_config", "attn_config"]:
+                value = value.to_dict()
+            output[key] = value
+
+        return output

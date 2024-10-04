@@ -49,7 +49,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..qwen2.configuration_qwen2 import Qwen2Config
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLVisionConfig
 
 
@@ -1082,7 +1081,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     QWEN2VL_START_DOCSTRING,
 )
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    def __init__(self, config: Qwen2Config):
+    def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1427,7 +1426,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         self.visual = Qwen2VisionTransformerPretrainedModel._from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
-        self.model = Qwen2VLModel._from_config(config)
+        self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.padding_side = "left"  # set it to left by default, user can use setter to change padding_sides

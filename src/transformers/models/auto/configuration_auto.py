@@ -670,7 +670,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("donut-swin", "donut"),
         ("kosmos-2", "kosmos2"),
         ("maskformer-swin", "maskformer"),
-        ("musicgen_melody_decoder", "musicgen_melody"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("qwen2_audio_encoder", "qwen2_audio"),

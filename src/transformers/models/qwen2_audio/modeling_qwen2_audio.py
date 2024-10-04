@@ -543,8 +543,6 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
