@@ -979,10 +979,10 @@ class ZambaMambaDecoderLayer(nn.Module):
 
 class HybridLayer(nn.Module):
     def __init__(
-        self, shared_transformer: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer
+        self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer
     ):
         super().__init__()
-        self.shared_transformer = shared_transformer
+        self.shared_transf = shared_transf
         self.linear = linear
         self.mamba_decoder = mamba
 
@@ -1018,7 +1018,7 @@ class HybridLayer(nn.Module):
                 Indices depicting the position of the input sequence tokens in the sequence.
         """
 
-        layer_outputs = self.shared_transformer(
+        layer_outputs = self.shared_transf(
             hidden_states,
             original_hidden_states=original_hidden_states,
             layer_idx=layer_idx,
@@ -1256,9 +1256,6 @@ class ZambaModel(ZambaPreTrainedModel):
                     "shared_transf.feed_forward.down_proj.weight",
                     "shared_transf.input_layernorm.weight",
                     "shared_transf.pre_ff_layernorm.weight",
-                    # 'linear.weight',
-                    # 'mamba.input_layernorm.weight',
-                    # *['mamba.mamba.' + m_layer for m_layer in mamba_layer_keys]
                 ]
                 self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
                 layers.append(HybridLayer(block, next(linear_layers), next(mamba_layers)))
