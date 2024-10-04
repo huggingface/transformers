@@ -447,16 +447,16 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             )
 
     def _get_input_ids_and_config(self):
-                config_and_inputs = self.model_tester.prepare_config_and_inputs()
-                (
-                    config,
-                    input_ids,
-                    input_mask,
-                    sequence_labels,
-                    token_labels,
-                    choice_labels,
-                ) = config_and_inputs
-                return config, input_ids, input_mask
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        return config, input_ids, input_mask
 
     def test_left_padding_compatibility(self):
         r"""
