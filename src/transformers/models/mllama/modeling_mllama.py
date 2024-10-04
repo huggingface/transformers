@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from flash_attn import flash_attn_func
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -28,11 +29,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -224,6 +227,76 @@ class MllamaVisionAttention(nn.Module):
         return output, attn_weights
 
 
+class MllamaVisionFlashAttention2(MllamaVisionAttention):
+    """
+    Mllama vision flash attention module. This module inherits from `MllamaVisionAttention` and
+    implements the forward pass using Flash Attention for improved performance.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Determine if FlashAttention uses the top-left mask based on its version
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if output_attentions:
+            # FlashAttention does not support returning attention weights
+            logger.warning_once(
+                "MllamaModel is using MllamaVisionFlashAttention2, but flash_attention_2 does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_state=hidden_state,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
+
+        bsz, seq_len, _ = hidden_state.size()
+
+        # Compute query, key, and value projections
+        query_states = self.q_proj(hidden_state)
+        key_states = self.k_proj(hidden_state)
+        value_states = self.v_proj(hidden_state)
+
+        # Reshape and transpose to [batch_size, num_heads, seq_len, head_dim]
+        query_states = query_states.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Prepare attention mask - sending attn mask triggers _upad_input which OOMs for vision tokens
+        attention_mask = None
+        # if attention_mask is not None:
+        #     # Ensure attention_mask is of shape [batch_size, seq_len] and dtype torch.bool
+        #     attention_mask = attention_mask.squeeze(1).squeeze(1)
+        #     attention_mask = attention_mask.to(torch.bool)
+
+        # Call the _flash_attention_forward function
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            seq_len,
+            is_causal=False,  # Vision attention is typically not causal
+            dropout=0.0,  # MllamaVisionAttention doesn't have dropout
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        # Reshape attn_output to [batch_size, seq_len, embed_dim]
+        attn_output = attn_output.transpose(1, 2).reshape(bsz, seq_len, -1)
+
+        # Apply the output projection
+        output = self.o_proj(attn_output)
+
+        return output, None
+
+
 class MllamaVisionSdpaAttention(MllamaVisionAttention):
     # Adapted from MllamaVisionAttention
     def forward(
@@ -269,7 +342,7 @@ class MllamaVisionSdpaAttention(MllamaVisionAttention):
         return output, None
 
 
-MLLAMA_VISION_ATTENTION_CLASSES = {"eager": MllamaVisionAttention, "sdpa": MllamaVisionSdpaAttention}
+MLLAMA_VISION_ATTENTION_CLASSES = {"eager": MllamaVisionAttention, "sdpa": MllamaVisionSdpaAttention, "flash_attention_2": MllamaVisionFlashAttention2}
 
 
 class MllamaVisionEncoderLayer(nn.Module):
@@ -515,6 +588,82 @@ class MllamaTextCrossAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+class MllamaTextCrossFlashAttention2(MllamaTextCrossAttention):
+    """
+    Mllama flash cross-attention module. This module inherits from `MllamaTextCrossAttention` and
+    implements the forward pass using Flash Attention for improved performance.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Check if flash attention version is greater or equal to 2.1
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+            self,
+            hidden_states: torch.Tensor,
+            cross_attention_states: Optional[torch.Tensor] = None,
+            past_key_value: Optional[Cache] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x seq_len x Channel"""
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_norm(query_states)
+
+        if cross_attention_states is not None:
+            key_states = self.k_proj(cross_attention_states)
+            value_states = self.v_proj(cross_attention_states)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+            key_states = self.k_norm(key_states)
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+        elif cache_position[0] != 0:
+            key_states, value_states = (
+                past_key_value.key_cache[self.layer_idx],
+                past_key_value.value_cache[self.layer_idx],
+            )
+        else:
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
+
+        # Transpose to get the expected layout for flash attention
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+
+        # Apply Flash Attention
+        dropout_rate = self.dropout if self.training else 0.0
+        output = flash_attn_func(
+            query_states, key_states, value_states,
+            dropout_p=dropout_rate,
+            softmax_scale=None,
+            causal=False,
+            return_attn_probs=output_attentions
+        )
+
+        attn_output = output.contiguous().view(bsz, q_len, -1)
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
 class MllamaTextCrossSdpaAttention(MllamaTextCrossAttention):
     """
     Mllama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -730,6 +879,95 @@ class MllamaTextSelfAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+class MllamaTextSelfFlashAttention2(MllamaTextSelfAttention):
+    """
+    Mllama flash self-attention module. This module inherits from `MllamaTextSelfAttention` and
+    implements the forward pass using Flash Attention for improved performance.
+    """
+
+    def __init__(self, config: MllamaTextConfig, layer_idx: int, *args, **kwargs):
+        super().__init__(config, layer_idx, *args, **kwargs)
+
+        # Check if flash attention version is greater or equal to 2.1
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            past_key_value=None,
+            cache_position: Optional[torch.LongTensor] = None,
+            **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x num_heads x head_dim
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # Transpose to get the expected layout for flash attention
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.dropout if self.training else 0.0
+
+        # Handle potential silent casting to float32
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=True,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
 class MllamaTextSelfSdpaAttention(MllamaTextSelfAttention):
     # Adapted from MllamaTextSelfAttention
     def forward(
@@ -812,8 +1050,8 @@ class MllamaTextSelfSdpaAttention(MllamaTextSelfAttention):
         return attn_output, None, past_key_value
 
 
-MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention, "sdpa": MllamaTextCrossSdpaAttention}
-MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention, "sdpa": MllamaTextSelfSdpaAttention}
+MLLAMA_TEXT_CROSS_ATTENTION_CLASSES = {"eager": MllamaTextCrossAttention, "sdpa": MllamaTextCrossSdpaAttention, "flash_attention_2": MllamaTextCrossFlashAttention2}
+MLLAMA_TEXT_ATTENTION_CLASSES = {"eager": MllamaTextSelfAttention, "sdpa": MllamaTextSelfSdpaAttention, "flash_attention_2": MllamaTextSelfFlashAttention2}
 
 
 # Copied from transformers.models.gemma2.modeling_gemma2.Gemma2MLP with Gemma2->MllamaText
@@ -1042,6 +1280,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaSelfAttentionDecoderLayer",
     ]
     _supports_cache_class = True
+    _supports_flash_attn_2 = True
     _supports_static_cache = False
     _supports_sdpa = True
     _supports_quantized_cache = True
