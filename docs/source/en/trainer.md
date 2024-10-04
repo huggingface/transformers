@@ -81,7 +81,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
@@ -153,7 +153,7 @@ from transformers import TrainerCallback
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(self, num_steps=10):
         self.num_steps = num_steps
-    
+
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step >= self.num_steps:
             return {"should_training_stop": True}
@@ -171,7 +171,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
     callback=[EarlyStoppingCallback()],
@@ -289,7 +289,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_config(config).to(0)
 
 trainer = trl.SFTTrainer(
-    model=model, 
+    model=model,
     args=args,
     train_dataset=train_dataset,
     dataset_text_field='text',
@@ -299,7 +299,7 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-To pass extra arguments supports by GaLore, you should pass correctly `optim_args`, for example:
+To pass extra arguments supported by GaLore, you should pass correctly `optim_args`, for example:
 
 ```python
 import torch
@@ -327,7 +327,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_config(config).to(0)
 
 trainer = trl.SFTTrainer(
-    model=model, 
+    model=model,
     args=args,
     train_dataset=train_dataset,
     dataset_text_field='text',
@@ -370,7 +370,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_config(config).to(0)
 
 trainer = trl.SFTTrainer(
-    model=model, 
+    model=model,
     args=args,
     train_dataset=train_dataset,
     dataset_text_field='text',
@@ -419,8 +419,8 @@ The kernel supports the Llama, Gemma, Mistral, and Mixtral model architectures. 
 
 ## LOMO optimizer
 
-The LOMO optimizers have been introduced in [Full Parameter Fine-Tuning for Large Language Models with Limited Resources](https://hf.co/papers/2306.09782) and [AdaLomo: Low-memory Optimization with Adaptive Learning Rate](https://hf.co/papers/2310.10195). 
-They both consist of an efficient full-parameter fine-tuning method. These optimizers fuse the gradient computation and the parameter update in one step to reduce memory usage. Supported optimizers for LOMO are `"lomo"` and `"adalomo"`. First either install LOMO from pypi `pip install lomo-optim` or install it from source with `pip install git+https://github.com/OpenLMLab/LOMO.git`. 
+The LOMO optimizers have been introduced in [Full Parameter Fine-Tuning for Large Language Models with Limited Resources](https://hf.co/papers/2306.09782) and [AdaLomo: Low-memory Optimization with Adaptive Learning Rate](https://hf.co/papers/2310.10195).
+They both consist of an efficient full-parameter fine-tuning method. These optimizers fuse the gradient computation and the parameter update in one step to reduce memory usage. Supported optimizers for LOMO are `"lomo"` and `"adalomo"`. First either install LOMO from pypi `pip install lomo-optim` or install it from source with `pip install git+https://github.com/OpenLMLab/LOMO.git`.
 
 <Tip>
 
@@ -457,7 +457,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
 
 trainer = trl.SFTTrainer(
-    model=model, 
+    model=model,
     args=args,
     train_dataset=train_dataset,
     dataset_text_field='text',
@@ -518,6 +518,51 @@ trainer.train()
 
 This script demonstrates how to fine-tune the `google/gemma-2b` model on the IMDB dataset using the GrokAdamW optimizer. The `TrainingArguments` are configured to use GrokAdamW, and the dataset is passed to the `Trainer` for training.
 
+## Schedule Free Optimizer
+
+The Schedule Free optimizers have been introduced in [The Road Less Scheduled](https://hf.co/papers/2405.15682).
+Schedule-Free learning replaces the momentum of the base optimizer with a combination of averaging and interpolation, to completely remove the need to anneal the learning rate with a traditional schedule.
+Supported optimizers for SFO are `"schedule_free_adamw"` and `"schedule_free_sgd"`. First install schedulefree from pypi `pip install schedulefree`.
+
+Below is a simple script to demonstrate how to fine-tune [google/gemma-2b](https://huggingface.co/google/gemma-2b) on IMDB dataset in full precision:
+
+```python
+import torch
+import datasets
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
+import trl
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+args = TrainingArguments(
+    output_dir="./test-schedulefree",
+    max_steps=1000,
+    per_device_train_batch_size=4,
+    optim="schedule_free_adamw",
+    gradient_checkpointing=True,
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-6,
+    save_strategy="no",
+    run_name="sfo-imdb",
+)
+
+model_id = "google/gemma-2b"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+trainer = trl.SFTTrainer(
+    model=model, 
+    args=args,
+    train_dataset=train_dataset,
+    dataset_text_field='text',
+    max_seq_length=1024,
+)
+
+trainer.train()
+```
+
 ## Accelerate and Trainer
 
 The [`Trainer`] class is powered by [Accelerate](https://hf.co/docs/accelerate), a library for easily training PyTorch models in distributed environments with support for integrations such as [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) and [DeepSpeed](https://www.deepspeed.ai/).
@@ -534,8 +579,8 @@ To use Accelerate with [`Trainer`], run the [`accelerate.config`](https://huggin
 <hfoption id="DistributedDataParallel">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-distributed_type: MULTI_GPU                                                                                                    
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
 downcast_bf16: 'no'
 gpu_ids: all
 machine_rank: 0 #change rank as per the node
@@ -609,8 +654,8 @@ use_cpu: false
 <hfoption id="DeepSpeed with Accelerate plugin">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-deepspeed_config:                                                                                                              
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
   gradient_accumulation_steps: 1
   gradient_clipping: 0.7
   offload_optimizer_device: cpu

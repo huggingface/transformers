@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -34,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -329,9 +331,7 @@ class RecurrentGemmaRglru(nn.Module):
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
         multiplier = 1
-        tracing = isinstance(activations, torch.fx.Proxy) or (
-            hasattr(torch, "_dynamo") and torch._dynamo.is_compiling()
-        )
+        tracing = isinstance(activations, torch.fx.Proxy) or is_torchdynamo_compiling()
         if not torch.jit.is_tracing() and not tracing:
             multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
@@ -695,9 +695,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -747,10 +745,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states=all_hidden_states,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
     # Ignore copy
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -782,7 +776,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
-class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
+class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
