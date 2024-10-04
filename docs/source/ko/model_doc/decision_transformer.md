@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요
 
-결정 트랜스포머(Decision Transformer) 모델은 Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch가 작성한 논문 [결정 트랜스포머 : 시퀀스 모델링을 통한 강화 학습(Decision Transformer: Reinforcement Learning via Sequence Modeling)](https://arxiv.org/abs/2106.01345)에서 제안되었습니다.
+결정 트랜스포머(Decision Transformer) 모델은 Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch가 발표한 논문 [결정 트랜스포머 : 시퀀스 모델링을 통한 강화 학습(Decision Transformer: Reinforcement Learning via Sequence Modeling)](https://arxiv.org/abs/2106.01345)에서 제안되었습니다.
 
 논문의 개요:
 
