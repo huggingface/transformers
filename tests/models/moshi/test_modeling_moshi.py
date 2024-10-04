@@ -310,7 +310,7 @@ class MoshiTester:
             "use_cache": False,
             "sampling_rate": self.sampling_rate,
         }
-        
+
         depth_dict_config = {
             "hidden_size": self.depth_hidden_size,
             "num_hidden_layers": self.depth_num_hidden_layers,
