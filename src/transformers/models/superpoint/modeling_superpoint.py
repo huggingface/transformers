@@ -192,7 +192,7 @@ class SuperPointEncoder(nn.Module):
         )
 
 
-class SuperPointKeypointDecoder(nn.Module):
+class SuperPointInterestPointDecoder(nn.Module):
     """
     The SuperPointInterestPointDecoder uses the output of the SuperPointEncoder to compute the keypoint with scores.
     The scores are first computed by a convolutional layer, then a softmax is applied to get a probability distribution
@@ -408,7 +408,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         self.config = config
 
         self.encoder = SuperPointEncoder(config)
-        self.keypoint_decoder = SuperPointKeypointDecoder(config)
+        self.keypoint_decoder = SuperPointInterestPointDecoder(config)
         self.descriptor_decoder = SuperPointDescriptorDecoder(config)
 
         self.post_init()
