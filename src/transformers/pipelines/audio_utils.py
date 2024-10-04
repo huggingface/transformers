@@ -71,7 +71,7 @@ def ffmpeg_microphone(
             The indentifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
             the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
             for how to specify and list input devices.
-        ffmpeg_additional_args (`list`, *optional*):
+        ffmpeg_additional_args (`list[str]`, *optional*):
             Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
             process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
             with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
@@ -165,7 +165,7 @@ def ffmpeg_microphone_live(
             The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
             the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
             for how to specify and list input devices.
-        ffmpeg_additional_args (`list`, *optional*):
+        ffmpeg_additional_args (`list[str]`, *optional*):
             Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
             process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
             with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
