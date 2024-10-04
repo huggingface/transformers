@@ -3794,7 +3794,7 @@ class ModelTesterMixin:
             }
 
             # set eager as it will be the one supported in all models
-            # we just need to test if passing a dict 'attn_implementation' fails or not
+            # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 attn_implementation_per_subconfig[key] = "eager"
@@ -3813,6 +3813,10 @@ class ModelTesterMixin:
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
+        """
+        Tests if non-composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -3850,6 +3854,16 @@ class ModelTesterMixin:
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -3900,7 +3914,7 @@ class ModelTesterMixin:
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         has_sdpa = True
                         break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                if not has_sdpa and any(module_attn == "sdpa" for module_attn in [text_attn, vision_attn]):
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
@@ -4200,7 +4214,7 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not self._is_composite and not model_class._supports_sdpa:
+            if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4248,7 +4262,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not self._is_composite and not model_class._supports_sdpa:
+            if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4290,7 +4304,7 @@ class ModelTesterMixin:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
         for model_class in self.all_generative_model_classes:
-            if not self._is_composite and not model_class._supports_sdpa:
+            if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4454,10 +4468,11 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     def test_flash_attn_2_can_dispatch_composite_models(self):
         """
-        Tests if composite models can dispatch on FA2 if the sub-models supports FA2.
+        Tests if composite models can dispatch on FA2 if the sub-models support FA2.
         The tests is needed as we handle differently composite models and we cannot check them
         with above tests. If any of the sub-models does not support FA2, we'll raise an error when dispatching
-        that particular sub-model. Otherwise we dispatch safely in all sub-modules.
+        that particular sub-model. Otherwise we dispatch safely in all sub-models, where "sub-models" are specific
+        backbone models (LM/vision/audio/etc)
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

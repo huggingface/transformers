@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -33,6 +32,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -552,18 +552,72 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip("InstructBlipvideo doesn't support SPDA with this particulr LM bacbone")
+    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
-        pass
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("InstructBlipvideo doesn't support SPDA with this particulr LM bacbone")
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        pass
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
 
-    @unittest.skip("InstructBlipvideo doesn't support SPDA with this particulr LM bacbone")
-    def test_eager_matches_sdpa_generate(self):
-        pass
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                text_attn = "sdpa" if getattr(model, "language_model")._supports_sdpa else "eager"
+                vision_attn = "sdpa" if getattr(model, "vision_model")._supports_sdpa else "eager"
+                qformer_attn = "sdpa" if getattr(model, "qformer")._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(
+                    model_sdpa.config._attn_implementation
+                    == {"text_config": None, "vision_config": None, "qformer_config": None}
+                )
+                self.assertTrue(getattr(model, "language_model").config._attn_implementation == text_attn)
+                self.assertTrue(getattr(model, "vision_model").config._attn_implementation == vision_attn)
+                self.assertTrue(getattr(model, "qformer").config._attn_implementation == qformer_attn)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(
+                    model_eager.config._attn_implementation
+                    == {"text_config": "eager", "vision_config": "eager", "qformer_config": "eager"}
+                )
+                self.assertTrue(getattr(model_eager, "language_model").config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, "vision_model").config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, "qformer").config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+                if not has_sdpa and any(
+                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
+                ):
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 # We will verify our results on an image of cute cats

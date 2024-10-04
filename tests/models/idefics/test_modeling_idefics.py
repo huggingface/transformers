@@ -327,7 +327,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    _is_composite = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -572,18 +571,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model = IdeficsModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
-
     @unittest.skip("Idefics has a hard requirement on SDPA")
-    def test_sdpa_can_dispatch_composite_models(self):
-        pass
-
-    @unittest.skip("Idefics has a hard requirement on SDPA")
-    def test_flash_attn_2_can_dispatch_composite_models(self):
+    def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
 
@@ -624,7 +613,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Idefics has a hard requirement on SDPA")
-    def test_sdpa_can_dispatch_composite_models(self):
+    def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
 

@@ -507,14 +507,14 @@ class RagModel(RagPreTrainedModel):
             from ..auto.modeling_auto import AutoModel
 
             question_encoder = AutoModel.from_config(
-                config.question_encoder, attn_implementation=config._attn_implementation
+                config.question_encoder, attn_implementation=config._attn_implementation["question_encoder"]
             )
 
         if generator is None:
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
             generator = AutoModelForSeq2SeqLM.from_config(
-                config.generator, attn_implementation=config._attn_implementation
+                config.generator, attn_implementation=config._attn_implementation["generator"]
             )
 
         self.retriever = retriever
