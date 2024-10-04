@@ -976,11 +976,11 @@ Below, we'll list the elements of the standard API, and give tips on writing tem
 
 #### Tool definitions
 
-Your template should expect that the varialbe `tools` will either be undefined (if no tools are passed), or is a list 
+Your template should expect that the variable `tools` will either be null (if no tools are passed), or is a list 
 of JSON schema dicts. Our chat template methods allow users to pass tools as either JSON schema or Python functions, but when
 functions are passed, we automatically generate JSON schema and pass that to your template. As a result, the 
-`tools` variable that your template receives will always be a list of JSON schema if it's defined. Here is
-a sample JSON schema:
+`tools` variable that your template receives will always be a list of JSON schema. Here is
+a sample tool JSON schema:
 
 ```json
 {
@@ -1006,10 +1006,11 @@ a sample JSON schema:
 }
 ```
 
-A common pattern for handling tools in chat templates would be something like this:
+And here is some example code for handling tools in your chat template. Remember, this is just an example for a
+specific format - your model will probably need different formatting!
 
 ```text
-{%- if tools is defined %}
+{%- if tools %}
     {%- for tool in tools %}
         {{- '<tool>' + tool['function']['name'] + '\n' }}
         {%- for argument in tool['function']['parameters']['properties'] %}
@@ -1023,7 +1024,7 @@ A common pattern for handling tools in chat templates would be something like th
 The specific tokens and tool descriptions your template renders should of course be chosen to match the ones your model
 was trained with. There is no requirement that your **model** understands JSON schema input, only that your template can translate
 JSON schema into your model's format. For example, [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024) 
-was trained with tools defined using Python function headers, but the Command-R template accepts JSON schema, 
+was trained with tools defined using Python function headers, but the Command-R tool template accepts JSON schema, 
 converts types internally and renders the input tools as Python headers. You can do a lot with templates!
 
 #### Tool calls
@@ -1072,12 +1073,12 @@ of the called function, and a "content" key containing the result of the tool ca
 {
   "role": "tool",
   "name": "multiply",
-  "content": 30
+  "content": "30"
 }
 ```
 
 You don't need to use all of the keys in the tool response. For example, if your model doesn't expect the function
-name to be included in the tool response, then rendering it is as simple as:
+name to be included in the tool response, then rendering it can be as simple as:
 
 ```text
 {%- if message['role'] == 'tool' %}
@@ -1085,5 +1086,5 @@ name to be included in the tool response, then rendering it is as simple as:
 {%- endif %}
 ```
 
-Again, remember that the actual formatting and outputs are model-specific - you should take a lot of care
-to ensure that special tokens, whitespace and everything else exactly match the format your model was trained with!
+Again, remember that the actual formatting and special tokens are model-specific - you should take a lot of care
+to ensure that tokens, whitespace and everything else exactly match the format your model was trained with!
