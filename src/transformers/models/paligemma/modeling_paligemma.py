@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 
-# Adapted from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
+# Adapted from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
 # But Paligemma has no causal mask on prefix
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
