@@ -101,45 +101,44 @@ def get_new_model():
     return new_model
 
 
-def parse_commit_message(commit_message: str) -> str:
+def parse_message(message: str) -> str:
     """
     Parses the commit message to find the models specified in it to run slow CI.
 
     Args:
-        commit_message (`str`): The commit message of the current commit.
+        message (`str`): The commit message of the current commit.
 
     Returns:
-        `str`: The substring in `commit_message` after `[run-slow]`, [run_slow]` or [run slow]`. If no such prefix is
+        `str`: The substring in `message` after `[run-slow]`, [run_slow]` or [run slow]`. If no such prefix is
          found, the empty string is returned.
     """
-    if commit_message is None:
+    if message is None:
         return ""
 
-    command_search = re.search(r"\[([^\]]*)\](.*)", commit_message)
-    if command_search is None:
+    message = message.strip().lower()
+
+    # run-slow: model_1, model_2
+    if not message.startswith(("run-slow", "run_slow", "run slow")):
         return ""
+    message = message[len("run slow"):]
+    # remove leading `:`
+    while message.strip().startswith(":"):
+        message = message.strip()[1:]
 
-    command = command_search.groups()[0]
-    command = command.lower().replace("-", " ").replace("_", " ")
-    run_slow = command == "run slow"
-    if run_slow:
-        models = command_search.groups()[1].strip()
-        return models
-    else:
-        return ""
+    return message
 
 
-def get_models(commit_message: str):
-    models = parse_commit_message(commit_message)
+def get_models(message: str):
+    models = parse_message(message)
     return [f"models/{x}" for x in models.replace(",", " ").split()]
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--commit_message", type=str, default="", help="The commit message.")
+    parser.add_argument("--message", type=str, default="", help="The commit message.")
     args = parser.parse_args()
 
     new_model = get_new_model()
-    specified_models = get_models(args.commit_message)
+    specified_models = get_models(args.message)
     models = ([] if new_model == "" else [new_model]) + specified_models
     print(sorted(set(models)))
