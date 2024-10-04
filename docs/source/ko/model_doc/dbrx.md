@@ -14,28 +14,30 @@ specific language governing permissions and limitations under the License.
 
 ## 오버뷰[[overview]]
 
-DBRX is a [transformer-based](https://www.isattentionallyouneed.com/) decoder-only large language model (LLM) that was trained using next-token prediction.
-It uses a *fine-grained* mixture-of-experts (MoE) architecture with 132B total parameters of which 36B parameters are active on any input.
-It was pre-trained on 12T tokens of text and code data.
-Compared to other open MoE models like Mixtral-8x7B and Grok-1, DBRX is fine-grained, meaning it uses a larger number of smaller experts. DBRX has 16 experts and chooses 4, while Mixtral-8x7B and Grok-1 have 8 experts and choose 2.
-This provides 65x more possible combinations of experts and we found that this improves model quality.
-DBRX uses rotary position encodings (RoPE), gated linear units (GLU), and grouped query attention (GQA).
-It is a BPE based model and uses the GPT-4 tokenizer as described in the [tiktoken](https://github.com/openai/tiktoken) repository.
-We made these choices based on exhaustive evaluation and scaling experiments.
+DBRX는 [트랜스포머 기반의](https://www.isattentionallyouneed.com/) 다음 토큰을 예측하는 디코더 전용 LLM 모델 입니다.
+총 132B 매개변수를 가진 *세밀한* 전문가 혼합(MoE) 아키텍처를 사용하며, 이 중 36B 매개변수가 입력마다 활성화됩니다.
+12T 토큰의 텍스트와 코드 데이터로 사전 학습되었습니다.
 
-DBRX was pretrained on 12T tokens of carefully curated data and a maximum context length of 32K tokens.
-We estimate that this data is at least 2x better token-for-token than the data we used to pretrain the MPT family of models.
-This new dataset was developed using the full suite of Databricks tools, including Apache Spark™ and Databricks notebooks for data processing, and Unity Catalog for data management and governance.
-We used curriculum learning for pretraining, changing the data mix during training in ways we found to substantially improve model quality.
+Mixtral-8x7B와 Grok-1과 같은 다른 공개 MoE 모델들과 비교했을 때, DBRX는 더 많은 수의 작은 전문가들을 사용하는 세밀한 구조를 가지고 있습니다. DBRX는 16개의 전문가 중 4개를 선택하는 반면, Mixtral-8x7B와 Grok-1은 8개의 전문가 중 2개를 선택합니다.
+
+이는 65배 더 많은 전문가 조합을 가능하게 하며, 이를 통해 모델의 품질이 향상되는 것을 발견했습니다.
+DBRX는 회전 위치 인코딩(RoPE), 게이트 선형 유닛(GLU), 그룹 쿼리 어텐션(GQA)을 사용합니다.
+BPE 기반 모델이며 [tiktoken](https://github.com/openai/tiktoken) 저장소에 설명된 GPT-4 토크나이저를 사용합니다.
+이러한 선택들은 철저한 평가와 스케일링 실험을 기반으로 이루어졌습니다.
+
+DBRX는 신중하게 선별된 12T 토큰의 데이터로 사전 학습되었으며, 최대 문맥 길이는 32K 토큰입니다.
+이 데이터는 토큰 대비 MPT 계열 모델 학습에 사용된 데이터보다 최소 2배 이상 더 좋은 것으로 추정됩니다.
+이 새로운 데이터셋은 데이터 처리를 위한 Apache Spark™와 Databricks 노트북, 그리고 데이터 관리와 거버넌스를 위한 Unity Catalog를 포함한 Databricks 도구 전체를 활용하여 개발되었습니다.
+우리는 사전 학습을 위해 커리큘럼 학습을 사용했으며, 학습 중 데이터 믹스를 변경하는 방식이 모델 품질을 상당히 개선한다는 것을 발견했습니다.
 
 
-More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
+DBRX Instruct와 DBRX Base에 대한 더 자세한 정보는 이 [기술 블로그 포스트](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm)에서 확인할 수 있습니다.
 
-This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct), though this may not be up to date.
+이 모델은 [eitan-turok](https://huggingface.co/eitanturok)와 [abhi-db](https://huggingface.co/abhi-db)에 의해 기여되었습니다. 원본 코드는 [이곳](https://github.com/databricks/dbrx-instruct)에서 찾을 수 있습니다만, 최신버전이 아닐 수 있습니다.
 
 ## 사용 예[[usage-examples]]
 
-The `generate()` method can be used to generate text using DBRX. You can generate using the standard attention implementation, flash-attention, and the PyTorch scaled dot product attention. The last two attention implementations give speed ups.
+`generate()` 메소드는 DBRX를 사용하여 텍스트를 생성하는 데 사용될 수 있습니다. 표준 어텐션 구현, 플래시 어텐션, 그리고 PyTorch 스케일된 점곱 어텐션을 사용하여 생성할 수 있습니다. 후자의 두 어텐션 구현 방식은 속도 향상을 제공합니다.
 
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
@@ -57,7 +59,9 @@ outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
-If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
+flash-attention이 설치되어 있다면(`pip install flash-attn`), 더 빠른 생성이 가능합니다. (플래시 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2에서 확인할 수 있습니다.)
+
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -79,7 +83,9 @@ outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
-You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
+PyTorch 스케일된 점곱 어텐션을 사용하여도 더 빠른 생성이 가능합니다. (스케일드 닷 프로덕트 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)에서 확인할 수 있습니다.)
+
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
