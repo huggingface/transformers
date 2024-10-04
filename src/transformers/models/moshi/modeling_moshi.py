@@ -270,17 +270,20 @@ class MoshiFlexibleLinear(nn.Module):
                 If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
                 But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
         """
-        if layer_idx is not None:
-            # Use torch.gather to select the corresponding weights for each sample
-            # (n_codebooks, output_size, hidden_size)
-            selected_weights = torch.index_select(self.weight, 0, layer_idx)
-            
-            # (bsz, n_codebooks, hidden_size) X (n_codebooks)
-            return torch.einsum("bnh,noh->bno", x, selected_weights)
 
-        # Multiple layers case:
-        # use einsum to batch the operations (batch_size, num_layers, input_size) -> (batch_size, num_layers, output_size)
-        return torch.einsum("bnh,noh->bno", x, self.weight)
+        # Use torch.gather to select the corresponding weights for each sample
+        # (codebooks, output_size, hidden_size)
+        selected_weights = torch.index_select(self.weight, 0, layer_idx) if layer_idx is not None else self.weight
+
+        # (1, codebooks, hidden_size, output_size)
+        selected_weights = selected_weights.transpose(1, 2)[None, :, :, :]
+
+        # (batch_size, codebooks, 1, hidden_size) x (1, codebooks, hidden_size, output_size)
+        # -> (batch_size, codebooks, 1, output_size)
+        x = torch.matmul(x[:, :, None, :], selected_weights)
+
+        # (batch_size, codebooks, output_size)
+        return x.squeeze(2)
 
 
 class MoshiLinear(nn.Module):
