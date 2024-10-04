@@ -251,7 +251,7 @@ def _compute_longrope_parameters(
         device (`torch.device`):
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
-            The current sequence length. Unused for this type of RoPE.
+            The current sequence length.
         rope_kwargs (`Dict`, *optional*):
             BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
     Returns:
@@ -279,8 +279,11 @@ def _compute_longrope_parameters(
     # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
     # values to compute the default attention scaling factor, instead of using `factor`.
     if hasattr(config, "original_max_position_embeddings"):
+        if seq_len and seq_len < config.original_max_position_embeddings:
+            expanded_max_position_embeddings = config.original_max_position_embeddings
+        else:
+            expanded_max_position_embeddings = config.max_position_embeddings
         max_position_embeddings = config.original_max_position_embeddings
-        expanded_max_position_embeddings = config.max_position_embeddings
         factor = expanded_max_position_embeddings / max_position_embeddings
     else:
         max_position_embeddings = config.max_position_embeddings
