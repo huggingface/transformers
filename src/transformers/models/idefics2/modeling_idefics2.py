@@ -39,7 +39,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel
-from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig
+from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
 
 if is_flash_attn_2_available():
@@ -763,12 +763,12 @@ class Idefics2PerceiverAttention(nn.Module):
         super().__init__()
 
         self.layer_idx = None
-        self.hidden_size = config.text_config.hidden_size
-        self.num_heads = config.perceiver_config.resampler_n_heads
-        self.head_dim = config.perceiver_config.resampler_head_dim
-        self.num_key_value_heads = config.perceiver_config.num_key_value_heads
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.resampler_n_heads
+        self.head_dim = config.resampler_head_dim
+        self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.attention_dropout = config.perceiver_config.attention_dropout
+        self.attention_dropout = config.attention_dropout
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -994,25 +994,20 @@ IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
 class Idefics2PerceiverLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.text_config.hidden_size
-        self.n_latents = config.perceiver_config.resampler_n_latents
-        self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
-        attn_implementation = (
-            config._attn_implementation["perceiver_config"]
-            if config._attn_implementation["perceiver_config"] is not None
-            else "eager"
-        )
+        self.hidden_size = config.hidden_size
+        self.n_latents = config.resampler_n_latents
+        self.depth = config.resampler_depth
+        self.rms_norm_eps = config.rms_norm_eps
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[attn_implementation](config, layer_idx=layer_idx)
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
-            hidden_size=config.text_config.hidden_size,
-            intermediate_size=config.text_config.hidden_size * 4,
-            output_size=config.text_config.hidden_size,
-            hidden_act=config.perceiver_config.hidden_act,
+            hidden_size=config.hidden_size,
+            intermediate_size=config.hidden_size * 4,
+            output_size=config.hidden_size,
+            hidden_act=config.hidden_act,
         )
 
     def forward(
@@ -1090,14 +1085,15 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     _supports_sdpa = False
+    config_class = Idefics2PerceiverConfig
 
     def __init__(self, config) -> None:
         super().__init__(config)
-        self.hidden_size = config.text_config.hidden_size
-        self.hidden_act = config.perceiver_config.hidden_act
-        self.n_latents = config.perceiver_config.resampler_n_latents
-        self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
+        self.hidden_size = config.hidden_size
+        self.hidden_act = config.hidden_act
+        self.n_latents = config.resampler_n_latents
+        self.depth = config.resampler_depth
+        self.rms_norm_eps = config.rms_norm_eps
 
         # Create Latents for Perceiver
         self.latents = nn.Parameter(torch.ones(self.n_latents, self.hidden_size))
@@ -1154,7 +1150,9 @@ class Idefics2Connector(nn.Module):
             output_size=config.text_config.hidden_size,
             hidden_act=config.text_config.hidden_act,
         )
-        self.perceiver_resampler = Idefics2PerceiverResampler(config)
+        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(
+            config.perceiver_config, attn_implementation=config._attn_implementation["perceiver_config"]
+        )
 
     def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
