@@ -15,16 +15,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Gemma2
+# Gemma2 [[gemma2]]
 
-## 개요
+## 개요 [[overview]]
 
-Gemma2 모델은 Google의 Gemma2 팀이 작성한 [Gemma2: Gemini 기술 및 연구 기반의 오픈 모델](https://blog.google/technology/developers/google-gemma-2/)에서 제안되었습니다.
-두 가지 Gemma2 모델이 출시되었으며, 파라미터 크기는 90억(9B)과 270억(27B)입니다.
+Gemma2 모델은 Google의 Gemma2 팀이 작성한 [Gemma2: Open Models Based on Gemini Technology and Research](https://blog.google/technology/developers/google-gemma-2/)에서 제안되었습니다.
+파라미터 크기가 각각 90억(9B)과 270억(27B)인 두 가지 Gemma2 모델이 출시되었습니다.
 
 블로그 게시물의 초록은 다음과 같습니다:
 
-*이제 우리는 전 세계의 연구자와 개발자들에게 Gemma 2를 공식적으로 출시합니다. 90억(9B)과 270억(27B) 파라미터 크기로 제공되는 Gemma 2는 1세대보다 더 높은 성능과 추론 효율성을 제공하며, 상당한 안전성 향상을 내장하고 있습니다. 사실 270억 규모의 모델은 크기가 두 배 이상인 모델과 경쟁력 있는 대안을 제공하며, 이는 작년 12월만 해도 독점 모델로만 가능했던 성능을 제공합니다.*
+*이제 우리는 전 세계의 연구자와 개발자들에게 Gemma 2를 공식적으로 출시합니다. 90억(9B)과 270억(27B) 파라미터 크기로 제공되는 Gemma 2는 1세대보다 더 높은 성능과 추론 효율성을 제공하며, 상당한 안전성 향상을 포함하고 있습니다. 사실 270억 규모의 모델은 크기가 두 배 이상인 모델과 비교해도 경쟁력 있는 대안을 제공하며, 이는 작년 12월까지만 해도 독점 모델에서만 가능했던 성능을 제공합니다.*
 
 팁:
 
@@ -38,26 +38,26 @@ Gemma2 모델은 Google의 Gemma2 팀이 작성한 [Gemma2: Gemini 기술 및 �
 
 이 모델은 [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq), [Tom Arsen]()이 기여했습니다.
 
-## Gemma2Config
+## Gemma2Config [[transformers.Gemma2Config]]
 
 [[autodoc]] Gemma2Config
 
-## Gemma2Model
+## Gemma2Model [[transformers.Gemma2Model]]
 
 [[autodoc]] Gemma2Model
     - forward
 
-## Gemma2ForCausalLM
+## Gemma2ForCausalLM [[transformers.Gemma2ForCausalLM]]
 
 [[autodoc]] Gemma2ForCausalLM
     - forward
 
-## Gemma2ForSequenceClassification
+## Gemma2ForSequenceClassification [[transformers.Gemma2ForSequenceClassification]]
 
 [[autodoc]] Gemma2ForSequenceClassification
     - forward
 
-## Gemma2ForTokenClassification
+## Gemma2ForTokenClassification [[transformers.Gemma2ForTokenClassification]]
 
 [[autodoc]] Gemma2ForTokenClassification
     - forward
