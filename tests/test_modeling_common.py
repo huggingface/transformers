@@ -1924,6 +1924,9 @@ class ModelTesterMixin:
 
             # Test when `vocab_size` is smaller than `hidden_size`.
             del model
+            del config
+            # Copy again. config changed with embedding resizing (`vocab_size` changed)
+            config = copy.deepcopy(original_config)
             config.vocab_size = 4
             config.pad_token_id = 3
             if is_deepspeed_zero3_enabled():
