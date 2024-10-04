@@ -544,6 +544,7 @@ def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
     map_location: Optional[Union[str, torch.device]] = None,
+    weights_only: bool = True,
 ):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
@@ -580,7 +581,7 @@ def load_state_dict(
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        weights_only_kwarg = {"weights_only": weights_only} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
@@ -617,6 +618,9 @@ def set_initialized_submodules(model, state_dict_keys):
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
         loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
+        # When checking if the root module is loaded all state_dict_keys must be used.
+        if module_name == "":
+            loaded_keys = set(state_dict_keys)
         if loaded_keys.issuperset(module.state_dict()):
             module._is_hf_initialized = True
         else:
@@ -3006,6 +3010,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         use_safetensors: bool = None,
+        weights_only: bool = True,
         **kwargs,
     ) -> "PreTrainedModel":
         r"""
@@ -3192,6 +3197,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_safetensors (`bool`, *optional*, defaults to `None`):
                 Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
                 is not installed, it will be set to `False`.
+
+            weights_only (`bool`, *optional*, defaults to `True`):
+                Indicates whether unpickler should be restricted to loading only tensors, primitive types,
+                dictionaries and any types added via torch.serialization.add_safe_globals().
+                When set to False, we can load wrapper tensor subclass weights.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -3828,7 +3838,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file)
+                state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3849,7 +3859,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0])
+                                one_state_dict = load_state_dict(resolved_archive_file[0], weights_only=weights_only)
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -4049,6 +4059,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
                 gguf_path=gguf_path,
+                weights_only=weights_only,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -4154,6 +4165,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         hf_quantizer=None,
         keep_in_fp32_modules=None,
         gguf_path=None,
+        weights_only=True,
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
@@ -4511,7 +4523,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
+                state_dict = load_state_dict(
+                    shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
+                )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4664,6 +4678,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         start_prefix="",
         hf_quantizer=None,
         pretrained_model_name_or_path=None,
+        weights_only=True,
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
@@ -4684,7 +4699,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
-        state_dict = load_state_dict(resolved_archive_file)
+        state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
             model,

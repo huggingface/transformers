@@ -31,7 +31,6 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
-    is_torchdynamo_compiling,
     logging,
 )
 from ..gemma.modeling_gemma import (
@@ -606,9 +605,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -800,10 +797,6 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         )
 
         hidden_states = outputs[0]
-        if labels is None and not is_torchdynamo_compiling():
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
         if self.config.final_logit_softcapping is not None:
@@ -811,8 +804,6 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             logits = torch.tanh(logits)
             logits = logits * self.config.final_logit_softcapping
 
-        # TODO: remove the float() operation in v4.46
-        logits = logits.float()
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
