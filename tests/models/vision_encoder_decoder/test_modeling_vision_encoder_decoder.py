@@ -20,7 +20,6 @@ import unittest
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from packaging import version
-from parameterized import parameterized
 
 from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
@@ -37,8 +36,6 @@ from transformers.testing_utils import (
 from transformers.utils import (
     cached_property,
     is_torch_available,
-    is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
     is_vision_available,
 )
 
@@ -388,28 +385,10 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+    def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
-
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
-            self.skipTest(
-                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
-            )
-
-        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
-        if torch_dtype == "float16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bfloat16":
-            torch_dtype = torch.bfloat16
-        elif torch_dtype == "float32":
-            torch_dtype = torch.float32
 
         inputs_dict = self.prepare_config_and_inputs()
         encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]
@@ -420,7 +399,7 @@ class EncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model_sdpa = VisionEncoderDecoderModel.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+            model_sdpa = VisionEncoderDecoderModel.from_pretrained(tmpdirname)
             model_sdpa = model_sdpa.eval().to(torch_device)
 
             # see https://github.com/huggingface/transformers/pull/32238
@@ -436,9 +415,7 @@ class EncoderDecoderMixin:
             # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
             # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
             if encoder_attn == "sdpa" and decoder_attn == "sdpa":
-                model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(
-                    tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
-                )
+                model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
                 self.assertTrue(
@@ -448,12 +425,11 @@ class EncoderDecoderMixin:
             else:
                 with self.assertRaises(ValueError):
                     model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(
-                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                        tmpdirname, attn_implementation="sdpa"
                     )
 
             model_eager = VisionEncoderDecoderModel.from_pretrained(
                 tmpdirname,
-                torch_dtype=torch_dtype,
                 attn_implementation="eager",
             )
             model_eager = model_eager.eval().to(torch_device)

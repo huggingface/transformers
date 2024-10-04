@@ -103,7 +103,7 @@ class RecurrentGemmaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -390,12 +390,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="RecurentGemma generation tests are not fully supported"
-    )  # TODO: @gante after adding MixinTests
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):
@@ -417,6 +411,10 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma does not support generating with input embeddings (missing position_ids)")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
         pass
 
 

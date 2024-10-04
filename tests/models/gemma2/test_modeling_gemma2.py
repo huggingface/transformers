@@ -86,8 +86,7 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    unittest.skip("Gemma2's forcefully disables sdpa due to softcapping")
-
+    @unittest.skip("Gemma2's forcefully disables sdpa due to softcapping")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
