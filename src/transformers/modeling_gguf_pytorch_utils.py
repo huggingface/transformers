@@ -176,7 +176,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
             if architecture == "qwen2moe":
                 if "_exp" in name:
-                    split_moe_expert_tensor(weights, parsed_parameters, tensor_name, name, tensor_key_mapping)
+                    split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
                     continue
                 if "ffn_gate_inp_shexp" in name:
                     weights = np.expand_dims(weights, axis=0)
@@ -239,7 +239,9 @@ def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
     return qkv_bias
 
 
-def split_moe_expert_tensor(weights: np.ndarray, parsed_parameters, tensor_name, name, tensor_key_mapping):
+def split_moe_expert_tensor(
+    weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
+):
     # Original merge implementation
     # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
     exp_name = ""
