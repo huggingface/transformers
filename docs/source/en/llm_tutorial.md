@@ -164,7 +164,7 @@ If not specified in the [`~generation.GenerationConfig`] file, `generate` return
 By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable; creative tasks like chatbots or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. Enable sampling with `do_sample=True`, and you can learn more about this topic in this [blog post](https://huggingface.co/blog/how-to-generate).
 
 ```py
->>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
+>>> # Set seed for reproducibility -- you don't need this unless you want full reproducibility
 >>> from transformers import set_seed
 >>> set_seed(42)
 

@@ -17,6 +17,7 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
+from typing import Optional
 
 import numpy as np
 import requests
@@ -284,44 +285,29 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @require_torch
-    @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+    # Override as Idefics3Processor needs image tokens in prompts
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer <image>"
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
 
-        input_str = "lower newer <image>"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 364)  # crop size doesn't affect our image processor
-
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component(
-            "image_processor", max_image_size={"longest_edge": 32}, size={"longest_edge": 32}
+        if batch_size == 1:
+            return ["lower newer <image>"]
+        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
+            batch_size - 2
         )
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, image_seq_len=2)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer <image>"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 32)
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
+    # Override as Idefics3Processor needs nested images to work properly with batched inputs
+    @require_vision
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        if batch_size is None:
+            return super().prepare_image_inputs()
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return [[super().prepare_image_inputs()]] * batch_size
 
     @require_vision
     @require_torch
@@ -333,7 +319,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=30)
@@ -350,7 +336,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer<image>"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -378,7 +364,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -402,7 +388,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
@@ -419,11 +405,11 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["<image>lower newer", "<image>upper older longer string"]
-        image_input = self.prepare_image_inputs()
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
-            images=[image_input, image_input],
+            images=image_input,
             return_tensors="pt",
             padding="longest",
             max_length=76,
@@ -446,7 +432,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer<image>"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
