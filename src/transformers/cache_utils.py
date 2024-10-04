@@ -10,13 +10,13 @@ from packaging import version
 
 from .configuration_utils import PretrainedConfig
 from .utils import (
-    deprecate_kwarg,
     is_hqq_available,
     is_optimum_quanto_available,
     is_quanto_available,
     is_torchdynamo_compiling,
     logging,
 )
+from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
