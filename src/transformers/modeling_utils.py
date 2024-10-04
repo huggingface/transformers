@@ -2454,9 +2454,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ).to(old_embeddings.weight.dtype)
         else:
             # Otherwise, just initialize with the mean. because distribtion will not be created.
-            new_embeddings.weight.data[-1 * added_num_tokens :, :] = mean_embeddings[None, :].repeat(
-                added_num_tokens, 1
-            ).to(old_embeddings.weight.dtype)
+            new_embeddings.weight.data[-1 * added_num_tokens :, :] = (
+                mean_embeddings[None, :].repeat(added_num_tokens, 1).to(old_embeddings.weight.dtype)
+            )
 
     def _init_added_lm_head_weights_with_mean(
         self,
