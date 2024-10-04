@@ -630,7 +630,7 @@ def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
     while len(all_dependencies) > 0:
         # Pick element to visit
         parent = all_dependencies.popleft()
-        if not parent in checked_dependencies:
+        if parent not in checked_dependencies:
             # Update dependencies
             all_dependencies.extend(dependency_mapping[parent])
             all_dependencies_with_parent += [(dependency, parent) for dependency in dependency_mapping[parent]]
@@ -639,6 +639,7 @@ def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
 
     # no child can ever appear before its parent thanks to the queue (needed to add them at the correct location in the body later)
     return all_dependencies_with_parent
+
 
 class ModularConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
@@ -729,7 +730,10 @@ class ModularConverterTransformer(CSTTransformer):
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
                 if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
                     file_ = ASSIGNMENTS_TO_KEEP[original_node.body[0].targets[0].target.value]
-                    self.files[file_][original_node.body[0].targets[0].target.value] = {"node": original_node, "insert_idx": self.global_scope_index}
+                    self.files[file_][original_node.body[0].targets[0].target.value] = {
+                        "node": original_node,
+                        "insert_idx": self.global_scope_index,
+                    }
             self.global_scope_index += 100
         return updated_node
 
@@ -853,10 +857,10 @@ class ModularConverterTransformer(CSTTransformer):
         else:
             self.class_to_file_type[class_name] = "modeling"
             self.files["modeling"][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
-        
+
         self.current_class = None
         return updated_node
-    
+
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         if m.matches(parent_node, m.Module()):
@@ -900,7 +904,7 @@ class ModularConverterTransformer(CSTTransformer):
             elif full_statement not in self.all_imports:
                 logger.warning(f"one import is protected with `if`. Hard guess where it's used {full_statement}")
         return node
-    
+
     def visit_Call(self, node: cst.Call):
         """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them"""
         # Only map function calls if we're inside a class (i.e., current_class is set)
@@ -913,11 +917,17 @@ class ModularConverterTransformer(CSTTransformer):
             if isinstance(node.func, cst.Name):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
 
-    def _add_function_to_body(self, top_level_function: str, body: dict, function_node: cst.FunctionDef, matching_callers: set | None = None,
-                              parent: str | None = None) -> bool:
+    def _add_function_to_body(
+        self,
+        top_level_function: str,
+        body: dict,
+        function_node: cst.FunctionDef,
+        matching_callers: set | None = None,
+        parent: str | None = None,
+    ) -> bool:
         """Add the given function to the body in the correct place if it not already present."""
         if matching_callers is None and parent is None:
-            raise ValueError('Cannot add function if both the parent and the matching callers are None.')
+            raise ValueError("Cannot add function if both the parent and the matching callers are None.")
         if matching_callers is None:
             matching_callers = {parent}
         if len(matching_callers) > 0 and top_level_function not in body.keys():
@@ -951,7 +961,9 @@ class ModularConverterTransformer(CSTTransformer):
                 matching_callers = calling_entities & file_elements
                 added = self._add_function_to_body(top_level_function, body, function_node, matching_callers)
                 if added:
-                    for dependency, parent in find_all_dependencies(top_level_function, self.function_call_dependency_mapping):
+                    for dependency, parent in find_all_dependencies(
+                        top_level_function, self.function_call_dependency_mapping
+                    ):
                         self._add_function_to_body(dependency, body, self.all_definitions[dependency], parent=parent)
 
         for file, body in self.files.items():
@@ -969,6 +981,7 @@ class ModularConverterTransformer(CSTTransformer):
 class PostModularConverterCleaner(CSTTransformer):
     """Allow simple cleaning after conversion. Remove top-level functions without any calls (they may arise due
     to dependency mapping, even if code parts with those functions calls were overwritten)"""
+
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
     def __init__(self):
@@ -1010,7 +1023,9 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         wrapper.visit(cst_transformers)
         for file, node in cst_transformers.files.items():
             if node != {}:
-                ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE.format(path_to_modular_file=modular_file) + node.code, True)
+                ruffed_code = run_ruff(
+                    AUTO_GENERATED_MESSAGE.format(path_to_modular_file=modular_file) + node.code, True
+                )
                 formatted_code = run_ruff(ruffed_code, False)
                 output[file] = [formatted_code, ruffed_code]
         return output
@@ -1041,11 +1056,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-<<<<<<< HEAD
-        default=["src/transformers/models/gemma/modular_gemma.py"],
-=======
         default=["src/transformers/models/roberta/modular_roberta.py"],
->>>>>>> e8219ac6b (improve modular)
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
