@@ -82,13 +82,13 @@ GGUF_TENSOR_MAPPING = {
     "qwen2moe": {
         "token_embd": "model.embed_tokens",
         "blk": "model.layers",
-        "ffn_up_exp": "mlp.experts.up_proj",
+        "ffn_up_exps": "mlp.experts",
         "ffn_up_shexp": "mlp.shared_expert.up_proj",
-        "ffn_down_exp": "mlp.experts.down_proj",
+        "ffn_down_exps": "mlp.experts",
         "ffn_down_shexp": "mlp.shared_expert.down_proj",
         "ffn_norm": "post_attention_layernorm",
-        "ffn_gate_inp": "mlp.gate",
-        "ffn_gate_exp": "mlp.experts.gate_proj",
+        "ffn_gate_inp.weight": "mlp.gate.weight",
+        "ffn_gate_exps": "mlp.experts",
         "ffn_gate_shexp": "mlp.shared_expert.gate_proj",
         "ffn_gate_inp_shexp": "mlp.shared_expert_gate",
         "attn_norm": "input_layernorm",
@@ -206,7 +206,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
         "expert_count": "num_experts",
-        "expert_used_count": "num_experts_per_tok"
+        "expert_used_count": "num_experts_per_tok",
     },
     "falcon": {
         "context_length": "max_position_embeddings",

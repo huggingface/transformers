@@ -38,8 +38,8 @@ class GgufIntegrationTests(unittest.TestCase):
     imatrix_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
-    qwen2_moe_model_id = "gdax/Qwen1.5-MoE-A2.7B_gguf"
-    qwen2_original_moe_model_id = "Qwen/Qwen1.5-MoE-A2.7B"
+    qwen2moe_model_id = "gdax/Qwen1.5-MoE-A2.7B_gguf"
+    qwen2moe_original_model_id = "Qwen/Qwen1.5-MoE-A2.7B"
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
     phi3_model_id = "microsoft/Phi-3-mini-4k-instruct-gguf"
@@ -73,7 +73,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
-    q2_k_qwen2_moe_model_id = "Qwen1.5-MoE-A2.7B_Q2_k.gguf"
+    q8_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B_Q8_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
     fp16_bloom_model_id = "bloom-560m.fp16.gguf"
     q8_bloom_model_id = "bloom-560m.q8_0.gguf"
@@ -81,7 +81,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
-    fp16_qwen2_moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
+    fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
 
     example_text = "Hello"
 
@@ -346,16 +346,15 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    def test_qwen2moe_q2_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.qwen2_moe_model_id, gguf_file=self.q2_k_qwen2_moe_model_id)
+    def test_qwen2moe_q8(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen2moe_model_id, gguf_file=self.q8_qwen2moe_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.qwen2_moe_model_id,
-            gguf_file=self.q2_k_qwen2_moe_model_id,
-            device_map="auto",
+            self.qwen2moe_model_id,
+            gguf_file=self.q8_qwen2moe_model_id,
             torch_dtype=torch.float16,
         )
 
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        text = tokenizer(self.example_text, return_tensors="pt")
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
@@ -363,14 +362,12 @@ class GgufIntegrationTests(unittest.TestCase):
 
     def test_qwen2moe_weights_conversion_fp16(self):
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.qwen2_moe_model_id,
-            gguf_file=self.fp16_qwen2_moe_model_id,
-            device_map="auto",
+            self.qwen2moe_model_id,
+            gguf_file=self.fp16_qwen2moe_model_id,
             torch_dtype=torch.float16,
         )
         original_model = AutoModelForCausalLM.from_pretrained(
-            self.qwen2_original_moe_model_id,
-            device_map="auto",
+            self.qwen2moe_original_model_id,
             torch_dtype=torch.float16,
         )
 
