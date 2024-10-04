@@ -2447,7 +2447,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_covariance_psd:
             # If covariances is positive definite, a distribution can be created. and we can sample new weights from it.
             distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embeddings, covariance_matrix=1e-5 * covariance
+                mean_embeddings, covariance_matrix=1e-7 * covariance
             )
             new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
                 sample_shape=(added_num_tokens,)
@@ -2485,7 +2485,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _init_added_lm_head_bias_with_mean(self, old_lm_head, new_lm_head, added_num_tokens):
         bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
         bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
-        new_lm_head.bias.data[-1 * added_num_tokens :].normal_(mean=bias_mean, std=bias_std * 1e-5)
+        new_lm_head.bias.data[-1 * added_num_tokens :].normal_(mean=bias_mean, std=1e-7 * bias_std)
 
     def _copy_lm_head_original_to_resized(
         self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
