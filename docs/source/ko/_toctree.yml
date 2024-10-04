@@ -280,8 +280,8 @@
       title: (번역중) Configuration
     - local: in_translation
       title: (번역중) Data Collator
-    - local: in_translation
-      title: (번역중) Keras callbacks
+    - local: main_classes/keras_callbacks
+      title: 케라스 콜백
     - local: in_translation
       title: (번역중) Logging
     - local: in_translation
