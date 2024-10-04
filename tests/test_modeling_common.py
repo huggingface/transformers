@@ -2030,7 +2030,7 @@ class ModelTesterMixin:
                 old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
             torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
-            # check if the bias is always initialized with zero.
+            # check if the old bias mean close to added bias mean.
             if output_embeds.bias is not None:
                 if is_deepspeed_zero3_enabled():
                     with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
