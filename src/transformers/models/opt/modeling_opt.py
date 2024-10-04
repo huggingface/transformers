@@ -61,15 +61,6 @@ _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
 
-def _attention_to_position_ids(attention_mask: torch.Tensor) -> torch.Tensor:
-    """
-    Converts an attention mask to position ids.
-    """
-
-    position_ids = torch.cumsum(attention_mask, dim=1)
-    return (position_ids * attention_mask - 1).long()
-
-
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -81,8 +72,19 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, position_ids: torch.LongTensor):
+    def forward(
+        self,
+        attention_mask: torch.LongTensor,
+        past_key_values_length: int = 0,
+        position_ids: Optional[torch.LongTensor] = None,
+    ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
+
+        if position_ids is None:
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
 
         return super().forward(position_ids + self.offset)
 
@@ -744,11 +746,12 @@ class OPTDecoder(OPTPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = _attention_to_position_ids(attention_mask)
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
             # cut positions if `past_key_values_length` is > 0
             position_ids = position_ids[:, past_key_values_length:]
 
-        pos_embeds = self.embed_positions(position_ids)
+        pos_embeds = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -1097,7 +1100,8 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             input_ids = input_ids[:, remove_prefix_length:]
 
         if attention_mask is not None and position_ids is None:
-            position_ids = _attention_to_position_ids(attention_mask)
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
