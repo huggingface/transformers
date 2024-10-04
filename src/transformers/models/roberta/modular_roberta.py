@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,6 @@ from ..bert.modeling_bert import (
     BertLayer,
     BertEncoder,
     BertPooler,
-    BertPreTrainedModel,
     BertModel,
 )
 
@@ -47,6 +46,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -58,6 +58,7 @@ from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
@@ -77,7 +78,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
-
 
 class RobertaEmbeddings(BertEmbeddings):
     def __init__(self, config):
@@ -202,19 +202,43 @@ class RobertaPooler(BertPooler):
     pass
 
 
-class RobertaPreTrainedModel(BertPreTrainedModel):
+class RobertaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = RobertaConfig
+    base_model_prefix = "roberta"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention", "RobertaSdpaSelfAttention"]
-    # del load_tf_weights
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
 
 class RobertaModel(RobertaPreTrainedModel, BertModel):
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config, add_pooling_layer)
+        super().__init__(config)
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = RobertaEncoder(config)
         self.pooler = RobertaPooler(config) if add_pooling_layer else None
         # Initialize weights and apply final processing
         self.post_init()
-
 
 
 ROBERTA_START_DOCSTRING = r"""
