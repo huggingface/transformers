@@ -14,10 +14,9 @@
 # limitations under the License.
 """PyTorch Moshi model."""
 
-import copy
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -48,14 +47,11 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto.modeling_auto import AutoModel
-from .configuration_moshi import MoshiConfig
+from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -276,7 +272,10 @@ class MoshiFlexibleLinear(nn.Module):
         """
         if layer_idx is not None:
             # Use torch.gather to select the corresponding weights for each sample
+            # (n_codebooks, output_size, hidden_size)
             selected_weights = torch.index_select(self.weight, 0, layer_idx)
+            
+            # (bsz, n_codebooks, hidden_size) X (n_codebooks)
             return torch.einsum("bnh,noh->bno", x, selected_weights)
 
         # Multiple layers case:
@@ -427,7 +426,6 @@ class MoshiAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
         self.is_causal = True
         self.scaling = 1 / math.sqrt(self.head_dim)
 
@@ -453,6 +451,7 @@ class MoshiAttention(nn.Module):
         # rotary embeddings are not used in the depth decoder
         self.rotary_emb = None
         if use_rope:
+            self.rope_theta = config.rope_theta
             self.rotary_emb = MoshiRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
@@ -742,7 +741,7 @@ MOSHI_ATTENTION_CLASSES = {
 
 
 class MoshiDecoderLayer(nn.Module):
-    def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool = False, use_rope=True):
+    def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.use_flexible_linear = use_flexible_linear
@@ -1033,48 +1032,36 @@ MOSHI_DECODER_INPUTS_DOCSTRING = r"""
 
 class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     """
-    Transformer depth decoder consisting of *config.depth_num_hidden_layers* layers. Each layer is a [`MoshiTransformerLayer`]
+    Transformer depth decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MoshiTransformerLayer`]
 
     Args:
         config: MoshiConfig
     """
 
-    def __init__(self, config: MoshiConfig):
-        original_hidden_size = config.hidden_size
+    config_class = MoshiDepthConfig
 
-        config = copy.deepcopy(config)
-        for key, value in config.to_dict().items():
-            if len(key) >= 6 and "depth_" == key[:6]:
-                config.__setattr__(key[6:], value)
+    def __init__(self, config: MoshiDepthConfig):
         super().__init__(config)
 
-        self.text_embed_tokens = nn.Embedding(config.vocab_size + 1, config.depth_hidden_size)
+        self.text_embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size)
 
         # the last codebook is never used as input
         self.embed_tokens = nn.ModuleList(
-            [
-                nn.Embedding(config.audio_vocab_size + 1, config.depth_hidden_size)
-                for _ in range(config.num_codebooks - 1)
-            ]
+            [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(config.num_codebooks - 1)]
         )
 
-        self.input_projections = MoshiFlexibleLinear(
-            original_hidden_size, config.depth_hidden_size, config.num_codebooks
-        )
+        self.input_projections = MoshiFlexibleLinear(config.input_size, config.hidden_size, config.num_codebooks)
 
         self.layers = nn.ModuleList(
             [
                 MoshiDecoderLayer(config, layer_idx, use_flexible_linear=True, use_rope=False)
-                for layer_idx in range(config.depth_num_hidden_layers)
+                for layer_idx in range(config.num_hidden_layers)
             ]
         )
 
-        self.lm_heads = MoshiFlexibleLinear(config.depth_hidden_size, config.audio_vocab_size, config.num_codebooks)
-
+        self.lm_heads = MoshiFlexibleLinear(config.hidden_size, config.audio_vocab_size, config.num_codebooks)
         self._attn_implementation = config._attn_implementation
-
         self.gradient_checkpointing = False
-
         self.config = config
 
     def forward(
@@ -1488,14 +1475,18 @@ class MoshiModel(MoshiPreTrainedModel):
         config: MoshiConfig
     """
 
+    # Ignore copy
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size, self.padding_idx)  # Ignore copy
+        self.embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [MoshiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                MoshiDecoderLayer(config, layer_idx, use_flexible_linear=False)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = MoshiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -1965,11 +1956,12 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(2 * config.num_codebooks)]
         )
         self.audio_encoder = AutoModel.from_config(
-            config.audio_encoder, attn_implementation=config._attn_implementation
+            config.audio_encoder_config, attn_implementation=config._attn_implementation
         )
         self.decoder = MoshiForCausalLM(config)
 
-        self.depth_decoder = MoshiDepthDecoder(config)
+        config.depth_decoder_config._attn_implementation_internal = config._attn_implementation
+        self.depth_decoder = MoshiDepthDecoder(config.depth_decoder_config)
 
         self.num_codebooks = config.num_codebooks
         self.post_init()
@@ -2353,7 +2345,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
         # create blank user inputs - moshi needs a constant stream of user inputs
         blank_input_values = torch.zeros(
-            (inputs_embeds.shape[0], 1, int(self.config.sampling_rate / self.config.audio_encoder.frame_rate)),
+            (inputs_embeds.shape[0], 1, int(self.config.sampling_rate / self.config.audio_encoder_config.frame_rate)),
             dtype=self.dtype,
             device=self.device,
         )
@@ -2765,7 +2757,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             moshi_seq_length = moshi_input.shape[-1]
             tokens_seq_length = inputs.shape[1]
 
-            ratio = self.config.audio_encoder.frame_rate / self.config.sampling_rate
+            ratio = self.config.audio_encoder_config.frame_rate / self.config.sampling_rate
             moshi_seq_length = math.ceil(moshi_seq_length * ratio) if moshi_audio_codes is None else moshi_seq_length
             user_seq_length = math.ceil(user_seq_length * ratio) if user_audio_codes is None else user_seq_length
 
@@ -2790,3 +2782,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
+
+
+__all__ = ["MoshiForCausalLM", "MoshiForConditionalGeneration", "MoshiModel", "MoshiPreTrainedModel"]

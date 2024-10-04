@@ -604,6 +604,7 @@ _import_structure = {
     ],
     "models.moshi": [
         "MoshiConfig",
+        "MoshiDepthConfig",
     ],
     "models.musicgen_melody": [
         "MusicgenMelodyConfig",
@@ -5436,6 +5437,7 @@ if TYPE_CHECKING:
     )
     from .models.moshi import (
         MoshiConfig,
+        MoshiDepthConfig,
     )
     from .models.mpnet import (
         MPNetConfig,

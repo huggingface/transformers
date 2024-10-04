@@ -132,7 +132,7 @@ class MoshiDecoderTester:
             tie_word_embeddings=False,
             pad_token_id=self.pad_token_id,
             ffn_dim=self.ffn_dim,
-            audio_encoder={"model_type": self.audio_encoder_type},
+            audio_encoder_config={"model_type": self.audio_encoder_type},
             attn_implementation=self.attn_implementation,
         )
         return config
@@ -166,7 +166,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self,
             config_class=MoshiConfig,
             hidden_size=16,
-            audio_encoder={"model_type": self.model_tester.audio_encoder_type},
+            audio_encoder_config={"model_type": self.model_tester.audio_encoder_type},
         )
 
     @unittest.skip(reason="The MoshiModel does not have support dynamic compile yet")
@@ -310,6 +310,15 @@ class MoshiTester:
             "use_cache": False,
             "sampling_rate": self.sampling_rate,
         }
+        
+        depth_dict_config = {
+            "hidden_size": self.depth_hidden_size,
+            "num_hidden_layers": self.depth_num_hidden_layers,
+            "max_position_embeddings": self.depth_max_position_embeddings,
+            "num_attention_heads": self.depth_num_attention_heads,
+            "ffn_dim": self.depth_ffn_dim,
+            "sliding_window": self.depth_sliding_window,
+        }
 
         config = MoshiConfig(
             vocab_size=self.vocab_size,
@@ -323,14 +332,9 @@ class MoshiTester:
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
             ffn_dim=self.ffn_dim,
-            audio_encoder=mimi_dict_config,
+            audio_encoder_config=mimi_dict_config,
+            depth_decoder_config=depth_dict_config,
             attn_implementation=self.attn_implementation,
-            depth_hidden_size=self.depth_hidden_size,
-            depth_num_hidden_layers=self.depth_num_hidden_layers,
-            depth_max_position_embeddings=self.depth_max_position_embeddings,
-            depth_num_attention_heads=self.depth_num_attention_heads,
-            depth_ffn_dim=self.depth_ffn_dim,
-            depth_sliding_window=self.depth_sliding_window,
         )
         return config
 
@@ -376,6 +380,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         inputs_dict["concat_unconditional_inputs"] = False
 
         return config, input_ids, attention_mask, inputs_dict
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+
+        # Make sure we only return `input_ids`.
+        # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
+        # There are further tests to test that audio waveforms and codes are well generated.
+        filtered_inputs_dict["return_audio_waveforms"] = False
+        filtered_inputs_dict["return_audio_codes"] = False
+        filtered_inputs_dict["concat_unconditional_inputs"] = False
+
+        return config, filtered_inputs_dict
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -704,7 +720,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
 
             input_values_length = int(
-                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder.frame_rate
+                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate
             )
 
             user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))

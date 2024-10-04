@@ -83,7 +83,7 @@ def _preprocess_state_dict(state_dict, config):
     # stack(gating.{i}.linear_in)->mlp.fc1
     # stack(gating.{i}.linear_out)->mlp.fc2
 
-    for layer_idx in range(config.depth_num_hidden_layers):
+    for layer_idx in range(config.depth_decoder_config.num_hidden_layers):
         linear_layers_in = [
             state_dict.pop(f"depformer.layers.{layer_idx}.gating.{i}.linear_in.weight")
             for i in range(config.num_codebooks)
