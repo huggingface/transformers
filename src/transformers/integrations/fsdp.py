@@ -18,14 +18,16 @@ from typing import TYPE_CHECKING
 from ..utils import is_torch_available
 
 
-if is_torch_available():
-    import torch.distributed.fsdp
-
 if TYPE_CHECKING:
     from torch import nn
 
 
 def is_fsdp_managed_module(module: nn.Module) -> bool:
+    if not is_torch_available():
+        return False
+
+    import torch.distributed.fsdp
+
     return isinstance(module, torch.distributed.fsdp.FullyShardedDataParallel) or getattr(
         module, "_is_fsdp_managed_module", False
     )
