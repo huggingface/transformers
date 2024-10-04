@@ -17,27 +17,26 @@ rendered properly in your Markdown viewer.
 
 # Gemma2
 
-## Overview
+## 개요
 
-The Gemma2 model was proposed in [Gemma2: Open Models Based on Gemini Technology and Research](https://blog.google/technology/developers/google-gemma-2/) by Gemma2 Team, Google.
-Two Gemma2 models are released, with parameters sizes of 9 billion (9B) and 27 billion (27B).
+Gemma2 모델은 Google의 Gemma2 팀이 작성한 [Gemma2: Gemini 기술 및 연구 기반의 오픈 모델](https://blog.google/technology/developers/google-gemma-2/)에서 제안되었습니다.
+두 가지 Gemma2 모델이 출시되었으며, 파라미터 크기는 90억(9B)과 270억(27B)입니다.
 
-The abstract from the blog post is the following:
+블로그 게시물의 초록은 다음과 같습니다:
 
-*Now we’re officially releasing Gemma 2 to researchers and developers globally. Available in both 9 billion (9B) and 27 billion (27B) parameter sizes, Gemma 2 is higher-performing and more efficient at inference than the first generation, with significant safety advancements built in. In fact, at 27B, it offers competitive alternatives to models more than twice its size, delivering the kind of performance that was only possible with proprietary models as recently as December.*
+*이제 우리는 전 세계의 연구자와 개발자들에게 Gemma 2를 공식적으로 출시합니다. 90억(9B)과 270억(27B) 파라미터 크기로 제공되는 Gemma 2는 1세대보다 더 높은 성능과 추론 효율성을 제공하며, 상당한 안전성 향상을 내장하고 있습니다. 사실 270억 규모의 모델은 크기가 두 배 이상인 모델과 경쟁력 있는 대안을 제공하며, 이는 작년 12월만 해도 독점 모델로만 가능했던 성능을 제공합니다.*
 
-Tips:
+팁:
 
-- The original checkpoints can be converted using the conversion script `src/transformers/models/Gemma2/convert_Gemma2_weights_to_hf.py` 
+- 원본 체크포인트는 변환 스크립트 `src/transformers/models/Gemma2/convert_Gemma2_weights_to_hf.py`를 사용하여 변환할 수 있습니다.
 
 <Tip warning={true}>
 
-- Gemma2 uses sliding window attention every second layer, which makes it unsuitable for typical kv caching with [`~DynamicCache`] or tuples of tensors. To enable caching in Gemma2 forward call, you must initialize a [`~HybridCache`] instance and pass it as `past_key_values` to the forward call. Note, that you also have to prepare `cache_position` if the `past_key_values` already contains previous keys and values.
+- Gemma2는 매 두 번째 레이어마다 슬라이딩 윈도우 어텐션을 사용하므로 [`~DynamicCache`] 또는 텐서의 튜플과 같은 일반적인 kv 캐싱에는 적합하지 않습니다. Gemma2의 forward 호출에서 캐싱을 활성화하려면 [`~HybridCache`] 인스턴스를 초기화하고 이를 `past_key_values`로 forward 호출에 전달해야 합니다. 또한 `past_key_values`에 이미 이전의 키와 값이 포함되어 있다면 `cache_position`도 준비해야 합니다.
 
 </Tip>
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq) and [Tom Arsen]().
-
+이 모델은 [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq), [Tom Arsen]()이 기여했습니다.
 
 ## Gemma2Config
 
