@@ -12,17 +12,19 @@ on:
   pull_request:
 concurrency:
   # But this will cancel the current job no ? Because they have the same PR number ... (any comment even not the target one)
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, '/pytest') }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, 'run-slow') }}
   cancel-in-progress: ${{ (github.event.issue.pull_request != null || github.event.pull_request != null) }}
 
 jobs:
   reply-and-trigger:
-#    if: contains(github.event.comment.body,'/pytest')
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
       - name: Trigger specific job
         run: |
+          echo "${{ github.event.comment.body }}"
+          echo "${{ startsWith(github.event.comment.body, 'run-slow') }}"
+          echo "hello 4"
           echo "${{ github.head_ref }}"
           echo "${{ github.ref }}"
           echo "${{ github.sha }}"
@@ -32,8 +34,161 @@ jobs:
           echo "${{ github.event.pull_request }}"
           echo "${{ github.event.issue.pull_request != null }}"
           echo "${{ github.event.pull_request != null }}"
-          echo "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, '/pytest') }}"
-          sleep 15m
+          echo "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ contains(github.event.comment.body, 'run-slow') }}"
+          echo "${{ github.event.pull_request.head.sha }}"
+          echo "${{ github.event.pull_request.merge_commit_sha }}"
+
+  get-pr-number:
+    runs-on: ubuntu-22.04
+    name: Get PR number
+    outputs:
+      PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
+    steps:
+      - name: Get PR number
+        shell: bash
+        run: |
+          echo "${{ github.event.pull_request.number }}"
+          echo "${{ github.event.issue.number }}"
+          echo "${{ github.event.issue.pull_request }}"
+          if [ "${{ github.event.pull_request.number }}" != "" ]; then
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event.issue.number }}" != "" && "${{ github.event.issue.pull_request }}" != "" ]]; then
+            echo "PR_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
+          else
+            echo "PR_NUMBER=" >> $GITHUB_ENV
+          fi
+
+      - name: Check PR number
+        shell: bash
+        run: |
+          echo "${{ env.PR_NUMBER }}"
+
+      - name: Set PR number
+        id: set_pr_number
+        run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
+
+  check-pr-number:
+    runs-on: ubuntu-latest
+    needs: get-pr-number
+    steps:
+      - env:
+          PR_NUMBER: ${{needs.get-pr-number.outputs.PR_NUMBER}}
+        run: |
+          echo "$PR_NUMBER"
+          echo "${{ env.PR_NUMBER }}"
+
+  check-pr-merge-branch:
+    runs-on: ubuntu-latest
+    needs: get-pr-number
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+
+      - name: Checkout PR merge branch
+        env:
+          PR_NUMBER: ${{needs.get-pr-number.outputs.PR_NUMBER}}
+        run: |
+            git fetch
+            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
+            git checkout refs/remotes/pull/$PR_NUMBER/merge
+            git log -n 5
+
+  # use a python script to handle this complex logic
+  # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
+  # case 2: `run-slow model_1, model_2`
+  # case 3: comment is `pytest ...`
+  get-tests:
+    runs-on: ubuntu-latest
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    outputs:
+      models: ${{ steps.models_to_run.outputs.models }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+
+      - name: Get models to test
+        run: |
+          python -m pip install GitPython
+          python utils/pr_slow_ci_models.py --message "${{ github.event.comment.body }}" | tee output.txt
+          echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
+
+      - name: Show models to test
+        id: models_to_run
+        run: |
+          echo "${{ env.models }}"
+          echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
+
+  show-tests:
+    runs-on: ubuntu-latest
+    name: Show model to test
+    needs: get-tests
+    steps:
+      - name: Show models to test
+        run: |
+          echo "${{ needs.get-tests.outputs.models }}"
+
+  run_models_gpu:
+      name: Run all tests for the model
+      # Triggered only `find_models_to_run` is triggered (label `run-slow` is added) which gives the models to run
+      # (either a new model PR or via a commit message)
+      if: ${{ needs.get-tests.outputs.models != '[]' }}
+      needs: get-tests
+      strategy:
+        fail-fast: false
+        matrix:
+          folders: ${{ fromJson(needs.get-tests.outputs.models) }}
+          machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+#      runs-on: ubuntu-latest
+      runs-on:
+         group: '${{ matrix.machine_type }}'
+      container:
+        image: huggingface/transformers-all-latest-gpu
+        options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      steps:
+      - name: Echo input and matrix info
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+
+#  git-checkout:
+#      runs-on: ubuntu-22.04
+#      name: Check PR merge branch
+#      steps:
+#        - name: Get PR number
+#          run: |
+#            if
+#
+#        - uses: actions/checkout@v4
+#          with:
+#            fetch-depth: "0"
+#            # ref: ${{ github.event.pull_request.head.sha }}
+#            ref: "refs/pull/${{ github.event.pull_request.number }}/merge"
+#
+#        - name: Checkout
+#          run: |
+#            git fetch
+#            git fetch origin pull/${{ github.event.pull_request.number }}/head:pull/${{ github.event.pull_request.number }}/merge
+#            git checkout pull/${{ github.event.pull_request.number }}/merge
+#            git log -n 5
+#
+#        - name: Checkout 2
+#          run: |
+#            git fetch
+#            git fetch origin refs/pull/${{ github.event.pull_request.number }}/merge:refs/remotes/pull/${{ github.event.pull_request.number }}/merge
+#            git checkout refs/remotes/pull/${{ github.event.pull_request.number }}/merge
+#            git log -n 5
+#
+#        - name: Checkout 3
+#          run: |
+#            git fetch
+#            git fetch origin refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pull/${{ github.event.pull_request.number }}/head
+#            git checkout refs/remotes/pull/${{ github.event.pull_request.number }}/head
+#            git log -n 6
 
 #      - name: Set up GitHub CLI
 #        uses: actions/checkout@v4
