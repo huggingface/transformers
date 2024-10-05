@@ -89,20 +89,22 @@ class DepthEstimationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout)
-        self.image_size = image.size
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs["target_size"] = image.size[::-1]
         return model_inputs
 
     def _forward(self, model_inputs):
+        target_size = model_inputs.pop("target_size")
         model_outputs = self.model(**model_inputs)
+        model_outputs["target_size"] = target_size
         return model_outputs
 
     def postprocess(self, model_outputs):
         predicted_depth = model_outputs.predicted_depth
         prediction = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(1), size=self.image_size[::-1], mode="bicubic", align_corners=False
+            predicted_depth.unsqueeze(1), size=model_outputs["target_size"], mode="bicubic", align_corners=False
         )
         output = prediction.squeeze().cpu().numpy()
         formatted = (output * 255 / np.max(output)).astype("uint8")

@@ -84,7 +84,7 @@ six==1.14.0
 terminado==0.8.3
 testpath==0.4.4
 tokenizers==0.8.1rc2
-torch==1.13.1
+torch==2.2.0
 torchvision==0.7.0
 tornado==6.4.1
 tqdm==4.66.3
