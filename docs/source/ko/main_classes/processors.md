@@ -80,7 +80,7 @@ rendered properly in your Markdown viewer.
 
 
 ## SQuAD [[squad]]
-[스탠포드 질문 응답 데이터셋 (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) 은 질문 응답 작업에서 모델의 성능을 평가하는 벤치마크입니다. 두 가지 버전 v1.1과 v2.0이 있습니다. 첫 번째 버전(v1.1)은 논문 [SQuAD: 텍스트 기계 이해에 대한 질문 100,000+](https://arxiv.org/abs/1606.05250)과 함께 발표되었습니다. 두 번째 버전(v2.0)은 논문 [당신이 모르는 것을 알다: SQuAD에 대해 대답할 수 없는 질문들](https://arxiv.org/abs/1806.03822) 와 함께 발표되었습니다.
+[The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) 은 질의 응답 작업에서 모델의 성능을 평가하는 벤치마크입니다. 두 가지 버전 v1.1과 v2.0이 있습니다. 첫 번째 버전(v1.1)은 논문 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://arxiv.org/abs/1606.05250)과 함께 발표되었습니다. 두 번째 버전(v2.0)은 논문 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://arxiv.org/abs/1806.03822) 와 함께 발표되었습니다.
 
 이 라이브러리는 각각의 버전에 해당하는 프로세서를 제공합니다:
 
