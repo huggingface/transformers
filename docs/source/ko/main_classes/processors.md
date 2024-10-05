@@ -66,7 +66,7 @@ rendered properly in your Markdown viewer.
 
 
 ## XNLI [[xnli]]
-[교차 언어적 NLI 코퍼스 (XNLI)](https://www.nyu.edu/projects/bowman/xnli/) 는 교차 언어 텍스트 표현의 품질을 평가하는 벤치마크입니다. XNLI는 [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)를 기반으로 크라우드 소싱된 데이터셋으로, 15개의 다른 언어(영어-리소스가 많은 언어들- 및 스와힐리어 -리소스가 충분하지 않은 언어들- 포함)에 대한 텍스트 추론 주석이 달린 텍스트 쌍으로 구성되어 있습니다.
+[교차 언어적 NLI 코퍼스 (XNLI)](https://www.nyu.edu/projects/bowman/xnli/) 는 교차 언어 텍스트 표현의 품질을 평가하는 벤치마크입니다. XNLI는 [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)를 기반으로 크라우드소싱으로 구축된 데이터셋으로, 15개의 다른 언어(영어-리소스가 많은 언어들- 및 스와힐리어 -리소스가 충분하지 않은 언어들- 포함)에 대한 텍스트 추론 주석이 달린 텍스트 쌍으로 구성되어 있습니다.
 
 이 데이터셋은 논문 [XNLI: 교차 언어적 문장 표현 평가](https://arxiv.org/abs/1809.05053)와 함께 발표되었습니다.
 
