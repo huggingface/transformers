@@ -37,15 +37,12 @@ class GgufIntegrationTests(unittest.TestCase):
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
     phi3_model_id = "microsoft/Phi-3-mini-4k-instruct-gguf"
-<<<<<<< HEAD
     dbrx_model_id = "dranger003/dbrx-instruct-iMat.GGUF"
-=======
     bloom_model_id = "afrideva/bloom-560m-GGUF"
     original_bloom_model_id = "bigscience/bloom-560m"
     falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
->>>>>>> 38f9f10dd9240619ea17fb6c7acb51b3bc592232
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -395,19 +392,11 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-<<<<<<< HEAD
-    def test_dbrx_q1_s(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.dbrx_model_id, gguf_file=self.q1_s_dbrx_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(
-            self.dbrx_model_id,
-            gguf_file=self.q1_s_dbrx_gguf_model_id,
-=======
     def test_bloom_fp16(self):
         tokenizer = AutoTokenizer.from_pretrained(self.bloom_model_id, gguf_file=self.fp16_bloom_model_id)
         model = AutoModelForCausalLM.from_pretrained(
             self.bloom_model_id,
             gguf_file=self.fp16_bloom_model_id,
->>>>>>> 38f9f10dd9240619ea17fb6c7acb51b3bc592232
             device_map="auto",
             torch_dtype=torch.float16,
         )
@@ -415,11 +404,6 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-<<<<<<< HEAD
-        EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-=======
         EXPECTED_TEXT = "Hello, I just want to say that I am very"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
@@ -516,7 +500,6 @@ class GgufIntegrationTests(unittest.TestCase):
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
 
->>>>>>> 38f9f10dd9240619ea17fb6c7acb51b3bc592232
     def test_tokenization_xnli(self):
         import tqdm
         from datasets import load_dataset
