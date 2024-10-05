@@ -210,8 +210,6 @@ for i in range(6):
 # for dab-DETR, also convert reference point head and query scale MLP
 rename_keys.extend(
     [
-        # only when the number of patterns (num_patterns parameter in config) are more than 0 like r50-pat3 or r50dc5-pat3
-        # ("transformer.patterns.weight", "patterns.weight"),
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
         ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
@@ -270,10 +268,8 @@ def rename_backbone_keys(state_dict):
     return new_state_dict
 
 
-def read_in_q_k_v(state_dict, is_panoptic=False):
+def read_in_q_k_v(state_dict):
     prefix = ""
-    if is_panoptic:
-        prefix = "dab_detr."
 
     # first: transformer encoder
     for i in range(6):
@@ -303,13 +299,23 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     Copy/paste/tweak model's weights to our DAB-DETR structure.
     """
 
-    # load default config
-    config = DABDETRConfig()
-    # set backbone and dilation attributes
-    if "resnet101" in model_name:
-        config.backbone = "resnet101"
+    # load modified config. Why? After loading the default config, the backbone kwargs are already set.
     if "dc5" in model_name:
-        config.dilation = True
+        config = DABDETRConfig(dilation=True)
+    else:
+        # load default config
+        config = DABDETRConfig()
+
+    # set other attributes
+    if "dab-detr-resnet-50-dc5" == model_name:
+        config.temperature_height = 10
+        config.temperature_width = 10
+    if "fixxy" in model_name:
+        config.random_refpoint_xy = True
+    if "pat3" in model_name:
+        config.num_patterns = 3
+        # only when the number of patterns (num_patterns parameter in config) are more than 0 like r50-pat3 or r50dc5-pat3
+        rename_keys.extend([("transformer.patterns.weight", "patterns.weight")])
 
     config.num_labels = 91
     repo_id = "huggingface/label-files"
@@ -344,10 +350,53 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
 
-    expected_slice_logits = torch.tensor(
-        [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
-    )
-    expected_slice_boxes = torch.tensor([[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]])
+    # Expected logits and pred_boxes results of each model
+    if model_name == "dab-detr-resnet-50":
+        expected_slice_logits = torch.tensor(
+            [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
+        )
+        logits_atol = 3e-4
+        boxes_atol = 1e-4
+    elif model_name == "dab-detr-resnet-50-pat3":
+        expected_slice_logits = torch.tensor(
+            [[-10.1069, -6.7068, -8.5944], [-9.4003, -7.3787, -8.7304], [-9.5858, -6.1514, -8.4744]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.5834, 0.6162, 0.2534], [0.6670, 0.2703, 0.1468], [0.5532, 0.1936, 0.0411]]
+        )
+        logits_atol = 1e-4
+        boxes_atol = 1e-4
+    elif model_name == "dab-detr-resnet-50-dc5":
+        expected_slice_logits = torch.tensor(
+            [[-9.9054, -6.0638, -7.8630], [-9.9112, -5.2952, -7.8175], [-9.8720, -5.3681, -7.7094]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.4077, 0.3644, 0.2689], [0.4429, 0.6903, 0.8238], [0.5188, 0.7933, 0.9989]]
+        )
+        logits_atol = 3e-3
+        boxes_atol = 1e-3
+    elif model_name == "dab-detr-resnet-50-dc5-pat3":
+        expected_slice_logits = torch.tensor(
+            [[-11.2264, -5.4028, -8.9815], [-10.8721, -6.0637, -9.1898], [-10.8535, -6.8360, -9.4203]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.8532, 0.5143, 0.1799], [0.6903, 0.3749, 0.3506], [0.5275, 0.2726, 0.0535]]
+        )
+        logits_atol = 1e-4
+        boxes_atol = 1e-4
+    elif model_name == "dab-detr-resnet-50-dc5-fixxy":
+        expected_slice_logits = torch.tensor(
+            [[-9.9362, -5.8105, -8.4952], [-9.6947, -4.9066, -8.3175], [-8.6919, -3.6328, -8.8972]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.4420, 0.3688, 0.2510], [0.5112, 0.7156, 0.9774], [0.4985, 0.4967, 0.9990]]
+        )
+        logits_atol = 5e-4
+        boxes_atol = 1e-3
+
     # finally, create HuggingFace model and load state dict
     model = DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
@@ -355,9 +404,9 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     model.eval()
     # verify our conversion
     outputs = model(**encoding)
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=logits_atol)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=boxes_atol)
     # Save model and image processor
     logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -376,9 +425,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pretrained_model_weights_path",
-        default="/Users/davidhajdu/Desktop/dab_detr_r50.pth",
+        default="",
         type=str,
-        help="The path of the original model weights like: Users/username/Desktop/dab_detr_r50.pth",
+        help="The path of the original model weights like: Users/username/Desktop/checkpoint.pth",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."

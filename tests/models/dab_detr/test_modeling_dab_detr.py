@@ -540,9 +540,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "DABDETRForSegmentation":
-                    correct_outlen += 2
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
 
@@ -748,6 +745,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 TOLERANCE = 1e-4
+CHECKPOINT = "IDEA-Research/dab-detr-resnet-50"
 
 
 # We will verify our results on an image of cute cats
@@ -762,12 +760,10 @@ def prepare_img():
 class DABDETRModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            DABDETRImageProcessor.from_pretrained("davidhajdu/dab-detr-resnet-50") if is_vision_available() else None
-        )
+        return DABDETRImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_no_head(self):
-        model = DABDETRModel.from_pretrained("davidhajdu/dab-detr-resnet-50").to(torch_device)
+        model = DABDETRModel.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -784,7 +780,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4))
 
     def test_inference_object_detection_head(self):
-        model = DABDETRForObjectDetection.from_pretrained("davidhajdu/dab-detr-resnet-50").to(torch_device)
+        model = DABDETRForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

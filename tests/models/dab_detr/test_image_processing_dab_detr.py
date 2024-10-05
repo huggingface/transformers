@@ -171,7 +171,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        image_processing = DABDETRImageProcessor.from_pretrained("davidhajdu/dab-detr-resnet-50")
+        image_processing = DABDETRImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
         encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
