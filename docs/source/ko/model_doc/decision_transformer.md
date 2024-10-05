@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 결정 트랜스포머 (Decision Transformer)
+# 결정 트랜스포머(Decision Transformer)[[overview]]
 
 ## 개요
 
