@@ -841,21 +841,20 @@ class ViTMAEDecoder(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        This method is a modified version of the interpolation function for ViT-mae model at the deocder, that
+        This method is a modified version of the interpolation function for ViT-mae model at the decoder, that
         allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
         resolution images.
 
-        Source:
+        Adapted from:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
         # -1 removes the class dimension since we later append it without interpolation
         embeddings_positions = embeddings.shape[1] - 1
-        num_positions = self.decoder_pos_embed.shape[1] - 1
 
         # Separation of class token and patch tokens
-        class_pos_embed = self.decoder_pos_embed[:, 0, :]
-        patch_pos_embed = self.decoder_pos_embed[:, 1:, :]
+        class_pos_embed = self.decoder_pos_embed[:, :1]
+        patch_pos_embed = self.decoder_pos_embed[:, 1:]
 
         # To retain the final 3d tensor with the required dimensions
         dim = self.decoder_pos_embed.shape[-1]
@@ -867,10 +866,10 @@ class ViTMAEDecoder(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         # Interpolating the decoder position embeddings shape wrt embeddings shape i.e (x).
-        # 1 keeps the other dimension constant
+        # we keep the second last dimension constant
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(1, embeddings_positions / num_positions),
+            size=(patch_pos_embed.shape[-2], embeddings_positions),
             mode="bicubic",
             align_corners=False,
         )
@@ -878,7 +877,7 @@ class ViTMAEDecoder(nn.Module):
         # Converting back to the original shape
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         # Adding the class token back
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding

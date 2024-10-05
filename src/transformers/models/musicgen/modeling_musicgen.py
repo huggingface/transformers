@@ -26,9 +26,14 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.configuration_utils import GenerationConfig, GenerationMode
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation import (
+    ClassifierFreeGuidanceLogitsProcessor,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+    StoppingCriteriaList,
+)
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -425,7 +430,7 @@ class MusicgenFlashAttention2(MusicgenAttention):
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1206,7 +1211,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     "The MusicGen decoder model with a language modelling head on top.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForCausalLM(MusicgenPreTrainedModel):
+class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
 
@@ -1658,7 +1663,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForConditionalGeneration(PreTrainedModel):
+class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
