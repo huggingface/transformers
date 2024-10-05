@@ -14,39 +14,38 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# TimeSformer
+# TimeSformer [[timesformer]]
 
-## Overview
+## 개요 [[overview]]
 
-The TimeSformer model was proposed in [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095) by Facebook Research.
-This work is a milestone in action-recognition field being the first video transformer. It inspired many transformer based video understanding and classification papers.
+TimeSformer 모델은 Facebook Research에서 제안한 [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095)에서 소개되었습니다. 이 연구는 첫 번째 비디오 Transformer로서, 행동 인식 분야에서 중요한 이정표가 되었습니다. 이 연구는 Transformer 기반의 비디오 이해 및 분류 논문에 많은 영감을 주었습니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다. 
 
-*We present a convolution-free approach to video classification built exclusively on self-attention over space and time. Our method, named "TimeSformer," adapts the standard Transformer architecture to video by enabling spatiotemporal feature learning directly from a sequence of frame-level patches. Our experimental study compares different self-attention schemes and suggests that "divided attention," where temporal attention and spatial attention are separately applied within each block, leads to the best video classification accuracy among the design choices considered. Despite the radically new design, TimeSformer achieves state-of-the-art results on several action recognition benchmarks, including the best reported accuracy on Kinetics-400 and Kinetics-600. Finally, compared to 3D convolutional networks, our model is faster to train, it can achieve dramatically higher test efficiency (at a small drop in accuracy), and it can also be applied to much longer video clips (over one minute long). Code and models are available at: [this https URL](https://github.com/facebookresearch/TimeSformer).*
+*우리는 공간과 시간에 걸쳐 셀프 어텐션만을 사용하는 합성곱이 없는(convolution-free) 비디오 분류 방법을 제안합니다. 이 방법은 “TimeSformer”라고 불리며, 표준 Transformer 아키텍처를 비디오에 적용하여 프레임 수준 패치 시퀀스로부터 직접 시공간적 특징을 학습할 수 있게 합니다. 우리의 실험적 연구는 다양한 셀프 어텐션 방식을 비교하며, 시간적 어텐션과 공간적 어텐션을 각각의 블록 내에서 별도로 적용하는 “분할 어텐션” 방식이 고려된 설계 선택 중 가장 우수한 비디오 분류 정확도를 제공한다는 것을 시사합니다. 이 혁신적인 설계에도 불구하고, TimeSformer는 Kinetics-400 및 Kinetics-600을 포함한 여러 행동 인식 벤치마크에서 최첨단 결과를 달성했으며, 현재까지 보고된 가장 높은 정확도를 기록했습니다. 마지막으로, 3D 합성곱 네트워크와 비교했을 때, TimeSformer는 더 빠르게 학습할 수 있으며, 약간의 정확도 저하를 감수하면 테스트 효율성이 크게 향상되고, 1분 이상의 긴 비디오 클립에도 적용할 수 있습니다. 코드와 모델은 다음 링크에서 확인할 수 있습니다: [https URL 링크](https://github.com/facebookresearch/TimeSformer).*
 
-This model was contributed by [fcakyon](https://huggingface.co/fcakyon).
-The original code can be found [here](https://github.com/facebookresearch/TimeSformer).
+이 모델은 [fcakyon](https://huggingface.co/fcakyon)이 기여하였습니다.
+원본 코드는 [여기](https://github.com/facebookresearch/TimeSformer)에서 확인할 수 있습니다.
 
-## Usage tips
+## 사용 팁 [[usage-tips]]
 
-There are many pretrained variants. Select your pretrained model based on the dataset it is trained on. Moreover,
-the number of input frames per clip changes based on the model size so you should consider this parameter while selecting your pretrained model.
+다양한 사전 학습된 모델의 변형들이 있습니다. 사용하려는 데이터셋에 맞춰 사전 학습된 모델을 선택해야 합니다. 또한, 모델 크기에 따라 클립당 입력 프레임 수가 달라지므로, 사전 학습된 모델을 선택할 때 이 매개변수를 고려해야 합니다.
 
-## Resources
+
+## 리소스 [[resources]]
 
 - [Video classification task guide](../tasks/video_classification)
 
-## TimesformerConfig
+## TimesformerConfig [[transformers.TimesformerConfig]]
 
 [[autodoc]] TimesformerConfig
 
-## TimesformerModel
+## TimesformerModel [[transformers.TimesformerModel]]
 
 [[autodoc]] TimesformerModel
     - forward
 
-## TimesformerForVideoClassification
+## TimesformerForVideoClassification [[transformers.TimesformerForVideoClassification]]
 
 [[autodoc]] TimesformerForVideoClassification
     - forward
