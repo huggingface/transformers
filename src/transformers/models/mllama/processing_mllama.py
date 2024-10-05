@@ -23,7 +23,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
-    BatchEncoding,
     PreTokenizedInput,
     TextInput,
 )
@@ -226,8 +225,10 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
         arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -250,7 +251,7 @@ class MllamaProcessor(ProcessorMixin):
                     - `'np'`: Return NumPy `np.ndarray` objects.
                     - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -323,9 +324,9 @@ class MllamaProcessor(ProcessorMixin):
             data["cross_attention_mask"] = cross_attention_mask
 
         return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
 
-        return batch_encoding
+        return batch_feature
 
     def batch_decode(self, *args, **kwargs):
         """

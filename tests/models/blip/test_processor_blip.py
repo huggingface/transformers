@@ -152,7 +152,7 @@ class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,

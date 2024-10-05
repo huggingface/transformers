@@ -522,6 +522,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -711,6 +713,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zamba
+        title: Zamba
       - local: model_doc/zoedepth
         title: ZoeDepth
       title: Vision models

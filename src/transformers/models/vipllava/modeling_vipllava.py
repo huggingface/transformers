@@ -283,7 +283,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return model_embeds
 
     # Ignore copy
-    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: list[int]):
+    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: List[int]):
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
         # For VIP-llava, the image features are computed this way
@@ -441,9 +441,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
