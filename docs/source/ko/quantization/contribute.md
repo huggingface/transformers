@@ -60,7 +60,7 @@ AWQ와 같은 일부 양자화 방법은 데이터 보정을 통해 모델을 "�
 
 4. `validate_environment`와 `update_torch_dtype` 메소드를 작성하세요. 이 메소드들은 양자화된 모델을 생성하기 전에 호출되어 사용자가 올바른 구성을 사용하고 있는지 확인합니다. 다른 양자화 기법에서 이 작업이 어떻게 이루어지는지 참고할 수 있습니다.
 
-5. `_process_model_before_weight_loading` 메소드를 작성하세요. Transformers에서는, 양자회된 모델들은 가중치를 불러오기전에 `"meta"` 디바이스에서 초기화 됩니다. 이 과정에서 `_process_model_before_weight_loading` 메소드는 모델의 뼈대를 조작하여 `nn.Linear`와 같은 일부 모듈을 양자화 모듈로 교체합니다. 모듈 교체 로직이나 기타 유틸리티 메소드를 정의하려면[transformers/src/integrations/](https://github.com/huggingface/transformers/tree/abbffc4525566a48a9733639797c812301218b83/src/transformers/integrations) 디렉터리내에 새로운 파일을 생성하고 해당 폴더의 `__init__.py` 파일에서 관련 메소드를 등록하여 사용할 수 있도록 해야 합니다. [quantizer_awq.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/quantizers/quantizer_awq.py)와 같은 다른 양자화 방법을 먼저 참고하시는 것이 도움이 될 것입니다.
+5. `_process_model_before_weight_loading` 메소드를 작성하세요. Transformers에서는, 양자회된 모델들은 가중치를 불러오기전에 `"meta"` 디바이스에서 초기화 됩니다. 이 과정에서 `_process_model_before_weight_loading` 메소드는 모델의 뼈대를 조작하여 `nn.Linear`와 같은 일부 모듈을 양자화 모듈로 교체합니다. 모듈 교체 로직이나 기타 유틸리티 메소드를 정의하려면[transformers/src/integrations/](https://github.com/huggingface/transformers/tree/abbffc4525566a48a9733639797c812301218b83/src/transformers/integrations) 폴더 내에 새로운 파일을 생성하고 해당 폴더의 `__init__.py` 파일에서 관련 메소드를 등록하여 사용할 수 있도록 해야 합니다. [quantizer_awq.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/quantizers/quantizer_awq.py)와 같은 다른 양자화 방법을 먼저 참고하시는 것이 도움이 될 것입니다.
 
 6. `_process_model_after_weight_loading` 메소드를 작성하세요. 해당 메소드는 가중치를 로드한 후 모델을 조작해야 하는 추가 기능을 구현할 수 있게 해줍니다.
 
