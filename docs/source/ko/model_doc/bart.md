@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-## 오버뷰[[overview]]
+## 개요 [[overview]]
 
 Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer가 발표한 [BART: 자연어 생성, 번역, 이해를 위한 잡음 제거 seq2seq 사전 훈련](https://arxiv.org/abs/1910.13461)이라는 논문에서 소개되었습니다.
 
@@ -40,7 +40,7 @@ Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan G
 ## 사용 팁:[[usage-tips]]
 
 - BART는 절대 위치 임베딩을 사용하는 모델이므로 일반적으로 입력을 왼쪽보다는 오른쪽에 패딩하는 것이 좋습니다.
-- 인코더와 디코더가 있는 seq2seq 모델입니다. 인코더에는 손상된 버전의 토큰이 입력되고, 디코더에는 원래 토큰이 입력됩니다(단, 일반적인 트랜스포머 디코더처럼 미래 단어를 숨기는 마스크가 있습니다). 사전 훈련 작업에서 인코더에 적용되는 변환들의 구성은 다음과 같습니다:
+- 인코더와 디코더가 있는 seq2seq 모델입니다. 인코더에는 손상된 토큰이(corrupted tokens) 입력되고, 디코더에는 원래 토큰이 입력됩니다(단, 일반적인 트랜스포머 디코더처럼 미래 단어를 숨기는 마스크가 있습니다). 사전 훈련 작업에서 인코더에 적용되는 변환들의 구성은 다음과 같습니다:
 
 사전 훈련 작업에서 인코더에 적용되는 변환들의 구성은 다음과 같습니다:
 
@@ -52,13 +52,13 @@ Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan G
 
 ## 구현 노트[[implementation-notes]]
 
-- Bart는 시퀀스 분류에 `token_type_ids`를 사용하지 않는다. 적절하게 나누기 위해서 [`BartTokenizer`]나
-  [`~BartTokenizer.encode`]를 사용한다.
-- [`BartModel`]의 정방향 전달은 `decoder_input_ids`가 전달되지 않으면 `decoder_input_ids`를 자동으로 생성할 것입니다. 이는 다른 일부 모델링 API와 다른 점이라 할 수 있습니다. 이 기능의 일반적인 사용 사례는 마스크 채우기(mask filling)입니다.
+- Bart는 시퀀스 분류에 `token_type_ids`를 사용하지 않습니다. 적절하게 나누기 위해서 [`BartTokenizer`]나
+  [`~BartTokenizer.encode`]를 사용합니다.
+- [`BartModel`]의 정방향 전달은 `decoder_input_ids`가 전달되지 않으면 `decoder_input_ids`를 자동으로 생성할 것입니다. 이는 다른 일부 모델링 API와 다른 점입니다. 이 기능의 일반적인 사용 사례는 마스크 채우기(mask filling)입니다.
 - Model predictions are intended to be identical to the original implementation when
   `forced_bos_token_id=0`. This only works, however, if the string you pass to
   [`fairseq.encode`] starts with a space.
-  모델 예측은 `forced_bos_token_id=0`일 때 기존 구현과 동일하게 작동하도록 의도되었습니다. 하지만, [fairseq.encode]에 전달하는 문자열이 공백으로 시작할 때만 이 기능이 작동합니다.
+  모델 예측은 `forced_bos_token_id=0`일 때 기존 구현과 동일하게 작동하도록 의도되었습니다. 하지만, [`fairseq.encode`]에 전달하는 문자열이 공백으로 시작할 때만 이 기능이 작동합니다.
 - [`~generation.GenerationMixin.generate`]는 요약과 같은 조건부 생성 작업에 사용되어야 합니다. 자세한 내용은 해당 문서의 예제를 참조하세요.
 - *facebook/bart-large-cnn* 가중치를 로드하는 모델은 `mask_token_id`가 없거나, 마스크 채우기 작업을 수행할 수 없습니다.
 
@@ -87,7 +87,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 - [분산형 학습: 🤗 Transformers와 Amazon SageMaker를 이용하여 요약하기 위한 BART/T5 학습](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq)에 대한 블로그 포스트.
 - [blurr를 이용하여 fastai로 요약하기 위한 BART를 미세 조정](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/posts/2021-05-25-mbart-sequence-classification-with-blurr.ipynb)하는 방법에 대한 노트북. 🌎
-- [Trainer 클래스를 사용하여 두 언어로 요약하기 위한 BART를 미세 조정](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb)하는 방법에 대한 노트북. 🌎
+- [Trainer 클래스를 사용하여 두 가지 언어로 요약하기 위한 BART 미세 조정](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb)하는 방법에 대한 노트북. 🌎
 - 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)에서는  [`BartForConditionalGeneration`]이 지원됩니다.
 - [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)에서 지원됩니다.
 - 이 [예제 스크립트에서는](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization)[`FlaxBartForConditionalGeneration`]이 지원됩니다.
