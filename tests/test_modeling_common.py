@@ -4868,7 +4868,6 @@ class ModelTesterMixin:
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @is_flaky(max_attempts=10)  # TODO @raushan: this test is VERY flaky on some VLMs, like paligemma
     def test_static_cache_matches_dynamic(self):
         """
         Tests that generating with static cache give almost same results as with dynamic cache.
