@@ -59,7 +59,7 @@ class GgufIntegrationTests(unittest.TestCase):
     iq3_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_XXS.gguf"
     iq4_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_XS.gguf"
     iq4_nl_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_NL.gguf"
-    
+
     q1_s_dbrx_gguf_model_id="ggml-dbrx-instruct-16x12b-iq1_s.gguf"
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -381,6 +381,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
     def test_dbrx_q1_s(self):
         tokenizer = AutoTokenizer.from_pretrained(self.dbrx_model_id, gguf_file=self.q1_s_dbrx_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
