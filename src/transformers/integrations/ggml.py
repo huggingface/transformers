@@ -91,7 +91,7 @@ GGUF_TENSOR_MAPPING = {
         "attn_v": "self_attn.v_proj",
         "attn_k": "self_attn.k_proj",
         "attn_output": "self_attn.o_proj",
-        "output.weight  ": "lm_head.weight",
+        "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
     "phi3": {
@@ -607,5 +607,4 @@ def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
     tokenizer_class_name = architecture
     converter = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name](tokenizer_dict)
     fast_tokenizer = converter.converted()
-    return fast_tokenizer, converter.additional_kwargs
     return fast_tokenizer, converter.additional_kwargs
