@@ -66,4 +66,4 @@ AWQ와 같은 일부 양자화 방법은 데이터를 보정하여 모델을 "�
 
 7. 모든 내용을 문서화하세요! 여러분의 양자화 방법이 잘 문서화 되도록 `docs/source/en/quantization` 디렉터리 아래에 새로운 파일을 추가하고 `docs/source/en/quantization/overview.md` 파일의 테이블에 새로운 행을 추가해주세요.
 
-8. 테스트를 추가하세요! 먼저 `docker/transformers-quantization-latest-gpu` 안의 nightly Dockerfile에 해당 패키지를 추가하고, `tests/quantization/xxx`에 새로운 테스트 파일을 추가해야 합니다. 다른 양자화 방법들은 테스트가 어떻게 구현되어 있는지 참고해보세요. 
+8. 테스트를 추가하세요! 먼저 `docker/transformers-quantization-latest-gpu` 안의 nightly Dockerfile에 해당 패키지를 추가하세요. 그 다음, `tests/quantization/xxx`에 새로운 테스트 파일을 추가하면 됩니다. 다른 양자화 방법들의 테스트 케이스를 참고해보세요. 
