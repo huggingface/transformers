@@ -216,7 +216,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return state
 
     def __setstate__(self, d):
-        self.__dict__ = d
+        self.__dict__.update(d)
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
@@ -335,6 +335,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
 
         output = bos_token_id + token_ids_0 + eos_token_id
+        print("build_inputs_with_special_tokens", output, self.add_eos_token, self.add_bos_token)
 
         if token_ids_1 is not None:
             output = output + bos_token_id + token_ids_1 + eos_token_id
