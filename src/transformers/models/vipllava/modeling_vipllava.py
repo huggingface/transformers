@@ -282,6 +282,17 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    # Ignore copy
+    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: List[int]):
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+
+        # For VIP-llava, the image features are computed this way
+        # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
+        image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+        image_features = torch.cat(image_features, dim=-1)
+        image_features = self.multi_modal_projector(image_features)
+        return image_features
+
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -430,9 +441,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -451,13 +460,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-
-            # For VIP-llava, the image features are computed this way
-            # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
-            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
-            image_features = torch.cat(image_features, dim=-1)
-            image_features = self.multi_modal_projector(image_features)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
+            )
 
             if legacy_processing:
                 logger.warning_once(
@@ -507,7 +512,10 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             # TODO: @raushan retain only the new behavior after v4.47
             else:
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)

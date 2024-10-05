@@ -145,6 +145,10 @@ def replace_with_awq_linear(
                 target_cls = WQLinear_ExllamaV2
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
+        elif quantization_config.version == AWQLinearVersion.IPEX:
+            from awq.modules.linear.gemm_ipex import WQLinear_IPEX
+
+            target_cls = WQLinear_IPEX
         else:
             raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
     else:
@@ -266,8 +270,11 @@ def fuse_awq_modules(model, quantization_config):
         # Replace layer norms
         _fuse_awq_layernorm(modules_to_fuse["layernorm"], module, FasterTransformerRMSNorm)
 
-        # Replace MLP layers
-        _fuse_awq_mlp(model, name, modules_to_fuse["mlp"], module, QuantFusedMLP)
+        # Replace MLP layers if awq version is not ipex.
+        if quantization_config.version != "ipex":
+            _fuse_awq_mlp(model, name, modules_to_fuse["mlp"], module, QuantFusedMLP)
+        else:
+            logger.info("The IPEX version AWQ does not support fuse mlp for now.")
 
         # Replace attention layers
         attention_has_been_fused = _fuse_awq_attention_layers(
@@ -372,7 +379,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             The `QuantAttentionFused` class as it only supports that class
             for now.
     """
-    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV, WQLinear_IPEX
 
     module_has_been_fused = False
 
@@ -388,6 +395,9 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             cat_dim = 0
         elif isinstance(q_proj, WQLinear_GEMM):
             linear_target_cls = WQLinear_GEMM
+            cat_dim = 1
+        elif isinstance(q_proj, WQLinear_IPEX):
+            linear_target_cls = WQLinear_IPEX
             cat_dim = 1
         else:
             raise ValueError("Unsupported q_proj type: {type(q_proj)}")
@@ -464,5 +474,18 @@ def post_init_awq_exllama_modules(model, exllama_config):
         )
     else:
         raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
+
+    return model
+
+
+def post_init_awq_ipex_modules(model):
+    """
+    Runs post init for IPEX layers which performs:
+        - Weights packing, reordering and repacking
+    """
+
+    from awq.modules.linear.gemm_ipex import ipex_post_init
+
+    model = ipex_post_init(model)
 
     return model

@@ -655,6 +655,7 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "Pix2StructConfig",
@@ -847,6 +848,7 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.zamba": ["ZambaConfig"],
     "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
@@ -3031,6 +3033,14 @@ else:
             "Phi3PreTrainedModel",
         ]
     )
+    _import_structure["models.phimoe"].extend(
+        [
+            "PhimoeForCausalLM",
+            "PhimoeForSequenceClassification",
+            "PhimoeModel",
+            "PhimoePreTrainedModel",
+        ]
+    )
     _import_structure["models.pix2struct"].extend(
         [
             "Pix2StructForConditionalGeneration",
@@ -3757,6 +3767,14 @@ else:
             "YosoForTokenClassification",
             "YosoModel",
             "YosoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.zamba"].extend(
+        [
+            "ZambaForCausalLM",
+            "ZambaForSequenceClassification",
+            "ZambaModel",
+            "ZambaPreTrainedModel",
         ]
     )
     _import_structure["models.zoedepth"].extend(
@@ -5507,6 +5525,7 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         Pix2StructConfig,
@@ -5731,6 +5750,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.zamba import ZambaConfig
     from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
@@ -7563,6 +7583,12 @@ if TYPE_CHECKING:
             Phi3Model,
             Phi3PreTrainedModel,
         )
+        from .models.phimoe import (
+            PhimoeForCausalLM,
+            PhimoeForSequenceClassification,
+            PhimoeModel,
+            PhimoePreTrainedModel,
+        )
         from .models.pix2struct import (
             Pix2StructForConditionalGeneration,
             Pix2StructPreTrainedModel,
@@ -8127,6 +8153,12 @@ if TYPE_CHECKING:
             YosoForTokenClassification,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zamba import (
+            ZambaForCausalLM,
+            ZambaForSequenceClassification,
+            ZambaModel,
+            ZambaPreTrainedModel,
         )
         from .models.zoedepth import (
             ZoeDepthForDepthEstimation,
