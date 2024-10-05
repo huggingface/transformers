@@ -90,10 +90,15 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     architecture = read_field(reader, "general.architecture")[0]
     model_name = read_field(reader, "general.name")
 
-    # in llama.cpp mistral models use the same architecture as llama. We need
+    # in llama.cpp mistral and granite models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
-    if "llama" in architecture and "mistral" in model_name:
-        updated_architecture = "mistral"
+    if "llama" in architecture:
+        if "mistral" in model_name:
+            updated_architecture = "mistral"
+        elif "granite" in model_name:
+            updated_architecture = "granite"
+        else:
+            updated_architecture = architecture
     else:
         updated_architecture = architecture
 

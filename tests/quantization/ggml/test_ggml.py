@@ -47,6 +47,7 @@ class GgufIntegrationTests(unittest.TestCase):
     falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
+    granite_model_id = "ibm-granite/granite-3b-code-base-2k-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -80,6 +81,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
+    q4_k_m_granite_model_id = "granite-3b-code-base.Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -502,6 +504,21 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+
+    def test_granite_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.granite_model_id, gguf_file=self.q4_k_m_granite_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.granite_model_id,
+            gguf_file=self.q4_k_m_granite_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello All,\nI am new to this forum."
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
         import tqdm
