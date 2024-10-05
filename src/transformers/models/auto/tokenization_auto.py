@@ -22,28 +22,20 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (get_class_from_dynamic_module,
+                                     resolve_trust_remote_code)
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...utils import (
-    cached_file,
-    extract_commit_hash,
-    is_g2p_en_available,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    logging,
-)
+from ...utils import (cached_file, extract_commit_hash, is_g2p_en_available,
+                      is_sentencepiece_available, is_tokenizers_available,
+                      logging)
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
-from .configuration_auto import (
-    CONFIG_MAPPING_NAMES,
-    AutoConfig,
-    config_class_to_model_type,
-    model_type_to_module_name,
-    replace_list_option_in_docstrings,
-)
-
+from .configuration_auto import (CONFIG_MAPPING_NAMES, AutoConfig,
+                                 config_class_to_model_type,
+                                 model_type_to_module_name,
+                                 replace_list_option_in_docstrings)
 
 if is_tokenizers_available():
     from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -852,7 +844,9 @@ class AutoTokenizer:
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
                 if gguf_file:
+                    print(gguf_file)
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+                    print("gguf_path", gguf_path)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
                     config = AutoConfig.for_model(**config_dict)
                 else:
