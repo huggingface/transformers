@@ -106,9 +106,9 @@ print(outputs)
 
 이 예시에서는 nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf compresseed-tensors 모델이 구성 항목을 통해 어떻게 정의되는지 살펴보고, 이것이 로드된 모델 표현으로 어떻게 변환되는지 확인해 보겠습니다.
 
-먼저 [모델의 `quantization_config`](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json)에 대해 알아보겠습니다. 처음 보면 항목이 많아 다소 복잡해 보일 수 있지만, 이는 compressed-tensors가 모델 압축 중 및 압축 후에도 유연하게 표현할 수 있는 형식이기 때문입니다.
+먼저 [모델의 `quantization_config`](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json)에 대해 알아보겠습니다. 처음 보면 항목이 많아 다소 복잡해 보일 수 있지만, 이는 compressed-tensors가 모델 압축 중 그리고 압축 후에도 유연하게 표현할 수 있는 형식이기 때문입니다.
 
-실제로 체크포인트 로딩과 추론을 위해 설정을 단순화할 수 있으며, 기본값이나 비어 있는 항목들을 포함하지 않도록 할 수 있습니다. 여기서는 압축이 실제로 어떻게 표현되는지에 초점을 맞추기 위해 설정을 간소화하겠습니다.
+실제로 체크포인트 로딩과 추론을 위해 설정을 단순화할 수 있으며, 기본값이나 비어있는 항목들을 포함하지 않도록 할 수 있습니다. 여기서는 압축이 실제로 어떻게 표현되는지에 초점을 맞추기 위해 설정을 간소화하겠습니다.
 
 ```yaml
 "quantization_config": {
