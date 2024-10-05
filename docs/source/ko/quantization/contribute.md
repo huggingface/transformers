@@ -52,7 +52,7 @@ AWQ와 같은 일부 양자화 방법은 데이터 보정을 통해 모델을 "�
 
 3. 여러분의 양자화 방법에 대해 다음의 클래스 속성 또는 속성 메소드들을 정의하세요:
 
-* `requires_calibration`: 양자화 방법이 데이터 보정 과정을 요구하는지 여부를 나타내는 속성입니다. 이 속성이 `True`로 설정되면, 양자화된 가중치를 사용한 추론만 지원할 수 있으며, 추론과 양자화 모두를 지원할 수는 없습니다. 
+* `requires_calibration`: 양자화 방법이 데이터 보정 과정을 요구하는지 여부를 나타내는 속성입니다. 이 속성이 `True`로 설정되면, 양자화된 가중치를 사용한 추론만 지원하며, 추론과 양자화 모두를 지원할 수는 없습니다. 
 * `required_packages`: 양자화된 가중치를 사용하는 데 필요한 패키지들의 문자열 리스트입니다. 필요하다면 [transformers/src/utils/import_utils.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/utils/import_utils.py)의 `is_auto_awq_available`과 같은 새로운 유틸리티 메소드를 정의해야 할 수도 있습니다.
 * `requires_parameters_quantization`: 양자화 방법이 기본 `nn.Parameter` 객체에 특별한 처리가 필요한 경우에만 사용됩니다. 예를 들어, bitsandbytes 방식은 `Params4bit`와 `Int8Param`을 사용하여 양자화된 파라미터들에 대한 특별한 처리를 요구하기 때문에 해당 플래그를 `True`로 설정해야 합니다. 하지만 최근의 대부분의 양자화 방법은 `torch.uint8` 내에 int2/int4 가중치를 포함시키므로, 해당 플래그는 일반적으로 필요하지 않습니다(기본값은 `False`로 설정). 
 * `is_serializable`: 해당 방법이 직렬화 가능한지를 결정하는 속성 메소드입니다.
