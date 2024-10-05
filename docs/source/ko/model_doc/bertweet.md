@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-BERTweet 모델은 Dat Quoc Nguyen, Thanh Vu, Anh Tuan Nguyen에 의해 [BERTweet: 영어 트윗을 위해 사전 학습된 언어 모델](https://www.aclweb.org/anthology/2020.emnlp-demos.2.pdf) 에서 제안되었습니다.
+BERTweet 모델은 Dat Quoc Nguyen, Thanh Vu, Anh Tuan Nguyen에 의해 [BERTweet: A pre-trained language model for English Tweets](https://www.aclweb.org/anthology/2020.emnlp-demos.2.pdf) 에서 제안되었습니다.
 
 해당 논문의 초록 :
 
