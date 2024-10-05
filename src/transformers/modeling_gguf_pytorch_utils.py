@@ -77,7 +77,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     print("gguf_checkpoint_path", gguf_checkpoint_path)
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
-    print("fields", fields)
+    print("fields")
     reader_keys = list(fields.keys())
 
     parsed_parameters = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
