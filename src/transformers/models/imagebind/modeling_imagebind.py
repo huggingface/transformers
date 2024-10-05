@@ -352,11 +352,36 @@ class ImageBindVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
+    def image_to_video(self, pixel_values: torch.FloatTensor, time_dim: int = 2, ntimes: int = 2):
+        """
+        Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
+        time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
+        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `ntimes` to get
+        shape (B, N, C, H, W).
+        """
+        if pixel_values.ndim not in [4, 5]:
+            raise ValueError(
+                f"The input `image` tensor should be 4- or 5-dimensional but has {pixel_values.ndim} dimensions."
+            )
+
+        # Add time dimension at specified dim index
+        if pixel_values.ndim == 4:
+            pixel_values = pixel_values.unsqueeze(time_dim)
+
+        # Repeat image across the time dimension ntimes.
+        if pixel_values.shape[time_dim] == 1:
+            new_shape = [1] * len(pixel_values.shape)
+            new_shape[time_dim] = ntimes
+            pixel_values = pixel_values.repeat(new_shape)
+
+        return pixel_values
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
+        pixel_values = self.image_to_video(pixel_values, ntimes=self.num_frames)
         batch_size, num_channels, num_frames, height, width = pixel_values.shape
 
         embeddings = self.patch_embedding(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
@@ -716,7 +741,6 @@ class ImageBindPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        layer_factor = (2 * self.config.num_hidden_layers) ** -0.5
 
         def init_projection(proj, embed_dim):
             nn.init.normal_(proj.weight, std=embed_dim**-0.5 * factor)
@@ -731,6 +755,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.position_embeddings, std=module.config.initializer_range * factor)
 
         elif isinstance(module, ImageBindAttention):
+            layer_factor = (2 * module.config.num_hidden_layers) ** -0.5
             in_proj_std = (module.embed_dim**-0.5) * layer_factor * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.qkv_proj.weight, std=in_proj_std)
@@ -741,6 +766,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(module.v_bias, std=in_proj_std)
 
         elif isinstance(module, ImageBindMlp):
+            layer_factor = (2 * module.config.num_hidden_layers) ** -0.5
             in_proj_std = (module.config.hidden_size**-0.5) * layer_factor * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
@@ -760,7 +786,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
             module,
             (ImageBindVisionModelWithProjection, ImageBindTextModelWithProjection, ImageBindAudioModelWithProjection),
         ):
-            modality = module.__class__.__name__.replace("ModelWithProjection", "").lower()
+            modality = module.__class__.__name__.replace("ModelWithProjection", "").replace("ImageBind", "").lower()
             init_projection(getattr(module, f"{modality}_projection"), self.config.hidden_size)
             if self.config.logit_scale_init_value is not None and self.config.learnable_logit_scale:
                 logit_scale = torch.ones([]) * np.log(self.config.logit_scale_init_value) * factor
@@ -1030,6 +1056,12 @@ class ImageBindTextTransformer(nn.Module):
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
+        batch_size, seq_len = input_shape
+
+        attention_mask = self._build_attention_mask(
+            attention_mask, batch_size, seq_len, hidden_states.dtype, hidden_states.device
+        )
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -1056,6 +1088,19 @@ class ImageBindTextTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+    def _build_attention_mask(self, attention_mask, batch_size, seq_len, dtype, device=None):
+        # Build causal mask
+        mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype, device=device)
+        mask.fill_(torch.finfo(dtype).min)
+        mask.triu_(1)
+        mask = mask.unsqueeze(1)  # expand mask
+
+        # If attention_mask update causal mask
+        if attention_mask is not None:
+            attention_mask = AttentionMaskConverter._expand_mask(attention_mask, dtype)
+            return mask + attention_mask
+        return mask
 
 
 @add_start_docstrings(

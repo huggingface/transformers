@@ -18,7 +18,6 @@ Image/Text processor class for ImageBind
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
 try:
     from typing import Unpack
@@ -29,27 +28,12 @@ from ...image_utils import (
     ImageInput,
     VideoInput,
 )
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import (
     BatchEncoding,
     PreTokenizedInput,
     TextInput,
 )
-
-
-def build_attention_mask(attention_mask, batch_size, seq_len, dtype=torch.float32, device=None):
-        # Build causal mask
-        mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype, device=device)
-        mask.fill_(torch.finfo(dtype).min)
-        mask.triu_(1)
-        mask = mask.unsqueeze(1)  # expand mask
-
-        # If attention_mask update causal mask
-        if attention_mask is not None:
-            attention_mask = AttentionMaskConverter._expand_mask(attention_mask, dtype)
-            return mask + attention_mask
-        return mask
 
 
 class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
@@ -179,18 +163,6 @@ class ImageBindProcessor(ProcessorMixin):
 
         if text is not None:
             encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            if type(encoding["input_ids"]) == list:
-                batch_size = 1
-                input_ids = torch.tensor(encoding["input_ids"])
-                seq_len = input_ids.size()[0]
-                attention_mask = torch.tensor(encoding["attention_mask"]).unsqueeze(0)
-            else:
-                batch_size, seq_len = encoding["input_ids"].size()
-                attention_mask = encoding["attention_mask"]
-            attention_mask = build_attention_mask(
-                attention_mask, batch_size, seq_len
-            )
-            encoding = BatchEncoding(data={"input_ids": encoding["input_ids"], "attention_mask": attention_mask}, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
             data.update(encoding)
 
         if images is not None or videos is not None:
