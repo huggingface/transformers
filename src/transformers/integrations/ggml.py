@@ -25,10 +25,10 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import (GPT2Converter, LlamaConverter,
+                                      Qwen2Converter)
 from ..utils import logging
 from ..utils.logging import tqdm
-
 
 logger = logging.get_logger(__name__)
 
@@ -107,6 +107,21 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "dbrx":{
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    }
 }
 
 
@@ -181,6 +196,18 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
+    "dbrx":{
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    }
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -414,6 +441,89 @@ class GGUFQwen2Converter(Qwen2Converter):
         )
         return tokenizer
 
+class GGUFDBRXConverter(GPT2Converter):
+    def __init__(self, tokenizer_dict):
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def merges(self, proto):
+        return proto.merges
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(self.proto)
+        merges = self.merges(self.proto)
+        bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+
+        tokenizer = Tokenizer(BPE(bpe_vocab, merges))
+        # add the special tokens from phi3 tokenizer config
+        tokenizer.add_special_tokens(
+            [
+                AddedToken("<||_unused_0_||>", normalized=False, special=True),
+                AddedToken("<|endoftext|>", normalized=False, special=True),
+                AddedToken("<|fim_prefix|>", normalized=False, special=True),
+                AddedToken("<|fim_middle|>", normalized=False, special=True),
+                AddedToken("<|fim_suffix|>", normalized=False, special=True),
+                AddedToken("<||_unused_1_||>", normalized=False, special=True),
+                AddedToken("<||_unused_2_||>", normalized=False, special=True),
+                AddedToken("<||_unused_3_||>", normalized=False, special=True),
+                AddedToken("<||_unused_4_||>", normalized=False, special=True),
+                AddedToken("<||_unused_5_||>", normalized=False, special=True),
+                AddedToken("<||_unused_6_||>", normalized=False, special=True),
+                AddedToken("<||_unused_7_||>", normalized=False, special=True),
+                AddedToken("<||_unused_8_||>", normalized=False, special=True),
+                AddedToken("<||_unused_9_||>", normalized=False, special=True),
+                AddedToken("<||_unused_10_||>", normalized=False, special=True),
+                AddedToken("<||_unused_11_||>", normalized=False, special=True),
+                AddedToken("<||_unused_12_||>", normalized=False, special=True),
+                AddedToken("<||_unused_13_||>", normalized=False, special=True),
+                AddedToken("<||_unused_14_||>", normalized=False, special=True),
+                AddedToken("<||_unused_15_||>", normalized=False, special=True),
+                AddedToken("<|endofprompt|>", normalized=False, special=True),
+                AddedToken("<|pad|>", normalized=False, special=True),
+                AddedToken("<|im_start|>", normalized=False, special=True),
+                AddedToken("<|im_end|>", normalized=False, special=True),
+            ]
+        )
+        self.additional_kwargs["unk_token"] = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        self.additional_kwargs["eos_token"] = (
+            proto.tokens[proto.eos_token_id] if proto.eos_token_id is not None else None
+        )
+        self.additional_kwargs["bos_token"] = (
+            proto.tokens[proto.bos_token_id] if proto.bos_token_id is not None else None
+        )
+        self.additional_kwargs["pad_token"] = (
+            proto.tokens[proto.pad_token_id] if proto.pad_token_id is not None else None
+        )
+        return tokenizer
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+            decoders.Replace(replacement, " "),
+        ]
+
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer(self.proto)
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+
+        return tokenizer
 
 class GGUFPhi3Converter(LlamaConverter):
     def __init__(self, tokenizer_dict):
@@ -495,6 +605,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
+    "dbrx": GGUFDBRXConverter,
 }
 
 

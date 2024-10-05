@@ -16,14 +16,9 @@ import tempfile
 import unittest
 
 from transformers import AddedToken, AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import (
-    require_gguf,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_gguf, require_torch_gpu, slow,
+                                        torch_device)
 from transformers.utils import is_torch_available
-
 
 if is_torch_available():
     import torch

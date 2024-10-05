@@ -1,0 +1,5 @@
+Requirement already satisfied: gguf in c:\users\cjfgh\anaconda3\envs\transformer\lib\site-packages (0.10.0)
+Requirement already satisfied: numpy>=1.17 in c:\users\cjfgh\anaconda3\envs\transformer\lib\site-packages (from gguf) (2.1.1)
+Requirement already satisfied: pyyaml>=5.1 in c:\users\cjfgh\anaconda3\envs\transformer\lib\site-packages (from gguf) (6.0.2)
+Requirement already satisfied: tqdm>=4.27 in c:\users\cjfgh\anaconda3\envs\transformer\lib\site-packages (from gguf) (4.66.5)
+Requirement already satisfied: colorama in c:\users\cjfgh\anaconda3\envs\transformer\lib\site-packages (from tqdm>=4.27->gguf) (0.4.6)

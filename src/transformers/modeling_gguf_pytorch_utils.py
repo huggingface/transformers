@@ -19,16 +19,11 @@ from typing import Optional
 import numpy as np
 from tqdm import tqdm
 
-from .integrations import (
-    GGUF_CONFIG_MAPPING,
-    GGUF_TENSOR_MAPPING,
-    GGUF_TOKENIZER_MAPPING,
-    _gguf_parse_value,
-)
+from .integrations import (GGUF_CONFIG_MAPPING, GGUF_TENSOR_MAPPING,
+                           GGUF_TOKENIZER_MAPPING, _gguf_parse_value)
 from .utils import is_torch_available
 from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
-
 
 if is_torch_available():
     import torch
