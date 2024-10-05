@@ -136,7 +136,7 @@ print(outputs)
 
 위 구성에서 하나의 구성 그룹이 지정되어 있으며, 이는 FP8로 가중치 및 활성화 양자화를 수행하고, 정적인 텐서별 전략을 사용하는 것을 확인할 수 있습니다. 또한 `ignore` 리스트에 `lm_head` 모듈의 양자화를 건너뛰도록 항목이 포함되어 있어, 해당 모듈은 체크포인트에서 변경되지 않은 상태로 유지된다는 점도 주목해야합니다.
 
-설정의 실제 결과를 확인하려면, [safetensors viewer](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf?show_file_info=model.safetensors.index.json)를 사용하여 모델 카드에서 모든 선형 모듈의 양자화된 가중치, 입력의 크기, 그리고 가중치의 크기를 모든 모델 레이어에서 확인할 수 있습니다. 
+설정의 실제 결과를 확인하려면, [safetensors viewer](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf?show_file_info=model.safetensors.index.json)를 사용하여 모델 카드에서 모든 선형 모듈의 양자화된 가중치, 입력의 스케일, 그리고 가중치의 스케일을 모든 모델 레이어에서 확인할 수 있습니다. 
 
 | Tensors | Shape |	Precision |
 | ------- | ----- | --------- |
