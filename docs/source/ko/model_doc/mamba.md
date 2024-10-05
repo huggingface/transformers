@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 - 맘바는 `어텐션` 레이어와 동등한 `믹서(mixer)` 레이어를 쌓습니다. `맘바`의 핵심 로직은 `MambaMixer` 클래스에 있습니다.
 - 두 가지 구현이 공존합니다: 하나는 최적화되어 빠른 cuda커널을 사용하고, 다른 하나는 단순하지만 모든 장치에서 실행할 수 있습니다!
 - 현재 구현은 원본 cuda커널을 활용합니다: 맘바를 위한 플래시 어텐션의 역할을 하는 것은 [`mamba-ssm`](https://github.com/state-spaces/mamba)와 [`causal_conv1d`](https://github.com/Dao-AILab/causal-conv1d) 저장소에 호스팅되어 있습니다. 하드웨어가 지원한다면 반드시 설치하세요!
-- 두 가지 구현중 단순구현의 성능을 빠르게 향상시키는 기여를 환영하고 있습니다.🤗
+- cuda 커널을 최적화하는 방향 보다는, 단순하지만 모든 장치에서 실행가능하도록하는 방향인 '단순구현'의 성능을 빠르게 향상시키는 기여를 더 환영하고 있습니다. 🤗
 
 이 모델은 [ArthurZ](https://huggingface.co/ArthurZ)에 의해 기여되었습니다.
 원본 코드는 [이곳](https://github.com/state-spaces/mamba)에서 확인할 수 있습니다.
