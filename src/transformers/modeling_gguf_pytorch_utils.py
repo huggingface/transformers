@@ -75,10 +75,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
         raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
-    print("gguf_checkpoint_path", gguf_checkpoint_path)
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
-    print("fields")
     reader_keys = list(fields.keys())
 
     parsed_parameters = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}

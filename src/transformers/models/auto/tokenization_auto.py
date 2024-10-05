@@ -858,9 +858,7 @@ class AutoTokenizer:
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
                 if gguf_file:
-                    print(gguf_file)
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-                    print("gguf_path", gguf_path)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
                     config = AutoConfig.for_model(**config_dict)
                 else:
