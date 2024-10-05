@@ -73,7 +73,7 @@ rendered properly in your Markdown viewer.
 이 라이브러리는 XNLI 데이터를 불러오는 프로세서를 제공합니다:
 
 [`~data.processors.utils.XnliProcessor`]
-참고로, 테스트셋에 대한 골드 레이블이 제공되므로, 테스트셋에서 평가가 수행됩니다.
+참고로, 테스트셋에 대한 골드 레이블(정답 레이블)이 제공되므로, 테스트셋에서 평가가 수행됩니다.
 
 프로세서 사용 예시는 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 스크립트에서 확인할 수 있습니다.
 
