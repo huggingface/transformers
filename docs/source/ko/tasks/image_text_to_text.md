@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-비전 언어 모델이라고도 불리는 이미지-텍스트-텍스트 모델은, 이미지 입력을 받는 언어 모델입니다. 이러한 모델은 시각적 질문 답변부터 이미지 분할에 이르기까지 다양한 작업을 처리할 수 있습니다. 이 작업은 이미지에서 텍스트로 변환하는 모델과 많은 유사성을 공유하지만, 이미지 캡셔닝과 같은 중복된 사용 사례도 있습니다. 이미지-텍스트로 모델은 이미지 입력만 받아 특정 작업을 수행하는 경우가 많지만, 비전 언어 모델은 개방형 텍스트와 이미지 입력을 받아 보다 범용적인 모델로 작동합니다.
+비전 언어 모델이라고도 불리는 이미지-텍스트-텍스트 모델은, 이미지를 입력 받는 언어 모델입니다. 이러한 모델은 시각적 질의 응답부터 이미지 분할에 이르기까지 다양한 작업을 처리할 수 있습니다. 이 작업은 이미지에서 텍스트로 변환하는 모델과 유사할뿐더러, 이미지 캡셔닝과 같은 중복된 사용 사례도 있습니다. 이미지-텍스트로 모델은 이미지 입력만 받아 특정 작업을 수행하는 경우가 많지만, 비전 언어 모델은 개방형 텍스트와 이미지 입력을 모두 받는 더욱 범용적인 모델입니다.
 
-이 가이드에서는 비전 언어 모델에 대한 간략한 개요를 제공하고, 이를 Transformers와 함께 사용하여 추론하는 방법을 보여줍니다.
+이 가이드에서는 비전 언어 모델에 대해 간략히 살펴보고, 이를 Transformers와 함께 사용하여 추론하는 방법을 보여줍니다.
 
 먼저, 비전 언어 모델에는 다양한 종류가 있습니다:
 - 미세 조정에 사용되는 기본 모델
@@ -51,7 +51,7 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
 
-이 모델은 사용자에게 채팅 출력을 파싱하는데 도움이 되는 [chat template](./chat_templating)을 가지고 있습니다. 또한, 이 모델은 단일 대화나 메시지에서 여러 이미지를 입력으로 받을 수도 있습니다. 이제 입력을 준비하겠습니다.
+이 모델은 사용자에게 채팅 출력을 파싱하는데 도움이 되는 [chat template](./chat_templating)을 가지고 있습니다. 또한, 해당 모델은 단일 대화나 메시지에서 여러 이미지를 입력으로 받을 수도 있습니다. 이제 입력을 준비하겠습니다.
 
 이미지 입력은 다음과 같습니다.
 
@@ -101,7 +101,7 @@ messages = [
 ]
 ```
 
-프로세서들의 [`~ProcessorMixin.apply_chat_template`] 메소드를 호출하여 이미지 입력과 함께 출력을 출력을 전처리하겠습니다.
+프로세서의 [`~ProcessorMixin.apply_chat_template`] 메소드를 호출하여 이미지 입력과 함께 출력을 출력을 전처리하겠습니다.
 
 ```python
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
@@ -117,6 +117,7 @@ generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True
 
 print(generated_texts)
 ## ['User: What do we see in this image? \nAssistant: In this image we can see two cats on the nets. \nUser: And how about this image? \nAssistant: In this image we can see flowers, plants and insect.']
+
 ## ['User: 이 이미지에서 무엇이 보이시나요? \nAssistant: 이 이미지에서는 그물 위에 있는 두 마리의 고양이를 볼 수 있습니다. \nUser: 그렇다면 이 이미지에서는 무엇이 보이시나요? \nAssistant: 이 이미지에서는 꽃, 풀 그리고 곤충을 볼 수 있습니다.']
 ```
 
@@ -184,7 +185,7 @@ def model_inference(
     thread.join()
 ```
 
-Now let's call the `model_inference` function we created and stream the values. 
+이제 우리가 생성한 `model_inference` 함수를 호출하고 값을 스트리밍해 봅시다.
 
 ```python
 generator = model_inference(
@@ -202,7 +203,7 @@ for value in generator:
 # In this image ...
 ```
 
-## Fit models in smaller hardware
+## Fit models in smaller hardware [[fit-models-in-smaller-hardware]]
 
 비전 언어 모델은 대부분 크기 때문에 더 작은 하드웨어에 맞추기 위해 최적화가 필요합니다. Transformers 여러 모델 양자화 라이브러리를 지원하며, 여기서는 [Quanto](./quantization/quanto#quanto)을 사용한 int8 양자화만을 다룹니다. int8 양자화를 사용하면 모든 가중치가 양자화될 경우 최대 75%의 메모리를 절감할 수 있습니다. 하지만 8비트는 CUDA에서 기본 정밀도가 아니기 때문에, 가중치가 실시간으로 양자화되면서 시간이 오래걸릴 수 있기 때문에, 이것은 완전한 해결책은 아닙니다.
 
@@ -212,7 +213,7 @@ for value in generator:
 pip install -U quanto bitsandbytes
 ```
 
-모델을 로드하는 동안 양자화 하려면, 먼저 [`QuantoConfig`]를 생성해야 합니다. 그런 다음 평소와 같이 모델을 로드 하되, 모델 초기화 시 `quantization_config`를 전달해야여 양자화를 수행해야 합니다.
+모델을 로드하는 동안 양자화 하려면, 먼저 [`QuantoConfig`]를 생성해야 합니다. 그런 다음 평소와 같이 모델을 로드하되, 모델 초기화 시 `quantization_config`를 전달해야여 양자화를 수행해야 합니다.
 
 ```python
 from transformers import Idefics2ForConditionalGeneration, AutoTokenizer, QuantoConfig
@@ -224,7 +225,7 @@ quantized_model = Idefics2ForConditionalGeneration.from_pretrained(model_id, dev
 
 이제 끝났습니다. 동일한 방식으로 아무런 변경 없이 모델을 사용할 수 있습니다. 
 
-## Further Reading
+## Further Reading [[further-reading]]
 
 다음은 이미지 기반 텍스트 변환 작업에 대한 몇 가지 추가 자료입니다.
 
