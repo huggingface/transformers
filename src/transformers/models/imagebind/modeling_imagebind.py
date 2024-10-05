@@ -1186,7 +1186,7 @@ class ImageBindVisionTransformer(nn.Module):
     ) -> Union[Tuple, ImageBindTransformerOutput]:
         r"""
         Returns:
-            Union[Tuple, ImageBindTransformerOutput]: 
+            Union[Tuple, ImageBindTransformerOutput]:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

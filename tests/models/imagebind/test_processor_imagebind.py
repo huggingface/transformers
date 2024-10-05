@@ -26,8 +26,6 @@ from transformers.utils import is_vision_available
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import ImageBindImageProcessor, ImageBindProcessor
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -483,7 +481,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer"]
@@ -508,7 +508,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
@@ -540,7 +542,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         raw_speech = floats_list((3, 1000))
@@ -563,7 +567,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer"]
@@ -594,7 +600,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         raw_speech = floats_list((3, 1000))
