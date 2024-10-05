@@ -360,8 +360,8 @@
         title: (번역중) CPMANT
       - local: in_translation
         title: (번역중) CTRL
-      - local: in_translation
-        title: (번역중) DeBERTa
+      - local: model_doc/deberta
+        title: DeBERTa
       - local: in_translation
         title: (번역중) DeBERTa-v2
       - local: in_translation
