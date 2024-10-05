@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 새로운 양자화 기법에 기여하기 [[contribute-new-quantization-method]]
 
-Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법을 지원하고 통합합니다. 그러나 아직 통합되지 않은 다른 양자화 방법들도 있습니다. [`HfQuantizer`] 클래스를 사용하면 이러한 양자화 방법을 Transformers 모델에 쉽게 추가하고 사용할 수 있습니다. [`HfQuantizer`]는 모든 PyTorch 모듈에 적용하는 것이 아니라, 양자화 방법을 추가하기 위한 내부 헬퍼 클래스로 설계되었습니다.
+Transformers는 QLoRA, GPTQ, LLM.int8, AWQ와 같은 다양한 양자화 방법을 지원하고 통합합니다. 그러나 아직 통합되지 않은 다른 양자화 방법들도 있습니다. [`HfQuantizer`] 클래스를 사용하면 아직 통합되지 않은 양자화 방법을 Transformers 모델에 쉽게 추가하고 사용할 수 있습니다. [`HfQuantizer`]는 모든 PyTorch 모듈에 적용하는 것이 아니라, 양자화 방법을 추가하기 위한 내부 헬퍼 클래스로 설계되었습니다.
 
 이 가이드에서는 [`HfQuantizer`] 클래스를 사용하여 새로운 양자화 방법을 통합하는 방법을 소개합니다.
 
