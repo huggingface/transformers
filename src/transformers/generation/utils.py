@@ -108,7 +108,6 @@ from .stopping_criteria import (
 )
 
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
@@ -1796,15 +1795,14 @@ class GenerationMixin:
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
-        # pylogging.error(f'start {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)
         self._validate_assistant(assistant_model, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
@@ -1976,7 +1974,6 @@ class GenerationMixin:
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
-            # pylogging.error(f'before _get_candidate_generator, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
                 generation_config=generation_config,
@@ -1984,10 +1981,10 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
+                target_tokenizer=tokenizer,
                 assistant_tokenizer=assistant_tokenizer,
                 model_kwargs=model_kwargs,
             )
-            # pylogging.error(f'before _assisted_decoding, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
 
             # 12. run assisted generate
             result = self._assisted_decoding(
@@ -2001,8 +1998,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
-            # pylogging.error(f'DOLA_GENERATION should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
-
             if self._is_stateful:
                 # DoLa decoding was not designed for stateful models, and would require some changes
                 raise ValueError(
@@ -2020,8 +2015,6 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
-            # pylogging.error(f'CONTRASTIVE_SEARCH should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
-
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
             if self._is_stateful:
@@ -2041,7 +2034,6 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # pylogging.error(f'Assistant GREEDY, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -2062,7 +2054,6 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
-            # pylogging.error(f'BEAM, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2094,7 +2085,6 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
-            # pylogging.error(f'G BEAM should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2125,7 +2115,6 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
-            # pylogging.error(f'C NBEAM should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             final_constraints = []
             if generation_config.constraints is not None:
                 final_constraints = generation_config.constraints
@@ -2203,8 +2192,6 @@ class GenerationMixin:
             and hasattr(result.past_key_values, "to_legacy_cache")
             and result.past_key_values.to_legacy_cache is not None
         ):
-            # pylogging.error(f'LEGACY should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
-
             # handle BC (convert by default if he user hasn't passed a cache AND the cache is of the default type)
             should_convert_cache = generation_config.return_legacy_cache
             is_user_defined_cache = user_defined_cache is not None
@@ -2225,7 +2212,6 @@ class GenerationMixin:
                 should_convert_cache = True
             if should_convert_cache:
                 result.past_key_values = result.past_key_values.to_legacy_cache()
-        # pylogging.error(f'end, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
         return result
 
     def _has_unfinished_sequences(
