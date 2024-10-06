@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
+from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
 from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -551,7 +551,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
-        model = AutoModelForVision2Seq.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
+        model = AutoModelForImageTextToText.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         prompt = "<grounding>An image of"
@@ -697,7 +697,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
-        model = AutoModelForVision2Seq.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
+        model = AutoModelForImageTextToText.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
 
         prompt = ["<grounding>Describe this image in detail:", "<grounding>An image of"]
 
