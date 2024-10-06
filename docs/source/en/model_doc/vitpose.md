@@ -72,7 +72,7 @@ with torch.no_grad():
     outputs = person_model(**inputs)
 
 results = person_image_processor.post_process_object_detection(
-    outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3
+    outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3
 )
 
 def pascal_voc_to_coco(bboxes: np.ndarray) -> np.ndarray:
