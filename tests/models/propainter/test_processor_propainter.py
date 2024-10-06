@@ -39,21 +39,18 @@ class ProPainterProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
         video_processor = ProPainterVideoProcessor()
 
-        processor = ProPainterProcessor(
-            video_processor=video_processor
-        )
+        processor = ProPainterProcessor(video_processor=video_processor)
         processor.save_pretrained(self.tmpdirname)
 
     def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def prepare_mask_inputs(self):
-        """This function prepares a list of numpy arrays of masks for all the frames of videos.
-        """
+        """This function prepares a list of numpy arrays of masks for all the frames of videos."""
         mask_inputs = [np.random.randint(2, size=(1, 30, 400), dtype=np.uint8)] * 8
         mask_inputs = [mask_inputs] * 3  # batch-size=3
-        return mask_inputs    
-    
+        return mask_inputs
+
     def test_video_processor(self):
         video_processor = self.get_video_processor()
 

@@ -78,7 +78,7 @@ class ProPainterProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several video(s) and their respective masks for all the frames. To prepare the video(s)
-        and masks, this method forwards the `videos`, `masks` and `kwrags` arguments to ProPainterProcessor's 
+        and masks, this method forwards the `videos`, `masks` and `kwrags` arguments to ProPainterProcessor's
         [`~ProPainterProcessor.__call__`] if `videos` and `masks` are not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -104,7 +104,7 @@ class ProPainterProcessor(ProcessorMixin):
         video_inputs = {}
 
         if videos is not None and masks is not None:
-            video_inputs = self.video_processor(videos, masks = masks, **output_kwargs["videos_kwargs"])
+            video_inputs = self.video_processor(videos, masks=masks, **output_kwargs["videos_kwargs"])
 
         return BatchFeature(data={**video_inputs})
 
