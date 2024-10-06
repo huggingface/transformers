@@ -1099,18 +1099,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        if attention_mask is not None and position_ids is None:
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`,
-                # as otherwise the input `position_ids` would have various stride during the decoding.
-                # Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case,
-                # position_ids` is already contiguous but with varying stride which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
