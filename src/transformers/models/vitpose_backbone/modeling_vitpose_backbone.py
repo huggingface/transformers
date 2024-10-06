@@ -224,7 +224,7 @@ class VitPoseBackboneAttention(nn.Module):
 
 
 class VitPoseBackboneMoeMLP(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
 
         in_features = out_features = config.hidden_size
