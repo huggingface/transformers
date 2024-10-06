@@ -875,9 +875,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
@@ -986,7 +984,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -998,7 +999,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
                 special_image_mask = (
-                    (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.video_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)

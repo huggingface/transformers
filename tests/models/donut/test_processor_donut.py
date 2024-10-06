@@ -14,16 +14,28 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
-from transformers import DonutProcessor
+from transformers import DonutImageProcessor, DonutProcessor, XLMRobertaTokenizerFast
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
-class DonutProcessorTest(unittest.TestCase):
+class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "naver-clova-ix/donut-base"
+    processor_class = DonutProcessor
 
     def setUp(self):
         self.processor = DonutProcessor.from_pretrained(self.from_pretrained_id)
+        self.tmpdirname = tempfile.mkdtemp()
+
+        image_processor = DonutImageProcessor()
+        tokenizer = XLMRobertaTokenizerFast.from_pretrained(self.from_pretrained_id)
+
+        processor = DonutProcessor(image_processor, tokenizer)
+
+        processor.save_pretrained(self.tmpdirname)
 
     def test_token2json(self):
         expected_json = {
