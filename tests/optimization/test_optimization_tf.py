@@ -17,12 +17,9 @@ import unittest
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
-
 if is_tf_available():
     import tensorflow as tf
-    from tensorflow.python.eager import context
     from tensorflow.python.framework import ops
-
     from transformers import GradientAccumulator, create_optimizer
 
 
@@ -35,9 +32,13 @@ class OptimizationFTest(unittest.TestCase):
 
     def testGradientAccumulator(self):
         accumulator = GradientAccumulator()
-        accumulator([tf.constant([1.0, 2.0])])
-        accumulator([tf.constant([-2.0, 1.0])])
-        accumulator([tf.constant([-1.0, 2.0])])
+        gradients = [
+            tf.constant([1.0, 2.0]),
+            tf.constant([-2.0, 1.0]),
+            tf.constant([-1.0, 2.0])
+        ]
+        for grad in gradients:
+            accumulator([grad])
         with self.assertRaises(ValueError):
             accumulator([tf.constant([1.0, 1.0]), tf.constant([2.0, 2.0])])
         self.assertEqual(accumulator.step, 3)
@@ -48,7 +49,6 @@ class OptimizationFTest(unittest.TestCase):
         self.assertListAlmostEqual(accumulator.gradients[0].numpy().tolist(), [0.0, 0.0], tol=1e-2)
 
     def testGradientAccumulatorDistributionStrategy(self):
-        context._context = None
         ops.enable_eager_execution_internal()
         physical_devices = tf.config.list_physical_devices("CPU")
         if len(physical_devices) == 1:
@@ -88,9 +88,13 @@ class OptimizationFTest(unittest.TestCase):
             self.assertListAlmostEqual(values[0].value(), grad1, tol=1e-2)
             self.assertListAlmostEqual(values[1].value(), grad2, tol=1e-2)
 
-        accumulate([1.0, 2.0], [-1.0, 1.0])
-        accumulate([3.0, -1.0], [-1.0, -1.0])
-        accumulate([-2.0, 2.0], [3.0, -2.0])
+        gradients = [
+            ([1.0, 2.0], [-1.0, 1.0]),
+            ([3.0, -1.0], [-1.0, -1.0]),
+            ([-2.0, 2.0], [3.0, -2.0])
+        ]
+        for grad1, grad2 in gradients:
+            accumulate(grad1, grad2)
         self.assertEqual(accumulator.step, 3)
         _check_local_values([2.0, 3.0], [1.0, -2.0])
         apply_grad()
