@@ -268,10 +268,7 @@ class VitPoseBackboneMLP(nn.Module):
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor, indices=None) -> torch.Tensor:

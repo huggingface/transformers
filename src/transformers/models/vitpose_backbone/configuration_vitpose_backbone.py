@@ -51,8 +51,8 @@ class VitPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
             The number of experts in the MoE layer.
         part_features (`int`, *optional*):
             The number of part features to output. Only used in case `num_experts` is greater than 1.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
