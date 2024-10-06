@@ -204,7 +204,7 @@ class VitPoseClassicDecoder(nn.Module):
     turning the feature maps into heatmaps.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: VitPoseConfig):
         super().__init__()
 
         self.deconv1 = nn.ConvTranspose2d(
