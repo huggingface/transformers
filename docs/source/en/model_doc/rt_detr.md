@@ -71,25 +71,6 @@ remote: 0.95 [40.11, 73.44, 175.96, 118.48]
 remote: 0.92 [333.73, 76.58, 369.97, 186.99]
 ```
 
-## ONNX Tips
-If you want to overwrite some attributes of your model, see `RTDetrConfig` in this [section](#RTDetrConfig).
-```python
-from transformers.models.rt_detr import RTDetrOnnxConfig  # type: ignore[import-untyped]
-from transformers.onnx.convert import export_pytorch  # type: ignore[import-untyped]
-
-rtdetr_onnx_config = RTDetrOnnxConfig(config=model.config, task="object-detection")
-
-export_pytorch(
-    preprocessor=preprocessor,
-    model=model,
-    config=rtdetr_onnx_config,
-    opset=17,
-    output=output_path,
-    tokenizer=None,
-    device="cuda",
-)
-```
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RT-DETR.
