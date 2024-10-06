@@ -351,8 +351,6 @@ class GenerationConfig(PushToHubMixin):
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
-        assistant_config (`AssistantConfig` or `dict`, *optional*):
-            Arguments used for assistant generation with different tokenizers. If passed as `Dict`, it will be converted to a `AssistantConfig` internally.
         assistant_confidence_threshold (`float`, *optional*):
             The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
@@ -458,13 +456,6 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
-        assistant_config = kwargs.pop("assistant_config", None)
-        if assistant_config is None:
-            self.assistant_config = None
-        elif isinstance(assistant_config, AssistantConfig):
-            self.assistant_config = assistant_config
-        else:
-            self.assistant_config = AssistantConfig.from_dict(assistant_config)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -1159,8 +1150,6 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
-        if "assistant_config" in output:
-            del output["assistant_config"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1290,37 +1279,6 @@ class GenerationConfig(PushToHubMixin):
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
-
-
-@dataclass
-class AssistantConfig:
-    """
-    Class that holds arguments for assistant generation with different tokenizers and should be passed into `GenerationConfig` during `generate`.
-    Accepts the following keys:
-        - model_name_or_path (`str`):
-            The target model name or path.
-        - assistant_name_or_path (`str`):
-            The assistant model name or path.
-    """
-
-    def __init__(
-        self,
-        model_name_or_path: str,
-        assistant_name_or_path: str,
-    ):
-        self.model_name_or_path = model_name_or_path
-        self.assistant_name_or_path = assistant_name_or_path
-
-        self.target_tokenizer = AutoTokenizer.from_pretrained(
-            model_name_or_path,
-            trust_remote_code=True,
-            use_fast=True,
-        )
-        self.assistant_tokenizer = AutoTokenizer.from_pretrained(
-            assistant_name_or_path,
-            trust_remote_code=True,
-            use_fast=True,
-        )
 
 
 @dataclass

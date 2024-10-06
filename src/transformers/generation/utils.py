@@ -15,6 +15,7 @@
 # limitations under the License.
 import copy
 import inspect
+import time
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
@@ -65,7 +66,6 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
-    AssistantConfig,
     GenerationConfig,
     GenerationMode,
 )
@@ -119,6 +119,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
+import logging as pylogging
 
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
@@ -687,7 +688,8 @@ class GenerationMixin:
         inputs_tensor: torch.Tensor,
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
-        assistant_config: AssistantConfig,
+        target_tokenizer: PreTrainedTokenizerBase,
+        assistant_tokenizer: PreTrainedTokenizerBase,
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
@@ -695,7 +697,7 @@ class GenerationMixin:
         """
         different_tokenizers = all(
             v is not None
-            for v in (assistant_model, assistant_config.target_tokenizer, assistant_config.assistant_tokenizer)
+            for v in (assistant_model, target_tokenizer, assistant_tokenizer)
         )
 
         if generation_config.prompt_lookup_num_tokens is not None:
@@ -713,7 +715,8 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
-                assistant_config=assistant_config,
+                target_tokenizer=target_tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -1156,7 +1159,7 @@ class GenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
-    def _validate_assistant(self, assistant_model, assistant_config):
+    def _validate_assistant(self, assistant_model, assistant_tokenizer):
         if assistant_model is None:
             return
 
@@ -1172,8 +1175,8 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if assistant_config is None and self.config.vocab_size != assistant_model.config.vocab_size:
-            raise ValueError("Make sure the main and assistant model use the same tokenizer")
+        if assistant_tokenizer is None and self.config.vocab_size != assistant_model.config.vocab_size:
+            raise ValueError("The main model and the assistant have different vocab sizes. Please provide the `assistant_tokenizer` to `generate()`.")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
@@ -1795,16 +1798,16 @@ class GenerationMixin:
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
+        # pylogging.error(f'start {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
+        
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
 
-        assistant_config = (
-            generation_config.assistant_config if hasattr(generation_config, "assistant_config") else None
-        )
-        self._validate_assistant(assistant_model, assistant_config)
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)
+        self._validate_assistant(assistant_model, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -1975,6 +1978,7 @@ class GenerationMixin:
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
+            # pylogging.error(f'before _get_candidate_generator, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
                 generation_config=generation_config,
@@ -1982,9 +1986,10 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
-                assistant_config=assistant_config,
+                assistant_tokenizer=assistant_tokenizer,
                 model_kwargs=model_kwargs,
             )
+            # pylogging.error(f'before _assisted_decoding, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
 
             # 12. run assisted generate
             result = self._assisted_decoding(
@@ -1998,6 +2003,8 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
+            # pylogging.error(f'DOLA_GENERATION should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
+
             if self._is_stateful:
                 # DoLa decoding was not designed for stateful models, and would require some changes
                 raise ValueError(
@@ -2015,6 +2022,8 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
+            # pylogging.error(f'CONTRASTIVE_SEARCH should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
+
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
             if self._is_stateful:
@@ -2034,6 +2043,7 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            # pylogging.error(f'Assistant GREEDY, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -2054,6 +2064,7 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
+            # pylogging.error(f'BEAM, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2085,6 +2096,7 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
+            # pylogging.error(f'G BEAM should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2115,6 +2127,7 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
+            # pylogging.error(f'C NBEAM should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
             final_constraints = []
             if generation_config.constraints is not None:
                 final_constraints = generation_config.constraints
@@ -2192,6 +2205,8 @@ class GenerationMixin:
             and hasattr(result.past_key_values, "to_legacy_cache")
             and result.past_key_values.to_legacy_cache is not None
         ):
+            # pylogging.error(f'LEGACY should not be called, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
+
             # handle BC (convert by default if he user hasn't passed a cache AND the cache is of the default type)
             should_convert_cache = generation_config.return_legacy_cache
             is_user_defined_cache = user_defined_cache is not None
@@ -2212,6 +2227,7 @@ class GenerationMixin:
                 should_convert_cache = True
             if should_convert_cache:
                 result.past_key_values = result.past_key_values.to_legacy_cache()
+        # pylogging.error(f'end, {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
         return result
 
     def _has_unfinished_sequences(

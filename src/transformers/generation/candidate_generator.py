@@ -14,14 +14,15 @@
 # limitations under the License.
 
 import copy
+import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
-from .configuration_utils import AssistantConfig
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 
@@ -158,6 +159,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare generation-related options.
         self.logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         self.generation_config = copy.deepcopy(generation_config)
+        
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
         self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
@@ -274,8 +276,10 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
         assistant_model (`PreTrainedModel`):
             The model to be used for generating candidates. This model should be smaller than the main model.
-        assistant_config (`AssistantConfig`):
-            The config for assisted generation with different tokenizers.
+        target_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used for the target model.
+        assistant_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used for the assistant model.
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
         logits_processor (`LogitsProcessorList`):
@@ -291,8 +295,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     def __init__(
         self,
         input_ids: torch.LongTensor,
-        assistant_config: AssistantConfig,
         assistant_model: "PreTrainedModel",
+        target_tokenizer: PreTrainedTokenizerBase,
+        assistant_tokenizer: PreTrainedTokenizerBase,
         generation_config: "GenerationConfig",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
@@ -300,7 +305,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     ):
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
 
-        self.assistant_config = assistant_config
+        self.target_tokenizer = target_tokenizer
+        self.assistant_tokenizer = assistant_tokenizer
         self.prev_tokens = None
         self.prev_assistant_ids = None
         self.target_lookbehind = 10
@@ -416,8 +422,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         input_ids = input_ids.to(self.assistant_model.device)
         convert_kwargs = {
-            "source_tokenizer": self.assistant_config.target_tokenizer,
-            "destination_tokenizer": self.assistant_config.assistant_tokenizer,
+            "source_tokenizer": self.target_tokenizer,
+            "destination_tokenizer": self.assistant_tokenizer,
         }
         remove_from_pkv = 0
 
@@ -488,20 +494,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.assistant_kwargs.pop("attention_mask", None)
 
-        assistant_config = self.generation_config.__dict__.pop("assistant_config", None)
-        assert (
-            assistant_config is not None
-        ), "Assistant config is required for AssistedCandidateGeneratorDifferentTokenizers"
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
-        self.generation_config.assistant_config = assistant_config
 
         num_prev_assistant = self.prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_token_ids(
             assistant_output.sequences[:, start_assistant_look_index:],
-            source_tokenizer=self.assistant_config.assistant_tokenizer,
-            destination_tokenizer=self.assistant_config.target_tokenizer,
+            source_tokenizer=self.assistant_tokenizer,
+            destination_tokenizer=self.target_tokenizer,
         )
         target_prompt_use_length = new_target_ids_from_window.shape[1]
 
