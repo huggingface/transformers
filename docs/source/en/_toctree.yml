@@ -494,6 +494,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/myt5
+        title: myt5
       - local: model_doc/nemotron
         title: Nemotron
       - local: model_doc/nezha
