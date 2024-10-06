@@ -16,9 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 양자화[[quantization]]
 
-Quantization techniques reduce memory and computational costs by representing weights and activations with lower-precision data types like 8-bit integers (int8). This enables loading larger models you normally wouldn't be able to fit into memory, and speeding up inference. Transformers supports the AWQ and GPTQ quantization algorithms and it supports 8-bit and 4-bit quantization with bitsandbytes.
 
-Quantization techniques that aren't supported in Transformers can be added with the [`HfQuantizer`] class.
 
 양자화 기법은 가중치와 활성화를 8비트 정수(int8)와 같은 더 낮은 정밀도의 데이터 타입으로 표현함으로써 메모리와 계산 비용을 줄입니다. 이를 통해 일반적으로는 메모리에 올릴 수 없는 더 큰 모델을 로드할 수 있고, 추론 속도를 높일 수 있습니다. Transformers는 AWQ와 GPTQ 양자화 알고리즘을 지원하며, bitsandbytes를 통해 8비트와 4비트 양자화를 지원합니다.
 Transformers에서 지원되지 않는 양자화 기법들은 [`HfQuantizer`] 클래스를 통해 추가될 수 있습니다.
