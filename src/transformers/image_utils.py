@@ -95,6 +95,7 @@ VideoInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
+    NONE = "none"
 
 
 class AnnotationFormat(ExplicitEnum):
@@ -217,6 +218,29 @@ def to_numpy_array(img) -> np.ndarray:
     return to_numpy(img)
 
 
+def replicate_channels(img: np.ndarray, num_channels: int = 3) -> np.ndarray:
+    """
+    Transforms an image with format (height, width) to (num_channels, height, width), so that all channels are
+    identical.
+
+    Args:
+        img (`np.ndarray`):
+            Input image.
+        num_channels (`int`, defaults to 3):
+            Expected number of channels in the final image.
+
+    Returns:
+        Image in format `(num_channels, height, width)`.
+    """
+    if not isinstance(img, np.ndarray):
+        raise ValueError(f"Invalid image type: {type(img)}. Expected np.ndarray.")
+
+    # If image has format (height, width), make it (num_channels, height, width)
+    if img.ndim == 2:
+        img = np.stack([img] * num_channels, axis=0)
+    return img
+
+
 def infer_channel_dimension_format(
     image: np.ndarray, num_channels: Optional[Union[int, Tuple[int, ...]]] = None
 ) -> ChannelDimension:
@@ -239,6 +263,8 @@ def infer_channel_dimension_format(
         first_dim, last_dim = 0, 2
     elif image.ndim == 4:
         first_dim, last_dim = 1, 3
+    elif image.ndim == 2:
+        return ChannelDimension.NONE
     else:
         raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 

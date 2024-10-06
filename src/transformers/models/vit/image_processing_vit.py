@@ -29,6 +29,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
+    replicate_channels,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -235,6 +236,9 @@ class ViTImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        # All transformations expect 3-channel images
+        images = [replicate_channels(image, 3) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
