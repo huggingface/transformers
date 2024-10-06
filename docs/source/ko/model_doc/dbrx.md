@@ -12,9 +12,9 @@ specific language governing permissions and limitations under the License.
 
 # DBRX[[dbrx]]
 
-## 오버뷰[[overview]]
+## 개요[[overview]]
 
-DBRX는 [트랜스포머 기반의](https://www.isattentionallyouneed.com/) 다음 토큰을 예측하는 디코더 전용 LLM 모델 입니다.
+DBRX는 [트랜스포머 기반의](https://www.isattentionallyouneed.com/) 다음 토큰을 예측하는 디코더 전용 LLM 모델입니다.
 총 132B 매개변수를 가진 *세밀한* 전문가 혼합(MoE) 아키텍처를 사용하며, 이 중 36B 매개변수가 입력마다 활성화됩니다.
 12T 토큰의 텍스트와 코드 데이터로 사전 학습되었습니다.
 
@@ -33,11 +33,11 @@ DBRX는 신중하게 선별된 12T 토큰의 데이터로 사전 학습되었으
 
 DBRX Instruct와 DBRX Base에 대한 더 자세한 정보는 이 [기술 블로그 포스트](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm)에서 확인할 수 있습니다.
 
-이 모델은 [eitan-turok](https://huggingface.co/eitanturok)와 [abhi-db](https://huggingface.co/abhi-db)에 의해 기여되었습니다. 원본 코드는 [이곳](https://github.com/databricks/dbrx-instruct)에서 찾을 수 있습니다만, 최신버전이 아닐 수 있습니다.
+이 모델은 [eitan-turok](https://huggingface.co/eitanturok)와 [abhi-db](https://huggingface.co/abhi-db)가 기여했습니다. 원본 코드는 [이곳](https://github.com/databricks/dbrx-instruct)에서 찾을 수 있지만, 최신 버전이 아닐 수 있습니다.
 
 ## 사용 예[[usage-examples]]
 
-`generate()` 메소드는 DBRX를 사용하여 텍스트를 생성하는 데 사용될 수 있습니다. 표준 어텐션 구현, 플래시 어텐션, 그리고 PyTorch 스케일된 점곱 어텐션을 사용하여 생성할 수 있습니다. 후자의 두 어텐션 구현 방식은 속도 향상을 제공합니다.
+`generate()` 메소드는 DBRX를 사용하여 텍스트를 생성하는 데 사용될 수 있습니다. 표준 어텐션 구현뿐만 아니라, 플래시 어텐션과 PyTorch의 스케일된 내적 어텐션(Scaled Dot-Product Attention)을 사용하여 생성할 수 있습니다. 후자의 두 어텐션 구현 방식은 처리 속도를 크게 높여줍니다.
 
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
@@ -59,7 +59,7 @@ outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
-flash-attention이 설치되어 있다면(`pip install flash-attn`), 더 빠른 생성이 가능합니다. (플래시 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2에서 확인할 수 있습니다.)
+`pip install flash-attn`를 통해 플래시 어텐션을 설치했다면, 더 빠른 생성이 가능합니다. (플래시 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2)에서 확인할 수 있습니다.)
 
 
 ```python
@@ -83,7 +83,7 @@ outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
-PyTorch 스케일된 점곱 어텐션을 사용하여도 더 빠른 생성이 가능합니다. (스케일드 닷 프로덕트 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)에서 확인할 수 있습니다.)
+PyTorch의 스케일된 내적 어텐션을 사용하여도 더 빠른 생성이 가능합니다. (스케일된 내적 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)에서 확인할 수 있습니다.)
 
 
 ```python
