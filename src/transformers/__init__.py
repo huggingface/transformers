@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.45.0.dev0"
+__version__ = "4.46.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -465,6 +465,7 @@ _import_structure = {
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
+    "models.granitemoe": ["GraniteMoeConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -480,6 +481,7 @@ _import_structure = {
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
     "models.idefics2": ["Idefics2Config"],
+    "models.idefics3": ["Idefics3Config"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
     "models.instructblip": [
@@ -576,6 +578,10 @@ _import_structure = {
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
+    "models.mllama": [
+        "MllamaConfig",
+        "MllamaProcessor",
+    ],
     "models.mluke": [],
     "models.mobilebert": [
         "MobileBertConfig",
@@ -601,6 +607,7 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.myt5": ["MyT5Tokenizer"],
     "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
@@ -608,6 +615,10 @@ _import_structure = {
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
     "models.olmoe": ["OlmoeConfig"],
+    "models.omdet_turbo": [
+        "OmDetTurboConfig",
+        "OmDetTurboProcessor",
+    ],
     "models.oneformer": [
         "OneFormerConfig",
         "OneFormerProcessor",
@@ -644,6 +655,7 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "Pix2StructConfig",
@@ -837,6 +849,7 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.zamba": ["ZambaConfig"],
     "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
@@ -958,6 +971,7 @@ _import_structure = {
         "AqlmConfig",
         "AwqConfig",
         "BitsAndBytesConfig",
+        "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
         "GPTQConfig",
@@ -1182,6 +1196,7 @@ else:
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
+    _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -1194,6 +1209,7 @@ else:
     )
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
+    _import_structure["models.mllama"].extend(["MllamaImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
@@ -2345,6 +2361,13 @@ else:
             "GranitePreTrainedModel",
         ]
     )
+    _import_structure["models.granitemoe"].extend(
+        [
+            "GraniteMoeForCausalLM",
+            "GraniteMoeModel",
+            "GraniteMoePreTrainedModel",
+        ]
+    )
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2402,6 +2425,14 @@ else:
             "Idefics2Model",
             "Idefics2PreTrainedModel",
             "Idefics2Processor",
+        ]
+    )
+    _import_structure["models.idefics3"].extend(
+        [
+            "Idefics3ForConditionalGeneration",
+            "Idefics3Model",
+            "Idefics3PreTrainedModel",
+            "Idefics3Processor",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -2693,6 +2724,16 @@ else:
             "MixtralPreTrainedModel",
         ]
     )
+    _import_structure["models.mllama"].extend(
+        [
+            "MllamaForCausalLM",
+            "MllamaForConditionalGeneration",
+            "MllamaPreTrainedModel",
+            "MllamaProcessor",
+            "MllamaTextModel",
+            "MllamaVisionModel",
+        ]
+    )
     _import_structure["models.mobilebert"].extend(
         [
             "MobileBertForMaskedLM",
@@ -2854,6 +2895,12 @@ else:
             "OlmoePreTrainedModel",
         ]
     )
+    _import_structure["models.omdet_turbo"].extend(
+        [
+            "OmDetTurboForObjectDetection",
+            "OmDetTurboPreTrainedModel",
+        ]
+    )
     _import_structure["models.oneformer"].extend(
         [
             "OneFormerForUniversalSegmentation",
@@ -2980,6 +3027,14 @@ else:
             "Phi3PreTrainedModel",
         ]
     )
+    _import_structure["models.phimoe"].extend(
+        [
+            "PhimoeForCausalLM",
+            "PhimoeForSequenceClassification",
+            "PhimoeModel",
+            "PhimoePreTrainedModel",
+        ]
+    )
     _import_structure["models.pix2struct"].extend(
         [
             "Pix2StructForConditionalGeneration",
@@ -2988,7 +3043,7 @@ else:
             "Pix2StructVisionModel",
         ]
     )
-    _import_structure["models.pixtral"].extend(["PixtralModel", "PixtralPreTrainedModel"])
+    _import_structure["models.pixtral"].extend(["PixtralPreTrainedModel", "PixtralVisionModel"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -3712,6 +3767,14 @@ else:
             "YosoForTokenClassification",
             "YosoModel",
             "YosoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.zamba"].extend(
+        [
+            "ZambaForCausalLM",
+            "ZambaForSequenceClassification",
+            "ZambaModel",
+            "ZambaPreTrainedModel",
         ]
     )
     _import_structure["models.zoedepth"].extend(
@@ -5245,6 +5308,7 @@ if TYPE_CHECKING:
     )
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
+    from .models.granitemoe import GraniteMoeConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5262,6 +5326,7 @@ if TYPE_CHECKING:
         IdeficsConfig,
     )
     from .models.idefics2 import Idefics2Config
+    from .models.idefics3 import Idefics3Config
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
     from .models.instructblip import (
@@ -5365,6 +5430,10 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
+    from .models.mllama import (
+        MllamaConfig,
+        MllamaProcessor,
+    )
     from .models.mobilebert import (
         MobileBertConfig,
         MobileBertTokenizer,
@@ -5397,6 +5466,7 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.myt5 import MyT5Tokenizer
     from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
@@ -5405,6 +5475,10 @@ if TYPE_CHECKING:
     )
     from .models.olmo import OlmoConfig
     from .models.olmoe import OlmoeConfig
+    from .models.omdet_turbo import (
+        OmDetTurboConfig,
+        OmDetTurboProcessor,
+    )
     from .models.oneformer import (
         OneFormerConfig,
         OneFormerProcessor,
@@ -5449,6 +5523,7 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         Pix2StructConfig,
@@ -5674,6 +5749,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.zamba import ZambaConfig
     from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
@@ -5802,6 +5878,7 @@ if TYPE_CHECKING:
         AqlmConfig,
         AwqConfig,
         BitsAndBytesConfig,
+        CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
         GPTQConfig,
@@ -6002,6 +6079,7 @@ if TYPE_CHECKING:
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
+        from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
@@ -6021,6 +6099,7 @@ if TYPE_CHECKING:
             MaskFormerFeatureExtractor,
             MaskFormerImageProcessor,
         )
+        from .models.mllama import MllamaImageProcessor
         from .models.mobilenet_v1 import (
             MobileNetV1FeatureExtractor,
             MobileNetV1ImageProcessor,
@@ -6986,6 +7065,11 @@ if TYPE_CHECKING:
             GraniteModel,
             GranitePreTrainedModel,
         )
+        from .models.granitemoe import (
+            GraniteMoeForCausalLM,
+            GraniteMoeModel,
+            GraniteMoePreTrainedModel,
+        )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
@@ -7030,6 +7114,12 @@ if TYPE_CHECKING:
             Idefics2Model,
             Idefics2PreTrainedModel,
             Idefics2Processor,
+        )
+        from .models.idefics3 import (
+            Idefics3ForConditionalGeneration,
+            Idefics3Model,
+            Idefics3PreTrainedModel,
+            Idefics3Processor,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,
@@ -7250,6 +7340,14 @@ if TYPE_CHECKING:
             MixtralModel,
             MixtralPreTrainedModel,
         )
+        from .models.mllama import (
+            MllamaForCausalLM,
+            MllamaForConditionalGeneration,
+            MllamaPreTrainedModel,
+            MllamaProcessor,
+            MllamaTextModel,
+            MllamaVisionModel,
+        )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
             MobileBertForMultipleChoice,
@@ -7377,6 +7475,10 @@ if TYPE_CHECKING:
             OlmoeModel,
             OlmoePreTrainedModel,
         )
+        from .models.omdet_turbo import (
+            OmDetTurboForObjectDetection,
+            OmDetTurboPreTrainedModel,
+        )
         from .models.oneformer import (
             OneFormerForUniversalSegmentation,
             OneFormerModel,
@@ -7475,6 +7577,12 @@ if TYPE_CHECKING:
             Phi3Model,
             Phi3PreTrainedModel,
         )
+        from .models.phimoe import (
+            PhimoeForCausalLM,
+            PhimoeForSequenceClassification,
+            PhimoeModel,
+            PhimoePreTrainedModel,
+        )
         from .models.pix2struct import (
             Pix2StructForConditionalGeneration,
             Pix2StructPreTrainedModel,
@@ -7482,8 +7590,8 @@ if TYPE_CHECKING:
             Pix2StructVisionModel,
         )
         from .models.pixtral import (
-            PixtralModel,
             PixtralPreTrainedModel,
+            PixtralVisionModel,
         )
         from .models.plbart import (
             PLBartForCausalLM,
@@ -8043,6 +8151,12 @@ if TYPE_CHECKING:
             YosoForTokenClassification,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zamba import (
+            ZambaForCausalLM,
+            ZambaForSequenceClassification,
+            ZambaModel,
+            ZambaPreTrainedModel,
         )
         from .models.zoedepth import (
             ZoeDepthForDepthEstimation,

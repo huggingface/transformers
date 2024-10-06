@@ -21,6 +21,7 @@ _import_structure = {
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
+        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
@@ -31,6 +32,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "set_module_8bit_tensor_to_device",
         "set_module_quantized_tensor_to_device",
+        "validate_bnb_backend_availability",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -114,6 +116,7 @@ if TYPE_CHECKING:
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
+        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
     )
@@ -124,6 +127,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         set_module_8bit_tensor_to_device,
         set_module_quantized_tensor_to_device,
+        validate_bnb_backend_availability,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,

@@ -598,7 +598,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            `int`: Index of the token.
+            `int`: Index of the token, or None if the char index refers to a whitespace only token and whitespace is
+                   trimmed with `trim_offsets=True`.
         """
 
         if not self._encodings:
@@ -1613,16 +1614,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        if "clean_up_tokenization_spaces" not in kwargs:
-            warnings.warn(
-                "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
-                "behavior will be deprecated in transformers v4.45, and will be then set to `False` by default. "
-                "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
-                FutureWarning,
-            )
-
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
-        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
+        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
@@ -1966,10 +1959,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # priority: `chat_template` argument > `tokenizer.chat_template`
             if self.chat_template is not None:
                 chat_template = self.chat_template
-
             else:
                 raise ValueError(
-                    "Cannot use apply_chat_template() because tokenizer.chat_template is not set and no template "
+                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
                     "argument was passed! For information about writing templates and setting the "
                     "tokenizer.chat_template attribute, please see the documentation at "
                     "https://huggingface.co/docs/transformers/main/en/chat_templating"

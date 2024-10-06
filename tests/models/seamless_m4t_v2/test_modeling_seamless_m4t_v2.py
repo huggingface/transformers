@@ -376,8 +376,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     )
     all_generative_model_classes = (SeamlessM4Tv2ForSpeechToText,) if is_torch_available() else ()
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
         self.config_tester = ConfigTester(self, config_class=SeamlessM4Tv2Config)
@@ -394,49 +392,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         model_name = "facebook/seamless-m4t-v2-large"
         model = SeamlessM4Tv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size 3
-        sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:batch_size, :sequence_length]
-
-        # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            if isinstance(config.eos_token_id, int):
-                config.eos_token_id = [config.eos_token_id]
-            config.pad_token_id = config.eos_token_id[0]
-
-        attention_mask = torch.ones(input_ids.shape[:2], dtype=torch.long)[:batch_size, :sequence_length]
-
-        return config, input_ids.float(), attention_mask, max_length
-
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = (
-            torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
-            + generation_config.decoder_start_token_id
-        )
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
