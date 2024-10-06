@@ -178,18 +178,16 @@ class VitPoseSimpleDecoder(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
 
-        self.scale_factor = config.scale_factor
+        self.activation = nn.ReLU()
+        self.upsampling = nn.Upsample(scale_factor=config.scale_factor, mode="bilinear", align_corners=False)
         self.conv = nn.Conv2d(
             config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
         )
 
-    def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
-        # Transform input: ReLu + upsample
-        hidden_state = nn.functional.relu(hidden_state)
-        hidden_state = nn.functional.interpolate(
-            hidden_state, scale_factor=self.scale_factor, mode="bilinear", align_corners=False
-        )
-
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # Transform input: ReLU + upsample
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.upsampling(hidden_state)
         heatmaps = self.conv(hidden_state)
 
         if flip_pairs is not None:
@@ -219,7 +217,7 @@ class VitPoseClassicDecoder(nn.Module):
 
         self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_state, flip_pairs):
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None):
         hidden_state = self.deconv1(hidden_state)
         hidden_state = self.batchnorm1(hidden_state)
         hidden_state = self.relu1(hidden_state)

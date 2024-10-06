@@ -114,7 +114,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def get_keypoint_predictions(heatmaps):
+def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple:
     """Get keypoint predictions from score maps.
 
     Args:
@@ -147,7 +147,7 @@ def get_keypoint_predictions(heatmaps):
     return preds, scores
 
 
-def post_dark_unbiased_data_processing(coords, batch_heatmaps, kernel=3):
+def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3):
     """DARK post-pocessing. Implemented by unbiased_data_processing.
 
     Paper references:
@@ -211,7 +211,7 @@ def post_dark_unbiased_data_processing(coords, batch_heatmaps, kernel=3):
     return coords
 
 
-def transform_preds(coords, center, scale, output_size):
+def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
     """Get final keypoint predictions from heatmaps and apply scaling and
     translation to map them back to the image.
 
@@ -366,6 +366,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.normalize_factor = 200.0
 
     def affine_transform(
         self,
@@ -512,7 +513,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = box_to_center_and_scale(
-                        box, image_width=size["width"], image_height=size["height"]
+                        box,
+                        image_width=size["width"],
+                        image_height=size["height"],
+                        normalize_factor=self.normalize_factor,
                     )
                     transformed_image = self.affine_transform(
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
@@ -546,10 +550,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def keypoints_from_heatmaps(
         self,
-        heatmaps,
-        center,
-        scale,
-        kernel=11,
+        heatmaps: np.ndarray,
+        center: np.ndarray,
+        scale: np.ndarray,
+        kernel: int = 11,
     ):
         """
         Get final keypoint predictions from heatmaps and transform them back to
@@ -587,7 +591,11 @@ class VitPoseImageProcessor(BaseImageProcessor):
         return preds, scores
 
     def post_process_pose_estimation(
-        self, outputs, boxes, kernel_size=11, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs: torch.Tensor,
+        boxes: Union[List[List[List[float]]], np.ndarray],
+        kernel_size: int = 11,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
@@ -622,15 +630,17 @@ class VitPoseImageProcessor(BaseImageProcessor):
         flattened_boxes = list(itertools.chain(*boxes))
         for i in range(batch_size):
             if target_sizes is not None:
-                img_w, img_h = target_sizes[i][0], target_sizes[i][1]
-                scale_fct = np.array([img_w, img_h, img_w, img_h])
-                flattened_boxes[i] = flattened_boxes[i] * scale_fct
+                image_width, image_height = target_sizes[i][0], target_sizes[i][1]
+                scale_factor = np.array([image_width, image_height, image_width, image_height])
+                flattened_boxes[i] = flattened_boxes[i] * scale_factor
             width, height = self.size["width"], self.size["height"]
             center, scale = box_to_center_and_scale(flattened_boxes[i], image_width=width, image_height=height)
             centers[i, :] = center
             scales[i, :] = scale
 
-        preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps.numpy(), centers, scales, kernel=kernel_size)
+        preds, scores = self.keypoints_from_heatmaps(
+            outputs.heatmaps.cpu().numpy(), centers, scales, kernel=kernel_size
+        )
 
         all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
         all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
@@ -638,7 +648,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         all_preds[:, :, 2:3] = scores
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
-        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
+        all_boxes[:, 4] = np.prod(scales * self.normalize_factor, axis=1)
 
         poses = torch.Tensor(all_preds)
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))

@@ -253,8 +253,8 @@ class VitPoseBackboneMoeMLP(nn.Module):
 
         # to support ddp training
         for i in range(self.num_experts):
-            selectedIndex = indices == i
-            current_hidden_state = self.experts[i](hidden_state) * selectedIndex
+            selected_index = indices == i
+            current_hidden_state = self.experts[i](hidden_state) * selected_index
             expert_hidden_state = expert_hidden_state + current_hidden_state
 
         hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
