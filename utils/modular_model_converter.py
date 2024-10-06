@@ -15,8 +15,8 @@
 import argparse
 import glob
 import importlib
-import re
 import os
+import re
 from collections import defaultdict, deque
 from typing import Dict, List, Set
 
@@ -1024,8 +1024,12 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         for file, node in cst_transformers.files.items():
             if node != {}:
                 # Get relative path starting from src/transformers/
-                relative_path = re.search(f"{os.sep}(src{os.sep}transformers{os.sep}.*)", os.path.abspath(modular_file)).group(1)
-                header = AUTO_GENERATED_MESSAGE.format(relative_path=relative_path, short_name=os.path.basename(relative_path))
+                relative_path = re.search(
+                    f"{os.sep}(src{os.sep}transformers{os.sep}.*)", os.path.abspath(modular_file)
+                ).group(1)
+                header = AUTO_GENERATED_MESSAGE.format(
+                    relative_path=relative_path, short_name=os.path.basename(relative_path)
+                )
                 ruffed_code = run_ruff(header + node.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
                 output[file] = [formatted_code, ruffed_code]
