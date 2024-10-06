@@ -1251,7 +1251,10 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if assistant_tokenizer is None and not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+        if (
+            assistant_tokenizer is None
+            and not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size
+        ):
             raise ValueError(
                 "The main model and the assistant have different vocab sizes. Please provide the `assistant_tokenizer` to `generate()`."
             )
