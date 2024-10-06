@@ -49,6 +49,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
     <p>
 </h4>
 
@@ -76,7 +77,7 @@ limitations under the License.
 
 ## Онлайн демонстрация
 
-Большинство наших моделей можно протестировать непосредственно на их страницах с [сайта](https://huggingface.co/models). Мы также предлагаем [привтаный хостинг моделей, контроль версий и API для выводов](https://huggingface.co/pricing) для публичных и частных моделей.
+Большинство наших моделей можно протестировать непосредственно на их страницах с [сайта](https://huggingface.co/models). Мы также предлагаем [приватный хостинг моделей, контроль версий и API для выводов](https://huggingface.co/pricing) для публичных и частных моделей.
 
 Вот несколько примеров:
 

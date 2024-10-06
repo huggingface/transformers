@@ -803,6 +803,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         self._initialized = True
+
+        # prepare to handle potential configuration issues during setup
+        from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
+
         if state.is_world_process_zero:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
@@ -852,7 +856,13 @@ class WandbCallback(TrainerCallback):
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                logger.info("Could not log the number of model parameters in Weights & Biases.")
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+            except WandbConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
 
             # log the initial model architecture to an artifact
             if self._log_model.is_enabled:
@@ -905,7 +915,7 @@ class WandbCallback(TrainerCallback):
         if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
             from ..trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
+            fake_trainer = Trainer(args=args, model=model, processing_class=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
@@ -2102,7 +2112,7 @@ class DVCLiveCallback(TrainerCallback):
             from transformers.trainer import Trainer
 
             if self._log_model is True:
-                fake_trainer = Trainer(args=args, model=kwargs.get("model"), tokenizer=kwargs.get("tokenizer"))
+                fake_trainer = Trainer(args=args, model=kwargs.get("model"), processing_class=kwargs.get("tokenizer"))
                 name = "best" if args.load_best_model_at_end else "last"
                 output_dir = os.path.join(args.output_dir, name)
                 fake_trainer.save_model(output_dir)

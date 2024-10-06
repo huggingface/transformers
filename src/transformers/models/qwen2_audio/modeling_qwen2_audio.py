@@ -22,10 +22,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -290,7 +291,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -324,7 +325,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
             value_states,
             causal_mask,
             tgt_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -855,7 +856,7 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
     """The QWEN2AUDIO model which consists of a audio backbone and a language model.""",
     QWEN2AUDIO_START_DOCSTRING,
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
+class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config, attn_implementation=config._attn_implementation)
