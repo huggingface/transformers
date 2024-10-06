@@ -268,7 +268,7 @@ pose_results = [result["keypoints"] for result in pose_results]
 
 result = visualize_keypoints(
     np.array(image),
-    pose_result,
+    pose_results,
     skeleton=skeleton,
     kpt_score_thr=0.3,
     pose_kpt_color=pose_kpt_color,
