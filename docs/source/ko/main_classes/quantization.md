@@ -23,7 +23,7 @@ Transformers에서 지원되지 않는 양자화 기법들은 [`HfQuantizer`] �
 
 <Tip>
 
- 모델을 양자화하는 방법은 이  [양자화](../quantization) 가이드를 통해 배울 수 있습니다.
+모델을 양자화하는 방법은 이 [양자화](../quantization) 가이드를 통해 배울 수 있습니다.
 
 </Tip>
 
