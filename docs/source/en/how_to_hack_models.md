@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -126,7 +126,7 @@ model = SamModel.from_pretrained("facebook/sam-vit-base")
 
 **Explanation:**
 
-- **Class Replacement:** By assigning your custom class to `modeling_sam.SamVisionAttention`, any instances of `SamVisionAttention` in the model will use the modified version.
+- **Class Replacement:** By assigning your custom class to `modeling_sam.SamVisionAttention`, any instances of `SamVisionAttention` in the model will use the modified version. Thus when you call `SamModel`, it will use the newly defined `SamVisionAttentionSplit`. 
 - **Model Loading:** The model is loaded using `from_pretrained`, and the custom attention mechanism is integrated.
 
 #### **Step 3: Apply LoRA to Specific Projections**
