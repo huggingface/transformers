@@ -129,7 +129,7 @@ def convert_to_grayscale_and_dilation(
 
 def extrapolation(
     image: ImageInput,
-    scale_hw: Optional[tuple[float, float]] = None,
+    scale_size: Optional[tuple[float, float]] = None,
     data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
@@ -137,8 +137,8 @@ def extrapolation(
     Prepares video frames for the outpainting process by extrapolating the field of view (FOV) and generating masks.
 
     This function performs the following tasks:
-    (a) Scaling: If the `scale_hw` parameter is provided(necesaary to provide for outpainting), it resizes the dimensions of the video frames based on
-        the scaling factors for height  and width. This step is crucial for `"video_outpainting"` mode. If `scale_hw` is `None`, no resizing is applied.
+    (a) Scaling: If the `scale_size` parameter is provided(necesaary to provide for outpainting), it resizes the dimensions of the video frames based on
+        the scaling factors for height  and width. This step is crucial for `"video_outpainting"` mode. If `scale_size` is `None`, no resizing is applied.
     (b) Field of View Expansion: The function calculates new dimensions for the frames to accommodate the expanded FOV.
         The new dimensions are adjusted to be divisible by 8 to meet processing requirements.
     (c) Frame Adjustment: The original frames are placed at the center of the new, larger frames. The rest of the frame is filled with zeros.
@@ -150,7 +150,7 @@ def extrapolation(
     Args:
         image (Image):
             The video frames to convert.
-        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_size (`tuple[float, float]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
         data_format (`str` or `ChannelDimension`, *optional*):
@@ -170,8 +170,8 @@ def extrapolation(
     num_channels = image.shape[get_channel_dimension_axis(image, input_data_format)]
 
     # Defines new FOV.
-    height_extr = int(scale_hw[0] * height)
-    width_extr = int(scale_hw[1] * width)
+    height_extr = int(scale_size[0] * height)
+    width_extr = int(scale_size[1] * width)
     height_extr = height_extr - height_extr % 8
     width_extr = width_extr - width_extr % 8
     height_start = int((height_extr - height) / 2)
@@ -280,7 +280,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
             Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
             choices=['video_inpainting', 'video_outpainting']
-        scale_hw (`tuple[float, float]`, *optional*):
+        scale_size (`tuple[float, float]`, *optional*):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
         mask_dilation (`int`, *optional*, defaults to 4):
@@ -302,7 +302,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         video_painting_mode: str = "video_inpainting",
-        scale_hw: Optional[tuple[float, float]] = None,
+        scale_size: Optional[tuple[float, float]] = None,
         mask_dilation: int = 4,
         **kwargs,
     ) -> None:
@@ -323,7 +323,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.video_painting_mode = video_painting_mode
-        self.scale_hw = scale_hw
+        self.scale_size = scale_size
         self.mask_dilation = mask_dilation
 
     # Adapted from transformers.models.vivit.image_processing_vivit.VivitImageProcessor.resize
@@ -377,7 +377,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
     def _extrapolation(
         self,
         images: ImageInput,
-        scale_hw: Optional[tuple[float, float]] = None,
+        scale_size: Optional[tuple[float, float]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -387,7 +387,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         Args:
         images (Image):
             The video frames to convert.
-        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_size (`tuple[float, float]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
         data_format (`str` or `ChannelDimension`, *optional*):
@@ -403,7 +403,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             *[
                 extrapolation(
                     image=image,
-                    scale_hw=scale_hw,
+                    scale_size=scale_size,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
@@ -545,7 +545,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         video_painting_mode: str = None,
-        scale_hw: Optional[tuple[float, float]] = None,
+        scale_size: Optional[tuple[float, float]] = None,
         mask_dilation: int = None,
     ):
         """
@@ -600,7 +600,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             video_painting_mode (`str`, *optional*, defaults to `self.video_inpainting`):
                 Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
                 choices=['video_inpainting', 'video_outpainting']
-            scale_hw (`tuple[float, float]`, *optional*, defaults to `self.scale_hw`):
+            scale_size (`tuple[float, float]`, *optional*, defaults to `self.scale_size`):
                 Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
                 It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
             mask_dilation (`int`, *optional*, defaults to `self.mask_dilation`):
@@ -623,7 +623,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         if video_painting_mode == "video_outpainting":
-            assert scale_hw is not None, "Please provide a outpainting scale (s_h, s_w)."
+            assert scale_size is not None, "Please provide a outpainting scale (scale_height, scale_width)."
 
         if not valid_images(videos):
             raise ValueError(
@@ -711,7 +711,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                     *[
                         self._extrapolation(
                             video,
-                            scale_hw=scale_hw,
+                            scale_size=scale_size,
                             data_format=data_format,
                             input_data_format=input_data_format,
                         )

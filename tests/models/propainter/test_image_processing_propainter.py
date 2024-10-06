@@ -182,7 +182,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs[0],
             masks=mask_inputs[0],
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (1, 10, 3, 64, 72)
@@ -193,7 +193,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs,
             masks=mask_inputs,
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (5, 10, 3, 64, 72)
@@ -231,7 +231,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs[0],
             masks=mask_inputs[0],
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (1, 10, 3, 64, 72)
@@ -242,7 +242,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs,
             masks=mask_inputs,
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (5, 10, 3, 64, 72)
@@ -282,7 +282,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs[0],
             masks=mask_inputs[0],
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (1, 10, 3, 64, 72)
@@ -293,7 +293,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs,
             masks=mask_inputs,
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).pixel_values_videos
         expected_output_video_shape = (5, 10, 3, 64, 72)
@@ -342,7 +342,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs[0],
             masks=mask_inputs[0],
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
             input_data_format="channels_first",
             image_mean=0,
@@ -358,7 +358,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             video_inputs,
             masks=mask_inputs,
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
             input_data_format="channels_first",
             image_mean=0,

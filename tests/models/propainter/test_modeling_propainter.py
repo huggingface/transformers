@@ -834,7 +834,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             video,
             masks=masks,
             video_painting_mode="video_outpainting",
-            scale_hw=(1.0, 1.2),
+            scale_size=(1.0, 1.2),
             return_tensors="pt",
         ).to(torch_device)
 

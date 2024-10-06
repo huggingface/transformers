@@ -4495,7 +4495,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         >>> # Forward pass:
 
-        >>> inputs = video_processor(video, masks = masks, video_painting_mode = "video_outpainting", scale_hw = (1.0,1.2), return_tensors="pt").to(device)
+        >>> inputs = video_processor(video, masks = masks, video_painting_mode = "video_outpainting", scale_size = (1.0,1.2), return_tensors="pt").to(device)
 
         >>> # The first input in this always has a value for inference as its not utilised during training
         >>> with torch.no_grad():
