@@ -373,6 +373,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             discrepancy_only: 2D array of shape (batch_size, discrepancy_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
         """
         compare_mat = prompt_plus_new_tokens.T == prompt
+        if not torch.is_tensor(compare_mat):
+            compare_mat = torch.tensor(compare_mat)
+
         compare_mat_int = compare_mat.to(int)
 
         if not compare_mat_int.any().item():
