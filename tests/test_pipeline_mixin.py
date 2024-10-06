@@ -30,7 +30,6 @@ from huggingface_hub import AudioClassificationInput, AutomaticSpeechRecognition
 from transformers.pipelines import AudioClassificationPipeline, AutomaticSpeechRecognitionPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_decord,
     require_pytesseract,
     require_timm,
     require_torch,
@@ -583,13 +582,11 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch_or_tf
     @require_vision
-    @require_decord
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
     @is_pipeline_test
     @require_vision
-    @require_decord
     @require_torch
     def test_pipeline_video_classification_fp16(self):
         self.run_task_tests(task="video-classification", torch_dtype="float16")
