@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""SAM 2 model configuration"""
-
-from typing import Tuple
+"""SAM2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -24,11 +22,30 @@ logger = logging.get_logger(__name__)
 
 
 class Sam2MemoryAttentionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2MemoryAttention`]. It is used to instantiate a SAM 2
+    memory attention module according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        d_model (`int`, *optional*, defaults to 256):
+            The dimension of the model in the memory attention module.
+        pos_enc_at_input (`bool`, *optional*, defaults to True):
+            Whether to apply positional encoding at the input.
+        num_layers (`int`, *optional*, defaults to 4):
+            The number of layers in the memory attention module.
+        batch_first (`bool`, *optional*, defaults to True):
+            Whether the input and output tensors are provided in batch-first format.
+
+    """
+
     def __init__(
         self,
-        d_model: int = 256,
+        d_model=256,
         pos_enc_at_input=True,
-        num_layers: int = 4,
+        num_layers=4,
         batch_first=True,
         **kwargs,
     ):
@@ -40,6 +57,21 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
 
 
 class Sam2MemoryEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2MemoryEncoder`]. It is used to instantiate a SAM 2
+    memory encoder according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        in_dim (`int`, *optional*, defaults to 256):
+            Input dimension of the memory encoder.
+        out_dim (`int`, *optional*, defaults to 64):
+            Output dimension of the memory encoder.
+
+    """
+
     def __init__(
         self,
         in_dim=256,
@@ -61,34 +93,67 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+    Args:
+        scalp (`int`, *optional*, defaults to 1):
+            The scalp parameter for the image encoder.
+        embed_dim (`int`, *optional*, defaults to 112):
+            Initial embedding dimension.
+        num_heads (`int`, *optional*, defaults to 2):
+            Initial number of attention heads.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate.
+        q_pool (`int`, *optional*, defaults to 3):
+            Number of q_pool stages.
+        q_stride (`Tuple[int, int]`, *optional*, defaults to (2, 2)):
+            Downsample stride between stages.
+        stages (`Tuple[int, ...]`, *optional*, defaults to (2, 3, 16, 3)):
+            Number of blocks per stage.
+        dim_mul (`float`, *optional*, defaults to 2.0):
+            Dimension multiplier factor at stage shift.
+        head_mul (`float`, *optional*, defaults to 2.0):
+            Head multiplier factor at stage shift.
+        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to (14, 14)):
+            Window size per stage when not using global attention.
+        window_spec (`Tuple[int, ...]`, *optional*, defaults to (8, 4, 14, 7)):
+            Window specifications for each stage.
+        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to (12, 16, 20)):
+            Blocks where global attention is used.
+        return_interm_layers (`bool`, *optional*, defaults to True):
+            Whether to return features from every stage.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the model in the neck.
+        backbone_channel_list (`List[int]`, *optional*, defaults to [896, 448, 224, 112]):
+            List of channel dimensions for the backbone.
+        kernel_size (`int`, *optional*, defaults to 1):
+            Kernel size for convolutions in the neck.
+        stride (`int`, *optional*, defaults to 1):
+            Stride for convolutions in the neck.
+        padding (`int`, *optional*, defaults to 0):
+            Padding for convolutions in the neck.
+        fpn_top_down_levels (`List[int]`, *optional*, defaults to [2, 3]):
+            Levels for top-down FPN connections.
+        fpn_interp_model (`str`, *optional*, defaults to "nearest"):
+            Interpolation model for FPN.
+        fuse_type (`str`, *optional*, defaults to "sum"):
+            Type of fusion to use in the neck.
+
     """
 
     def __init__(
         self,
         scalp=1,
-        embed_dim: int = 112,  # initial embed dim
-        num_heads: int = 2,  # initial number of heads
-        drop_path_rate: float = 0.0,  # stochastic depth
-        q_pool: int = 3,  # number of q_pool stages
-        q_stride: Tuple[int, int] = (2, 2),  # downsample stride bet. stages
-        stages: Tuple[int, ...] = (2, 3, 16, 3),  # blocks per stage
-        dim_mul: float = 2.0,  # dim_mul factor at stage shift
-        head_mul: float = 2.0,  # head_mul factor at stage shift
-        window_pos_embed_bkg_spatial_size: Tuple[int, int] = (14, 14),
-        # window size per stage, when not using global att.
-        window_spec: Tuple[int, ...] = (
-            8,
-            4,
-            14,
-            7,
-        ),
-        # global attn in these blocks
-        global_att_blocks: Tuple[int, ...] = (
-            12,
-            16,
-            20,
-        ),
-        return_interm_layers=True,  # return feats from every stage
+        embed_dim=112,
+        num_heads=2,
+        drop_path_rate=0.0,
+        q_pool=3,
+        q_stride=(2, 2),
+        stages=(2, 3, 16, 3),
+        dim_mul=2.0,
+        head_mul=2.0,
+        window_pos_embed_bkg_spatial_size=(14, 14),
+        window_spec=(8, 4, 14, 7),
+        global_att_blocks=(12, 16, 20),
+        return_interm_layers=True,
         d_model=256,
         backbone_channel_list=[896, 448, 224, 112],
         kernel_size=1,
@@ -128,7 +193,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
 class Sam2Config(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
-    SAM 2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
+    SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2 Hiera-B+
     [facebook/sam2-hiera-base-plus](https://huggingface.co/facebook/sam2-hiera-base-plus) architecture.
 
@@ -157,18 +222,18 @@ class Sam2Config(PretrainedConfig):
     ...     Sam2Model,
     ... )
 
-    >>> # Initializing a SamConfig with `"facebook/hiera-base-plus"` style configuration
-    >>> configuration = Sam2onfig()
+    >>> # Initializing a Sam2Config with `"facebook/hiera-base-plus"` style configuration
+    >>> configuration = Sam2config()
 
-    >>> # Initializing a SamModel (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam-vit-huge"` style configuration
     >>> model = Sam2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a SamConfig from a Sam2ImageEncoderConfig, Sam2MemoryAttentionConfig, and Sam2MemoryEncoderConfig
+    >>> # We can also initialize a Sam2Config from a Sam2ImageEncoderConfig, Sam2MemoryAttentionConfig, and Sam2MemoryEncoderConfig
 
-    >>> # Initializing SAM vision, SAM Q-Former and language model configurations
+    >>> # Initializing SAM2 image encoder, memory attention, and memory encoder configurations
     >>> image_encoder_config = Sam2ImageEncoderConfig()
     >>> memory_attention_config = Sam2MemoryAttentionConfig()
     >>> memory_encoder_config = Sam2MemoryEncoderConfig()
