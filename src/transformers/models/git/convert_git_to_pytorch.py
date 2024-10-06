@@ -242,7 +242,9 @@ def prepare_video():
     with av.open(file_path) as container:
         # sample 6 frames
         num_frames = 6
-        indices = sample_frame_indices(clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames)
+        indices = sample_frame_indices(
+            clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
+        )
         frames = read_video_pyav(container, indices)
 
         return frames
