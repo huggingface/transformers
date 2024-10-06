@@ -35,7 +35,7 @@ This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The o
 
 ## Usage tips:
 
-- The model is used for both video inpainting and video outpainting. To switch between modes, you need to provide a value of a `tuple(h,w)` to the `scale_hw` keyword argument in the `ProPainterVideoProcessor`. In the usage example, we have demonstrated both ways of providing video frames and their corresponding masks regardless of whether the data is in `.mp4`, `.jpg`, or any other image/video format.
+- The model is used for both video inpainting and video outpainting. To switch between modes, `video_painting_mode` keyword argument has to be set in the `ProPainterVideoProcessor`. Choices are: `['video_inpainting', 'video_outpainting']`. By default the mode is `video_inpainting`. To perform outpainting, set `video_painting_mode='video_outpainting'` and provide a `tuple(scale_height, scale_width)` to the `scale_size` keyword argument in `ProPainterVideoProcessor`. In the usage example, we have demonstrated both ways of providing video frames and their corresponding masks regardless of whether the data is in `.mp4`, `.jpg`, or any other image/video format.
 
 - After downloading the original checkpoints from [here](https://github.com/sczhou/ProPainter/releases/tag/v0.1.0), you can convert them using the **conversion script** available at
 `src/transformers/models/propainter/convert_propainter_to_hf.py` with the following command:
@@ -45,7 +45,7 @@ python src/transformers/models/propainter/convert_propainter_to_hf.py \
     --pytorch-dump-folder-path /output/path --verify-logits
 ```
 
-- You must remember this while providing the inputs as a single batch (one video), i.e., if the size of a single frame goes lower than 128 (height or width) then you may possibly encounter the error below. The solution is to keep the frame size to a minimum of **128**.
+- You must remember this while providing the inputs as a single batch (one video), i.e., if the size of a single frame goes lower than 128 (height or width) then you **may** possibly encounter the error below. The solution is to keep the frame size to a minimum of **128**.
 ```
 RuntimeError: CUDA error: device-side assert triggered
 CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
@@ -175,7 +175,7 @@ imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstr
 
 # Forward pass:
 
-inputs = video_processor(video, masks = masks, video_painting_mode = "video_outpainting", scale_hw = (1.0,1.2), return_tensors="pt").to(device)
+inputs = video_processor(video, masks = masks, video_painting_mode = "video_outpainting", scale_size = (1.0,1.2), return_tensors="pt").to(device)
 
 # The first input in this always has a value for inference as its not utilised during training
 with torch.no_grad():
