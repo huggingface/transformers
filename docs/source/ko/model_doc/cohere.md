@@ -1,6 +1,6 @@
 # Cohere[[cohere]]
 
-## 오버뷰[[overview]]
+## 개요[[overview]]
 
 The Cohere Command-R 모델은 Cohere팀이 [Command-R: 프로덕션 규모의 검색 증강 생성](https://txt.cohere.com/command-r/)라는 블로그 포스트에서 소개 되었습니다.
 
@@ -89,7 +89,7 @@ gen_text = tokenizer.decode(gen_tokens[0])
 print(gen_text)
 ```
 
-bitsnbytes 라이브러리를 이용해서 4bit 양자화된 모델 로딩
+bitsandbytes 라이브러리를 이용해서 4bit 양자화된 모델 로딩
 ```python
 # pip install transformers bitsandbytes accelerate
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
