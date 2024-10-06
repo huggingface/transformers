@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RAG(검색 증강 생성)
+# RAG(검색 증강 생성) [[rag]]
 
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=rag">
@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-## 개요
+## 개요 [[overview]]
 
 검색 증강 생성(Retrieval-augmented generation, "RAG") 모델은 사전 훈련된 밀집 검색(DPR)과 시퀀스-투-시퀀스 모델의 장점을 결합합니다. RAG 모델은 문서를 검색하고, 이를 시퀀스-투-시퀀스 모델에 전달한 다음, 주변화(marginalization)를 통해 출력을 생성합니다. 검색기와 시퀀스-투-시퀀스 모듈은 사전 훈련된 모델로 초기화되며, 함께 미세 조정되어 검색과 생성 모두 다운스트림 작업(모델을 특정 태스크에 적용하는 것)에 적응할 수 있게 합니다.
 
@@ -34,43 +34,43 @@ rendered properly in your Markdown viewer.
 
 이 모델은 [ola13](https://huggingface.co/ola13)에 의해 기여되었습니다.
 
-## 사용 팁
+## 사용 팁 [[usage-tips]]
 
 검색 증강 생성(Retrieval-augmented generation, "RAG") 모델은 사전 훈련된 밀집 검색(DPR)과 시퀀스-투-시퀀스 모델의 강점을 결합합니다. RAG 모델은 문서를 검색하고, 이를 시퀀스-투-시퀀스 모델에 전달한 다음, 주변화(marginalization)를 통해 출력을 생성합니다. 검색기와 시퀀스-투-시퀀스 모듈은 사전 훈련된 모델로 초기화되며, 함께 미세 조정됩니다. 이를 통해 검색과 생성 모두 다운스트림 작업에 적응할 수 있게 됩니다.
 
-## RagConfig
+## RagConfig [[transformers.RagConfig]]
 
 [[autodoc]] RagConfig
 
-## RagTokenizer
+## RagTokenizer [[transformers.RagTokenizer]]
 
 [[autodoc]] RagTokenizer
 
-## Rag specific outputs
+## Rag specific outputs [[transformers.models.rag.modeling_rag.RetrievAugLMMarginOutput]]
 
 [[autodoc]] models.rag.modeling_rag.RetrievAugLMMarginOutput
 
 [[autodoc]] models.rag.modeling_rag.RetrievAugLMOutput
 
-## RagRetriever
+## RagRetriever [[transformers.RagRetriever]]
 
 [[autodoc]] RagRetriever
 
 <frameworkcontent>
 <pt>
 
-## RagModel
+## RagModel [[transformers.RagModel]]
 
 [[autodoc]] RagModel
     - forward
 
-## RagSequenceForGeneration
+## RagSequenceForGeneration [[transformers.RagSequenceForGeneration]]
 
 [[autodoc]] RagSequenceForGeneration
     - forward
     - generate
 
-## RagTokenForGeneration
+## RagTokenForGeneration [[transformers.RagTokenForGeneration]]
 
 [[autodoc]] RagTokenForGeneration
     - forward
@@ -79,18 +79,18 @@ rendered properly in your Markdown viewer.
 </pt>
 <tf>
 
-## TFRagModel
+## TFRagModel [[transformers.TFRagModel]]
 
 [[autodoc]] TFRagModel
     - call
 
-## TFRagSequenceForGeneration
+## TFRagSequenceForGeneration [[transformers.TFRagSequenceForGeneration]]
 
 [[autodoc]] TFRagSequenceForGeneration
     - call
     - generate
 
-## TFRagTokenForGeneration
+## TFRagTokenForGeneration [[transformers.TFRagTokenForGeneration]]
 
 [[autodoc]] TFRagTokenForGeneration
     - call
