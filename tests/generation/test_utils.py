@@ -3473,6 +3473,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(expected_out.shape, predicted_out.shape)
         self.assertTrue((expected_out == predicted_out).all().item())
 
+
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(

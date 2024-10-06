@@ -14,12 +14,10 @@
 # limitations under the License.
 
 import copy
-import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -28,6 +26,7 @@ from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
 
 
@@ -159,7 +158,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare generation-related options.
         self.logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         self.generation_config = copy.deepcopy(generation_config)
-        
+
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
         self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
@@ -296,8 +295,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self,
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
-        target_tokenizer: PreTrainedTokenizerBase,
-        assistant_tokenizer: PreTrainedTokenizerBase,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,

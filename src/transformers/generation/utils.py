@@ -15,7 +15,6 @@
 # limitations under the License.
 import copy
 import inspect
-import time
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
@@ -109,6 +108,7 @@ from .stopping_criteria import (
 )
 
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
@@ -119,7 +119,6 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-import logging as pylogging
 
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
@@ -688,17 +687,14 @@ class GenerationMixin:
         inputs_tensor: torch.Tensor,
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
-        target_tokenizer: PreTrainedTokenizerBase,
-        assistant_tokenizer: PreTrainedTokenizerBase,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
-        different_tokenizers = all(
-            v is not None
-            for v in (assistant_model, target_tokenizer, assistant_tokenizer)
-        )
+        different_tokenizers = all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
 
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
@@ -1176,7 +1172,9 @@ class GenerationMixin:
                 )
 
         if assistant_tokenizer is None and self.config.vocab_size != assistant_model.config.vocab_size:
-            raise ValueError("The main model and the assistant have different vocab sizes. Please provide the `assistant_tokenizer` to `generate()`.")
+            raise ValueError(
+                "The main model and the assistant have different vocab sizes. Please provide the `assistant_tokenizer` to `generate()`."
+            )
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
@@ -1799,7 +1797,7 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # pylogging.error(f'start {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))}')
-        
+
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria

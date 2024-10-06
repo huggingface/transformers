@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
-from ..models.auto.tokenization_auto import AutoTokenizer
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
