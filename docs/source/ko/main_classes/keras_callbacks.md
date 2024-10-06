@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 케라스 콜백[[keras-callbacks]]
 
-케라스로 트랜스포머 모델을 학습할 때, 일반적인 작업을 자동화하기 위한 라이브러리 전용 콜백들이 사용 가능합니다:
+케라스로 트랜스포머 모델을 학습할 때, 일반적인 작업을 자동화하기 위한 라이브러리 전용 콜백들을 사용 할 수 있습니다.
 
 ## KerasMetricCallback[[transformers.KerasMetricCallback]]
 
