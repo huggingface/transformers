@@ -16,10 +16,8 @@
 Processor class for ProPainter.
 """
 
-import math
 import os
 import sys
-from typing import Iterable, List, Union
 
 
 if sys.version_info >= (3, 11):
@@ -28,8 +26,7 @@ else:
     from typing_extensions import Unpack
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import VideoInput
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
