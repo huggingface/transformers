@@ -1675,10 +1675,10 @@ class Trainer:
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
-            self.args.deepspeed_plugin = None
 
             # From 1.0 on, we also need to fully reset/override the DS plugin when doing sweeps
             if AcceleratorState._shared_state != {} and version.parse(accelerate_version) > version.parse("0.34.2"):
+                self.args.deepspeed_plugin = None
                 AcceleratorState().deepspeed_plugins = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
 
         self.create_accelerator_and_postprocess()
