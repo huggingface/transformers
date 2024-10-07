@@ -44,6 +44,32 @@ jobs:
         id: set_pr_number
         run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
 
+  # Get commit sha of `refs/pull/PR_NUMBER/merge` and `refs/pull/PR_NUMBER/head`
+  get-sha:
+    runs-on: ubuntu-latest
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    outputs:
+      PR_MERGE_COMMIT_SHA: ${{ steps.get_sha.outputs.PR_MERGE_COMMIT_SHA }}
+      PR_HEAD_SHA: ${{ steps.get_sha.outputs.PR_HEAD_SHA }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+
+      - name: Get SHA
+        id: get_sha
+        env:
+          PR_NUMBER: ${{needs.get-pr-number.outputs.PR_NUMBER}}
+        run: |
+            echo "PR_MERGE_COMMIT_SHA: $(git log -1 --format=%H)"
+            echo "PR_MERGE_COMMIT_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+            git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
+            git checkout refs/remotes/pull/$PR_NUMBER/head
+            echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
+            echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+
   # use a python script to handle this complex logic
   # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
   # case 2: `run-slow model_1, model_2`
@@ -61,17 +87,6 @@ jobs:
           fetch-depth: "0"
           ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
 
-      - name: Reply to the comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=This comment contains run-slow, running the specified job..."
-
       - name: Get models to test
         run: |
           python -m pip install GitPython
@@ -84,10 +99,22 @@ jobs:
           echo "${{ env.models }}"
           echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
 
+      # TODO: update
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
+            -f "body=This comment contains run-slow, running the specified job..."
+
   create_run:
     name: Create run
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    needs: get-tests
+    needs: [get-sha, get-tests]
     permissions: write-all
     runs-on: ubuntu-latest
     steps:
@@ -101,15 +128,16 @@ jobs:
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            repos/${{ github.repository }}/statuses/${{ needs.get-sha.outputs.PR_HEAD_SHA }} \
             -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Slow CI job" -f "context=pytest/custom-tests"
 
+  # (To be removed: only for playing with this PR on `transformers_ci_bot` where no self-hosted runner is available)
   run_models_gpu_dummy:
-      name: Run all tests for the model
+      name: Run all tests for the model (dummy)
       # Triggered only `find_models_to_run` is triggered (label `run-slow` is added) which gives the models to run
       # (either a new model PR or via a commit message)
       if: ${{ needs.get-tests.outputs.models != '[]' }}
-      needs: [get-tests, create_run]
+      needs: [get-pr-number, get-tests, create_run]
       strategy:
         fail-fast: false
         matrix:
@@ -121,13 +149,14 @@ jobs:
         shell: bash
         run: |
           echo "${{ matrix.folders }}"
+          sleep 10s
 
   run_models_gpu:
       name: Run all tests for the model
       # Triggered only `find_models_to_run` is triggered (label `run-slow` is added) which gives the models to run
       # (either a new model PR or via a commit message)
       if: ${{ needs.get-tests.outputs.models != '[]' }}
-      needs: [get-tests, create_run]
+      needs: [get-pr-number, get-tests, create_run]
       strategy:
         fail-fast: false
         matrix:
@@ -155,9 +184,12 @@ jobs:
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
-      - name: Update clone
+      - name: Checkout to PR merge commit
         working-directory: /transformers
-        run: git fetch && git fetch origin pull/${{ github.event.pull_request.number }}/head:pull/${{ github.event.pull_request.number }}/merge && git checkout pull/${{ github.event.pull_request.number }}/merge
+        run: |
+            git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
+            git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
+            git log -1 --format=%H
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -180,7 +212,7 @@ jobs:
             machine_type=${{ matrix.machine_type }}
           fi
           echo "$machine_type"
-          echo "machine_type=$machine_type" >> $GITHUB_ENV    
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Environment
         working-directory: /transformers
@@ -219,9 +251,9 @@ jobs:
 
   update_run_status:
     name: Update Check Run Status
-    needs: [run_models_gpu]
+    needs: [get-sha, create_run, run_models_gpu]
     permissions: write-all
-    if: always()
+    if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -238,7 +270,7 @@ jobs:
             echo "STATUS=${{ needs.run_models_gpu.result }}" >> $GITHUB_ENV
           fi
 
-      - name: Update run's status
+      - name: Update PR commit statuses
         run: |
           echo "${{ needs.run_models_gpu.result }}"
           echo "${{ env.STATUS }}"
@@ -246,5 +278,5 @@ jobs:
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            repos/${{ github.repository }}/statuses/${{ needs.get-sha.outputs.PR_HEAD_SHA }} \
             -f "target_url=$GITHUB_RUN_URL" -f "state=${{ env.STATUS }}" -f "description=Slow CI job" -f "context=pytest/custom-tests"
