@@ -20,22 +20,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...utils import logging
-from ..bert.modeling_bert import (
-    BertEmbeddings,
-    BertSelfAttention,
-    BertSdpaSelfAttention,
-    BertSelfOutput,
-    BertAttention,
-    BertIntermediate,
-    BertOutput,
-    BertLayer,
-    BertEncoder,
-    BertPooler,
-    BertModel,
-)
-
-
 from ...activations import gelu
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -53,6 +37,19 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+)
+from ..bert.modeling_bert import (
+    BertAttention,
+    BertEmbeddings,
+    BertEncoder,
+    BertIntermediate,
+    BertLayer,
+    BertModel,
+    BertOutput,
+    BertPooler,
+    BertSdpaSelfAttention,
+    BertSelfAttention,
+    BertSelfOutput,
 )
 from .configuration_roberta import RobertaConfig
 
@@ -78,6 +75,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
 
 class RobertaEmbeddings(BertEmbeddings):
     def __init__(self, config):
@@ -131,7 +129,7 @@ class RobertaEmbeddings(BertEmbeddings):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-    
+
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
@@ -148,6 +146,7 @@ class RobertaEmbeddings(BertEmbeddings):
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape)
+
 
 class RobertaSelfAttention(BertSelfAttention):
     pass
@@ -175,6 +174,7 @@ class RobertaAttention(BertAttention):
 
 class RobertaIntermediate(BertIntermediate):
     pass
+
 
 class RobertaOutput(BertOutput):
     pass
@@ -241,8 +241,10 @@ class RobertaModel(RobertaPreTrainedModel, BertModel):
         self.post_init()
 
 
-ROBERTA_INPUTS_DOCSTRING = None # To use value from modeling_bert
-ROBERTA_START_DOCSTRING = None # To use value from modeling_bert
+ROBERTA_INPUTS_DOCSTRING = None  # To use value from modeling_bert
+ROBERTA_START_DOCSTRING = None  # To use value from modeling_bert
+
+
 @add_start_docstrings(
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.""", ROBERTA_START_DOCSTRING
 )

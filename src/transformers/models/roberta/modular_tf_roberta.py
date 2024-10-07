@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 
-import math
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -26,8 +25,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithPastAndCrossAttentions,
-    TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFCausalLMOutputWithCrossAttentions,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
@@ -40,36 +37,33 @@ from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFMultipleChoiceLoss,
-    TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
     keras,
-    keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_roberta import RobertaConfig
 from ..bert.modeling_tf_bert import (
-    TFBertSelfAttention,
-    TFBertMainLayer,
-    TFBertSelfOutput,
     TFBertAttention,
-    TFBertIntermediate,
-    TFBertOutput,
-    TFBertLayer,
     TFBertEncoder,
+    TFBertIntermediate,
+    TFBertMainLayer,
+    TFBertModel,
+    TFBertOutput,
     TFBertPooler,
     TFBertPreTrainedModel,
-    TFBertModel,
+    TFBertSelfAttention,
+    TFBertSelfOutput,
 )
+from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -185,6 +179,7 @@ class TFRobertaEmbeddings(keras.layers.Layer):
 
 class TFRobertaPooler(TFBertPooler):
     pass
+
 
 class TFRobertaSelfAttention(TFBertSelfAttention):
     pass
@@ -320,7 +315,6 @@ class TFRobertaEncoder(TFBertEncoder):
 
 
 class TFRobertaMainLayer(TFBertMainLayer):
-
     def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(config, add_pooling_layer, **kwargs)
         self.num_hidden_layers = config.num_hidden_layers
@@ -332,7 +326,6 @@ class TFRobertaMainLayer(TFBertMainLayer):
         self.pooler = TFRobertaPooler(config, name="pooler") if add_pooling_layer else None
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
-
 
     def build(self, input_shape=None):
         if self.built:
@@ -407,7 +400,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
-ROBERTA_START_DOCSTRING = None # To use value from modeling_tf_bert
+ROBERTA_START_DOCSTRING = None  # To use value from modeling_tf_bert
 
 
 class TFRobertaModel(TFRobertaPreTrainedModel, TFBertModel):
