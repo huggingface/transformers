@@ -1244,9 +1244,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-
-        # TODO: remove the float() operation in v4.46
-        logits = self.lm_heads(hidden_states, cache_position).float()
+        logits = self.lm_heads(hidden_states, cache_position)
 
         loss = None
         if labels is not None:
@@ -1833,8 +1831,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        # TODO: remove the float() operation in v4.46
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
         if labels is not None:
