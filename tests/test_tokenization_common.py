@@ -25,8 +25,8 @@ import traceback
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from parameterized import parameterized
 
@@ -1132,7 +1132,6 @@ class TokenizerTesterMixin:
                 # Check that no error raised
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
-
     @require_jinja
     def test_chat_template_batched(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
@@ -1553,7 +1552,10 @@ class TokenizerTesterMixin:
                         # Assert that chat templates are correctly serialized as lists of dictionaries
                         self.assertEqual(
                             config_dict["chat_template"],
-                            [{"name": "template1", "template": "{{'a'}}"}, {"name": "template2", "template": "{{'b'}}"}],
+                            [
+                                {"name": "template1", "template": "{{'a'}}"},
+                                {"name": "template2", "template": "{{'b'}}"},
+                            ],
                         )
                         new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                     # Assert that the serialized list is correctly reconstructed as a single dict
