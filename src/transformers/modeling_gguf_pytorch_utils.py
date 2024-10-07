@@ -242,7 +242,7 @@ def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
 
 
 def split_moe_expert_tensor(
-    weights: np.ndarray, parsed_parameters: Dict[str, Any], name: str, tensor_key_mapping: dict
+    weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
 ):
     # Original merge implementation
     # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
