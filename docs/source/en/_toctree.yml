@@ -153,6 +153,8 @@
     title: Interoperability with TikToken files
   - local: modular_transformers
     title: Modularity in `transformers`
+  - local: how_to_hack_models
+    title: Model Hacking (overwriting a class to your usage)
   title: Developer guides
 - sections:
   - local: quantization/overview
