@@ -667,6 +667,8 @@
         title: (번역중) BLIP-2
       - local: in_translation
         title: (번역중) BridgeTower
+      - local: model_doc/chameleon
+        title: Chameleon
       - local: in_translation
         title: (번역중) Chinese-CLIP
       - local: in_translation
