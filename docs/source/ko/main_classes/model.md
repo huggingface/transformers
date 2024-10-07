@@ -35,7 +35,7 @@ rendered properly in your Markdown viewer.
     - push_to_hub
     - all
 
-사용자 정의 모델은 초고속 초기화가 특정 모델에 적용될 수 있는지 여부를 결정하는 `_supports_assign_param_buffer`도 포함해야 합니다.
+사용자 정의 모델은 초고속 초기화(superfast init)가 특정 모델에 적용될 수 있는지 여부를 결정하는 `_supports_assign_param_buffer`도 포함해야 합니다.
 `test_save_and_load_from_pretrained` 실패 시, 모델이 `_supports_assign_param_buffer`를 필요로 하는지 확인하세요.
 필요로 한다면 `False`로 설정하세요. 
 
