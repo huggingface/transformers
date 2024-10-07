@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 데이터 콜레이터(Data Collator)[[data-collator]]
 
-데이터 콜레이터는 데이터셋 요소들의 리스트를 입력으로 사용하여 배치를 형성하는 객체입니다. 이러한 요소들은 `train_dataset` 또는 `eval_dataset의` 요소들과 동일한 타입 입니다. 배치를 구성하기 위해, 데이터 수집기는 (패딩과 같은) 일부 처리를 적용할 수 있습니다. [`DataCollatorForLanguageModeling`]과 같은 일부 콜레이터는 형성된 배치에 (무작위 마스킹과 같은) 일부 무작위 데이터 증강도 적용합니다. 사용 예시는 [예제 스크립트](../examples)나 [예제 노트북](../notebooks)에서 찾을 수 있습니다.
+데이터 콜레이터는 데이터셋 요소들의 리스트를 입력으로 사용하여 배치를 형성하는 객체입니다. 이러한 요소들은 `train_dataset` 또는 `eval_dataset의` 요소들과 동일한 타입 입니다. 배치를 구성하기 위해, 데이터 콜레이터는 (패딩과 같은) 일부 처리를 적용할 수 있습니다. [`DataCollatorForLanguageModeling`]과 같은 일부 콜레이터는 형성된 배치에 (무작위 마스킹과 같은) 일부 무작위 데이터 증강도 적용합니다. 사용 예시는 [예제 스크립트](../examples)나 [예제 노트북](../notebooks)에서 찾을 수 있습니다.
 
 
 ## 기본 데이터 콜레이터[[transformers.default_data_collator]]
