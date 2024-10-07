@@ -58,7 +58,7 @@ answer = "a bee"
 inputs = processor(images=raw_image, text=prompt, suffix=answer, return_tensors="pt")
 ```
 
-## 리소스[[resources]]
+## 자료[[resources]]
 
 PaliGemma를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목록(🌎로 표시됨) 입니다.여기에 포함될 자료를 제출하고 싶으시다면 PR(Pull Request)를 열어주세요. 리뷰 해드리겠습니다! 자료는 기존 자료를 복제하는 대신 새로운 내용을 담고 있어야 합니다.
 
