@@ -49,6 +49,9 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...processing_utils import (
+    Fa2Kwargs,
+)    
 from .configuration_llama import LlamaConfig
 
 
@@ -422,10 +425,7 @@ class LlamaFlashAttention2(LlamaAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        cu_seq_lens_q: Optional[torch.LongTensor] = None,
-        cu_seq_lens_k: Optional[torch.LongTensor] = None,
-        max_length_q: int = 0,
-        max_length_k: int = 0,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
@@ -515,11 +515,8 @@ class LlamaFlashAttention2(LlamaAttention):
             sliding_window=getattr(self, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_in_batch_q=max_length_q if isinstance(max_length_q, int) else max_length_q.item(),
-            max_seqlen_in_batch_k=max_length_k if isinstance(max_length_k, int) else max_length_k.item(),
             batch_size=batch_size,
+            **kwargs
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -658,10 +655,6 @@ class LlamaDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        cu_seq_lens_q: Optional[torch.LongTensor] = None,
-        cu_seq_lens_k: Optional[torch.LongTensor] = None,
-        max_length_q: int = 0,
-        max_length_k: int = 0,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -700,10 +693,6 @@ class LlamaDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
-            cu_seq_lens_q=cu_seq_lens_q,
-            cu_seq_lens_k=cu_seq_lens_k,
-            max_length_q=max_length_q,
-            max_length_k=max_length_k,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -891,11 +880,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        cu_seq_lens_q: Optional[torch.LongTensor] = None,
-        cu_seq_lens_k: Optional[torch.LongTensor] = None,
-        max_length_q: int = 0,
-        max_length_k: int = 0,
+        **fa2_kwargs: Fa2Kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -979,10 +964,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    cu_seq_lens_q=cu_seq_lens_q,
-                    cu_seq_lens_k=cu_seq_lens_k,
-                    max_length_q=max_length_q,
-                    max_length_k=max_length_k,
+                    **fa2_kwargs
                 )
 
             hidden_states = layer_outputs[0]
@@ -1178,11 +1160,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cu_seq_lens_q: Optional[torch.LongTensor] = None,
-        cu_seq_lens_k: Optional[torch.LongTensor] = None,
-        max_length_q: int = 0,
-        max_length_k: int = 0,
         num_logits_to_keep: int = 0,
+        **fa2_kwargs: Fa2Kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1232,10 +1211,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            cu_seq_lens_q=cu_seq_lens_q,
-            cu_seq_lens_k=cu_seq_lens_k,
-            max_length_q=max_length_q,
-            max_length_k=max_length_k,
+            **fa2_kwargs,
         )
 
         hidden_states = outputs[0]
