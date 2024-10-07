@@ -14,17 +14,7 @@
 
 from typing import Dict
 
-import torch.distributed
-
-from transformers import (
-    DataCollatorForSeq2Seq,
-    EvalPrediction,
-    GenerationConfig,
-    HfArgumentParser,
-    PreTrainedTokenizerBase,
-    Seq2SeqTrainingArguments,
-    is_torch_available,
-)
+from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -36,9 +26,20 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
+    import torch.distributed
     import torch.utils.data
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer, Seq2SeqTrainer
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DataCollatorForSeq2Seq,
+        EvalPrediction,
+        GenerationConfig,
+        HfArgumentParser,
+        PreTrainedTokenizerBase,
+        Seq2SeqTrainer,
+        Seq2SeqTrainingArguments,
+        )
 
     class DummyTextDataset(torch.utils.data.Dataset[str]):
         def __init__(self, tokenizer: PreTrainedTokenizerBase) -> None:
