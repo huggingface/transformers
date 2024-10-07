@@ -279,7 +279,7 @@
     - local: in_translation
       title: (번역중) Configuration
     - local: main_classes/data_collator
-      title: 데이터 수집기
+      title: 데이터 콜레이터
     - local: in_translation
       title: (번역중) Keras callbacks
     - local: in_translation
