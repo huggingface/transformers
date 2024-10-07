@@ -10,13 +10,13 @@ from packaging import version
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
+from .utils.deprecation import deprecate_kwarg
 
 
 if is_quanto_available():
     quanto_version = version.parse(importlib.metadata.version("quanto"))
     if quanto_version >= version.parse("0.2.0"):
         from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
-        from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
