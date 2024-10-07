@@ -207,8 +207,8 @@ class ProPainterBasicMotionEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        corr_planes = config.corr_levels * (2 * config.corr_radius + 1) ** 2
-        self.conv_corr1 = nn.Conv2d(corr_planes, config.num_channels * 2, 1, padding=0)
+        correlation_planes = config.correlation_levels * (2 * config.correlation_radius + 1) ** 2
+        self.conv_corr1 = nn.Conv2d(correlation_planes, config.num_channels * 2, 1, padding=0)
         self.conv_corr2 = nn.Conv2d(config.num_channels * 2, 192, config.patch_size, padding=config.padding)
         self.conv_flow1 = nn.Conv2d(2, config.num_channels, config.kernel_size[0], padding=3)
         self.conv_flow2 = nn.Conv2d(
@@ -224,15 +224,15 @@ class ProPainterBasicMotionEncoder(nn.Module):
             padding=config.padding,
         )
 
-    def forward(self, flow, corr):
-        hidden_states_corr = F.relu(self.conv_corr1(corr))
-        hidden_states_corr = F.relu(self.conv_corr2(hidden_states_corr))
-        hidden_states_flow = F.relu(self.conv_flow1(flow))
+    def forward(self, optical_flow, correlation):
+        hidden_states_correlation = F.relu(self.conv_corr1(correlation))
+        hidden_states_correlation = F.relu(self.conv_corr2(hidden_states_correlation))
+        hidden_states_flow = F.relu(self.conv_flow1(optical_flow))
         hidden_states_flow = F.relu(self.conv_flow2(hidden_states_flow))
 
-        hidden_states = torch.cat([hidden_states_corr, hidden_states_flow], dim=1)
+        hidden_states = torch.cat([hidden_states_correlation, hidden_states_flow], dim=1)
         hidden_states = F.relu(self.conv(hidden_states))
-        hidden_states = torch.cat([hidden_states, flow], dim=1)
+        hidden_states = torch.cat([hidden_states, optical_flow], dim=1)
 
         return hidden_states
 
@@ -307,15 +307,15 @@ class ProPainterBasicUpdateBlock(nn.Module):
             nn.Conv2d(config.num_channels * 2, config.in_channels[0] * 9, 1, padding=0),
         )
 
-    def forward(self, net, inp, corr, flow):
-        motion_features = self.encoder(flow, corr)
-        inp = torch.cat([inp, motion_features], dim=1)
+    def forward(self, network, input, correlation, optical_flow):
+        motion_features = self.encoder(optical_flow, correlation)
+        input = torch.cat([input, motion_features], dim=1)
 
-        net = self.gru(net, inp)
-        delta_flow = self.flow_head(net)
+        network = self.gru(network, input)
+        delta_flow = self.flow_head(network)
         # scale mask to balence gradients
-        mask = 0.25 * self.mask(net)
-        return net, mask, delta_flow
+        mask = 0.25 * self.mask(network)
+        return network, mask, delta_flow
 
 
 def coords_grid(batch_size, height, width):
@@ -341,26 +341,26 @@ class ProPainterCorrBlock:
     def __init__(
         self,
         config: ProPainterConfig,
-        fmap1: torch.tensor,
-        fmap2: torch.tensor,
+        feature_map_1: torch.tensor,
+        feature_map_2: torch.tensor,
         num_levels: int = 4,
         radius: int = 4,
     ):
         self.config = config
         self.num_levels = num_levels
         self.radius = radius
-        self.corr_pyramid = []
+        self.correlation_pyramid = []
 
         # all pairs correlation
-        corr = ProPainterCorrBlock.corr(fmap1, fmap2)
+        correlation = ProPainterCorrBlock.correlation(feature_map_1, feature_map_2)
 
-        batch_size, height1, width1, dimension, height2, width2 = corr.shape
-        corr = corr.reshape(batch_size * height1 * width1, dimension, height2, width2)
+        batch_size, height1, width1, dimension, height2, width2 = correlation.shape
+        correlation = correlation.reshape(batch_size * height1 * width1, dimension, height2, width2)
 
-        self.corr_pyramid.append(corr)
+        self.correlation_pyramid.append(correlation)
         for _ in range(self.num_levels - 1):
-            corr = F.avg_pool2d(corr, 2, stride=config.strides[1])
-            self.corr_pyramid.append(corr)
+            correlation = F.avg_pool2d(correlation, 2, stride=config.strides[1])
+            self.correlation_pyramid.append(correlation)
 
     def __call__(self, coords):
         radius = self.radius
@@ -369,28 +369,28 @@ class ProPainterCorrBlock:
 
         out_pyramid = []
         for i in range(self.num_levels):
-            corr = self.corr_pyramid[i]
-            dx = torch.linspace(-radius, radius, 2 * radius + 1)
-            dy = torch.linspace(-radius, radius, 2 * radius + 1)
-            delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+            correlation = self.correlation_pyramid[i]
+            delta_x = torch.linspace(-radius, radius, 2 * radius + 1)
+            delta_y = torch.linspace(-radius, radius, 2 * radius + 1)
+            delta = torch.stack(torch.meshgrid(delta_y, delta_x), axis=-1).to(coords.device)
             centroid_lvl = coords.reshape(batch_size * height1 * width1, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2 * radius + 1, 2 * radius + 1, 2)
             coords_lvl = centroid_lvl + delta_lvl
-            corr = sample_point(corr, coords_lvl)
-            corr = corr.view(batch_size, height1, width1, -1)
-            out_pyramid.append(corr)
+            correlation = sample_point(correlation, coords_lvl)
+            correlation = correlation.view(batch_size, height1, width1, -1)
+            out_pyramid.append(correlation)
 
         out = torch.cat(out_pyramid, dim=-1)
         return out.permute(0, 3, 1, 2).contiguous().float()
 
     @staticmethod
-    def corr(fmap1, fmap2):
-        batch_size, dimension, height, width = fmap1.shape
-        fmap1 = fmap1.view(batch_size, dimension, height * width)
-        fmap2 = fmap2.view(batch_size, dimension, height * width)
-        corr = torch.matmul(fmap1.transpose(1, 2), fmap2)
-        corr = corr.view(batch_size, height, width, 1, height, width)
-        return corr / torch.sqrt(torch.tensor(dimension).float())
+    def correlation(feature_map_1, feature_map_2):
+        batch_size, dimension, height, width = feature_map_1.shape
+        feature_map_1 = feature_map_1.view(batch_size, dimension, height * width)
+        feature_map_2 = feature_map_2.view(batch_size, dimension, height * width)
+        correlation = torch.matmul(feature_map_1.transpose(1, 2), feature_map_2)
+        correlation = correlation.view(batch_size, height, width, 1, height, width)
+        return correlation / torch.sqrt(torch.tensor(dimension).float())
 
 
 class ProPainterRaftOpticalFlow(nn.Module):
@@ -441,18 +441,18 @@ class ProPainterRaftOpticalFlow(nn.Module):
         image2 = image2.contiguous()
 
         # run the feature network
-        fmap1, fmap2 = self.feature_network([image1, image2])
+        feature_map_1, feature_map_2 = self.feature_network([image1, image2])
 
-        fmap1 = fmap1.float()
-        fmap2 = fmap2.float()
+        feature_map_1 = feature_map_1.float()
+        feature_map_2 = feature_map_2.float()
 
-        corr_fn = ProPainterCorrBlock(self.config, fmap1, fmap2, radius=self.config.corr_radius)
+        correlation_fn = ProPainterCorrBlock(self.config, feature_map_1, feature_map_2, radius=self.config.correlation_radius)
 
         # run the context network
         context_network_out = self.context_network(image1)
-        net, inp = torch.split(context_network_out, [self.hidden_dim, self.context_dim], dim=1)
-        net = torch.tanh(net)
-        inp = torch.relu(inp)
+        network, input = torch.split(context_network_out, [self.hidden_dim, self.context_dim], dim=1)
+        network = torch.tanh(network)
+        input = torch.relu(input)
 
         coords0, coords1 = self.initialize_flow(image1)
 
@@ -461,10 +461,10 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
         for _ in range(iters):
             coords1 = coords1.detach()
-            corr = corr_fn(coords1)  # index correlation volume
+            correlation = correlation_fn(coords1)  # index correlation volume
 
-            flow = coords1 - coords0
-            net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
+            optical_flow = coords1 - coords0
+            network, up_mask, delta_flow = self.update_block(network, input, correlation, optical_flow)
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
@@ -486,18 +486,18 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
         return coords1 - coords0, flow_up
 
-    def forward(self, gt_local_frames, iters=20):
-        batch_size, temporal_length, num_channels, height, width = gt_local_frames.size()
+    def forward(self, ground_truth_local_frames, iters=20):
+        batch_size, temporal_length, num_channels, height, width = ground_truth_local_frames.size()
 
-        gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, num_channels, height, width)
-        gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, num_channels, height, width)
-        _, gt_flows_forward = self._forward(gt_local_frames_1, gt_local_frames_2, iters)
-        _, gt_flows_backward = self._forward(gt_local_frames_2, gt_local_frames_1, iters)
+        ground_truth_local_frames_1 = ground_truth_local_frames[:, :-1, :, :, :].reshape(-1, num_channels, height, width)
+        ground_truth_local_frames_2 = ground_truth_local_frames[:, 1:, :, :, :].reshape(-1, num_channels, height, width)
+        _, ground_truth_flows_forward = self._forward(ground_truth_local_frames_1, ground_truth_local_frames_2, iters)
+        _, ground_truth_flows_backward = self._forward(ground_truth_local_frames_2, ground_truth_local_frames_1, iters)
 
-        gt_flows_forward = gt_flows_forward.view(batch_size, temporal_length - 1, 2, height, width)
-        gt_flows_backward = gt_flows_backward.view(batch_size, temporal_length - 1, 2, height, width)
+        ground_truth_flows_forward = ground_truth_flows_forward.view(batch_size, temporal_length - 1, 2, height, width)
+        ground_truth_flows_backward = ground_truth_flows_backward.view(batch_size, temporal_length - 1, 2, height, width)
 
-        return gt_flows_forward, gt_flows_backward
+        return ground_truth_flows_forward, ground_truth_flows_backward
 
 
 class ProPainterP3DBlock(nn.Module):
@@ -690,15 +690,15 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                     )  # two order feature_propagation -1 & -2
                     feature_propagation = self.deform_align[module_name](feature_propagation, cond)
                 # fuse current features
-                feat = (
+                features = (
                     [feat_current]
                     + [features[k][idx] for k in features if k not in ["spatial", module_name]]
                     + [feature_propagation]
                 )
 
-                feat = torch.cat(feat, dim=1)
+                features = torch.cat(features, dim=1)
                 # embed current features
-                feature_propagation = feature_propagation + self.backbone[module_name](feat)
+                feature_propagation = feature_propagation + self.backbone[module_name](features)
                 features[module_name].append(feature_propagation)
             # end for
             if "backward" in module_name:
@@ -756,20 +756,20 @@ def flow_warp(features, flow, interpolation="bilinear", padding_mode="zeros", al
     return output
 
 
-def fb_consistency_check(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
-    flow_backward_warped = flow_warp(flow_backward, flow_forward.permute(0, 2, 3, 1))
-    flow_diff_forward = flow_forward + flow_backward_warped
+def forward_backward_consistency_check(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
+    flow_backward_warped_to_forward = flow_warp(flow_backward, flow_forward.permute(0, 2, 3, 1))
+    flow_diff_forward = flow_forward + flow_backward_warped_to_forward
 
-    normalized_forward = (
+    flow_forward_norm_squared = (
         torch.norm(flow_forward, p=2, dim=1, keepdim=True) ** 2
-        + torch.norm(flow_backward_warped, p=2, dim=1, keepdim=True) ** 2
+        + torch.norm(flow_backward_warped_to_forward, p=2, dim=1, keepdim=True) ** 2
     )  # |wf| + |wb(wf(x))|
-    occ_thresh_forward = alpha1 * normalized_forward + alpha2
+    flow_forward_occlusion_threshold = alpha1 * flow_forward_norm_squared + alpha2
 
-    fb_valid_forward = (torch.norm(flow_diff_forward, p=2, dim=1, keepdim=True) ** 2 < occ_thresh_forward).to(
+    forward_backward_valid_mask = (torch.norm(flow_diff_forward, p=2, dim=1, keepdim=True) ** 2 < flow_forward_occlusion_threshold).to(
         flow_forward
     )
-    return fb_valid_forward
+    return forward_backward_valid_mask
 
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
@@ -851,7 +851,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
         propagation_list = ["backward_1", "forward_1"]
         cache_list = ["input"] + propagation_list
 
-        for p_i, module_name in enumerate(propagation_list):
+        for propagation_index, module_name in enumerate(propagation_list):
             features[module_name] = []
             masks[module_name] = []
 
@@ -868,8 +868,8 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 flows_for_check = flows_forward
 
             for i, idx in enumerate(frame_idx):
-                feat_current = features[cache_list[p_i]][idx]
-                mask_current = masks[cache_list[p_i]][idx]
+                feat_current = features[cache_list[propagation_index]][idx]
+                mask_current = masks[cache_list[propagation_index]][idx]
 
                 if i == 0:
                     feat_prop = feat_current
@@ -877,7 +877,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 else:
                     flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
                     flow_check = flows_for_check[:, flow_idx[i], :, :, :]
-                    flow_vaild_mask = fb_consistency_check(flow_prop, flow_check)
+                    flow_vaild_mask = forward_backward_consistency_check(flow_prop, flow_check)
                     feat_warped = flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
 
                     if self.learnable:
@@ -907,8 +907,8 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
                 # refine
                 if self.learnable:
-                    feat = torch.cat([feat_current, feat_prop, mask_current], dim=1)
-                    feat_prop = feat_prop + self.backbone[module_name](feat)
+                    features = torch.cat([feat_current, feat_prop, mask_current], dim=1)
+                    feat_prop = feat_prop + self.backbone[module_name](features)
 
                 features[module_name].append(feat_prop)
                 masks[module_name].append(mask_prop)
@@ -917,24 +917,24 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 features[module_name] = features[module_name][::-1]
                 masks[module_name] = masks[module_name][::-1]
 
-        outputs_b = torch.stack(features["backward_1"], dim=1).view(-1, num_channels, height, width)
-        outputs_f = torch.stack(features["forward_1"], dim=1).view(-1, num_channels, height, width)
+        outputs_backward = torch.stack(features["backward_1"], dim=1).view(-1, num_channels, height, width)
+        outputs_forward = torch.stack(features["forward_1"], dim=1).view(-1, num_channels, height, width)
 
         if self.learnable:
             mask_in = mask.view(-1, 2, height, width)
-            masks_f = None
-            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + masked_frames.view(
+            masks_forward = None
+            outputs = self.fuse(torch.cat([outputs_backward, outputs_forward, mask_in], dim=1)) + masked_frames.view(
                 -1, num_channels, height, width
             )
         else:
-            masks_f = torch.stack(masks["forward_1"], dim=1)
-            outputs = outputs_f
+            masks_forward = torch.stack(masks["forward_1"], dim=1)
+            outputs = outputs_forward
 
         return (
-            outputs_b.view(batch_size, -1, num_channels, height, width),
-            outputs_f.view(batch_size, -1, num_channels, height, width),
+            outputs_backward.view(batch_size, -1, num_channels, height, width),
+            outputs_forward.view(batch_size, -1, num_channels, height, width),
             outputs.view(batch_size, -1, num_channels, height, width),
-            masks_f,
+            masks_forward,
         )
 
 
@@ -1041,8 +1041,8 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
             ),
         )
 
-    def forward(self, features_propagation, cond_features, flow):
-        output = self.conv_offset(cond_features)
+    def forward(self, features_propagation, condition_features, flow):
+        output = self.conv_offset(condition_features)
         output1, output2, mask = torch.chunk(output, 3, dim=1)
 
         # offset
@@ -1283,15 +1283,15 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
             -1, self.config.num_channels, height // 8, width // 8
         )  # batch_size*timesteps num_channels height width
 
-        _, num_channels, _, h_f, w_f = features_enc1.shape
+        _, num_channels, _, feature_height, feature_width = features_enc1.shape
         features_enc1 = (
-            features_enc1.permute(0, 2, 1, 3, 4).contiguous().view(-1, num_channels, h_f, w_f)
+            features_enc1.permute(0, 2, 1, 3, 4).contiguous().view(-1, num_channels, feature_height, feature_width)
         )  # batch_size*timesteps num_channels height width
         features_dec2 = self.decoder2(features_prop) + features_enc1
 
-        _, num_channels, _, h_f, w_f = downsample_inputs.shape
+        _, num_channels, _, feature_height, feature_width = downsample_inputs.shape
         downsample_inputs = (
-            downsample_inputs.permute(0, 2, 1, 3, 4).contiguous().view(-1, num_channels, h_f, w_f)
+            downsample_inputs.permute(0, 2, 1, 3, 4).contiguous().view(-1, num_channels, feature_height, feature_width)
         )  # batch_size*timesteps num_channels height width
 
         features_dec1 = self.decoder1(features_dec2)
@@ -1589,8 +1589,8 @@ class ProPainterSparseWindowAttention(nn.Module):
             mask_bl[self.expand_size[0] :, : -self.expand_size[1]] = 0
             mask_br = torch.ones(self.window_size[0], self.window_size[1])
             mask_br[self.expand_size[0] :, self.expand_size[1] :] = 0
-            masrool_k = torch.stack((mask_tl, mask_tr, mask_bl, mask_br), 0).flatten(0)
-            self.register_buffer("valid_ind_rolled", masrool_k.nonzero(as_tuple=False).view(-1))
+            masked_rolled_key = torch.stack((mask_tl, mask_tr, mask_bl, mask_br), 0).flatten(0)
+            self.register_buffer("valid_ind_rolled", masked_rolled_key.nonzero(as_tuple=False).view(-1))
 
         self.max_pool = nn.MaxPool2d(window_size, window_size, (0, 0))
 
@@ -1610,17 +1610,17 @@ class ProPainterSparseWindowAttention(nn.Module):
         n_window_width = math.ceil(width / self.window_size[1])
         new_height = n_window_height * self.window_size[0]  # 20
         new_width = n_window_width * self.window_size[1]  # 36
-        pad_r = new_width - width
-        pad_b = new_height - height
+        padding_right = new_width - width
+        padding_bottom = new_height - height
         # reverse order
-        if pad_r > 0 or pad_b > 0:
+        if padding_right > 0 or padding_bottom > 0:
             hidden_states = F.pad(
                 hidden_states,
-                (0, 0, 0, pad_r, 0, pad_b, 0, 0),
+                (0, 0, 0, padding_right, 0, padding_bottom, 0, 0),
                 mode="constant",
                 value=0,
             )
-            mask = F.pad(mask, (0, 0, 0, pad_r, 0, pad_b, 0, 0), mode="constant", value=0)
+            mask = F.pad(mask, (0, 0, 0, padding_right, 0, padding_bottom, 0, 0), mode="constant", value=0)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dimension
         query = self.query(hidden_states)
@@ -1820,44 +1820,44 @@ class ProPainterSparseWindowAttention(nn.Module):
             mask_ind_i = mask[i].nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
             # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
-            mask_n = len(mask_ind_i)
-            if mask_n > 0:
-                window_query_t = window_query[i, mask_ind_i].view(
-                    mask_n,
+            num_masked_indices = len(mask_ind_i)
+            if num_masked_indices > 0:
+                window_query_masked = window_query[i, mask_ind_i].view(
+                    num_masked_indices,
                     self.num_attention_heads,
                     timesteps * window_height * window_width,
                     channel_head,
                 )
-                window_key_t = window_key[i, mask_ind_i]
-                window_value_t = window_value[i, mask_ind_i]
+                window_key_masked = window_key[i, mask_ind_i]
+                window_value_masked = window_value[i, mask_ind_i]
                 # mask output key and value
                 if token_indices is not None:
                     # key [n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
-                    window_key_t = window_key_t[:, :, token_indices.view(-1)].view(
-                        mask_n, self.num_attention_heads, -1, channel_head
+                    window_key_masked = window_key_masked[:, :, token_indices.view(-1)].view(
+                        num_masked_indices, self.num_attention_heads, -1, channel_head
                     )
                     # value
-                    window_value_t = window_value_t[:, :, token_indices.view(-1)].view(
-                        mask_n, self.num_attention_heads, -1, channel_head
+                    window_value_masked = window_value_masked[:, :, token_indices.view(-1)].view(
+                        num_masked_indices, self.num_attention_heads, -1, channel_head
                     )
                 else:
-                    window_key_t = window_key_t.view(
+                    window_key_masked = window_key_masked.view(
                         n_window_height * n_window_width,
                         self.num_attention_heads,
                         timesteps * window_height * window_width,
                         channel_head,
                     )
-                    window_value_t = window_value_t.view(
+                    window_value_masked = window_value_masked.view(
                         n_window_height * n_window_width,
                         self.num_attention_heads,
                         timesteps * window_height * window_width,
                         channel_head,
                     )
 
-                att_t = (window_query_t @ window_key_t.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_t.size(-1)))
-                att_t = F.softmax(att_t, dim=-1)
-                att_t = self.attn_drop(att_t)
-                y_t = att_t @ window_value_t
+                attention_scores_masked = (window_query_masked @ window_key_masked.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_masked.size(-1)))
+                attention_scores_masked = F.softmax(attention_scores_masked, dim=-1)
+                attention_scores_masked = self.attn_drop(attention_scores_masked)
+                y_t = attention_scores_masked @ window_value_masked
 
                 output[i, mask_ind_i] = y_t.view(
                     -1,
@@ -1871,17 +1871,17 @@ class ProPainterSparseWindowAttention(nn.Module):
             unmask_ind_i = (mask[i] == 0).nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
             # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
-            window_query_s = window_query[i, unmask_ind_i]
-            window_key_s = window_key[i, unmask_ind_i, :, :, : window_height * window_width]
-            window_value_s = window_value[i, unmask_ind_i, :, :, : window_height * window_width]
+            window_query_unmasked = window_query[i, unmask_ind_i]
+            window_key_unmasked = window_key[i, unmask_ind_i, :, :, : window_height * window_width]
+            window_value_unmasked = window_value[i, unmask_ind_i, :, :, : window_height * window_width]
 
-            att_s = (window_query_s @ window_key_s.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_s.size(-1)))
-            att_s = F.softmax(att_s, dim=-1)
-            att_s = self.attn_drop(att_s)
-            y_s = att_s @ window_value_s
+            attention_scores_unmasked = (window_query_unmasked @ window_key_unmasked.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_unmasked.size(-1)))
+            attention_scores_unmasked = F.softmax(attention_scores_unmasked, dim=-1)
+            attention_scores_unmasked = self.attn_drop(attention_scores_unmasked)
+            y_s = attention_scores_unmasked @ window_value_unmasked
             output[i, unmask_ind_i] = y_s
         if output_attentions:
-            all_self_attentions = all_self_attentions + (att_t,) + (att_s,)
+            all_self_attentions = all_self_attentions + (attention_scores_masked,) + (attention_scores_unmasked,)
         # re-assemble all head outputs side by side
         output = output.view(
             batch_size,
@@ -1899,7 +1899,7 @@ class ProPainterSparseWindowAttention(nn.Module):
             .view(batch_size, timesteps, new_height, new_width, num_channels)
         )
 
-        if pad_r > 0 or pad_b > 0:
+        if padding_right > 0 or padding_bottom > 0:
             output = output[:, :, :height, :width, :]
 
         # output projection
@@ -2204,12 +2204,12 @@ class ProPainterInpaintGenerator(nn.Module):
         local_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[
             :, :local_timestep, ...
         ]
-        ref_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[
+        reference_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[
             :, local_timestep:, ...
         ]
-        fold_feat_size = (height, width)
+        folded_feature_size = (height, width)
 
-        ds_flows_f = (
+        downsampled_flows_forward = (
             F.interpolate(
                 completed_flows[0].view(-1, 2, original_height, original_width),
                 scale_factor=1 / 4,
@@ -2218,7 +2218,7 @@ class ProPainterInpaintGenerator(nn.Module):
             ).view(batch_size, local_timestep - 1, 2, height, width)
             / 4.0
         )
-        ds_flows_b = (
+        downsampled_flows_backward = (
             F.interpolate(
                 completed_flows[1].view(-1, 2, original_height, original_width),
                 scale_factor=1 / 4,
@@ -2227,56 +2227,56 @@ class ProPainterInpaintGenerator(nn.Module):
             ).view(batch_size, local_timestep - 1, 2, height, width)
             / 4.0
         )
-        ds_mask_in = F.interpolate(
+        downsampled_mask_input = F.interpolate(
             masks_in.reshape(-1, 1, original_height, original_width),
             scale_factor=1 / 4,
             mode="nearest",
         ).view(batch_size, timestep, 1, height, width)
-        ds_mask_in_local = ds_mask_in[:, :local_timestep]
-        ds_mask_updated_local = F.interpolate(
+        downsampled_mask_input_local = downsampled_mask_input[:, :local_timestep]
+        downsampled_mask_updated_local = F.interpolate(
             masks_updated[:, :local_timestep].reshape(-1, 1, original_height, original_width),
             scale_factor=1 / 4,
             mode="nearest",
         ).view(batch_size, local_timestep, 1, height, width)
 
         if self.training:
-            mask_pool_l = self.max_pool(ds_mask_in.view(-1, 1, height, width))
-            mask_pool_l = mask_pool_l.view(batch_size, timestep, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
+            mask_pool_local = self.max_pool(downsampled_mask_input.view(-1, 1, height, width))
+            mask_pool_local = mask_pool_local.view(batch_size, timestep, 1, mask_pool_local.size(-2), mask_pool_local.size(-1))
         else:
-            mask_pool_l = self.max_pool(ds_mask_in_local.view(-1, 1, height, width))
-            mask_pool_l = mask_pool_l.view(
+            mask_pool_local = self.max_pool(downsampled_mask_input_local.view(-1, 1, height, width))
+            mask_pool_local = mask_pool_local.view(
                 batch_size,
                 local_timestep,
                 1,
-                mask_pool_l.size(-2),
-                mask_pool_l.size(-1),
+                mask_pool_local.size(-2),
+                mask_pool_local.size(-1),
             )
 
-        prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
+        propagated_mask_input = torch.cat([downsampled_mask_input_local, downsampled_mask_updated_local], dim=2)
         _, _, local_features, _ = self.feature_propagation_module(
-            local_features, ds_flows_f, ds_flows_b, prop_mask_in, interpolation
+            local_features, downsampled_flows_forward, downsampled_flows_backward, propagated_mask_input, interpolation
         )
-        encoder_hidden_states = torch.cat((local_features, ref_features), dim=1)
+        encoder_hidden_states = torch.cat((local_features, reference_features), dim=1)
 
-        trans_feat = self.soft_split(
+        transformed_features = self.soft_split(
             encoder_hidden_states.view(-1, num_channels, height, width),
             batch_size,
-            fold_feat_size,
+            folded_feature_size,
         )
-        mask_pool_l = mask_pool_l.permute(0, 1, 3, 4, 2).contiguous()
-        trans_feat, all_hidden_states, all_self_attentions = self.transformers(
-            trans_feat,
-            fold_feat_size,
-            mask_pool_l,
+        mask_pool_local = mask_pool_local.permute(0, 1, 3, 4, 2).contiguous()
+        transformed_features, all_hidden_states, all_self_attentions = self.transformers(
+            transformed_features,
+            folded_feature_size,
+            mask_pool_local,
             t_dilation=t_dilation,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
-        trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
-        trans_feat = trans_feat.view(batch_size, timestep, -1, height, width)
+        transformed_features = self.soft_comp(transformed_features, timestep, folded_feature_size)
+        transformed_features = transformed_features.view(batch_size, timestep, -1, height, width)
 
-        encoder_hidden_states = encoder_hidden_states + trans_feat
+        encoder_hidden_states = encoder_hidden_states + transformed_features
 
         if self.training:
             output = self.decoder(encoder_hidden_states.view(-1, num_channels, height, width))
@@ -2777,7 +2777,7 @@ class ProPainterLpips(nn.Module):
         ]
         self.length = len(self.num_channels)
 
-        self.net = ProPainterVgg16(is_training=is_training)
+        self.network = ProPainterVgg16(is_training=is_training)
 
         if is_training:
             use_dropout = True
@@ -2802,7 +2802,7 @@ class ProPainterLpips(nn.Module):
             self.scaling_layer(frames),
             self.scaling_layer(pred_images),
         )
-        hidden_states0, hidden_states1 = self.net.forward(frames), self.net.forward(pred_images)
+        hidden_states0, hidden_states1 = self.network.forward(frames), self.network.forward(pred_images)
         feats0, feats1, diffs = {}, {}, {}
 
         for i in range(self.length):
@@ -3054,13 +3054,13 @@ def hamming_distance(ternary_transform_frame1, ternary_transform_frame2):
     return distance_sum
 
 
-def ternary_loss(config, flow_comp, flow_gt, mask, current_frame, shift_frame, scale_factor=1):
+def ternary_loss(config, flow_computed, flow_ground_truth, mask, current_frame, shift_frame, scale_factor=1):
     if scale_factor != 1:
         current_frame = F.interpolate(current_frame, scale_factor=1 / scale_factor, mode="bilinear")
         shift_frame = F.interpolate(shift_frame, scale_factor=1 / scale_factor, mode="bilinear")
-    warped_sc = flow_warp(shift_frame, flow_gt.permute(0, 2, 3, 1))
+    warped_sc = flow_warp(shift_frame, flow_ground_truth.permute(0, 2, 3, 1))
     confidence_mask = torch.exp(-50.0 * torch.sum(torch.abs(current_frame - warped_sc), dim=1).pow(2)).unsqueeze(1)
-    warped_comp_sc = flow_warp(shift_frame, flow_comp.permute(0, 2, 3, 1))
+    warped_comp_sc = flow_warp(shift_frame, flow_computed.permute(0, 2, 3, 1))
 
     ternary_transform1 = ternary_transform(
         config, current_frame
@@ -3082,7 +3082,7 @@ class ProPainterFlowLoss(nn.Module):
         self.config = config
         self.l1_criterion = nn.L1Loss()
 
-    def forward(self, pred_flows, gt_flows, masks, frames):
+    def forward(self, pred_flows, ground_truth_flows, masks, frames):
         # pred_flows: bacth_size timestep-1 2 height width
         loss = 0
         warp_loss = 0
@@ -3093,9 +3093,9 @@ class ProPainterFlowLoss(nn.Module):
         current_frames = [frames0, frames1]
         next_frames = [frames1, frames0]
         for i in range(len(pred_flows)):
-            combined_flow = pred_flows[i] * masks[i] + gt_flows[i] * (1 - masks[i])
-            l1_loss = self.l1_criterion(pred_flows[i] * masks[i], gt_flows[i] * masks[i]) / torch.mean(masks[i])
-            l1_loss += self.l1_criterion(pred_flows[i] * (1 - masks[i]), gt_flows[i] * (1 - masks[i])) / torch.mean(
+            combined_flow = pred_flows[i] * masks[i] + ground_truth_flows[i] * (1 - masks[i])
+            l1_loss = self.l1_criterion(pred_flows[i] * masks[i], ground_truth_flows[i] * masks[i]) / torch.mean(masks[i])
+            l1_loss += self.l1_criterion(pred_flows[i] * (1 - masks[i]), ground_truth_flows[i] * (1 - masks[i])) / torch.mean(
                 (1 - masks[i])
             )
 
@@ -3113,7 +3113,7 @@ class ProPainterFlowLoss(nn.Module):
             warp_loss_i = ternary_loss(
                 self.config,
                 combined_flow.reshape(-1, 2, height, width),
-                gt_flows[i].reshape(-1, 2, height, width),
+                ground_truth_flows[i].reshape(-1, 2, height, width),
                 masks[i].reshape(-1, 1, height, width),
                 current_frames[i].reshape(-1, 3, height, width),
                 next_frames[i].reshape(-1, 3, height, width),
@@ -3788,14 +3788,14 @@ class ProPainterLosses:
         comp_frames,
         discriminator,
         pred_flows_bi,
-        gt_flows_bi,
+        ground_truth_flows_bi,
         flow_masks,
         pred_edges_bi,
     ):
         _, _, _, height, width = frames.size()
 
-        gt_edges_forward = self.get_edges(gt_flows_bi[0])
-        gt_edges_backward = self.get_edges(gt_flows_bi[1])
+        gt_edges_forward = self.get_edges(ground_truth_flows_bi[0])
+        gt_edges_backward = self.get_edges(ground_truth_flows_bi[1])
         gt_edges_bi = [gt_edges_forward, gt_edges_backward]
 
         gen_loss = 0
@@ -3838,7 +3838,7 @@ class ProPainterLosses:
 
         # these losses are for training flow completion network
         # compulte flow_loss
-        flow_loss, warp_loss = self.flow_loss(pred_flows_bi, gt_flows_bi, flow_masks, frames)
+        flow_loss, warp_loss = self.flow_loss(pred_flows_bi, ground_truth_flows_bi, flow_masks, frames)
         flow_loss = flow_loss * self.config.flow_weight_flow_complete_net
 
         # compute edge loss
@@ -3997,22 +3997,22 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
     def compute_flow(self, pixel_values_videos):
         if self.training:
-            gt_local_frames = pixel_values_videos[
+            ground_truth_local_frames = pixel_values_videos[
                 :, : self.config.num_local_frames_propainter, ...
             ]  # batch_size, temporal_length, num_channels, height, width (before slicing)
             # get gt optical flow
             if self.gradient_checkpointing:
-                gt_flows_bi = self._gradient_checkpointing_func(
+                ground_truth_flows_bi = self._gradient_checkpointing_func(
                     self.optical_flow_model.__call__,
-                    gt_local_frames,
+                    ground_truth_local_frames,
                     self.config.raft_iter,
                 )
             else:
-                gt_flows_bi = self.optical_flow_model(gt_local_frames, iters=self.config.raft_iter)
+                ground_truth_flows_bi = self.optical_flow_model(ground_truth_local_frames, iters=self.config.raft_iter)
         else:
             short_clip_len = self._get_short_clip_len(pixel_values_videos.size(-1))
             if pixel_values_videos.size(1) > short_clip_len:
-                gt_flows_f_list, gt_flows_b_list = [], []
+                ground_truth_flows_forward_list, ground_truth_flows_backward_list = [], []
                 for f in range(0, self.video_length, short_clip_len):
                     end_f = min(self.video_length, f + short_clip_len)
                     if f == 0:
@@ -4024,33 +4024,33 @@ class ProPainterModel(ProPainterPreTrainedModel):
                             pixel_values_videos[:, f - 1 : end_f],
                             iters=self.config.raft_iter,
                         )
-                    gt_flows_f_list.append(flows_f)
-                    gt_flows_b_list.append(flows_b)
+                    ground_truth_flows_forward_list.append(flows_f)
+                    ground_truth_flows_backward_list.append(flows_b)
                     torch.cuda.empty_cache()
 
-                gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
-                gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
-                gt_flows_bi = (gt_flows_f, gt_flows_b)
+                ground_truth_flows_forward = torch.cat(ground_truth_flows_forward_list, dim=1)
+                ground_truth_flows_backward = torch.cat(ground_truth_flows_backward_list, dim=1)
+                ground_truth_flows_bi = (ground_truth_flows_forward, ground_truth_flows_backward)
             else:
-                gt_flows_bi = self.optical_flow_model(pixel_values_videos, iters=self.config.raft_iter)
+                ground_truth_flows_bi = self.optical_flow_model(pixel_values_videos, iters=self.config.raft_iter)
                 torch.cuda.empty_cache()
-        return gt_flows_bi
+        return ground_truth_flows_bi
 
-    def complete_flow(self, gt_flows_bi, flow_masks):
+    def complete_flow(self, ground_truth_flows_bi, flow_masks):
         if self.training:
             local_masks = flow_masks[:, : self.config.num_local_frames_propainter, ...].contiguous()
             if self.gradient_checkpointing:
                 pred_flows_bi, pred_edges_bi = self._gradient_checkpointing_func(
                     self.flow_completion_net.forward_bidirect_flow.__call__,
-                    gt_flows_bi,
+                    ground_truth_flows_bi,
                     local_masks,
                 )
             else:
-                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, local_masks)
+                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(ground_truth_flows_bi, local_masks)
             pred_flows_bi_loss = pred_flows_bi
-            pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, local_masks)
+            pred_flows_bi = self.flow_completion_net.combine_flow(ground_truth_flows_bi, pred_flows_bi, local_masks)
         else:
-            flow_length = gt_flows_bi[0].size(1)
+            flow_length = ground_truth_flows_bi[0].size(1)
             if flow_length > self.config.subvideo_length:
                 pred_flows_f, pred_flows_b, pred_flows_bi_loss, pred_edges_bi_loss = (
                     [],
@@ -4059,24 +4059,24 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 )
                 pad_len = 5
                 for f in range(0, flow_length, self.config.subvideo_length):
-                    s_f = max(0, f - pad_len)
-                    e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
-                    pad_len_s = max(0, f) - s_f
-                    pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
+                    start_frame = max(0, f - pad_len)
+                    end_frame = min(flow_length, f + self.config.subvideo_length + pad_len)
+                    pad_len_s = max(0, f) - start_frame
+                    pad_len_e = end_frame - min(flow_length, f + self.config.subvideo_length)
                     pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
-                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]),
-                        flow_masks[:, s_f : e_f + 1],
+                        (ground_truth_flows_bi[0][:, start_frame:end_frame], ground_truth_flows_bi[1][:, start_frame:end_frame]),
+                        flow_masks[:, start_frame : end_frame + 1],
                     )
                     pred_flows_bi_loss.append(pred_flows_bi_sub)
                     pred_edges_bi_loss.append(pred_edges_bi)
                     pred_flows_bi_sub = self.flow_completion_net.combine_flow(
-                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]),
+                        (ground_truth_flows_bi[0][:, start_frame:end_frame], ground_truth_flows_bi[1][:, start_frame:end_frame]),
                         pred_flows_bi_sub,
-                        flow_masks[:, s_f : e_f + 1],
+                        flow_masks[:, start_frame : end_frame + 1],
                     )
 
-                    pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s : e_f - s_f - pad_len_e])
-                    pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s : e_f - s_f - pad_len_e])
+                    pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s : end_frame - start_frame - pad_len_e])
+                    pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s : end_frame - start_frame - pad_len_e])
 
                     torch.cuda.empty_cache()
 
@@ -4087,10 +4087,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
                 pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
             else:
-                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(ground_truth_flows_bi, flow_masks)
                 pred_flows_bi_loss = pred_flows_bi
 
-                pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+                pred_flows_bi = self.flow_completion_net.combine_flow(ground_truth_flows_bi, pred_flows_bi, flow_masks)
 
                 torch.cuda.empty_cache()
 
@@ -4099,7 +4099,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def image_propagation(self, pixel_values_videos, masks_dilated, pred_flows_bi):
         if self.training:
             batch_size, height, width = self.size[0], self.size[3], self.size[4]
-            gt_local_frames = pixel_values_videos[:, : self.config.num_local_frames_propainter, ...]
+            ground_truth_local_frames = pixel_values_videos[:, : self.config.num_local_frames_propainter, ...]
             local_masks = masks_dilated[:, : self.config.num_local_frames_propainter, ...].contiguous()
             masked_frames = pixel_values_videos * (1 - masks_dilated)
             masked_local_frames = masked_frames[:, : self.config.num_local_frames_propainter, ...]
@@ -4130,7 +4130,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             )
             updated_frames = masked_frames.clone()
             prop_local_frames = (
-                gt_local_frames * (1 - local_masks)
+                ground_truth_local_frames * (1 - local_masks)
                 + prop_imgs.view(
                     batch_size,
                     self.config.num_local_frames_propainter,
@@ -4152,30 +4152,30 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 updated_frames, updated_masks = [], []
                 pad_len = 10
                 for f in range(0, self.video_length, subvideo_length_img_prop):
-                    s_f = max(0, f - pad_len)
-                    e_f = min(self.video_length, f + subvideo_length_img_prop + pad_len)
-                    pad_len_s = max(0, f) - s_f
-                    pad_len_e = e_f - min(self.video_length, f + subvideo_length_img_prop)
+                    start_frame = max(0, f - pad_len)
+                    end_frame = min(self.video_length, f + subvideo_length_img_prop + pad_len)
+                    pad_len_s = max(0, f) - start_frame
+                    pad_len_e = end_frame - min(self.video_length, f + subvideo_length_img_prop)
 
-                    batch_size, timesteps, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                    batch_size, timesteps, _, _, _ = masks_dilated[:, start_frame:end_frame].size()
                     pred_flows_bi_sub = (
-                        pred_flows_bi[0][:, s_f : e_f - 1],
-                        pred_flows_bi[1][:, s_f : e_f - 1],
+                        pred_flows_bi[0][:, start_frame : end_frame - 1],
+                        pred_flows_bi[1][:, start_frame : end_frame - 1],
                     )
                     prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(
-                        masked_frames[:, s_f:e_f],
+                        masked_frames[:, start_frame:end_frame],
                         pred_flows_bi_sub,
-                        masks_dilated[:, s_f:e_f],
+                        masks_dilated[:, start_frame:end_frame],
                         "nearest",
                     )
                     updated_frames_sub = (
-                        pixel_values_videos[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f])
-                        + prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
+                        pixel_values_videos[:, start_frame:end_frame] * (1 - masks_dilated[:, start_frame:end_frame])
+                        + prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, start_frame:end_frame]
                     )
                     updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
 
-                    updated_frames.append(updated_frames_sub[:, pad_len_s : e_f - s_f - pad_len_e])
-                    updated_masks.append(updated_masks_sub[:, pad_len_s : e_f - s_f - pad_len_e])
+                    updated_frames.append(updated_frames_sub[:, pad_len_s : end_frame - start_frame - pad_len_e])
+                    updated_masks.append(updated_masks_sub[:, pad_len_s : end_frame - start_frame - pad_len_e])
                     torch.cuda.empty_cache()
 
                 updated_frames = torch.cat(updated_frames, dim=1)
@@ -4282,7 +4282,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 )
 
                 # 1.0 indicates mask
-                l_t = len(neighbor_ids)
+                num_neighbor_frames = len(neighbor_ids)
 
                 # pred_img = selected_imgs # results of image propagation
                 inpaint_generator_outputs = self.inpaint_generator(
@@ -4290,7 +4290,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     selected_pred_flows_bi,
                     selected_masks,
                     selected_update_masks,
-                    l_t,
+                    num_neighbor_frames,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
@@ -4532,9 +4532,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.size = pixel_values_videos.size()
         self.video_length = pixel_values_videos.size(1)
 
-        gt_flows_bi = self.compute_flow(pixel_values_videos)
+        ground_truth_flows_bi = self.compute_flow(pixel_values_videos)
 
-        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(gt_flows_bi, flow_masks)
+        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(ground_truth_flows_bi, flow_masks)
 
         updated_frames, updated_masks = self.image_propagation(pixel_values_videos, masks_dilated, pred_flows_bi)
 
@@ -4558,7 +4558,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             comp_frames_loss,
             self.discriminator,
             pred_flows_bi_loss,
-            gt_flows_bi,
+            ground_truth_flows_bi,
             flow_masks,
             pred_edges_bi,
         )

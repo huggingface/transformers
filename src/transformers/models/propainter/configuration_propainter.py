@@ -57,9 +57,9 @@ class ProPainterConfig(PretrainedConfig):
             The length of neighboring frames considered in the ProPainter inpaint_generator network.
         subvideo_length (`int`, *optional*, defaults to 80):
             The length of sub-videos for training.
-        corr_levels (`int`, *optional*, defaults to 4):
+        correlation_levels (`int`, *optional*, defaults to 4):
             The number of correlation levels used in the RAFT optical flow model.
-        corr_radius (`int`, *optional*, defaults to 4):
+        correlation_radius (`int`, *optional*, defaults to 4):
             The radius of the correlation window used in the RAFT optical flow model.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability applied to layers in the model.
@@ -140,8 +140,8 @@ class ProPainterConfig(PretrainedConfig):
         ref_stride=10,
         neighbor_length=10,
         subvideo_length=80,
-        corr_levels=4,
-        corr_radius=4,
+        correlation_levels=4,
+        correlation_radius=4,
         dropout=0.0,
         initializer_range=0.02,
         raft_iter=20,
@@ -179,8 +179,8 @@ class ProPainterConfig(PretrainedConfig):
         self.ref_stride = ref_stride
         self.neighbor_length = neighbor_length
         self.subvideo_length = subvideo_length
-        self.corr_levels = corr_levels
-        self.corr_radius = corr_radius
+        self.correlation_levels = correlation_levels
+        self.correlation_radius = correlation_radius
         self.dropout = dropout
         self.initializer_range = initializer_range
         self.raft_iter = raft_iter
