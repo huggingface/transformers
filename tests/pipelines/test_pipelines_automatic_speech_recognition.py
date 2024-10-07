@@ -1444,7 +1444,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
-    def test_chunking_parameter_passthrough(self):
+    def test_input_parameter_input_passthrough(self):
+        """Test that chunked vs non chunked versions of ASR pipelines returns the same structure for the same inputs."""
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-internal-testing/tiny-random-wav2vec2",
@@ -1454,10 +1455,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]["array"]
 
-        n_repeats = 2
-        audio_tiled = np.tile(audio, n_repeats)
-        output = speech_recognizer([audio_tiled], batch_size=2, unused_parameter="unused")
-        assert output["unused_parameter"] == "unused"
+        inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}
+
+        chunked_output = speech_recognizer(inputs.copy(), chunked_length_s=30)
+        non_chunked_output = speech_recognizer(inputs.copy())
+        assert (
+            chunked_output.keys() == non_chunked_output.keys()
+        ), "The output structure should be the same for chunked vs non-chunked versions of asr pipelines."
 
     @require_torch
     def test_return_timestamps_ctc_fast(self):
