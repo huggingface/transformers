@@ -37,7 +37,7 @@ pipeline("Hey how are you doing today?")
 라마3 모델의 모든 체크포인트는 [이곳](https://huggingface.co/models?search=llama3)에서 확인하세요.
 원본 코드는 [이곳](https://github.com/meta-llama/llama3)에서 확인할 수 있습니다.
 
-## 사용팁[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 <Tip warning={true}>
 
