@@ -907,8 +907,8 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
 
         # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
         # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
-        if past_key_values is not None and past_key_values.is_static and attention_mask is not None:
-            target_length = past_key_values.get_max_cache_shape()
+        if isinstance(past_key_values, StaticCache) and attention_mask is not None:
+            target_length = past_key_values.get_max_length()
             batch_size, seq_length = attention_mask.shape
             diff = target_length - seq_length
 

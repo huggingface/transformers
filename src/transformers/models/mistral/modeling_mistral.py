@@ -914,9 +914,7 @@ class MistralModel(MistralPreTrainedModel):
             )
             exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
             if self.config.sliding_window is not None:
-                if past_key_values is not None and (
-                    not past_key_values.is_sliding or sequence_length > self.config.sliding_window
-                ):
+                if not using_sliding_window_cache or sequence_length > self.config.sliding_window:
                     exclude_mask.bitwise_or_(
                         torch.arange(target_length, device=device)
                         <= (cache_position.reshape(-1, 1) - self.config.sliding_window)
