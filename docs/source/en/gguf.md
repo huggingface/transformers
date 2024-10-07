@@ -82,6 +82,7 @@ For now the supported model architectures are the architectures that have been v
 - Phi3
 - Bloom
 - Falcon
+- Gemma2
 
 ## Example usage
 
