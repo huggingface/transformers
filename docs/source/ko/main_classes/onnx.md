@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 🤗 트랜스포머는 `transformers.onnx` 패키지를 제공하며, 이 패키지는 설정 객체를 활용하여 모델 체크포인트를 ONNX 그래프로 변환할 수 있게 합니다.
 
-🤗 트랜스포머에 대한 자세한 내용은 [이 가이드](../serialization)를 참조하세요.
+🤗 Transformers에 대한 자세한 내용은 [이 가이드](../serialization)를 참조하세요.
 
 ## ONNX 설정[[onnx-configurations]]
 
