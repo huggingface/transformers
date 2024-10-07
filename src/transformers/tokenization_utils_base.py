@@ -598,7 +598,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            `int`: Index of the token.
+            `int`: Index of the token, or None if the char index refers to a whitespace only token and whitespace is
+                   trimmed with `trim_offsets=True`.
         """
 
         if not self._encodings:

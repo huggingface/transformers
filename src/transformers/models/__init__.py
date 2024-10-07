@@ -168,6 +168,7 @@ from . import (
     musicgen,
     musicgen_melody,
     mvp,
+    myt5,
     nemotron,
     nllb,
     nllb_moe,

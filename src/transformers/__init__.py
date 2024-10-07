@@ -607,6 +607,7 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.myt5": ["MyT5Tokenizer"],
     "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
@@ -5457,6 +5458,7 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.myt5 import MyT5Tokenizer
     from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
