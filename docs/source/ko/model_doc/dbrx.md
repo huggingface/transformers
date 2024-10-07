@@ -59,7 +59,7 @@ outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
-`pip install flash-attn`를 통해 플래시 어텐션을 설치했다면, 더 빠른 생성이 가능합니다. (플래시 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2)에서 확인할 수 있습니다.)
+`pip install flash-attn`를 통해 플래시 어텐션을 설치하면, 더 빠른 생성이 가능합니다. (플래시 어텐션에 대한 HuggingFace 문서는 [이곳](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2)에서 확인할 수 있습니다.)
 
 
 ```python
