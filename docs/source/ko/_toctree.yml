@@ -270,8 +270,8 @@
   - sections:
     - local: main_classes/agent
       title: 에이전트와 도구
-    - local: in_translation
-      title: (번역중) Auto Classes
+    - local: model_doc/auto
+      title: 자동 클래스
     - local: in_translation
       title: (번역중) Backbones
     - local: in_translation
