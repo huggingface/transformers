@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 🤗 트랜스포머 모델을 ONNX로 내보내기[[exporting--transformers-models-to-onnx]]
+# 🤗 Transformers 모델을 ONNX로 내보내기[[exporting--transformers-models-to-onnx]]
 
 🤗 트랜스포머는 `transformers.onnx` 패키지를 제공하며, 이 패키지는 설정 객체를 활용하여 모델 체크포인트를 ONNX 그래프로 변환할 수 있게 합니다.
 
