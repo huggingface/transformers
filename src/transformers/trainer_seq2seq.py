@@ -29,6 +29,8 @@ from .utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
+    from torch.utils.data import IterableDataset
+    
     from .data.data_collator import DataCollator
     from .feature_extraction_utils import FeatureExtractionMixin
     from .image_processing_utils import BaseImageProcessor
@@ -38,6 +40,9 @@ if TYPE_CHECKING:
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
     from .training_args import TrainingArguments
+
+    if is_datasets_available():
+        import datasets
 
 
 logger = logging.get_logger(__name__)
@@ -50,7 +55,7 @@ class Seq2SeqTrainer(Trainer):
         model: Union["PreTrainedModel", nn.Module] = None,
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
-        train_dataset: Optional[Dataset] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
