@@ -574,11 +574,19 @@ def pipeline(
     """
     Utility factory method to build a [`Pipeline`].
 
-    Pipelines are made of:
+    A pipeline consists of:
 
-        - A [tokenizer](tokenizer) in charge of mapping raw textual input to token.
-        - A [model](model) to make predictions from the inputs.
-        - Some (optional) post processing for enhancing model's output.
+        - One or more components for pre-processing model inputs, such as a [tokenizer](tokenizer),
+        [image_processor](image_processor), [feature_extractor](feature_extractor), or [processor](processors).
+        - A [model](model) that generates predictions from the inputs.
+        - Optional post-processing steps to refine the model's output, which can also be handled by processors.
+
+    <Tip>
+    While there are such optional arguments as `tokenizer`, `feature_extractor`, `image_processor`, and `processor`,
+    they shouldn't be specified all at once. If these components are not provided, `pipeline` will try to load
+    required ones automatically. In case you want to provide these components explicitly, please refer to a
+    specific pipeline in order to get more details regarding what components are required.
+    </Tip>
 
     Args:
         task (`str`):
@@ -710,12 +718,6 @@ def pipeline(
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
-
-    Note:
-        While there are such optional arguments as `tokenizer`, `feature_extractor`, `image_processor`, and `processor`,
-        they shouldn't be specified all at once. If these components are not provided, `pipeline` will try to load
-        required ones automatically. In case you want to provide these components explicitly, please refer to a
-        specific pipeline in order to get more details regarding what components are required.
 
     Returns:
         [`Pipeline`]: A suitable pipeline for the task.
