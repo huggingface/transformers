@@ -378,8 +378,8 @@
         title: (번역중) ERNIE
       - local: in_translation
         title: (번역중) ErnieM
-      - local: in_translation
-        title: (번역중) ESM
+      - local: model_doc/esm
+        title: ESM
       - local: in_translation
         title: (번역중) FLAN-T5
       - local: in_translation
