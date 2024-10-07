@@ -1443,7 +1443,7 @@ class MoshiConverter(SpmConverter):
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=True)
 
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
