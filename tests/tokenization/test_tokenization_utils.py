@@ -28,6 +28,7 @@ from transformers import (
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
+    LlamaTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
     TensorType,
@@ -279,6 +280,41 @@ class TokenizerUtilsTest(unittest.TestCase):
 
                 self.assertEqual(decoded_flat, "##：")
                 self.assertEqual(decoded_list, "##：")
+
+    def test_extra_sepcial_tokens_multimodal(self):
+        special_tokens_list = [
+            "bos_token",
+            "eos_token",
+            "unk_token",
+            "sep_token",
+            "pad_token",
+            "cls_token",
+            "mask_token",
+            "additional_special_tokens",
+        ]
+        llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        llama_tokenizer.is_multimodal = True
+        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            llama_tokenizer.save_pretrained(tmpdirname)
+
+            # load back and check we have extra special tokens set
+            loaded_tokenizer = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            multimodal_special_tokens_list = special_tokens_list + ["image_token", "boi_token", "eoi_token"]
+            self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
+
+            # if we set an image_token_id then we can get an "image_token" as str that matches the id
+            loaded_tokenizer.image_token_id = 0
+            self.assertTrue(loaded_tokenizer.image_token == loaded_tokenizer.convert_ids_to_tokens(0))
+
+        # save one more time and make sure the image token can get loaded back
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            loaded_tokenizer.save_pretrained(tmpdirname)
+            loaded_tokenizer_with_image_token = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            self.assertTrue(
+                loaded_tokenizer_with_image_token.image_token
+                == loaded_tokenizer_with_image_token.convert_ids_to_tokens(0)
+            )
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):

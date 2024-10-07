@@ -2400,8 +2400,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        # Let's make sure we properly save the special tokens.
+        # Let's make sure we properly save the special tokens and flag whether it is a multimodal tokenizer.
         tokenizer_config.update(self.special_tokens_map)
+        if self.is_multimodal and "is_multimodal" not in tokenizer_config:
+            tokenizer_config["is_multimodal"] = True
 
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
