@@ -4159,7 +4159,6 @@ class ModelTesterMixin:
                 model = torch.compile(model, dynamic=True)
 
                 inputs_dict.pop("attention_mask", None)
-                inputs_dict.pop("cross_attention_mask", None)
                 inputs_dict.pop("decoder_attention_mask", None)
                 for name, inp in inputs_dict.items():
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
