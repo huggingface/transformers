@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Time Series Transformer[[time-series-transformer]]
+# 시계열 트랜스포머[[time-series-transformer]]
 
 ## Overview[[overview]]
 
