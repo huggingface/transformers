@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Jamba model."""
+"""Testing suite for the PyTorch Zamba model."""
 
 import math
 import tempfile
@@ -21,7 +21,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, JambaConfig, is_torch_available
+from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -41,58 +41,16 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        JambaForCausalLM,
-        JambaForSequenceClassification,
-        JambaModel,
+        ZambaForCausalLM,
+        ZambaForSequenceClassification,
+        ZambaModel,
     )
-    from transformers.models.jamba.modeling_jamba import (
+    from transformers.models.zamba.modeling_zamba import (
         HybridMambaAttentionDynamicCache,
     )
 
 
-class JambaConfigTester(ConfigTester):
-    def _create_attn_config(self, attn_layer_offset: int, attn_layer_period: int):
-        _input_dict = self.inputs_dict.copy()
-        _input_dict["attn_layer_offset"] = attn_layer_offset
-        _input_dict["attn_layer_period"] = attn_layer_period
-        return self.config_class(**_input_dict)
-
-    def _create_expert_config(self, expert_layer_offset: int, expert_layer_period: int):
-        _input_dict = self.inputs_dict.copy()
-        _input_dict["expert_layer_offset"] = expert_layer_offset
-        _input_dict["expert_layer_period"] = expert_layer_period
-        return self.config_class(**_input_dict)
-
-    def test_attn_offsets(self):
-        self._create_attn_config(attn_layer_offset=0, attn_layer_period=4)
-        self._create_attn_config(attn_layer_offset=1, attn_layer_period=4)
-        self._create_attn_config(attn_layer_offset=2, attn_layer_period=4)
-        self._create_attn_config(attn_layer_offset=3, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
-            self._create_attn_config(attn_layer_offset=4, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
-            self._create_attn_config(attn_layer_offset=5, attn_layer_period=4)
-
-    def test_expert_offsets(self):
-        self._create_expert_config(expert_layer_offset=0, expert_layer_period=4)
-        self._create_expert_config(expert_layer_offset=1, expert_layer_period=4)
-        self._create_expert_config(expert_layer_offset=2, expert_layer_period=4)
-        self._create_expert_config(expert_layer_offset=3, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
-            self._create_expert_config(expert_layer_offset=4, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
-            self._create_expert_config(expert_layer_offset=5, expert_layer_period=4)
-
-    def test_jamba_offset_properties(self):
-        self.test_attn_offsets()
-        self.test_expert_offsets()
-
-    def run_common_tests(self):
-        self.test_jamba_offset_properties()
-        return super().run_common_tests()
-
-
-class JambaModelTester:
+class ZambaModelTester:
     def __init__(
         self,
         parent,
@@ -102,14 +60,17 @@ class JambaModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
+        mamba_dt_rank=32,
         num_hidden_layers=5,
         attn_layer_offset=1,
         attn_layer_period=8,
         num_attention_heads=4,
-        num_key_value_heads=2,
+        num_key_value_heads=4,
+        n_mamba_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
+        hidden_mamba_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -128,13 +89,16 @@ class JambaModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.mamba_dt_rank = mamba_dt_rank
         self.num_hidden_layers = num_hidden_layers
         self.attn_layer_offset = attn_layer_offset
         self.attn_layer_period = attn_layer_period
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.n_mamba_heads = n_mamba_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.hidden_mamba_act = hidden_mamba_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
@@ -165,16 +129,19 @@ class JambaModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return JambaConfig(
+        return ZambaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            mamba_dt_rank=self.mamba_dt_rank,
             num_hidden_layers=self.num_hidden_layers,
             attn_layer_offset=self.attn_layer_offset,
             attn_layer_period=self.attn_layer_period,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
+            n_mamba_heads=self.n_mamba_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
+            hidden_mamba_act=self.hidden_mamba_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
@@ -182,7 +149,6 @@ class JambaModelTester:
             is_decoder=True,
             initializer_range=self.initializer_range,
             use_mamba_kernels=False,
-            num_experts=2,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -207,7 +173,7 @@ class JambaModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = JambaModel(config=config)
+        model = ZambaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -223,7 +189,7 @@ class JambaModelTester:
         token_labels,
         choice_labels,
     ):
-        model = JambaForCausalLM(config=config)
+        model = ZambaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -243,12 +209,12 @@ class JambaModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = JambaForCausalLM(config=config)
+        model = ZambaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
+        # Attention: Zamba needs the cache to be initialized to return a cache!
         past_key_values = HybridMambaAttentionDynamicCache(
             config, input_ids.shape[0], model.dtype, device=model.device
         )
@@ -297,7 +263,7 @@ class JambaModelTester:
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = JambaForSequenceClassification(config)
+        model = ZambaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
@@ -318,23 +284,23 @@ class JambaModelTester:
 
 
 @require_torch
-class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            JambaModel,
-            JambaForCausalLM,
-            JambaForSequenceClassification,
+            ZambaModel,
+            ZambaForCausalLM,
+            ZambaForSequenceClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (JambaForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (ZambaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": JambaModel,
-            "text-classification": JambaForSequenceClassification,
-            "text-generation": JambaForCausalLM,
-            "zero-shot": JambaForSequenceClassification,
+            "feature-extraction": ZambaModel,
+            "text-classification": ZambaForSequenceClassification,
+            "text-generation": ZambaForCausalLM,
+            "zero-shot": ZambaForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -343,8 +309,8 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = JambaModelTester(self)
-        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=37)
+        self.model_tester = ZambaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -365,44 +331,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_load_balancing_loss(self):
-        r"""
-        Let's make sure we can actually compute the loss and do a backward on it.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.num_experts = 16
-        config.output_router_logits = True
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
-        model = JambaForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask)
-        bs, seqlen = input_ids.shape
-        self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
-        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
-
-        # First, we make sure that adding padding tokens doesn't change the loss
-        # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
-        # Add padding tokens to input_ids
-        padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
-            torch_device
-        )
-        padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
-        padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
-
-        padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
-        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
-
-        # We make sure that the loss of including padding tokens != the loss without padding tokens
-        # if attention_mask=None --> we don't exclude padding tokens
-        include_padding_result = model(padded_input_ids, attention_mask=None)
-
-        # This is to mimic torch.testing.assert_not_close
-        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
     def test_initialization(self):
         r"""
         Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
@@ -420,6 +348,21 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     elif "D" in name:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                    elif "x_proj" in name or "dt_proj_weight" in name:
+                        self.assertIn(
+                            ((param.data.mean() * 1e2).round() / 1e2).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
+                        )
+                    elif "dt_proj_bias" in name:
+                        dt = torch.exp(
+                            torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                            + math.log(config.time_step_min)
+                        ).clamp(min=config.time_step_floor)
+                        inv_dt = dt + torch.log(-torch.expm1(-dt))
+                        if param.requires_grad:
+                            self.assertTrue(param.data.max().item() <= inv_dt[1])
+                            self.assertTrue(param.data.min().item() >= inv_dt[0])
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -432,11 +375,11 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
         Mamba block are initialized differently and we tested that in test_initialization
         """
-        self.skipTest(reason="Cumbersome and redundant for Jamba")
+        self.skipTest("Cumbersome and redundant for Zamba")
 
     def test_attention_outputs(self):
         r"""
-        Overriding the test_attention_outputs test as the Jamba model outputs attention only for its attention layers
+        Overriding the test_attention_outputs test as the Zamba model outputs attention only for its attention layers
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -445,9 +388,12 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = math.ceil(
-            (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
-            / self.model_tester.attn_layer_period
+        expected_num_attentions = (
+            math.ceil(
+                (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
+                / self.model_tester.attn_layer_period
+            )
+            + 1
         )
 
         for model_class in self.all_model_classes:
@@ -500,6 +446,63 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    def _get_input_ids_and_config(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        return config, input_ids, input_mask
+
+    def test_left_padding_compatibility(self):
+        r"""
+        Overriding the test_left_padding_compatibility test as the mamba layers accentuate the numerical differences
+        effect of the left padding discussed in the issue in the note. Using a more permissive tolerance value.
+        """
+        import inspect
+        # NOTE: left-padding results in small numerical differences. This is expected.
+        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+
+        # First, filter out models that don't support left padding - generative and decoder-only.
+        # Zamba is a decoder-only architecture
+        decoder_only_classes = self.all_generative_model_classes
+
+        # Then, test left-padding
+        def _prepare_model_kwargs(input_ids, attention_mask, signature):
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            if "cache_position" in signature:
+                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                model_kwargs["cache_position"] = cache_position
+            return model_kwargs
+
+        for model_class in decoder_only_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            model = model_class(config).to(torch_device).eval()
+            signature = inspect.signature(model.forward).parameters.keys()
+
+            # Without padding
+            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
+            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+
+            # With left-padding (length 32)
+            pad_size = (input_ids.shape[0], 32)
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padded_input_ids = torch.cat((padding, input_ids), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
+
+            # They should result in very similar logits
+            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
@@ -507,7 +510,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_fp32_ln(self):
         r"""
-        Overriding the test_flash_attn_2_fp32_ln test as the Jamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_fp32_ln test as the Zamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
         for model_class in self.all_generative_model_classes:
@@ -519,7 +522,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
                 dummy_input = inputs_dict[model.main_input_name]
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Jamba does not support right padding + use_cache with FA2.
+                # NOTE: Zamba does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -545,7 +548,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         r"""
-        Overriding the test_flash_attn_2_generate_padding_right test as the Jamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_generate_padding_right test as the Zamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
         import torch
@@ -583,7 +586,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_generate_use_cache(self):
         r"""
-        Overriding the test_flash_attn_2_generate_use_cache test as the Jamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_generate_use_cache test as the Zamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
         import torch
@@ -607,7 +610,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Jamba does not support right padding + use_cache with FA2.
+                # NOTE: Zamba does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -632,46 +635,33 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         r"""
-        Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_inference_padding_right test as the Zamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
-        self.skipTest(reason="Jamba flash attention does not support right padding")
+        self.skipTest(reason="Zamba flash attention does not support right padding")
 
-    @unittest.skip(reason="Jamba has its own special cache type")
+    @unittest.skip(reason="Zamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
 
 @require_torch
-class JambaModelIntegrationTest(unittest.TestCase):
+class ZambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
 
     @classmethod
+    @slow
     def setUpClass(cls):
-        model_id = "ai21labs/Jamba-tiny-dev"
-        cls.model = JambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model_id = "Zyphra/Zamba-7B-v1"
+        cls.model = ZambaForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
+        )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
     def test_simple_generate(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            7: "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-            8: "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
-            9: "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
-        }
-
         self.model.to(torch_device)
 
         input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
@@ -679,81 +669,68 @@ class JambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+        self.assertEqual(
+            output_sentence,
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+        )
 
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=input_ids).logits
+        with torch.no_grad():
+            logits = self.model(input_ids=input_ids).logits
 
-            EXPECTED_LOGITS_NO_GRAD = torch.tensor(
-                [
-                    -7.6875, -7.6562,  8.9375, -7.7812, -7.4062, -7.9688, -8.3125, -7.4062,
-                    -7.8125, -8.1250, -7.8125, -7.3750, -7.8438, -7.5000, -8.0625, -8.0625,
-                    -7.5938, -7.9688, -8.2500, -7.5625, -7.7500, -7.7500, -7.6562, -7.6250,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0000,
-                    -7.5000, -7.7500, -7.9375, -7.4688, -8.0625, -7.3438, -8.0000, -7.5000
-                ]
-                , dtype=torch.float32)  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD = torch.tensor(
+            [
+                -7.9375,  8.1875,  1.3984, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7500, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+            ]
+            , dtype=torch.float32)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_simple_batched_generate_with_padding(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            7: [
-                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
-            ],
-            8: [
-                "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",
-            ],
-            9: [
-                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
-            ],
-        }
-
         self.model.to(torch_device)
+        self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        self.model.resize_token_embeddings(len(self.tokenizer))
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(output_sentences[0], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0])
-        self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
+        self.assertEqual(
+            output_sentences[0],
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+        )
+        self.assertEqual(
+            output_sentences[1],
+            "[PAD][PAD][PAD][PAD][PAD][PAD]<s> Tell me a story about a time when you were in a difficult situation",
+        )
 
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=inputs["input_ids"]).logits
+        with torch.no_grad():
+            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits
 
-            # TODO fix logits
-            EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
-                [
-                    -7.7188, -7.6875,  8.8750, -7.8125, -7.4062, -8.0000, -8.3125, -7.4375,
-                    -7.8125, -8.1250, -7.8125, -7.4062, -7.8438, -7.5312, -8.0625, -8.0625,
-                    -7.6250, -8.0000, -8.3125, -7.5938, -7.7500, -7.7500, -7.6562, -7.6562,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0625,
-                     -7.5000, -7.7812, -7.9375, -7.4688, -8.0625, -7.3750, -8.0000, -7.50003
-                ]
-                , dtype=torch.float32)  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
+            [
+                -7.9375,  8.1250,  1.3594, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7344, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+            ]
+            , dtype=torch.float32)  # fmt: skip
 
-            EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
-                [
-                    -3.5469, -4.0625,  8.5000, -3.8125, -3.6406, -3.7969, -3.8125, -3.3594,
-                     -3.7188, -3.7500, -3.7656, -3.5469, -3.7969, -4.0000, -3.5625, -3.6406,
-                    -3.7188, -3.6094, -4.0938, -3.6719, -3.8906, -3.9844, -3.8594, -3.4219,
-                    -3.2031, -3.4375, -3.7500, -3.6562, -3.9688, -4.1250, -3.6406, -3.57811,
-                    -3.0312, -3.4844, -3.6094, -3.5938, -3.7656, -3.8125, -3.7500, -3.8594
-                ]
-                , dtype=torch.float32)  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
+            [
+               -6.3750,  3.4219,  0.6719, -5.0312, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000,  2.0625, 10.3750, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000
+            ]
+            , dtype=torch.float32)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
