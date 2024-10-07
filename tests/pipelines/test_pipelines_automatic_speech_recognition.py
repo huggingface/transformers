@@ -1456,7 +1456,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}
 
-        chunked_output = speech_recognizer(inputs.copy(), chunked_length_s=30)
+        chunked_output = speech_recognizer(inputs.copy(), chunk_length_s=30)
         non_chunked_output = speech_recognizer(inputs.copy())
         assert (
             chunked_output.keys() == non_chunked_output.keys()
