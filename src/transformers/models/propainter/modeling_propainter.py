@@ -673,22 +673,22 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             for i, idx in enumerate(frame_idx):
                 feat_current = features["spatial"][mapping_idx[idx]]
                 if i > 0:
-                    cond_n1 = feature_propagation
+                    first_order_condition_features = feature_propagation
 
                     # initialize second-order features
-                    feat_n2 = torch.zeros_like(feature_propagation)
-                    cond_n2 = torch.zeros_like(cond_n1)
+                    second_order_propagated_features = torch.zeros_like(feature_propagation)
+                    second_order_condition_features = torch.zeros_like(first_order_condition_features)
                     if i > 1:  # second-order features
-                        feat_n2 = features[module_name][-2]
-                        cond_n2 = feat_n2
+                        second_order_propagated_features = features[module_name][-2]
+                        second_order_condition_features = second_order_propagated_features
 
-                    cond = torch.cat(
-                        [cond_n1, feat_current, cond_n2], dim=1
+                    condition_features = torch.cat(
+                        [first_order_condition_features, feat_current, second_order_condition_features], dim=1
                     )  # condition information, cond(flow warped 1st/2nd feature)
                     feature_propagation = torch.cat(
-                        [feature_propagation, feat_n2], dim=1
+                        [feature_propagation, second_order_propagated_features], dim=1
                     )  # two order feature_propagation -1 & -2
-                    feature_propagation = self.deform_align[module_name](feature_propagation, cond)
+                    feature_propagation = self.deform_align[module_name](feature_propagation, condition_features)
                 # fuse current features
                 features = (
                     [feat_current]
@@ -855,17 +855,12 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
             features[module_name] = []
             masks[module_name] = []
 
-            if "backward" in module_name:
-                frame_idx = range(0, timesteps)
-                frame_idx = frame_idx[::-1]
-                flow_idx = frame_idx
-                flows_for_prop = flows_forward
-                flows_for_check = flows_backward
-            else:
-                frame_idx = range(0, timesteps)
-                flow_idx = range(-1, timesteps - 1)
-                flows_for_prop = flows_backward
-                flows_for_check = flows_forward
+            is_backward = "backward" in module_name
+
+            frame_idx = range(timesteps - 1, -1, -1) if is_backward else range(timesteps)
+            flow_idx = frame_idx if is_backward else range(-1, timesteps - 1)
+
+            flows_for_prop, flows_for_check = (flows_forward, flows_backward) if is_backward else (flows_backward, flows_forward)
 
             for i, idx in enumerate(frame_idx):
                 feat_current = features[cache_list[propagation_index]][idx]
@@ -877,45 +872,45 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 else:
                     flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
                     flow_check = flows_for_check[:, flow_idx[i], :, :, :]
-                    flow_vaild_mask = forward_backward_consistency_check(flow_prop, flow_check)
+                    flow_valid_mask = forward_backward_consistency_check(flow_prop, flow_check)
                     feat_warped = flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
 
                     if self.learnable:
-                        cond = torch.cat(
+                        condition_features = torch.cat(
                             [
                                 feat_current,
                                 feat_warped,
                                 flow_prop,
-                                flow_vaild_mask,
+                                flow_valid_mask,
                                 mask_current,
                             ],
                             dim=1,
                         )
-                        feat_prop = self.deform_align[module_name](feat_prop, cond, flow_prop)
+                        feat_prop = self.deform_align[module_name](feat_prop, condition_features, flow_prop)
                         mask_prop = mask_current
                     else:
                         mask_prop_valid = flow_warp(mask_prop, flow_prop.permute(0, 2, 3, 1))
                         mask_prop_valid = torch.where(mask_prop_valid > 0.1, 1, 0).to(mask_prop_valid)
 
-                        union_vaild_mask = mask_current * flow_vaild_mask * (1 - mask_prop_valid)
-                        union_vaild_mask = torch.where(union_vaild_mask > 0.1, 1, 0).to(union_vaild_mask)
+                        union_valid_mask = mask_current * flow_valid_mask * (1 - mask_prop_valid)
+                        union_valid_mask = torch.where(union_valid_mask > 0.1, 1, 0).to(union_valid_mask)
 
-                        feat_prop = union_vaild_mask * feat_warped + (1 - union_vaild_mask) * feat_current
+                        feat_prop = union_valid_mask * feat_warped + (1 - union_valid_mask) * feat_current
                         # update mask
-                        mask_prop = mask_current * (1 - (flow_vaild_mask * (1 - mask_prop_valid)))
+                        mask_prop = mask_current * (1 - (flow_valid_mask * (1 - mask_prop_valid)))
                         mask_prop = torch.where(mask_prop > 0.1, 1, 0).to(mask_prop)
 
                 # refine
                 if self.learnable:
                     features = torch.cat([feat_current, feat_prop, mask_current], dim=1)
-                    feat_prop = feat_prop + self.backbone[module_name](features)
+                    feat_prop += self.backbone[module_name](features)
 
                 features[module_name].append(feat_prop)
                 masks[module_name].append(mask_prop)
             # end for
             if "backward" in module_name:
-                features[module_name] = features[module_name][::-1]
-                masks[module_name] = masks[module_name][::-1]
+                features[module_name] = features[module_name].reverse()
+                masks[module_name] = masks[module_name].reverse()
 
         outputs_backward = torch.stack(features["backward_1"], dim=1).view(-1, num_channels, height, width)
         outputs_forward = torch.stack(features["forward_1"], dim=1).view(-1, num_channels, height, width)
