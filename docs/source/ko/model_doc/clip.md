@@ -28,7 +28,7 @@ Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gret
 이 모델은 [valhalla](https://huggingface.co/valhalla)에 의해 기여되었습니다. 
 원본 코드는 [이곳](https://github.com/openai/CLIP)에서 확인할 수 있습니다.
 
-## 사용팁과 사용예[[usage-tips-and-example]]
+## 사용 팁과 예시[[usage-tips-and-example]]
 
 CLIP은 멀티모달 비전 밒 언어 모델입니다. 이미지-텍스트 유사도 계산과 제로샷 이미지 분류에 사용될 수 있습니다. CLIP은 ViT와 유사한 트랜스포머를 사용하여 시각적 특징을 추출하고, 인과적 언어 모델을 사용하여 텍스트 특징을 추출합니다. 그 후 텍스트와 시각적 특징 모두 동일한 차원의 잡재 공간으로 투영됩니다. 투영된 이미지와 텍스트 특징 사이의 내적이 유사도 점수로 사용됩니다.
 
