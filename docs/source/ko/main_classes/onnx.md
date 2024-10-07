@@ -24,9 +24,9 @@ rendered properly in your Markdown viewer.
 
 내보내려는(export) 모델 아키텍처의 유형에 따라 상속받아야 할 세 가지 추상 클래스를 제공합니다:
 
-* 인코더 기반 모델은 [`~onnx.config.OnnxConfig`]에서 상속받습니다.
-* 디코더 기반 모델은 [`~onnx.config.OnnxConfigWithPast`]에서 상속받습니다.
-* 인코더-디코더 기반 모델은 [`~onnx.config.OnnxSeq2SeqConfigWithPast`]에서 상속받습니다.
+* 인코더 기반 모델은 [`~onnx.config.OnnxConfig`]을 상속받습니다.
+* 디코더 기반 모델은 [`~onnx.config.OnnxConfigWithPast`]을 상속받습니다.
+* 인코더-디코더 기반 모델은 [`~onnx.config.OnnxSeq2SeqConfigWithPast`]을 상속받습니다.
 
 ### OnnxConfig[[transformers.onnx.OnnxConfig]]
 
