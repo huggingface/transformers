@@ -27,7 +27,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 </Tip>
 
-## 오버뷰[[overview]]
+## 개요[[overview]]
 
 Trajectory Transformer 모델은 Michael Janner, Qiyang Li, Sergey Levine이 제안한 [하나의 커다란 시퀀스 모델링 문제로서의 오프라인 강화학습](https://arxiv.org/abs/2106.02039)라는 논문에서 소개되었습니다.
 
