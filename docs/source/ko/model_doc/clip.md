@@ -112,7 +112,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 ```
 
 
-### 스케일된 점곱 어텐션(SDPA) 사용하기[[using-scaled-dot-product-attention-sdpa]]
+### 스케일된 점곱 어텐션 (Scaled dot-product Attention(SDPA)) 사용하기[[using-scaled-dot-product-attention-sdpa]]
 
 파이토치는 `torch.nn.functional`의 일부로 네이티브 스케일된 점곱 어텐션(SPDA) 연산자를 포함하고 있습니다. 이 함수는 입력과 사용 중인 하드웨어에 따라 적용될 수 있는 여러 구현을 포함합니다. 자세한 정보는 [공식문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)나 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 페이지를 참조하세요.
 
