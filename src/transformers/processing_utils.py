@@ -526,18 +526,24 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
+        output_naked_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
         output_chat_template_file = os.path.join(save_directory, "chat_template.json")
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-            chat_template_json_string = (
-                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
-            )
-            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
-                writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file}")
+            if kwargs.get("save_naked_chat_template", False):
+                with open(output_naked_chat_template_file, "w", encoding="utf-8") as writer:
+                    writer.write(self.chat_template)
+                logger.info(f"chat template saved in {output_naked_chat_template_file}")
+            else:
+                chat_template_json_string = (
+                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+                )
+                with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                    writer.write(chat_template_json_string)
+                logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
