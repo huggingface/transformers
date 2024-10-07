@@ -90,6 +90,7 @@ if is_torch_available():
         BertConfig,
         BertModel,
         CLIPTextModel,
+        GenerationMixin,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -1714,6 +1715,54 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
+
+    def test_can_generate(self):
+        """Tests the behavior of `PreTrainedModel.can_generate` method."""
+        logger = logging.get_logger("transformers.modeling_utils")
+        logger.warning_once.cache_clear()
+
+        # 1 - By default, a model CAN'T generate
+        can_generate = BertModel.can_generate()
+        self.assertFalse(can_generate)
+
+        # 2 - The most common case for a model to be able to generate is to inherit from `GenerationMixin` directly
+        class DummyBertWithMixin(BertModel, GenerationMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithMixin.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 3 - Alternatively, a model can implement a `generate` method
+        class DummyBertWithGenerate(BertModel):
+            def generate(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithGenerate.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 4 - Finally, it can inherit from a model that can generate
+        class DummyBertWithParent(DummyBertWithMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithParent.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # `GenerationMixin`)
+        class DummyBertWithPrepareInputs(BertModel):
+            def prepare_inputs_for_generation(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithPrepareInputs.can_generate()
+        self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
+        self.assertTrue(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """
