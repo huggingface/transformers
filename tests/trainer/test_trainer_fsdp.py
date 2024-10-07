@@ -39,7 +39,7 @@ if is_torch_available():
         PreTrainedTokenizerBase,
         Seq2SeqTrainer,
         Seq2SeqTrainingArguments,
-        )
+    )
 
     class DummyTextDataset(torch.utils.data.Dataset[str]):
         def __init__(self, tokenizer: PreTrainedTokenizerBase) -> None:
