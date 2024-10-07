@@ -1125,12 +1125,11 @@ def pipeline(
         if isinstance(processor, (str, tuple)):
             processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             if not isinstance(processor, ProcessorMixin):
-                warnings.warn(
-                    f"Processor will be not loaded, because {processor} is not an instance of `ProcessorMixin`. "
-                    f"Got type `{type(processor)}` instead.",
-                    UserWarning,
+                raise TypeError(
+                    "Processor was loaded, but it is not an instance of `ProcessorMixin`. "
+                    f"Got type `{type(processor)}` instead. Please check that you specified "
+                    "correct pipeline task for the model and model has processor implemented and saved."
                 )
-                processor = None
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
