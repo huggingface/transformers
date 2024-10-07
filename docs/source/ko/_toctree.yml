@@ -135,8 +135,8 @@
     title: 커뮤니티 리소스
   - local: troubleshooting
     title: 문제 해결
-  - local: in_translation
-    title: (번역중) Interoperability with GGUF files
+  - local: gguf
+    title: GGUF 파일들과의 상호 운용성
   title: (번역중) 개발자 가이드
 - sections:
   - local: in_translation
