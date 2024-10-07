@@ -1505,6 +1505,9 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
+        # process
+
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (

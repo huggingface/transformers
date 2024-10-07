@@ -3836,7 +3836,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
 
-
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(
