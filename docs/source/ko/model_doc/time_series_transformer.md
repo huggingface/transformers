@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 이 시계열 트랜스포머 모델은 시계열 예측을 위한 기본적인 인코더-디코더 구조의 트랜스포머 입니다.
 이 모델은 [kashif](https://huggingface.co/kashif)에 의해 기여되었습니다.
 
-## Usage tips[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 - 다른 라이브러리의 모델들과 마찬가지로, [`TimeSeriesTransformerModel`]은 상단에 헤드가 없는 기본적인 트랜스포머 입니다. [`TimeSeriesTransformerForPrediction`]은 상단에 분포 헤드를 추가하여 시계열 예측에 사용할 수 있습니다. 이 모델은 이른바 확률적 예측 모델이며, 포인트 예측 모델이 아닙니다. 즉 샘플링할 수 있는 분포를 학습하며, 값을 직접 출력 하지는 않습니다.
 - [`TimeSeriesTransformerForPrediction`]은 두개의 블록으로 구성되어 있습니다. 인코더는 `context_length`의  시계열 값을 입력(`past_values`라고 부름)으로 받아들이며, 디코더는 미래의 `prediction_length`만큼 시계열 값을 예측합니다(`future_values`라고 부름). 학습중에는 모델에 `past_values` 와 `future_values`쌍을 모델에 제공해야 합니다.
