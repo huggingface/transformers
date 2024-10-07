@@ -216,7 +216,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
-        self.default_name = "".join(x.title() for x in new_name.split("_"))
+        # For tensorflow files, classes are defined as TFModelName
+        self.default_name = "".join(x.title() if x != 'tf' else x.upper() for x in new_name.split("_"))
         if self.new_name in CONFIG_MAPPING_NAMES:
             self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
                 "Config", ""
@@ -224,8 +225,17 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
-            "".join(x.title() for x in old_name.split("_")): self.default_name,
+            "".join(x.title() if x != 'tf' else x.upper() for x in old_name.split("_")): self.default_name,
         }
+        # Tensorflow files are special as modeling classes start with "TF", but not the Config/strings etc...
+        if new_name.split("_")[0] == 'tf' and old_name.split("_")[0] == 'tf':
+            old_name_without_tf = "".join(old_name.split("_")[1:])
+            new_name_without_tf = "".join(new_name.split("_")[1:])
+            self.patterns.update({
+                old_name_without_tf: new_name_without_tf,
+                old_name_without_tf.upper(): new_name_without_tf.upper(),
+                "".join(x.title() for x in old_name_without_tf.split("_")): self.default_name.replace("TF", ""),
+            })
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
         if self.old_name in CONFIG_MAPPING_NAMES:
