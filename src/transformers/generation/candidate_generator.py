@@ -309,11 +309,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_lookbehind = 10
 
     @staticmethod
-    def _get_longest_diag_dict(inp, nonzero_idx):
+    def _get_longest_diag_dict(input_matrix, nonzero_idx):
         """
         Calculates the length of the longest diagonal sequence in a given matrix.
         Args:
-            inp (torch.Tensor): The input matrix.
+            input_matrix (torch.Tensor): The input matrix.
             nonzero_idx (torch.Tensor): The indices of the non-zero elements in the matrix.
         Returns:
             dict: A dictionary where the keys are the indices of the non-zero elements and the values are the lengths of the longest diagonal sequences starting from those indices.
@@ -331,11 +331,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             visited.add(tuple_start_idx)
             cur_diag_len = 1
             start_idx += 1
-            while start_idx[0] < inp.shape[0] and start_idx[1] < inp.shape[1]:
+            while start_idx[0] < input_matrix.shape[0] and start_idx[1] < input_matrix.shape[1]:
                 tuple_start_idx = tuple(start_idx.tolist())
                 visited.add(tuple_start_idx)
 
-                if inp[start_idx[0], start_idx[1]] == 1:
+                if input_matrix[start_idx[0], start_idx[1]] == 1:
                     cur_diag_len += 1
                     start_idx += 1
                 else:
@@ -345,16 +345,16 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return diags
 
     @staticmethod
-    def _get_longest_diag_index(inp):
+    def _get_longest_diag_index(input_matrix):
         """
         Returns the start index and length of the longest diagonal in the given input.
         Args:
-            inp (numpy.ndarray): The input array.
+            input_matrix (numpy.ndarray): The input matrix.
         Returns:
             tuple: A tuple containing the start index and length of the longest diagonal.
         """
 
-        diags = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_dict(inp, inp.nonzero())
+        diags = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_dict(input_matrix, input_matrix.nonzero())
         diags_values = list(diags.values())
         diags_keys = list(diags.keys())
         best_diag = np.argmax(diags_values)
@@ -395,7 +395,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         ]
         return discrepancy_length, new_tokens_only, discrepancy_only
 
-    def convert_token_ids(
+    def convert_source_tokens_to_target_tokens(
         self,
         input_ids,
         source_tokenizer,
@@ -433,7 +433,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
-            new_assistant_ids = self.convert_token_ids(input_ids[:, start_index_in_target_window:], **convert_kwargs)
+            new_assistant_ids = self.convert_source_tokens_to_target_tokens(input_ids[:, start_index_in_target_window:], **convert_kwargs)
             prompt_use_length = new_assistant_ids.shape[1]
             prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
@@ -461,7 +461,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 assistant_input_ids = torch.cat([assistant_input_ids, new_assistant_ids], dim=-1)
 
         else:
-            assistant_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
+            assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
             self.prev_target_ids = input_ids
 
         self.prev_assistant_ids = assistant_input_ids
@@ -498,7 +498,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         num_prev_assistant = self.prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
-        new_target_ids_from_window = self.convert_token_ids(
+        new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
             assistant_output.sequences[:, start_assistant_look_index:],
             source_tokenizer=self.assistant_tokenizer,
             destination_tokenizer=self.target_tokenizer,
