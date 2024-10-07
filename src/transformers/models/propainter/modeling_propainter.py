@@ -702,7 +702,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                 features[module_name].append(feature_propagation)
             # end for
             if "backward" in module_name:
-                features[module_name] = features[module_name][::-1]
+                features[module_name] = features[module_name].reverse()
 
         outputs = []
         for i in range(0, timesteps):
@@ -955,9 +955,12 @@ class ProPainterDeconv(nn.Module):
         return self.conv(hidden_states)
 
 
-class ProPainterModulatedDeformConv2d(nn.Module):
+class ProPainterDeformableAlignment(nn.Module):
+    """Second-order deformable alignment module."""
+
     def __init__(
         self,
+        config: ProPainterConfig,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
@@ -967,8 +970,13 @@ class ProPainterModulatedDeformConv2d(nn.Module):
         groups: int = 1,
         deform_groups: int = 1,
         bias: bool = True,
+        **kwargs
     ):
+        self.max_residue_magnitude = kwargs.pop("max_residue_magnitude", 3)
+
         super().__init__()
+
+        self.config = config
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -979,9 +987,6 @@ class ProPainterModulatedDeformConv2d(nn.Module):
         self.groups = groups
         self.deform_groups = deform_groups
         self.with_bias = bias
-        # enable compatibility with nn.Conv2d
-        self.transposed = False
-        self.output_padding = _single(0)
 
         self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
         if bias:
@@ -989,19 +994,6 @@ class ProPainterModulatedDeformConv2d(nn.Module):
         else:
             self.register_parameter("bias", None)
 
-    def forward(self, hidden_states, offset, mask):
-        pass
-
-
-class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
-    """Second-order deformable alignment module."""
-
-    def __init__(self, config: ProPainterConfig, *args, **kwargs):
-        self.max_residue_magnitude = kwargs.pop("max_residue_magnitude", 3)
-
-        super().__init__(*args, **kwargs)
-
-        self.config = config
         self.conv_offset = nn.Sequential(
             nn.Conv2d(
                 2 * self.out_channels + 2 + 1 + 2,
@@ -1060,13 +1052,43 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
         return hidden_states
 
 
-class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
+class ProPainterSecondOrderDeformableAlignment(nn.Module):
     """Second-order deformable alignment module."""
 
-    def __init__(self, config: ProPainterConfig, *args, **kwargs):
+    def __init__(self,
+        config: ProPainterConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+        deform_groups: int = 1,
+        bias: bool = True,
+        **kwargs
+    ):
         self.max_residue_magnitude = kwargs.pop("max_residue_magnitude", 5)
 
-        super().__init__(*args, **kwargs)
+        super().__init__()
+
+        self.config = config
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = _pair(kernel_size)
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.deform_groups = deform_groups
+        self.with_bias = bias
+
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter("bias", None)
 
         self.conv_offset = nn.Sequential(
             nn.Conv2d(
