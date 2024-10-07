@@ -2101,6 +2101,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    def test_distil_token_timestamp_generation(self):
+        # we actually just want to check that returning segments with distil model works
+        processor = WhisperProcessor.from_pretrained("distil-whisper/distil-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("distil-whisper/distil-large-v3")
+        model.to(torch_device)
+
+        input_speech = np.concatenate(self._load_datasamples(4))
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        _ = model.generate(
+            input_features, max_length=448, return_timestamps=True, return_token_timestamps=True, return_segments=True
+        )
+
+    @slow
     def test_tiny_longform_timestamps_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
