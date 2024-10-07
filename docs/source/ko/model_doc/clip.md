@@ -126,7 +126,7 @@ model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=to
 
 최고의 속도향상을 위해서, 반정밀도로 모델을 로드하는 것을 추천합니다. (예를들면 `torch.float16` 또는 `torch.bfloat16`).
 
-### 플래시 어텐션과 스케일된 점곱 어텐션(SDPA)으로 기대하는 속도향상[[expected-speedups-with-flash-attention-and-sdpa]]
+### 플래시 어텐션과 스케일된 점곱 어텐션(SDPA)으로 인해 예상되는 속도향상[[expected-speedups-with-flash-attention-and-sdpa]]
 
 로컬 벤치마크(NVIDIA A10G, PyTorch 2.3.1+cu121)에서 `float16`을 사용하여 `"openai/clip-vit-large-patch14"` 체크포인트로 추론을 수행했을 때, 다음과 같은 속도 향상을 확인 했습니다.
 [코드](https://gist.github.com/qubvel/ac691a54e54f9fae8144275f866a7ff8):
