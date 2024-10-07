@@ -1444,12 +1444,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
-    def test_input_parameter_input_passthrough(self):
+    def test_input_parameter_passthrough(self):
         """Test that chunked vs non chunked versions of ASR pipelines returns the same structure for the same inputs."""
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-internal-testing/tiny-random-wav2vec2",
-            chunk_length_s=10.0,
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
