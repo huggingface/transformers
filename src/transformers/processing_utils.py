@@ -44,7 +44,6 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
-    CHAT_TEMPLATE_NAME,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -527,7 +526,7 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
+        output_chat_template_file = os.path.join(save_directory, "chat_template.json")
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
@@ -601,21 +600,23 @@ class ProcessorMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
-            chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
 
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             # cant't load chat-template when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
+            resolved_naked_chat_template_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
             # can't load chat-template when given a file url as pretrained_model_name_or_path
             resolved_chat_template_file = None
+            resolved_naked_chat_template_file = None
         else:
             processor_file = PROCESSOR_NAME
-            chat_template_file = CHAT_TEMPLATE_NAME
+            chat_template_file = "chat_template.json"
+            naked_chat_template_file = "chat_template.jinja"
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -650,6 +651,21 @@ class ProcessorMixin(PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
+
+                resolved_naked_chat_template_file = cached_file(
+                    pretrained_model_name_or_path,
+                    naked_chat_template_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -665,6 +681,10 @@ class ProcessorMixin(PushToHubMixin):
 
         # Add chat template as kwarg before returning because most models don't have processor config
         chat_template = None
+        if resolved_naked_chat_template_file is not None:
+            with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
+                chat_template = reader.read()
+            kwargs["chat_template"] = chat_template
         if resolved_chat_template_file is not None:
             with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
@@ -696,7 +716,7 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
             logger.warning_once(
-                "Chat templates should be in a 'chat_template.json' file but found key='chat_template' "
+                "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
 
