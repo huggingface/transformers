@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 기본 클래스 [`PreTrainedModel`], [`TFPreTrainedModel`], [`FlaxPreTrainedModel`]는 로컬 파일과 디렉토리로부터 모델을 로드하고 저장하거나 또는 (허깅페이스 AWS S3 리포지토리로부터 다운로드된) 라이브러리에서 제공하는 사전 훈련된 모델 설정을 로드하고 저장하는 것을 지원하는 기본 메소드를 구현하였습니다.   
 
-[`PreTrainedModel`]과 [`TFPreTrainedModel`]은 또한 모든 모델들에 공통적으로 지원하는 몇가지 메소드를 구현하였습니다:
+[`PreTrainedModel`]과 [`TFPreTrainedModel`]은 또한 모든 모델들을 공통적으로 지원하는 메소드 여러개를 구현하였습니다:
 
 - 새 토큰이 단어장에 추가될 때, 입력 토큰 임베딩의 크기를 조정합니다.
 - 모델의 어텐션 헤드를 가지치기합니다.
