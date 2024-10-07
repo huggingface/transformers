@@ -81,7 +81,7 @@ class StableLmRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class StableLmLinearScalingRotaryEmbedding(LlamaLinearScalingRotaryEmbedding):
+class StableLmLinearScalingRotaryEmbedding(StableLmRotaryEmbedding, LlamaLinearScalingRotaryEmbedding):
     pass
 
 
