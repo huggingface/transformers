@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Informer[[informer]]
 
-## Overview[[overview]]
+## 개요[[overview]]
 
 The Informer 모델은 Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang가 제안한 [Informer: 장기 시퀀스 시계열 예측(LSTF)을 위한 더욱 효율적인 트랜스포머(Beyond Efficient Transformer)](https://arxiv.org/abs/2012.07436)라는 논문에서 소개되었습니다.
 
@@ -34,7 +34,7 @@ Informer의 세가지 독특한 특성:
 이 모델은 [elisim](https://huggingface.co/elisim)와 [kashif](https://huggingface.co/kashif)가 기여했습니다.
 원본 코드는 [이곳](https://github.com/zhouhaoyi/Informer2020)에서 확인할 수 있습니다.
 
-## Resources[[resources]]
+## 자료[[resources]]
 
 시작하는 데 도움이 되는 Hugging Face와 community 자료 목록(🌎로 표시됨) 입니다. 여기에 포함될 자료를 제출하고 싶으시다면 PR(Pull Request)를 열어주세요. 리뷰 해드리겠습니다! 자료는 기존 자료를 복제하는 대신 새로운 내용을 담고 있어야 합니다.
 
