@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
@@ -874,11 +874,13 @@ class MistralModel(MistralPreTrainedModel):
         # to infer the attention mask.
 
         # cache_position must be valid here no matter which cache we use
-        past_seen_tokens = cache_position[0] if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
+
         if (
             self.config._attn_implementation == "sdpa"
-            and past_key_values is not None
-            and not (past_key_values.is_static or past_key_values.is_sliding)
+            and not (using_static_cache or using_sliding_window_cache)
             and not output_attentions
         ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
@@ -894,7 +896,7 @@ class MistralModel(MistralPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
-        if past_key_values is not None and (past_key_values.is_sliding or past_key_values.is_static):
+        if using_sliding_window_cache or using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
         # DynamicCache or no cache
         else:
