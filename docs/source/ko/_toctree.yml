@@ -606,8 +606,8 @@
       - local: in_translation
         title: (번역중) VideoMAE
       - local: in_translation
-        title: (번역중) Vision Transformer (ViT)
-      - local: in_translation
+        title: Vision Transformer (ViT)
+      - local: model_doc/vit
         title: (번역중) ViT Hybrid
       - local: in_translation
         title: (번역중) ViTMAE
