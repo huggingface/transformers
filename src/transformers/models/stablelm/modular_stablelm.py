@@ -25,22 +25,13 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...cache_utils import Cache
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
@@ -54,21 +45,18 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 from ..llama.modeling_llama import (
-    LlamaRotaryEmbedding,
-    LlamaLinearScalingRotaryEmbedding,
     LlamaDynamicNTKScalingRotaryEmbedding,
-    rotate_half,
-    apply_rotary_pos_emb,
-    repeat_kv,
-    LlamaModel,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-
-
+    LlamaLinearScalingRotaryEmbedding,
+    LlamaModel,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    repeat_kv,
 )
 from ..mistral.modeling_mistral import (
-   MistralMLP,
+    MistralMLP,
 )
 
 
@@ -368,7 +356,6 @@ class StableLmFlashAttention2(StableLmAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -546,7 +533,6 @@ class StableLmDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
         )
 
-        # copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer.forward
         if self.use_parallel_residual:
             # x = x + attn(ln1(x)) + mlp(ln1(x))
             # Fully Connected
@@ -580,7 +566,6 @@ STABLELM_INPUTS_DOCSTRING = None
 
 
 class StableLmModel(LlamaModel):
-
     def __init__(self, config: StableLmConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -589,7 +574,6 @@ class StableLmModel(LlamaModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = StableLmRotaryEmbedding(config=config)
         self.post_init()
-
 
 
 class StableLmForCausalLM(LlamaForCausalLM):
