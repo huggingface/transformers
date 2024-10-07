@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import pickle
 import shutil
 import tempfile
@@ -34,8 +35,7 @@ from transformers.testing_utils import (
     require_torch,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin, SMALL_TRAINING_CORPUS
-import inspect
+from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -314,10 +314,11 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_alignement_methods(self):
         # TODO: @ArthurZucker - alignment is broken
         pass
-    
+
     def test_added_tokens_do_lower_case(self):
         # TODO: @ArthurZucker
         pass
+
 
 @require_torch
 @require_sentencepiece
