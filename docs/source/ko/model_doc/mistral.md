@@ -169,7 +169,7 @@ pip install -U flash-attn --no-build-isolation
 "The expected output"
 ```
 
-이 모델은 [Younes Belkada](https://huggingface.co/ybelkada)와 [Arthur Zucker](https://huggingface.co/ArthurZ)에 의해 기여 되었습니다.
+이 모델은 [Younes Belkada](https://huggingface.co/ybelkada)와 [Arthur Zucker](https://huggingface.co/ArthurZ)가 기여했습니다.
 원본 코드는 [이곳](https://github.com/mistralai/mistral-src)에서 확인할 수 있습니다.
 
 ## 리소스[[resources]]
