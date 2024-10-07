@@ -1994,10 +1994,6 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
 
     def test_absence_of_safetensors_triggers_conversion(self):
-        from transformers.utils.logging import set_verbosity_debug
-
-        set_verbosity_debug()
-
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
