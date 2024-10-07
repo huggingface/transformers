@@ -75,6 +75,6 @@ pipeline("Hey how are you doing today?")
 
 - `attn_implementation="flash_attention_2"`를 통해서 플래시 어텐션2를 사용할 때, `from_pretrained` 클래스 메서드에 `torch_dtype`를 전달하지 말고 자동 혼합 정밀도(Automatic Mixed-Precision) 학습을 사용하세요. `Trainer`를 사용할 때는 단순히 `fp16` 또는 `bf16`을 `True`로 설정하면 됩니다. 그렇지 않으면 반드시 `torch.autocast`를 사용해야 합니다. 플래시 어텐션은 `fp16`과 `bf16` 데이터 유형만 지원하기 때문입니다.
 
-## 리소스[[resources]]
+## 자료[[resources]]
 
 많은 멋진 자료들이 이미 [라마2](./llama2) 문서 페이지에서 제공되고 있으며, 여기에서 라마3를 위한 새로운 자료를 추가하도록 기여자들을 초대합니다! 🤗
