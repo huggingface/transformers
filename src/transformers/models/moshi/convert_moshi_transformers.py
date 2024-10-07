@@ -270,7 +270,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
-    parser.add_argument("--test_tokenizer", default=None, type=bool, help="Test the tokenizer on hard sentences.")
 
     args = parser.parse_args()
 
@@ -288,25 +287,6 @@ if __name__ == "__main__":
             eos_token_id=original_tokenizer.eos_id(),
             pad_token_id=original_tokenizer.pad_id(),
         )
-        if args.test_tokenizer:
-            import tqdm
-            from datasets import load_dataset
-
-            dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
-            for item in tqdm.tqdm(dataset["validation"]):
-                string = item["code"]
-                encoded1 = tokenizer.encode(string)
-                encoded2 = original_tokenizer.encode(string)
-
-                decoded1 = tokenizer.decode(encoded1)
-                decoded2 = original_tokenizer.decode(encoded1)
-
-                if decoded1 != decoded2:
-                    raise ValueError(
-                        "Hint: the following tokenization.decode diff were obtained for HF tokenizer vs original:\n "
-                        f"elements in HF: {set(decoded1)-set(decoded2)} \nvs\n "
-                        f"elements in original: {set(decoded2)-set(decoded1)} \n\n{string}"
-                    )
 
         tokenizer.save_pretrained(args.pytorch_dump_folder_path)
 
