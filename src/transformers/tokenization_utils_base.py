@@ -2268,7 +2268,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if key != "additional_special_tokens":
                     init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
 
-
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
