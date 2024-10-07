@@ -52,6 +52,13 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-object-detection).
     """
 
+    _load_processor = True
+
+    # set to False because required sub-processors will be loaded with the `Processor` class
+    _load_tokenizer = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
