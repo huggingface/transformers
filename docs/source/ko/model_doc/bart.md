@@ -111,7 +111,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 - [질문 답변 작업 가이드](../tasks/question_answering)
 - [인과적 언어 모델링 작업 가이드](../tasks/language_modeling)
-- 이 [논문](https://arxiv.org/abs/2010.13002)에서는 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
+- 이 [논문](https://arxiv.org/abs/2010.13002)은 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
 
 ## BartConfig[[transformers.BartConfig]]
 
