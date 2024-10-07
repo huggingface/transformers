@@ -678,6 +678,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.function_call_class_mapping = defaultdict(lambda: set())
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
+        self.added_dependencies = set()
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -821,6 +822,7 @@ class ModularConverterTransformer(CSTTransformer):
                         node = self.all_definitions.pop(dependency, node)
                         start_insert_idx -= 1
                         file_to_update[dependency] = {"insert_idx": start_insert_idx, "node": node}
+                        self.added_dependencies.add(dependency)
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
@@ -973,36 +975,51 @@ class ModularConverterTransformer(CSTTransformer):
                     new_body = list(dependency_imports[file].values()) + new_body
                 new_module = cst.Module(body=[*new_body], header=node.header)
                 # Final cleanup
-                new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner())
+                new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner(self.added_dependencies))
                 self.files[file] = new_module
         return node
 
 
 class PostModularConverterCleaner(CSTTransformer):
-    """Allow simple cleaning after conversion. Remove top-level functions without any calls (they may arise due
-    to dependency mapping, even if code parts with those functions calls were overwritten)"""
+    """Allow simple cleaning after conversion. Remove top-level functions/classes without any calls (they may arise due
+    to dependency mapping, even if code parts with those functions/classes were overwritten)"""
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self):
+    def __init__(self, added_dependencies: set):
         super().__init__()
-        self.top_level_functions = {}
-        self.function_calls = set()
+        self.top_level_functions_or_classes = {}
+        self.all_used_functions_or_classes = set()
+        self.added_dependencies = added_dependencies
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         if m.matches(parent_node, m.Module()):
-            self.top_level_functions[node.name.value] = node
+            self.top_level_functions_or_classes[node.name.value] = node
 
-    def visit_Call(self, node: cst.Call):
-        # Simple function calls such as foo()
-        if isinstance(node.func, cst.Name):
-            # Add the current class to the set corresponding to the function call
-            self.function_calls.add(node.func.value)
+    def visit_ClassDef(self, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            self.top_level_functions_or_classes[node.name.value] = node
+
+    def visit_Name(self, node: cst.Name):
+        """This is used to find any mention of a top-level function or class except its own definition.
+        It will contain other names as well, but those will not be used.
+        """
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+
+        if not (
+            (m.matches(parent_node, m.ClassDef()) and parent_node.name.value == node.value)
+            or (m.matches(parent_node, m.FunctionDef()) and parent_node.name.value == node.value)
+        ):
+            self.all_used_functions_or_classes.add(node.value)
 
     def leave_Module(self, original_node: cst.Module, node):
-        unused_functions = set(self.top_level_functions.keys()) - self.function_calls
-        nodes_to_remove = [self.top_level_functions[func] for func in unused_functions]
+        # Find any class/function that was mistakenly added as part of the dependencies and remove it
+        unused = self.added_dependencies - self.all_used_functions_or_classes
+        nodes_to_remove = [
+            self.top_level_functions_or_classes[name] for name in unused if name in self.top_level_functions_or_classes
+        ]
         new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
         # Return a new module with the updated body
         return node.with_changes(body=new_body)
