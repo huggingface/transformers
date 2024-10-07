@@ -319,7 +319,7 @@ class Seq2SeqTrainer(Trainer):
         summon_full_params_context = (
             FullyShardedDataParallel.summon_full_params(self.model)
             if isinstance(self.model, FullyShardedDataParallel)
-            else contextlib.contextmanager()
+            else contextlib.nullcontext()
         )
 
         with summon_full_params_context:
