@@ -15,6 +15,7 @@
 
 import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+import numpy as np
 
 import torch
 
@@ -176,6 +177,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
+        self.probs = []
+        self.matches = []
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -227,6 +230,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
+        if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
+            self.assistant_model.generation_config.assistant_confidence_threshold > 0:
+            for i, score in enumerate(assistant_output.scores):
+                id = assistant_output.sequences[-1,i-len(assistant_output.scores)]
+                probs = score.softmax(-1)
+                p = probs[0,id].item()
+                self.probs.append(p)
+
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
@@ -256,6 +267,35 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+        if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
+            self.assistant_model.generation_config.assistant_confidence_threshold > 0:
+            self.matches.extend(num_matches*[1])
+            self.matches.extend([0]*(len(self.probs)-len(self.matches)))
+            # print(f"{num_matches=}")
+            # print(f"{self.probs=}")
+            # print(f"{self.matches=}")
+            if len(self.probs) > 5:
+                thresholds = np.unique(self.probs)
+                best_threshold = thresholds[0]
+                best_accuracy = 0
+
+                # Loop over possible thresholds
+                for threshold in thresholds:
+                    # Classify scores based on the current threshold
+                    predictions = self.probs >= threshold  # accepted if >= threshold, rejected otherwise
+                    
+                    # Calculate accuracy
+                    accuracy = np.mean(predictions == self.matches)
+                    
+                    # Update the best threshold if accuracy improves
+                    if accuracy > best_accuracy:
+                        best_accuracy = accuracy
+                        best_threshold = threshold
+
+                # Display the best threshold and corresponding accuracy
+                #print("Optimal Threshold:", best_threshold)
+                #print("Best Accuracy:", best_accuracy)
+                self.assistant_model.generation_config.assistant_confidence_threshold = max(0,best_threshold-0.2)
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
