@@ -198,6 +198,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonModel"),
         ("phi", "PhiModel"),
         ("phi3", "Phi3Model"),
+        ("phimoe", "PhimoeModel"),
         ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
@@ -283,6 +284,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("zamba", "ZambaModel"),
     ]
 )
 
@@ -518,6 +520,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonForCausalLM"),
         ("phi", "PhiForCausalLM"),
         ("phi3", "Phi3ForCausalLM"),
+        ("phimoe", "PhimoeForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
         ("prophetnet", "ProphetNetForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
@@ -544,6 +547,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlnet", "XLNetLMHeadModel"),
         ("xmod", "XmodForCausalLM"),
+        ("zamba", "ZambaForCausalLM"),
     ]
 )
 
@@ -948,6 +952,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonForSequenceClassification"),
         ("phi", "PhiForSequenceClassification"),
         ("phi3", "Phi3ForSequenceClassification"),
+        ("phimoe", "PhimoeForSequenceClassification"),
         ("plbart", "PLBartForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("qwen2", "Qwen2ForSequenceClassification"),
@@ -971,6 +976,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForSequenceClassification"),
         ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
+        ("zamba", "ZambaForSequenceClassification"),
     ]
 )
 

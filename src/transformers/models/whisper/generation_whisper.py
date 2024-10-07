@@ -998,7 +998,10 @@ class WhisperGenerationMixin(GenerationMixin):
                     for v in range(len(values)):
                         layer_past_key_values = []
                         for w in values[v]:
-                            layer_past_key_values.append(w[batch_idx][None].cpu())
+                            if len(w) != 0:
+                                layer_past_key_values.append(w[batch_idx][None].cpu())
+                            else:
+                                layer_past_key_values.append(w)
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return tuple(all_past_key_values)
 

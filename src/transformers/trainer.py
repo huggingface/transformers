@@ -599,11 +599,11 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if (self.is_deepspeed_enabled or self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
+        if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
-                "Passing `optimizers` is not allowed if Deepspeed or PyTorch FSDP is enabled. "
+                "Passing `optimizers` is not allowed if PyTorch FSDP is enabled. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -741,6 +741,13 @@ class Trainer:
     def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
         logger.warning("Trainer.tokenizer is now deprecated. You should use Trainer.processing_class instead.")
         return self.processing_class
+
+    @tokenizer.setter
+    def tokenizer(self, processing_class) -> None:
+        logger.warning(
+            "Trainer.tokenizer is now deprecated. You should use `Trainer.processing_class = processing_class` instead."
+        )
+        self.processing_class = processing_class
 
     def _activate_neftune(self, model):
         r"""
