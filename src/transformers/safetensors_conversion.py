@@ -1,5 +1,3 @@
-import json
-import uuid
 from typing import Optional
 
 import requests
@@ -31,14 +29,14 @@ def spawn_conversion(token: str, private: bool, model_id: str):
     def start(_sse_connection):
         for line in _sse_connection.iter_lines():
             line = line.decode()
-            if line.startswith('event:'):
+            if line.startswith("event:"):
                 status = line[7:]
                 logger.debug(f"Safetensors conversion status: {status}")
 
-                if status == 'complete':
+                if status == "complete":
                     return
-                elif status == 'heartbeat':
-                    logger.debug('Heartbeat')
+                elif status == "heartbeat":
+                    logger.debug("Heartbeat")
                 else:
                     logger.debug(f"Unknown status {status}")
             else:
@@ -47,9 +45,9 @@ def spawn_conversion(token: str, private: bool, model_id: str):
     data = {"data": [model_id, private, token]}
 
     result = requests.post(sse_url, stream=True, json=data).json()
-    event_id = result['event_id']
+    event_id = result["event_id"]
 
-    with requests.get(f'{sse_url}/{event_id}', stream=True) as sse_connection:
+    with requests.get(f"{sse_url}/{event_id}", stream=True) as sse_connection:
         try:
             logger.debug("Spawning safetensors automatic conversion.")
             start(sse_connection)
@@ -82,7 +80,7 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
 
 def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
     try:
-        api = HfApi(token=cached_file_kwargs.get("token"), headers={'user-agent': http_user_agent()})
+        api = HfApi(token=cached_file_kwargs.get("token"), headers={"user-agent": http_user_agent()})
         sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
 
         if sha is None:
