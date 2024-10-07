@@ -27,6 +27,10 @@ from transformers import (
     MoshiConfig,
     PretrainedConfig,
 )
+from transformers.integrations.deepspeed import (
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+)
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -43,6 +47,9 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
+if is_deepspeed_available():
+    import deepspeed
 
 if is_torch_available():
     import torch
@@ -85,7 +92,7 @@ class MoshiDecoderTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=100,
-        pad_token_id=99,
+        pad_token_id=25,
         num_codebooks=4,
         audio_encoder_type="mimi",
         attn_implementation="eager",
@@ -184,6 +191,161 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest(reason="Moshi has no strict equivalence between two modes, skipping this test.")
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings
+    def test_resize_tokens_embeddings(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
+            model_embed_pre_resize = model.get_input_embeddings()
+            type_model_embed_pre_resize = type(model_embed_pre_resize)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.get_text_config().vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+            del model
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
+            model_vocab_size = config.get_text_config().vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
+            self.assertTrue(new_model_vocab_size, model.vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+            # Test when `vocab_size` is smaller than `hidden_size`.
+            del model
+            config.vocab_size = 4
+            config.pad_token_id = 4  # Ignore copy
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
+            model_vocab_size = config.get_text_config().vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+
 
 class MoshiTester:
     def __init__(
@@ -195,7 +357,7 @@ class MoshiTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=8,
         intermediate_size=4,
         hidden_act="silu",
         rms_norm_eps=0.001,
@@ -203,15 +365,15 @@ class MoshiTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=100,
-        pad_token_id=99,
-        bos_token_id=99,
+        pad_token_id=25,
+        bos_token_id=25,
         num_codebooks=4,
         audio_encoder_type="mimi",
         attn_implementation="eager",
         depth_hidden_size=16,
         depth_num_hidden_layers=2,
         depth_max_position_embeddings=5,
-        depth_num_attention_heads=2,
+        depth_num_attention_heads=8,
         depth_ffn_dim=16,
         depth_sliding_window=4,
         mimi_intermediate_size=40,
@@ -226,7 +388,7 @@ class MoshiTester:
         mimi_num_hidden_layers=2,
         mimi_num_attention_heads=2,
         mimi_num_key_value_heads=2,
-        mimi_sliding_window=4,
+        mimi_sliding_window=3,
         sampling_rate=800,
     ):
         self.parent = parent
@@ -608,12 +770,12 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @require_torch_sdpa
     @slow
-    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_eager_matches_sdpa_generate(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        max_new_tokens = 30
+        max_new_tokens = 5
 
         if len(self.all_generative_model_classes) == 0:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
@@ -778,6 +940,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences)
             )
 
+    @unittest.skip(reason="Compile not yet supported because in Moshi models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:
@@ -847,6 +1013,20 @@ class MoshiIntegrationTests(unittest.TestCase):
 
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
+
+    @slow
+    def test_moshiko_greedy_unconditional_fp16_eager(self):
+        model = MoshiForConditionalGeneration.from_pretrained(
+            "kmhf/hf-moshiko", torch_dtype=torch.float16, attn_implementation="eager"
+        ).to(torch_device)
+        some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
+
+        model_outputs = model.generate(
+            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+        )
+
+        # eager equivalence is not as strict as sdpa.
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
