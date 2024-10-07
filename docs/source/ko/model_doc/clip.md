@@ -171,7 +171,7 @@ model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=to
 |                 32 |                16 |            0.19  |          0.162 |         1.177 |           0.154 |          1.233 |
 |                 32 |                64 |            0.216 |          0.181 |         1.19  |           0.176 |          1.228 |
 
-## 리소스[[resources]]
+## 자료[[resources]]
 
 CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목록(🌎로 표시됨) 입니다.
 
