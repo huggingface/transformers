@@ -1016,6 +1016,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
+                logger.warning_once(
+                    "The final logits were masked using attention mask before calculating the loss. "
+                    "This behavior will be removed in v4.48, you should be masking the `labels` with `-100` "
+                    "in data collator before training starts."
+                )
                 shift_attention_mask = attention_mask[..., 1:]
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
