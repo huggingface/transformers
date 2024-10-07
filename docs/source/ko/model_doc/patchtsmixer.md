@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # PatchTSMixer[[patchtsmixer]]
 
-## Overview[[overview]]
+## 개요[[overview]]
 
 PatchTSMixer 모델은 Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong, Jayant Kalagnanam이 제안한 [TSMixer: 다변량 시계열 예측을 위한 경량 MLP-Mixer 모델](https://arxiv.org/pdf/2306.09364.pdf)이라는 논문에서 소개되었습니다.
 
@@ -30,7 +30,7 @@ PatchTSMixer는 MLP-Mixer 아키텍처를 기반으로 한 경량 시계열 모�
 
 이 모델은 [ajati](https://huggingface.co/ajati), [vijaye12](https://huggingface.co/vijaye12), 
 [gsinthong](https://huggingface.co/gsinthong), [namctin](https://huggingface.co/namctin),
-[wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)에 의해 기여 되었습니다.
+[wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)가 기여했습니다.
 
 ## Usage example[[usage-example]]
 
