@@ -26,7 +26,7 @@ pipeline = transformers.pipeline("text-generation", model=model_id, model_kwargs
 pipeline("Hey how are you doing today?")
 ```
 
-## 오버뷰[[overview]]
+## 개요[[overview]]
 
 라마3 모델은 Meta AI 팀이 제안한 [메타 라마3 소개: 현재까지 가장 유능한 공개 가능 LLM](https://ai.meta.com/blog/meta-llama-3/)에서 소개되었습니다.
 
