@@ -1024,7 +1024,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                     "This behavior will be removed in v4.48, you should be masking the `labels` with `-100` "
                     "in data collator before training starts."
                 )
-                shift_attention_mask = attention_mask[..., 1:]
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
