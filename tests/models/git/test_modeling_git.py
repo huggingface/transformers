@@ -614,3 +614,38 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # CLIP family models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = GitModel.from_pretrained("microsoft/git-base").to(torch_device)
+
+        processor = GitProcessor.from_pretrained(
+            "microsoft/git-base", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 130, 768))
+
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-1.0296, 2.5960, 0.8703], [1.7027, 1.3302, -0.4543], [-1.4932, -0.1084, 0.0502]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
