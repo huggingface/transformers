@@ -38,7 +38,7 @@ Trajectory Transformer 모델은 Michael Janner, Qiyang Li, Sergey Levine이 제
 이 모델은 [CarlCochet](https://huggingface.co/CarlCochet)에 의해 기여되었습니다.
 원본 코드는 [이곳](https://github.com/jannerm/trajectory-transformer)에서 확인할 수 있습니다.
 
-## 사용팁[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 이 트랜스포머는 심층 강화학습에 사용됩니다. 사용하려면 이전의 모든 타임스텝에서의 행동, 상태, 보상으로부터 시퀀스를 생성해야 합니다. 이 모델은 이 모든 요소를 함께 하나의 큰 시퀀스(궤적)로 취급합니다.
 
