@@ -862,9 +862,7 @@ class SpecialTokensMixin:
         self._pad_token_type_id = 0
         self.verbose = verbose
         self._special_tokens_map = {attr: None for attr in self.SPECIAL_TOKENS_ATTRIBUTES}
-        self._special_tokens_map.update({f"{attr}_id": None for attr in self.SPECIAL_TOKENS_ATTRIBUTES})
-        self._special_tokens_map["additional_special_tokens"] = []
-        self._special_tokens_map["additional_special_tokens_ids"] = []
+        self._special_tokens_map["additional_special_tokens"] = []  # for BC where it defaults to empty list
 
         # We directly set the hidden value to allow initialization with special tokens
         # which are not yet in the vocabulary. Necessary for serialization/de-serialization
@@ -1058,18 +1056,22 @@ class SpecialTokensMixin:
         return self._pad_token_type_id
 
     def __setattr__(self, key, value):
-        if self.__dict__.get("_special_tokens_map", None) is not None and (
-            key in self._special_tokens_map or f"{key}_id" in self._special_tokens_map
+        key_without_id = key
+        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        if key_is_special_id:
+            key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
+
+        if self.__dict__.get("_special_tokens_map", None) is not None and any(
+            name in self.__dict__["_special_tokens_map"] for name in [key, key_without_id]
         ):
-            if key.endswith("_id") or key.endswith("_ids"):
-                # self._check_token_id(value)
+            if key_is_special_id:
                 if value is not None:
                     value = (
                         self.convert_ids_to_tokens(value)
                         if key != "additional_special_tokens"
                         else [self.convert_ids_to_tokens(val) for val in value]
                     )
-                key = key[:-3] if not key.endswith("_ids") else key[:-4]
+                key = key_without_id
 
             if key != "additional_special_tokens" and not isinstance(value, (str, AddedToken)) and value is not None:
                 raise ValueError(f"Cannot set a non-string value as the {key}")
@@ -1078,11 +1080,16 @@ class SpecialTokensMixin:
             super().__setattr__(key, value)
 
     def __getattr__(self, key):
-        if self.__dict__.get("_special_tokens_map", None) is not None and (
-            key in self.__dict__["_special_tokens_map"] or f"{key}_id" in self.__dict__["_special_tokens_map"]
+        key_without_id = key
+        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        if key_is_special_id:
+            key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
+
+        if self.__dict__.get("_special_tokens_map", None) is not None and any(
+            name in self.__dict__["_special_tokens_map"] for name in [key, key_without_id]
         ):
             _special_tokens_map = self.__dict__["_special_tokens_map"]
-            if not key.endswith("_id") and not key.endswith("_ids"):
+            if not key_is_special_id:
                 if _special_tokens_map[key] is None:
                     if self.verbose:
                         logger.error(f"Using {key}, but it is not set yet.")
@@ -1090,8 +1097,7 @@ class SpecialTokensMixin:
                 value = _special_tokens_map[key]
                 return str(value) if key != "additional_special_tokens" else [str(tok) for tok in value]
             else:
-                key = key[:-3] if not key.endswith("_ids") else key[:-4]
-                attr_as_tokens = getattr(self, key)
+                attr_as_tokens = getattr(self, key_without_id)
                 return self.convert_tokens_to_ids(attr_as_tokens)
         else:
             super().__getattr__(key)
@@ -1166,6 +1172,19 @@ class SpecialTokensMixin:
         all_toks = self.all_special_tokens
         all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
+
+    def _set_model_specific_special_tokens(self, special_tokens: List[str]):
+        """
+        Adds new special tokens to the "SPECIAL_TOKENS_ATTRIBUTES" list which will be part
+        of "self.special_tokens" and saved as a special token in tokenizer's config.
+        This allows us to dynamically add new model-type specific tokens after initilizing the tokenizer.
+        For example: if the model tokenizers is multimodal, we can support special image or audio tokens.
+        """
+        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + special_tokens
+        self._special_tokens_map.update({token: None for token in special_tokens})
+        for key, value in self.init_kwargs.items():
+            if key in special_tokens and isinstance(value, (str, AddedToken)):
+                self._special_tokens_map[key] = value
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
@@ -1353,41 +1372,6 @@ INIT_TOKENIZER_DOCSTRING = r"""
 """
 
 
-def multimodal_tokenizer_decorator(from_pretrained_method):
-    def wrapper(self, *args, **kwargs):
-        base_tokenizer_class = from_pretrained_method(self, *args, **kwargs)
-        if getattr(base_tokenizer_class, "is_multimodal", False):
-            logger.info(
-                "The current tokenizer belongs to a MultiModal model, The loaded tokenizer class will be a `MultiModalTokenizer` instance",
-                "with extra special tokens for the modality supported, e.g. `image_token` or `boi_token`.",
-            )
-            IMAGE_SPECIAL_TOKENS_ATTRIBUTES = [
-                "image_token",
-                "boi_token",
-                "eoi_token",
-            ]
-            base_tokenizer_class.SPECIAL_TOKENS_ATTRIBUTES = (
-                base_tokenizer_class.SPECIAL_TOKENS_ATTRIBUTES + IMAGE_SPECIAL_TOKENS_ATTRIBUTES
-            )
-            base_tokenizer_class._special_tokens_map.update(
-                {
-                    "image_token": None,
-                    "boi_token": None,
-                    "eoi_token": None,
-                    "image_token_id": None,
-                    "boi_token_id": None,
-                    "eoi_token_id": None,
-                }
-            )
-            for key, value in base_tokenizer_class.init_kwargs.items():
-                if key in IMAGE_SPECIAL_TOKENS_ATTRIBUTES and isinstance(value, (str, AddedToken)):
-                    base_tokenizer_class._special_tokens_map[key] = value
-            return base_tokenizer_class
-        return base_tokenizer_class
-
-    return wrapper
-
-
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     """
@@ -1456,6 +1440,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
         super().__init__(**kwargs)
+
+        if self.is_multimodal:
+            extra_special_tokens = ["image_token", "boi_token", "eoi_token"]
+            self._set_model_specific_special_tokens(special_tokens=extra_special_tokens)
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1795,7 +1783,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return chat_template
 
     @classmethod
-    @multimodal_tokenizer_decorator
     def from_pretrained(
         cls,
         pretrained_model_name_or_path: Union[str, os.PathLike],
