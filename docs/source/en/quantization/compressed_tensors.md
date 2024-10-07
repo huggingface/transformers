@@ -21,7 +21,7 @@ Some of the supported formats include:
 1. `dense`
 2. `int-quantized` ([sample](https://huggingface.co/nm-testing/tinyllama-w8a8-compressed-hf-quantizer)): INT8 quantized models
 3. `float-quantized` ([sample](https://huggingface.co/nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat)): FP8 quantized models; currently support E4M3
-4. `pack-quantized` ([sample](nm-testing/tinyllama-w4a16-compressed-hf-quantizer)): INT4 or INT8 weight-quantized models, packed into INT32. For INT4, the weights have an INT4 range but are stored as INT8 and then packed into INT32.
+4. `pack-quantized` ([sample](https://huggingface.co/nm-testing/tinyllama-w4a16-compressed-hf-quantizer)): INT4 or INT8 weight-quantized models, packed into INT32. For INT4, the weights have an INT4 range but are stored as INT8 and then packed into INT32.
 
 Compressed models can be easily created using [llm-compressor](https://github.com/vllm-project/llm-compressor).
 Alternatively models can be created independently and serialized with a compressed tensors config.
