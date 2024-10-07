@@ -15,7 +15,7 @@
 # limitations under the License.
 
 import re
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 import numpy as np
 from tqdm import tqdm
