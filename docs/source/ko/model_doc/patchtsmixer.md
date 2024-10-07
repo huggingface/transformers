@@ -32,7 +32,7 @@ PatchTSMixer는 MLP-Mixer 아키텍처를 기반으로 한 경량 시계열 모�
 [gsinthong](https://huggingface.co/gsinthong), [namctin](https://huggingface.co/namctin),
 [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)가 기여했습니다.
 
-## Usage example[[usage-example]]
+## 사용 예[[usage-example]]
 
 아래의 코드 스니펫은 PatchTSMixer 모델을 무작위로 초기화하는 방법을 보여줍니다. 
 PatchTSMixer 모델은 [Trainer API](../trainer.md)와 호환됩니다.
@@ -52,11 +52,11 @@ trainer.train()
 results = trainer.evaluate(test_dataset)
 ```
 
-## Usage tips[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 이 모델은 시계열 분류와 시계열 회귀에도 사용될 수 있습니다. 각각[`PatchTSMixerForTimeSeriesClassification`]와 [`PatchTSMixerForRegression`] 클래스를 참조하세요.
 
-## Resources[[resources]]
+## 자료[[resources]]
 
 - PatchTSMixer를 자세히 설명하는 블로그 포스트는 여기에서 찾을 수 있습니다 [이곳](https://huggingface.co/blog/patchtsmixer). 이 블로그는 Google Colab에서도 열어볼 수 있습니다.
 
