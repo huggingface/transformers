@@ -229,6 +229,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
+    from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
@@ -1674,7 +1675,10 @@ class Trainer:
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
-            self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
+            self.args.deepspeed_plugin = None
+
+            if AcceleratorState._shared_state != {}:
+                AcceleratorState().deepspeed_plugins = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
 
         self.create_accelerator_and_postprocess()
 
