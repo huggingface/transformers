@@ -61,7 +61,7 @@ CLIP은 멀티모달 비전 밒 언어 모델입니다. 이미지-텍스트 유�
 
 ### CLIP과 플래시 어텐션2 결합[[combining-clip-and-flash-attention-2]]
 
-우선 최신버전의 플래시 어텐션2를 설치합니다.
+먼저 최신버전의 플래시 어텐션2를 설치합니다.
 
 ```bash
 pip install -U flash-attn --no-build-isolation
