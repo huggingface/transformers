@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 시계열 트랜스포머[[time-series-transformer]]
 
-## Overview[[overview]]
+## 개요[[overview]]
 
 이 시계열 트랜스포머 모델은 시계열 예측을 위한 기본적인 인코더-디코더 구조의 트랜스포머 입니다.
 이 모델은 [kashif](https://huggingface.co/kashif)에 의해 기여되었습니다.
