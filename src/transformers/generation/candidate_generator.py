@@ -263,8 +263,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """
-    `CandidateGenerator` class to be used for assisted generation and speculative decoding when using different tokenizers for the assistant and target models. This class generates candidates through the use of a smaller model. Read the following blog post for more information:
-    https://huggingface.co/blog/assisted-generation
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding when using different
+    tokenizers for the assistant and target models. This class generates candidates through the use of a smaller
+    model.
 
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
