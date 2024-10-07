@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeBERTa[[deberta]]
 
-## 오버뷰[[overview]]
+## 개요[[overview]]
 
 
 DeBERTa 모델은 Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen이 작성한 [DeBERTa: 분리된 어텐션을 활용한 디코딩 강화 BERT](https://arxiv.org/abs/2006.03654)이라는 논문에서 제안되었습니다. 이 모델은 2018년 Google이 발표한 BERT 모델과 2019년 Facebook이 발표한 RoBERTa 모델을 기반으로 합니다.
