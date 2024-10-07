@@ -40,7 +40,7 @@ rendered properly in your Markdown viewer.
 
 `미스트랄-7B`는 아파치 2.0 라이선스로 출시되었습니다.
 
-## 사용팁[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 미스트랄 AI팀은 다음 3가지 체크포인트를 공개했습니다:
 
