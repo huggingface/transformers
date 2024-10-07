@@ -40,7 +40,9 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-- For better results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. For that you need to construct a conversation history, passing in a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
+### Single image inference
+
+For best results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. For that you need to construct a conversation history, passing in a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
 
 ```python
 from transformers import AutoProcessor
@@ -75,6 +77,60 @@ print(text_prompt)
 >>> "USER: <image>\n<What’s shown in this image? ASSISTANT: This image shows a red stop sign.</s>USER: Describe the image in more details. ASSISTANT:"
 ```
 
+### Batched inference
+
+LLaVa also supports batched inference. Here is how you can do it:
+
+```python
+import requests
+from PIL import Image
+import torch
+from transformers import AutoProcessor, LLavaForConditionalGeneration
+
+# Load the model in half-precision
+model = LLavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+# Get two different images
+url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+image_stop = Image.open(requests.get(url, stream=True).raw)
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image_cats = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a batch of two prompts
+conversation_1 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+
+conversation_2 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+
+prompt_1 = processor.apply_chat_template(conversation_1, add_generation_prompt=True)
+prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=True)
+prompts = [prompt_1, prompt_2]
+
+# We can simply feed images in the order they have to be used in the text prompt
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
+
+# Generate
+generate_ids = model.generate(**inputs, max_new_tokens=30)
+processor.batch_decode(generate_ids, skip_special_tokens=True)
+```
+
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by each llava checkpoint:
 
 [llava-interleave models](https://huggingface.co/collections/llava-hf/llava-interleave-668e19a97da0036aad4a2f19) requires the following format:
@@ -98,7 +154,6 @@ For multiple turns conversation:
 ```bash
 "USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
-
 
 ### Using Flash Attention 2
 
