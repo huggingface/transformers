@@ -131,3 +131,23 @@ class DepthEstimationPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         # This is highly irregular to have no small tests.
         self.skipTest(reason="There is not hf-internal-testing tiny model for either GLPN nor DPT")
+
+    @require_torch
+    def test_multiprocess(self):
+        depth_estimator = pipeline(
+            model="hf-internal-testing/tiny-random-DepthAnythingForDepthEstimation",
+            num_workers=2,
+        )
+        outputs = depth_estimator(
+            [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        )
+        self.assertEqual(
+            [
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
+            ],
+            outputs,
+        )
