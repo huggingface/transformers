@@ -29,7 +29,7 @@ alt="drawing" width="600"/>
 
 이 모델은 [Molbap](https://huggingface.co/Molbap)에 의해 기여 되었습니다.
 
-## 사용팁[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 PaliGemma의 추론은 다음처럼 수행됩니다:
 
