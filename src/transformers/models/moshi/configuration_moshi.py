@@ -150,7 +150,8 @@ class MoshiConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Moshiko model,
+    e.g. [kmhf/hf-moshiko](https://huggingface.co/kmhf/hf-moshiko)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

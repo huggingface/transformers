@@ -161,6 +161,10 @@ The original code can be found [here](https://github.com/kyutai-labs/moshi).
 
 [[autodoc]] MoshiConfig
 
+## MoshiDepthConfig
+
+[[autodoc]] MoshiDepthConfig
+
 ## MoshiModel
 
 [[autodoc]] MoshiModel
