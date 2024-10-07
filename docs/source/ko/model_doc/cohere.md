@@ -18,7 +18,7 @@ The Cohere Command-R 모델은 Cohere팀이 [Command-R: 프로덕션 규모의 �
 모델 체크포인트는 [이곳](https://huggingface.co/CohereForAI/c4ai-command-r-v01)에서 확인하세요.
 이 모델은 [Saurabh Dash](https://huggingface.co/saurabhdash)과 [Ahmet Üstün](https://huggingface.co/ahmetustun)에 의해 기여 되었습니다. Hugging Face에서 이 코드의 구현은 [GPT-NeoX](https://github.com/EleutherAI/gpt-neox)에 기반하였습니다.
 
-## 사용팁[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 <Tip warning={true}>
 
