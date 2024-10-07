@@ -153,6 +153,8 @@
     title: Interoperability with TikToken files
   - local: modular_transformers
     title: Modularity in `transformers`
+  - local: how_to_hack_models
+    title: Model Hacking (overwriting a class to your usage)
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -536,12 +538,8 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
-      - local: model_doc/qwen2_audio
-        title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
-      - local: model_doc/qwen2_vl
-        title: Qwen2VL
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -888,6 +886,10 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip
