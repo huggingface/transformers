@@ -190,6 +190,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    phimoe,
     phobert,
     pix2struct,
     pixtral,
@@ -280,5 +281,6 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zamba,
     zoedepth,
 )

@@ -1153,6 +1153,7 @@ JOB_TO_TEST_FILE = {
 
 
 def create_test_list_from_filter(full_test_list, out_path):
+    os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
