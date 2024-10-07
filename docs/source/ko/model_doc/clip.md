@@ -114,7 +114,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 
 ### 스케일된 내적 어텐션 (Scaled dot-product Attention(SDPA)) 사용하기[[using-scaled-dot-product-attention-sdpa]]
 
-파이토치는 `torch.nn.functional`의 일부로 네이티브 스케일된 점곱 어텐션(SPDA) 연산자를 포함하고 있습니다. 이 함수는 입력과 사용 중인 하드웨어에 따라 적용될 수 있는 여러 구현을 포함합니다. 자세한 정보는 [공식문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)나 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 페이지를 참조하세요.
+파이토치는 `torch.nn.functional`의 일부로 네이티브 스케일된 내적 어텐션(SPDA) 연산자를 포함하고 있습니다. 이 함수는 입력과 사용 중인 하드웨어에 따라 적용될 수 있는 여러 구현을 포함합니다. 자세한 정보는 [공식문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)나 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) 페이지를 참조하세요.
 
 `torch>=2.1.1`에서는 구현이 가능할 때 SDPA가 기본적으로 사용되지만, `from_pretrained()` 함수에서 `attn_implementation="sdpa"`를 설정하여 SDPA를 명시적으로 사용하도록 요청할 수도 있습니다.
 
