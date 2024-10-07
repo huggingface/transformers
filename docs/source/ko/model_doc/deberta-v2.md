@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeBERTa-v2
 
-## 오버뷰
+## 개요
 
 
 DeBERTa 모델은 Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen이 작성한 [DeBERTa: 분리된 어텐션을 활용한 디코딩 강화 BERT](https://arxiv.org/abs/2006.03654)이라는 논문에서 제안되었습니다. 이 모델은 2018년 Google이 발표한 BERT 모델과 2019년 Facebook이 발표한 RoBERTa 모델을 기반으로 합니다.
@@ -34,14 +34,14 @@ DeBERTa v2는 SuperGLUE 단일 모델 제출에 사용된 1.5B 모델을 포함�
 v2의 새로운 점:
 
 - **어휘(Vocabulary)** v2에서는 학습 데이터로부터 구축된 128K 크기의 새로운 어휘를 사용하도록 토크나이저가 변경되었습니다. GPT2 기반 토크나이저 대신, 이제는 [센텐스피스 기반](https://github.com/google/sentencepiece) 토크나이저를 사용합니다.
-- **nGiE(n그램 유도 입력 인코딩)** DeBERTa-v2 모델은 입력 토큰들의 지역적 의존성을 더 잘 학습하기 위해 첫 번째 트랜스포머 층과 함께 추가적인 합성곱 층을 사용합니다.
+- **nGiE[n그램 유도(Induced) 입력 인코딩]** DeBERTa-v2 모델은 입력 토큰들의 지역적 의존성을 더 잘 학습하기 위해 첫 번째 트랜스포머 층과 함께 추가적인 합성곱 층을 사용합니다.
 - **어텐션 층에서 위치 투영 행렬과 내용 투영 행렬 공유** 이전 실험들을 기반으로, 이는 성능에 영향을 주지 않으면서 매개변수를 절약할 수 있습니다.
 - **상대적 위치를 인코딩하기 위한 버킷 적용** DeBERTa-v2 모델은 T5와 유사하게 상대적 위치를 인코딩하기 위해 로그 버킷을 사용합니다.
 - **900M 모델 & 1.5B 모델** 900M과 1.5B, 두 가지 추가 모델 크기가 제공되며, 이는 다운스트림 작업의 성능을 크게 향상시킵니다.
 
 [DeBERTa](https://huggingface.co/DeBERTa) 모델의 텐서플로 2.0 구현은 [kamalkraj](https://huggingface.co/kamalkraj)가 기여했습니다. 원본 코드는 [이곳](https://github.com/microsoft/DeBERTa)에서 확인하실 수 있습니다.
 
-## 리소스
+## 자료
 
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 - [토큰 분류 작업 가이드](../tasks/token_classification)
