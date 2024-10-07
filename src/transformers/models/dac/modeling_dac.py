@@ -494,33 +494,37 @@ class DacPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def apply_weight_norm(self):
-        for layer in self.quantizer.quantizers:
-            nn.utils.weight_norm(layer.in_proj)
-            nn.utils.weight_norm(layer.out_proj)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
 
-        nn.utils.weight_norm(self.encoder.conv1)
-        nn.utils.weight_norm(self.encoder.conv2)
+        for layer in self.quantizer.quantizers:
+            weight_norm(layer.in_proj)
+            weight_norm(layer.out_proj)
+
+        weight_norm(self.encoder.conv1)
+        weight_norm(self.encoder.conv2)
 
         for layer in self.encoder.block:
-            nn.utils.weight_norm(layer.conv1)
-            nn.utils.weight_norm(layer.res_unit1.conv1)
-            nn.utils.weight_norm(layer.res_unit1.conv2)
-            nn.utils.weight_norm(layer.res_unit2.conv1)
-            nn.utils.weight_norm(layer.res_unit2.conv2)
-            nn.utils.weight_norm(layer.res_unit3.conv1)
-            nn.utils.weight_norm(layer.res_unit3.conv2)
+            weight_norm(layer.conv1)
+            weight_norm(layer.res_unit1.conv1)
+            weight_norm(layer.res_unit1.conv2)
+            weight_norm(layer.res_unit2.conv1)
+            weight_norm(layer.res_unit2.conv2)
+            weight_norm(layer.res_unit3.conv1)
+            weight_norm(layer.res_unit3.conv2)
 
-        nn.utils.weight_norm(self.decoder.conv1)
-        nn.utils.weight_norm(self.decoder.conv2)
+        weight_norm(self.decoder.conv1)
+        weight_norm(self.decoder.conv2)
 
         for layer in self.decoder.block:
-            nn.utils.weight_norm(layer.conv_t1)
-            nn.utils.weight_norm(layer.res_unit1.conv1)
-            nn.utils.weight_norm(layer.res_unit1.conv2)
-            nn.utils.weight_norm(layer.res_unit2.conv1)
-            nn.utils.weight_norm(layer.res_unit2.conv2)
-            nn.utils.weight_norm(layer.res_unit3.conv1)
-            nn.utils.weight_norm(layer.res_unit3.conv2)
+            weight_norm(layer.conv_t1)
+            weight_norm(layer.res_unit1.conv1)
+            weight_norm(layer.res_unit1.conv2)
+            weight_norm(layer.res_unit2.conv1)
+            weight_norm(layer.res_unit2.conv2)
+            weight_norm(layer.res_unit3.conv1)
+            weight_norm(layer.res_unit3.conv2)
 
     def remove_weight_norm(self):
         for layer in self.quantizer.quantizers:

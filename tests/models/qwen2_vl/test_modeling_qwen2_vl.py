@@ -58,11 +58,11 @@ class Qwen2VLVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=8,
+        batch_size=2,
         seq_length=7,
         num_channels=3,
         ignore_index=-100,
-        image_size=28,
+        image_size=14,
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
@@ -90,7 +90,7 @@ class Qwen2VLVisionText2TextModelTester:
             "mlp_ratio": 4,
             "num_heads": 4,
             "patch_size": 14,
-            "spatial_merge_size": 2,
+            "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
         rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
@@ -119,9 +119,10 @@ class Qwen2VLVisionText2TextModelTester:
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
-        self.seq_length = seq_length
         self.is_training = is_training
         self.vocab_size = vocab_size
+        self.num_image_tokens = 32
+        self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return Qwen2VLConfig(
@@ -162,23 +163,19 @@ class Qwen2VLVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        vision_seqlen = pixel_values.shape[0] // self.batch_size // (self.vision_config["spatial_merge_size"] ** 2)
-        input_ids = ids_tensor([self.batch_size, self.seq_length - 1 + vision_seqlen], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, torch.arange(vision_seqlen, device=torch_device) + 1] = self.image_token_id
+        input_ids[:, self.num_image_tokens] = self.image_token_id
         labels = torch.zeros(
-            (self.batch_size, self.seq_length - 1 + vision_seqlen),
+            (self.batch_size, self.seq_length),
             dtype=torch.long,
             device=torch_device,
         )
-        patch_size = self.vision_config["patch_size"]
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor(
-                [[1, self.image_size // patch_size, self.image_size // patch_size]] * self.batch_size
-            ),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels,
@@ -310,6 +307,12 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         reason="Qwen2-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
     )
     def test_beam_search_low_memory(self):
+        pass
+
+    @unittest.skip(
+        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
 

@@ -15,10 +15,12 @@
 import unittest
 
 import numpy as np
+from huggingface_hub import AudioClassificationOutputElement
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -65,6 +67,9 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         )
 
         self.run_torchaudio(audio_classifier)
+
+        for single_output in output:
+            compare_pipeline_output_to_hub_spec(single_output, AudioClassificationOutputElement)
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):

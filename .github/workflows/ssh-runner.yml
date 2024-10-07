@@ -58,8 +58,19 @@ jobs:
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
         run: |
-          if [ "${{ secrets[format('{0}_{1}', github.actor, 'SLACK_ID')] }}" != "" ]; then
-            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', github.actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
+          echo "${{ github.actor }}"
+          github_actor=${{ github.actor }}
+          github_actor=${github_actor/'-'/'_'}
+          echo "$github_actor"
+          echo "github_actor=$github_actor" >> $GITHUB_ENV
+
+      - name: Store Slack infos
+        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
+        shell: bash
+        run: |
+          echo "${{ env.github_actor }}"
+          if [ "${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" != "" ]; then
+            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
           else
             echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
           fi
