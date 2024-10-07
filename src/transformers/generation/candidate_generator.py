@@ -15,6 +15,7 @@
 
 import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+import sys
 import numpy as np
 
 import torch
@@ -270,12 +271,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
             self.assistant_model.generation_config.assistant_confidence_threshold > 0:
             self.matches.extend(num_matches*[1])
-            self.matches.extend([0]*(len(self.probs)-len(self.matches)))
-            # print(f"{num_matches=}")
-            # print(f"{self.probs=}")
-            # print(f"{self.matches=}")
+            if len(self.probs)>len(self.matches): 
+                self.matches.append(0)
+                n=len(self.probs)-len(self.matches)
+                if n>0:
+                    del self.probs[-n:]
+
+            
             if len(self.probs) > 5:
-                thresholds = np.unique(self.probs)
+                thresholds = np.unique(np.floor(self.probs * 10)/10)
                 best_threshold = thresholds[0]
                 best_accuracy = 0
 
@@ -295,7 +299,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 # Display the best threshold and corresponding accuracy
                 #print("Optimal Threshold:", best_threshold)
                 #print("Best Accuracy:", best_accuracy)
-                self.assistant_model.generation_config.assistant_confidence_threshold = max(0,best_threshold-0.2)
+                self.assistant_model.generation_config.assistant_confidence_threshold = max(sys.float_info.epsilon,best_threshold)
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
