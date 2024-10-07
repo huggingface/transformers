@@ -61,14 +61,14 @@ def load_original_colpali(device: str = "auto") -> ColPali:
 @torch.no_grad()
 def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     # Load the original model and state_dict
-    colpali_original = load_original_colpali(device=device)
-    state_dict = colpali_original.state_dict()
+    model_original = load_original_colpali(device=device)
+    state_dict = model_original.state_dict()
 
     # Format the state_dict keys
     state_dict = remove_model_prefix(state_dict)
 
     # Load the original config
-    original_config = colpali_original.config.to_dict()
+    original_config = model_original.config.to_dict()
 
     # Add the extra attributes for the new model
     new_config = original_config.copy()
@@ -87,6 +87,10 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     model.load_state_dict(state_dict)
     print("Loaded original model weights")
 
+    # Tie the weights (init step)
+    if model.language_model._tied_weights_keys is not None:
+        model._tied_weights_keys = [f"language_model.{k}" for k in model.language_model._tied_weights_keys]
+
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(state_dict.keys())
     state_dict_keys_new = set(model.state_dict().keys())
@@ -104,28 +108,27 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
         "Are Benjamin, Antoine, Merve, and Jo best friends?",
     ]
 
-    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-hf"))
+    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2"))
 
     batch_queries = processor.process_queries(queries).to(device)
     batch_images = processor.process_images(images).to(device)
 
     with torch.no_grad():
-        outputs_images_original = colpali_original(**batch_images)
-        breakpoint()
+        outputs_images_original = model_original(**batch_images)
         outputs_images_new = model(**batch_images, return_dict=True).embeddings
         if outputs_images_original.shape != outputs_images_new.shape:
             raise ValueError("Output shapes do not match for images forward pass")
         # FIXME: doesn't match
-        if not torch.allclose(outputs_images_original, outputs_images_new, atol=1e-2):
+        if not torch.allclose(outputs_images_original, outputs_images_new, atol=1e-3):
             raise ValueError("Output values do not match for images forward pass")
 
     with torch.no_grad():
-        outputs_queries_original = colpali_original(**batch_queries.copy())
+        outputs_queries_original = model_original(**batch_queries.copy())
         outputs_queries_new = model(**batch_queries.copy(), return_dict=True).embeddings
         if outputs_queries_original.shape != outputs_queries_new.shape:
             raise ValueError("Output shapes do not match for query forward pass")
         # FIXME: doesn't match
-        if not torch.allclose(outputs_queries_original, outputs_queries_new, atol=1e-2):
+        if not torch.allclose(outputs_queries_original, outputs_queries_new, atol=1e-3):
             raise ValueError("Output values do not match for query forward pass")
 
     # Save the model
