@@ -455,6 +455,8 @@ class Starcoder2PreTrainedModel(Qwen2PreTrainedModel):
     pass
 
 
+STARCODER2_INPUTS_DOCSTRING = None # will be automatically redefined
+
 class Starcoder2Model(Starcoder2PreTrainedModel, LlamaModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
