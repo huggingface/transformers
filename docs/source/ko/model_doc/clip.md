@@ -183,7 +183,7 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 - 사전학습된 CLIP모델을 이미지 캡셔닝을 위한 빔서치 추론에 어떻게 활용하는지에 관한 [노트북](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing)
 
-**Image retrieval**
+**이미지 검색**
 
 - 사전학습된 CLIP모델과 MRR(Mean Reciprocal Rank) 점수 연산을 사용한 이미지 검색에 대한 [노트북](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing). 🌎
 - 이미지 검색과 유사성 점수에 대해 보여주는 [노트북](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb). 🌎
