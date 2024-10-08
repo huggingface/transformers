@@ -240,11 +240,14 @@ class UMT5Attention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None):
+    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        if cache_position is None:
+            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        else:
+            context_position = cache_position[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
@@ -263,70 +266,84 @@ class UMT5Attention(nn.Module):
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
-        # get past key value
+        # if encoder_hidden_states are provided this layer is used as a cross-attention layer for the decoder
+        is_cross_attention = encoder_hidden_states is not None
+
+        query_states = self.q(hidden_states)
+        query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if encoder_hidden_states is not None:
+            if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_value.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_value.self_attention_cache
 
-        # get key/value states
-        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        if encoder_hidden_states is not None and past_key_value and is_updated:
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self._shape(self.k(current_states))
-            value_states = self._shape(self.v(current_states))
+            key_states = self.k(current_states)
+            value_states = self.v(current_states)
+            key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not encoder_hidden_states is not None else None
-                key_states, value_states = past_key_value.update(
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
-        query_states = self._shape(self.q(hidden_states))
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        scores = torch.matmul(query_states, key_states.transpose(3, 2))
 
-        # compute positional bias
-        if self.has_relative_attention_bias:
-            query_length = seq_length
-            if isinstance(past_key_value, StaticCache):
-                query_length = past_key_value.get_max_length()
-            elif past_key_value is not None:
-                query_length += past_key_value.get_seq_length()
-
-            position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
-        else:
+        # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
+        real_seq_length = seq_length + past_key_value.get_seq_length() if past_key_value is not None else seq_length
+        key_length = key_states.shape[-2]
+        if not self.has_relative_attention_bias:
             position_bias = torch.zeros(
-                (1, self.n_heads, seq_length, key_states.size(2)),
-                device=attention_scores.device,
-                dtype=attention_scores.dtype,
-                requires_grad=self.training,
+                (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
             )
-        if past_key_value is not None:
-            position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-        if attention_mask is not None:
-            position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
+        else:
+            position_bias = self.compute_bias(
+                real_seq_length, key_length, device=scores.device, cache_position=cache_position
+            )
+            position_bias = position_bias[:, :, -seq_length:, :]
 
-        attention_scores += position_bias
+        if attention_mask is not None:
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            position_bias = position_bias + causal_mask
+
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
+
         # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
-        attn_output = self.o(context_states)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, seq_length, -1)
+
+        attn_output = self.o(attn_output)
         return attn_output, attn_weights, past_key_value
 
 
@@ -412,7 +429,7 @@ class UMT5Block(nn.Module):
         output_attentions=False,
         cache_position=None,
     ):
-        hidden_states, self_attn_weights, present_key_value = self.layer[0](
+        hidden_states, self_attn_weights, past_key_value = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -430,8 +447,7 @@ class UMT5Block(nn.Module):
         cross_attn_weights = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.layer[1](
+            hidden_states, cross_attn_weights, past_key_value = self.layer[1](
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -680,7 +696,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         # initialize past_key_values
         return_legacy_cache = False
         return_self_attention_cache = False
-        if use_cache or past_key_values is not None:
+        if self.is_decoder and (use_cache or past_key_values is not None):
             if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
                 return_self_attention_cache = True
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
@@ -694,23 +710,20 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        elif not self.is_decoder:
+            # do not pass cache object down the line for encoder stack
+            # it messes indexing later in decoder-stack because cache object is modified in-place
+            past_key_values = None
 
-        past_key_values_length = 0
-        if cache_position is not None:
-            past_key_values_length = cache_position[0]
-        elif past_key_values is not None:
-            past_key_values_length = past_key_values.get_seq_length()
-
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )
 
         if attention_mask is None and not is_torchdynamo_compiling():
-            # required mask seq length can be calculated via length of past
-            mask_seq_length = (
-                past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
-            )
+            # required mask seq length can be calculated via length of past cache
+            mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.is_decoder:

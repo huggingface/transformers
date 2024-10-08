@@ -425,6 +425,7 @@ class SwitchTransformersModelTester:
         )
         torch.manual_seed(0)
         output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        print(output_with_past_cache, output_without_past_cache)
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_model_fp16_forward(

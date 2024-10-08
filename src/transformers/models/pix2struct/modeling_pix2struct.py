@@ -796,55 +796,50 @@ class Pix2StructTextAttention(nn.Module):
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
         """
         # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        # Mask is (batch_size, 1, 1, key_length) (non-causal) or (batch_size, 1, query_length, key_length)
         batch_size, seq_length = hidden_states.shape[:2]
 
-        real_seq_length = seq_length
-        real_seq_length += cache_position[0] if query_length is None else query_length
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        is_cross_attention = key_value_states is not None
 
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+        query_states = self.query(hidden_states).contiguous()
+        query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        def to_projection_shape(states):
-            """projection"""
-            return states.contiguous().view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        # get query states
-        # (batch_size, n_heads, seq_length, dim_per_head)
-        query_states = to_projection_shape(self.query(hidden_states))
-
-        # get past key value
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if key_value_states is not None:
+            if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
 
         # get key/value states
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if key_value_states is not None and past_key_value and is_updated:
+        current_states = key_value_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = to_projection_shape(self.key(current_states))
-            value_states = to_projection_shape(self.value(current_states))
+            key_states = self.key(current_states).contiguous()
+            value_states = self.value(current_states).contiguous()
+            key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not key_value_states is not None else None
+                cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        scores = torch.matmul(query_states, key_states.transpose(3, 2))
 
         if position_bias is None:
+            real_seq_length = cache_position[-1] + 1 if query_length is None else query_length
+            key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
                     (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
@@ -1004,7 +999,7 @@ class Pix2StructTextBlock(nn.Module):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states, present_key_value_state = self_attention_outputs[:2]
+        hidden_states, past_key_value = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
@@ -1014,10 +1009,6 @@ class Pix2StructTextBlock(nn.Module):
 
         do_cross_attention = encoder_hidden_states is not None
         if do_cross_attention:
-            # the actual query length is unknown for cross attention
-            # if using past key value states. Need to inject it here
-            query_length = cache_position[0]
-
             cross_attention_outputs = self.encoder_decoder_attention(
                 hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1025,12 +1016,12 @@ class Pix2StructTextBlock(nn.Module):
                 position_bias=encoder_decoder_position_bias,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=past_key_value,
-                query_length=query_length,
+                query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            hidden_states = cross_attention_outputs[0]
+            hidden_states, past_key_value = cross_attention_outputs[:2]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
