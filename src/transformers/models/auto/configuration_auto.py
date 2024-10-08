@@ -211,6 +211,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
         ("phi3", "Phi3Config"),
+        ("phimoe", "PhimoeConfig"),
         ("pix2struct", "Pix2StructConfig"),
         ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
@@ -311,6 +312,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zamba", "ZambaConfig"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
@@ -497,6 +499,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
+        ("myt5", "myt5"),
         ("nat", "NAT"),
         ("nemotron", "Nemotron"),
         ("nezha", "Nezha"),
@@ -522,6 +525,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
         ("phi3", "Phi3"),
+        ("phimoe", "Phimoe"),
         ("phobert", "PhoBERT"),
         ("pix2struct", "Pix2Struct"),
         ("pixtral", "Pixtral"),
@@ -630,6 +634,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zamba", "Zamba"),
         ("zoedepth", "ZoeDepth"),
     ]
 )

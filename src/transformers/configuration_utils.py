@@ -380,11 +380,14 @@ class PretrainedConfig(PushToHubMixin):
 
         non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            raise ValueError(
+            # TODO (joao): this should be an exception if the user has modified the loaded config. See #33886
+            warnings.warn(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
-                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}"
+                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
+                "This warning will become an exception in the future."
+                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -1033,6 +1036,7 @@ class PretrainedConfig(PushToHubMixin):
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
             else:
+                default_config = None
                 decoder_config = None
 
         # If it is a composite model, we want to check the subconfig that will be used for generation

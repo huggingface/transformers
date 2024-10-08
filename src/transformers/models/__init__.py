@@ -169,6 +169,7 @@ from . import (
     musicgen,
     musicgen_melody,
     mvp,
+    myt5,
     nemotron,
     nllb,
     nllb_moe,
@@ -191,6 +192,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    phimoe,
     phobert,
     pix2struct,
     pixtral,
@@ -281,5 +283,6 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zamba,
     zoedepth,
 )
