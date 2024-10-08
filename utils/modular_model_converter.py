@@ -295,7 +295,12 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
         # Check if the function being called is of the form ClassB().func_a or ClassB.func_a
         if isinstance(original_node.func, cst.Attribute) and (
             # Match ClassB().func_a(...)
-            (isinstance(original_node.func.value, cst.Call) and isinstance(original_node.func.value.func, cst.Name) and original_node.func.value.func.value in self.all_bases) or
+            (
+                isinstance(original_node.func.value, cst.Call)
+                and isinstance(original_node.func.value.func, cst.Name)
+                and original_node.func.value.func.value in self.all_bases
+            )
+            or
             # Match ClassB.func_a(...)
             (isinstance(original_node.func.value, cst.Name) and original_node.func.value.value in self.all_bases)
         ):
@@ -308,6 +313,7 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
 
             return updated_node.with_changes(args=new_args)
         return updated_node
+
 
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
