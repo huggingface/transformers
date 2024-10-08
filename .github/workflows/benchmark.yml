@@ -34,6 +34,13 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]"
 
+      - name: Run database init script
+        run: |
+          psql -U transformers_benchmarks -f benchmark/init_db.sql
+        env:
+          PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
+          PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
+
       - name: Run benchmark
         working-directory: /transformers
         run: |
