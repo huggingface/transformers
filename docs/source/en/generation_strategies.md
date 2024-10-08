@@ -409,24 +409,22 @@ For the complete list of the available parameters, refer to the [API documentati
 
 Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
 assistant model (ideally a much smaller one), to generate a few candidate tokens. The main model then validates the candidate
-tokens in a single forward pass, which speeds up the decoding process. 
-Assisted decoding supports any pair of main and assistant models, even if their tokenizers are different, using Universal Assisted Decoding (see below).
-If they use the same tokenizer and `do_sample=True`, then the token validation with resampling introduced in the
-[speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+tokens in a single forward pass, which speeds up the decoding process. If `do_sample=True`, then the token validation with
+resampling introduced in the [speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+Assisted decoding assumes the main and assistant models have the same tokenizer, otherwise, see Universal Assisted Decoding below.
+
+Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
+To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 #### Universal Assisted Decoding
 
-Universal Assisted Decoding (UAD) handles cases where the main and assistant models have different tokenizers. 
-Simply pass the tokenizers using the `tokenizer` and `assistant_tokenizer` arguments (see below).
+Universal Assisted Decoding (UAD) adds support for main and assistant models with different tokenizers.
+To use it, simply pass the tokenizers using the `tokenizer` and `assistant_tokenizer` arguments (see below).
 Internally, the main model input tokens are re-encoded into assistant model tokens, then candidate tokens are generated in the assistant encoding, which are
 in turn re-encoded into main model candidate tokens. Validation then proceeds as explained above.
 The re-encoding steps involve decoding token ids into text and then encoding the text using a different tokenizer.
 Since re-encoding the tokens may result in tokenization discrepancies, UAD finds the longest common subsequence between the source and target encodings, 
 to ensure the new tokens include the correct prompt suffix.
-
-
-Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
-To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 To enable assisted decoding, set the `assistant_model` argument with a model.
 

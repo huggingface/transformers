@@ -1235,7 +1235,7 @@ class GenerationMixin:
                 f"names: {terminations_with_generation_support}."
             )
 
-    def _validate_assistant(self, assistant_model, assistant_tokenizer):
+    def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
         if assistant_model is None:
             return
 
@@ -1251,13 +1251,19 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if (
-            assistant_tokenizer is None
-            and not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size
-        ):
-            raise ValueError(
-                "The main model and the assistant have different vocab sizes. Please provide the `assistant_tokenizer` to `generate()`."
-            )
+        doc_reference = (
+            "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
+        )
+        if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+            if assistant_tokenizer is not None:
+                raise ValueError(
+                    f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
+                )
+        else:
+            if tokenizer is None or assistant_tokenizer is None:
+                raise ValueError(
+                    f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                )
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
@@ -1921,7 +1927,7 @@ class GenerationMixin:
 
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, assistant_tokenizer)
+        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:

@@ -263,9 +263,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """
-    `CandidateGenerator` class to be used for assisted generation and speculative decoding when using different
-    tokenizers for the assistant and target models. This class generates candidates through the use of a smaller
+    `CandidateGenerator` class to be used for Universal Assisted Generation (UAD): assisted generation with different tokenizers
+    for the assistant and main models. This class generates candidates through the use of a smaller
     model.
+
+    The main model input tokens are re-encoded into assistant model tokens, then candidate tokens are generated in the assistant encoding, which are
+    in turn re-encoded into main model candidate tokens. Validation then proceeds as explained above.
+    The re-encoding steps involve decoding token ids into text and then encoding the text using a different tokenizer.
+    Since re-encoding the tokens may result in tokenization discrepancies, UAD finds the longest common subsequence between the source and target encodings,
+    to ensure the new tokens include the correct prompt suffix.
 
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -354,7 +360,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             tuple: A tuple containing the start index and length of the longest diagonal.
         """
 
-        diags = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_dict(input_matrix, input_matrix.nonzero())
+        diags = AssistedCandidateGeneratorDifferentTokenizers._get_longest_diag_dict(
+            input_matrix, input_matrix.nonzero()
+        )
         diags_values = list(diags.values())
         diags_keys = list(diags.keys())
         best_diag = np.argmax(diags_values)
@@ -415,6 +423,18 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return dest_ids.to(input_ids.device)
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        """
+        Fetches the candidates to be tried for the current input.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+
+        Return:
+            `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
+            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            vocabulary_size)` containing the logits associated to each candidate.
+        """
         max_new_tokens = int(self.num_assistant_tokens)
         if max_new_tokens == 0:
             return input_ids, None
@@ -433,7 +453,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
-            new_assistant_ids = self.convert_source_tokens_to_target_tokens(input_ids[:, start_index_in_target_window:], **convert_kwargs)
+            new_assistant_ids = self.convert_source_tokens_to_target_tokens(
+                input_ids[:, start_index_in_target_window:], **convert_kwargs
+            )
             prompt_use_length = new_assistant_ids.shape[1]
             prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
