@@ -2063,7 +2063,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_slow = kwargs.get("from_slow", False)
         gguf_file = kwargs.get("gguf_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-        has_chat_template_file = resolved_vocab_files.get("chat_template_file", None) is not None
+        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
@@ -2101,10 +2101,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_kwargs = init_configuration
 
         # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
-        if has_chat_template_file:
-            with open(resolved_vocab_files["chat_template_file"]) as chat_template_handle:
-                chat_template = chat_template_handle.read()
-            init_kwargs["chat_template"] = chat_template  # Clobbers any template in the config
+        if chat_template_file is not None:
+            with open(chat_template_file) as chat_template_handle:
+                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
 
         if not _is_local:
             if "auto_map" in init_kwargs:
