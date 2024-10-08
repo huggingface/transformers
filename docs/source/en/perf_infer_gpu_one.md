@@ -65,6 +65,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
 * [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
+* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)

@@ -303,7 +303,9 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config, attn_implementation=config._attn_implementation)
+        self.vision_tower = AutoModel.from_config(
+            config=config.vision_config, attn_implementation=config._attn_implementation
+        )
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
