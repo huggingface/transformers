@@ -593,8 +593,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
-      - local: in_translation
-        title: (번역중) Swin2SR
+      - local: model_doc/swin2sr
+        title: Swin2SR
       - local: in_translation
         title: (번역중) Table Transformer
       - local: in_translation
