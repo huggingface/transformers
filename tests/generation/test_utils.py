@@ -2193,7 +2193,7 @@ class GenerationTesterMixin:
             input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
             if left_padding:
                 attention_mask = torch.tensor([
-                    [0,0,0,0,1,1,1],
+                    [0,0,0,0,0,1,1],
                     [1,1,1,1,1,1,1],
                 ], device=input_ids.device, dtype=int)
             else:
