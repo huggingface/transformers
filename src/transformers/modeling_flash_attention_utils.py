@@ -276,7 +276,7 @@ def _flash_attention_forward(
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and max_seqlen_in_batch_q is not None:
+    elif position_ids is not None and max_length_q is not None:
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,

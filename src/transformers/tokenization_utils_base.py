@@ -599,7 +599,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            `int`: Index of the token.
+            `int`: Index of the token, or None if the char index refers to a whitespace only token and whitespace is
+                   trimmed with `trim_offsets=True`.
         """
 
         if not self._encodings:
@@ -809,6 +810,7 @@ class BatchEncoding(UserDict):
             [`BatchEncoding`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
+        import torch
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs

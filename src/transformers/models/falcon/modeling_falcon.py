@@ -964,9 +964,7 @@ class FalconModel(FalconPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1139,7 +1137,7 @@ class FalconModel(FalconPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         batch_size, sequence_length, _ = input_tensor.shape
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
