@@ -2037,7 +2037,7 @@ class GenerationTesterMixin:
         Tests if DynamicSlidingWindowCache works the same as DynamicCache for models that support it.
         """
         for model_class in self.all_generative_model_classes:
-            config, _, _, inputs_dict = self._get_input_ids_and_config()
+            config, _ = self.prepare_config_and_inputs_for_generate()
             if getattr(config, "sliding_window", None) is None:
                 self.skipTest(reason="This model does not support sliding window.")
 
@@ -2085,7 +2085,7 @@ class GenerationTesterMixin:
         - Third case tests that we can continue if the cache is not full, and we add tokens so that the new input is bigger than the sliding window
         """
         for model_class in self.all_generative_model_classes:
-            config, _, _, _ = self._get_input_ids_and_config()
+            config, _ = self.prepare_config_and_inputs_for_generate()
             if getattr(config, "sliding_window", None) is None:
                 self.skipTest(reason="This model does not support sliding window.")
 
