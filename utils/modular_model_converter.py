@@ -641,6 +641,53 @@ def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
     return all_dependencies_with_parent
 
 
+class PostModularConverterCleaner(CSTTransformer):
+    """Allow simple cleaning after conversion. Remove top-level functions/classes without any calls (they may arise due
+    to dependency mapping, even if code parts with those functions/classes were overwritten)"""
+
+    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+
+    def __init__(self, added_dependencies: set):
+        super().__init__()
+        self.top_level_functions_or_classes = {}
+        self.all_used_functions_or_classes = set()
+        self.added_dependencies = added_dependencies
+
+    def visit_FunctionDef(self, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            self.top_level_functions_or_classes[node.name.value] = node
+
+    def visit_ClassDef(self, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            self.top_level_functions_or_classes[node.name.value] = node
+
+    def visit_Name(self, node: cst.Name):
+        """This is used to find any mention of a top-level function or class except its own definition.
+        It will contain other names as well, but those will not be used. This is the most general way to do it
+        since mentions may appear in a lot of different contexts (apart from simple Call to the function/class).
+        e.g. Attention classes are only mentionned by their name in a dict assignment.
+        """
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+
+        if not (
+            (m.matches(parent_node, m.ClassDef()) and parent_node.name.value == node.value)
+            or (m.matches(parent_node, m.FunctionDef()) and parent_node.name.value == node.value)
+        ):
+            self.all_used_functions_or_classes.add(node.value)
+
+    def leave_Module(self, original_node: cst.Module, node):
+        # Find any class/function that was mistakenly added as part of the dependencies and remove it
+        unused = self.added_dependencies - self.all_used_functions_or_classes
+        nodes_to_remove = [
+            self.top_level_functions_or_classes[name] for name in unused if name in self.top_level_functions_or_classes
+        ]
+        new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
+        # Return a new module with the updated body
+        return node.with_changes(body=new_body)
+
+
 class ModularConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
 
@@ -672,8 +719,8 @@ class ModularConverterTransformer(CSTTransformer):
         self.match_patterns = "|".join(self.files.keys())
         self.all_definitions = {}
         self.class_to_file_type = {}
-        self.current_class = None
-        self.current_top_level_function = None
+        self.current_class = None  # keep track of current top-level class during visit
+        self.current_top_level_function = None  # keep track of current top-level function during visit
         # Mapping from top-level functions to classes using them
         self.function_call_class_mapping = defaultdict(lambda: set())
         # Mapping from top-level functions to other top-level functions dependencies
@@ -908,7 +955,9 @@ class ModularConverterTransformer(CSTTransformer):
         return node
 
     def visit_Call(self, node: cst.Call):
-        """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them"""
+        """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them.
+        Important note: we only rely on direct Call to the functions here, not indirect mentions (such as assigning a variable with the function,
+        add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible."""
         # Only map function calls if we're inside a class (i.e., current_class is set)
         if self.current_class is not None:
             # Simple function calls such as foo()
@@ -919,7 +968,7 @@ class ModularConverterTransformer(CSTTransformer):
             if isinstance(node.func, cst.Name):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
 
-    def _add_function_to_body(
+    def _maybe_add_function_to_body(
         self,
         top_level_function: str,
         body: dict,
@@ -927,7 +976,10 @@ class ModularConverterTransformer(CSTTransformer):
         matching_callers: set | None = None,
         parent: str | None = None,
     ) -> bool:
-        """Add the given function to the body in the correct place if it not already present."""
+        """Check if the `top_level_function` should be added to the body (i.e. it is not already present, and `matching_callers`
+        is not empy, or `parent`is provided). If it should be added, do it (in the correct location, just before its caller) and return
+        `True`. Return `False` otherwise.
+        """
         if matching_callers is None and parent is None:
             raise ValueError("Cannot add function if both the parent and the matching callers are None.")
         if matching_callers is None:
@@ -944,6 +996,28 @@ class ModularConverterTransformer(CSTTransformer):
             return True
         return False
 
+    def _recursively_add_all_new_needed_functions_in_files(self):
+        """For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
+        the different files, and add them to the file if it is the case (also recursively adding all other functions that
+        may be needed in that function body)."""
+        # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modualr_xxx.py`
+        for top_level_function, function_node in self.all_definitions.items():
+            calling_entities = self.function_call_class_mapping[top_level_function]
+            # The function may be needed in different files, we need to iterate on them
+            for file, body in self.files.items():
+                file_elements = set(body.keys())
+                # If the intersection is not null, top_level_func must be added to file
+                matching_callers = calling_entities & file_elements
+                added = self._maybe_add_function_to_body(top_level_function, body, function_node, matching_callers)
+                # If the function was added, we need to recursively add all its dependencies
+                if added:
+                    for dependency, parent in find_all_dependencies(
+                        top_level_function, self.function_call_dependency_mapping
+                    ):
+                        self._maybe_add_function_to_body(
+                            dependency, body, self.all_definitions[dependency], parent=parent
+                        )
+
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {file_type: imports.copy() for file_type in self.files}
@@ -953,20 +1027,9 @@ class ModularConverterTransformer(CSTTransformer):
                 {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
             )
 
-        # Check if any new top-level function should be added to the different files (because it was called in a class in the file).
-        # It will recursively add any other functions that was used in the previously added function
-        for top_level_function, function_node in self.all_definitions.items():
-            calling_entities = self.function_call_class_mapping[top_level_function]
-            for file, body in self.files.items():
-                file_elements = set(body.keys())
-                # If the intersection is not null, top_level_func must be added to file
-                matching_callers = calling_entities & file_elements
-                added = self._add_function_to_body(top_level_function, body, function_node, matching_callers)
-                if added:
-                    for dependency, parent in find_all_dependencies(
-                        top_level_function, self.function_call_dependency_mapping
-                    ):
-                        self._add_function_to_body(dependency, body, self.all_definitions[dependency], parent=parent)
+        # Check if any new top-level function from the `modular_xxx.py` should be added to the different files
+        # (if it is called in a class in the file, then it will be copy pasted from `modular.py` to that file).
+        self._recursively_add_all_new_needed_functions_in_files()
 
         for file, body in self.files.items():
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
@@ -978,51 +1041,6 @@ class ModularConverterTransformer(CSTTransformer):
                 new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner(self.added_dependencies))
                 self.files[file] = new_module
         return node
-
-
-class PostModularConverterCleaner(CSTTransformer):
-    """Allow simple cleaning after conversion. Remove top-level functions/classes without any calls (they may arise due
-    to dependency mapping, even if code parts with those functions/classes were overwritten)"""
-
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
-
-    def __init__(self, added_dependencies: set):
-        super().__init__()
-        self.top_level_functions_or_classes = {}
-        self.all_used_functions_or_classes = set()
-        self.added_dependencies = added_dependencies
-
-    def visit_FunctionDef(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if m.matches(parent_node, m.Module()):
-            self.top_level_functions_or_classes[node.name.value] = node
-
-    def visit_ClassDef(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if m.matches(parent_node, m.Module()):
-            self.top_level_functions_or_classes[node.name.value] = node
-
-    def visit_Name(self, node: cst.Name):
-        """This is used to find any mention of a top-level function or class except its own definition.
-        It will contain other names as well, but those will not be used.
-        """
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-
-        if not (
-            (m.matches(parent_node, m.ClassDef()) and parent_node.name.value == node.value)
-            or (m.matches(parent_node, m.FunctionDef()) and parent_node.name.value == node.value)
-        ):
-            self.all_used_functions_or_classes.add(node.value)
-
-    def leave_Module(self, original_node: cst.Module, node):
-        # Find any class/function that was mistakenly added as part of the dependencies and remove it
-        unused = self.added_dependencies - self.all_used_functions_or_classes
-        nodes_to_remove = [
-            self.top_level_functions_or_classes[name] for name in unused if name in self.top_level_functions_or_classes
-        ]
-        new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
-        # Return a new module with the updated body
-        return node.with_changes(body=new_body)
 
 
 def convert_modular_file(modular_file, old_model_name=None, new_model_name=None, cst_transformers=None):
