@@ -495,39 +495,27 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
-            del tuple_inputs, dict_inputs
-            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs)
-            del tuple_inputs, dict_inputs
-            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-            del tuple_inputs, dict_inputs
-            torch.cuda.empty_cache()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-            del tuple_inputs, dict_inputs
-            torch.cuda.empty_cache()
 
             if self.has_attentions:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-                del tuple_inputs, dict_inputs
-                torch.cuda.empty_cache()
 
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-                del tuple_inputs, dict_inputs
-                torch.cuda.empty_cache()
 
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -537,8 +525,6 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     dict_inputs,
                     {"output_hidden_states": True, "output_attentions": True},
                 )
-                del tuple_inputs, dict_inputs
-                torch.cuda.empty_cache()
 
     @require_safetensors
     def test_can_use_safetensors(self):
