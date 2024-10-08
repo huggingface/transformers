@@ -1,3 +1,17 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import warnings
 from typing import List, Union
 
 import numpy as np
@@ -99,6 +113,9 @@ class ImageClassificationPipeline(Pipeline):
     def _sanitize_parameters(self, top_k=None, function_to_apply=None, timeout=None):
         preprocess_params = {}
         if timeout is not None:
+            warnings.warn(
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
+            )
             preprocess_params["timeout"] = timeout
         postprocess_params = {}
         if top_k is not None:
@@ -109,12 +126,12 @@ class ImageClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -142,9 +159,6 @@ class ImageClassificationPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -156,7 +170,12 @@ class ImageClassificationPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs:
+            inputs = kwargs.pop("images")
+        if inputs is None:
+            raise ValueError("Cannot call the image-classification pipeline without an inputs argument!")
+        return super().__call__(inputs, **kwargs)
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
