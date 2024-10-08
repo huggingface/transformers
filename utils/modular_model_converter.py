@@ -631,14 +631,14 @@ def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
 
     def foo2():
         pass
-    
+
     def bar():
         foo1()
-    
+
     def foobar():
         bar()
         foo2()
-    
+
     class MyLayer(SomeOtherModelLayer):
         def forward(...):
             foobar()
