@@ -24,13 +24,16 @@ from torch.utils.data import Dataset
 from .generation.configuration_utils import GenerationConfig
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
-from .utils import logging
+from .utils import is_datasets_available, logging
 from .utils.deprecation import deprecate_kwarg
 
 
+if is_datasets_available():
+    import datasets
+
 if TYPE_CHECKING:
     from torch.utils.data import IterableDataset
-    
+
     from .data.data_collator import DataCollator
     from .feature_extraction_utils import FeatureExtractionMixin
     from .image_processing_utils import BaseImageProcessor
@@ -40,9 +43,6 @@ if TYPE_CHECKING:
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
     from .training_args import TrainingArguments
-
-    if is_datasets_available():
-        import datasets
 
 
 logger = logging.get_logger(__name__)
