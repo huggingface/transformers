@@ -2179,18 +2179,25 @@ class GenerationTesterMixin:
         # check whether we still need the overwrites
         self._test_attention_implementation("flash_attention_2")
 
-    @parameterized.expand(
-        [({"do_sample": False},), ({"do_sample": False, "top_k": 2, "penalty_alpha": 0.5, "low_memory": True},)]
-    )
+    @parameterized.expand([(False,), (True,)])
     @pytest.mark.generate
-    def test_generate_with_dynamic_sliding_window_cache(self):
+    def test_generate_with_dynamic_sliding_window_cache(self, left_padding: bool):
         """
         Tests if DynamicSlidingWindowCache works the same as DynamicCache for models that support it.
         """
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, _, _, inputs_dict = self._get_input_ids_and_config()
             if getattr(config, "sliding_window", None) is None:
                 self.skipTest(reason="This model does not support sliding window.")
+
+            input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
+            if left_padding:
+                attention_mask = torch.tensor([
+                    [0,0,0,0,1,1,1],
+                    [1,1,1,1,1,1,1],
+                ], device=input_ids.device, dtype=int)
+            else:
+                attention_mask = torch.ones_like(input_ids)
 
             # Make sure we will go beyond the sliding window
             config.sliding_window = 3
