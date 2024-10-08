@@ -90,6 +90,7 @@ class FlaxBigBirdModelTester(unittest.TestCase):
         self.use_bias = use_bias
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
+        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

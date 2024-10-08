@@ -115,7 +115,6 @@ _import_structure = {
     "data.metrics": [],
     "data.processors": [],
     "debug_utils": [],
-    "deepspeed": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "dynamic_module_utils": [],

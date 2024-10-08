@@ -373,7 +373,6 @@ src/transformers/data/processors/squad.py
 src/transformers/data/processors/utils.py
 src/transformers/data/processors/xnli.py
 src/transformers/debug_utils.py
-src/transformers/deepspeed.py
 src/transformers/dependency_versions_check.py
 src/transformers/dependency_versions_table.py
 src/transformers/dynamic_module_utils.py
