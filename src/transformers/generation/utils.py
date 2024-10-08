@@ -1697,11 +1697,10 @@ class GenerationMixin:
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
-            num_hidden_layers = self.config.get_text_config().num_hidden_layers
             model_kwargs[cache_name] = (
-                DynamicCache(num_hidden_layers)
+                DynamicCache()
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
+                else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
 
     def _supports_num_logits_to_keep(self) -> bool:

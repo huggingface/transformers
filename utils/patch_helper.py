@@ -90,6 +90,6 @@ if __name__ == "__main__":
     parser.add_argument("--prs", nargs="+", required=False, type=str, help="PR numbers to find merge commits for")
 
     args = parser.parse_args()
-    if args.prs == None:
+    if args.prs is None:
         args.prs = "https://github.com/huggingface/transformers/pull/33753  https://github.com/huggingface/transformers/pull/33861  https://github.com/huggingface/transformers/pull/33906  https://github.com/huggingface/transformers/pull/33761  https://github.com/huggingface/transformers/pull/33586  https://github.com/huggingface/transformers/pull/33766  https://github.com/huggingface/transformers/pull/33958 https://github.com/huggingface/transformers/pull/33965".split()
     main(args.prs)
