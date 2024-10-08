@@ -52,6 +52,7 @@ For example:
   reference it (in case of addition) or completely remove it (in case of deletion).
 - If a class inherits from another, for example: class GemmaModel(LlamaModel):, dependencies are automatically 
   inferred. All submodules will be automatically inferred from the superclass.
+- If you define new functions in the `modular` and use them inside classes, the linter will automatically infer the 
 
 You should be able to write everything (the tokenizer, the image processor, the model, the config) in this `modular` 
 file, and the corresponding files will be created for you. 
@@ -158,6 +159,25 @@ class GemmaTokenizer(LlamaTokenizer):
         raise AttributeError("Not needed for Gemma")
 ```
 
+### Define new functions
+
+If you define a new function in the `modular` file to be used inside a class, say
+
+```python
+def my_new_function(*args, **kwargs):
+  # Do something here
+  pass
+
+class GemmaModel(LlamaModel):
+    def forward(*args, **kwargs):
+      # Call the function
+      example = my_new_function(*args, **kwargs)
+      # continue here
+```
+
+the `my_new_function` function (and, recursively, any other new functions called in its body) will be automatically copy-pasted 
+in the file where it is used.
+
 ### Calling `super()`
 We recently shipped a few features that allow you to go from:
 ```python
@@ -174,4 +194,4 @@ We now also support special cases like
 class GemmaVisionModel(CLIPModel):                                 
     pass
 ```
-where the name of your class `GemmaVision` is not the same as the modular `Gemma`. This is super useful for composite models
+where the name of your class `GemmaVision` is not the same as the modular `Gemma`. This is super useful for composite models.
