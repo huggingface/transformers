@@ -624,7 +624,34 @@ def get_new_part(class_name, base_class):
 
 
 def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
-    """Return all the dependencies of the given top-level function."""
+    """Return all the dependencies of the given top-level function. Given the following structure in the `modular_xxx.py` file:
+    ```
+    def foo1():
+        pass
+
+    def foo2():
+        pass
+    
+    def bar():
+        foo1()
+    
+    def foobar():
+        bar()
+        foo2()
+    
+    class MyLayer(SomeOtherModelLayer):
+        def forward(...):
+            foobar()
+    ```
+    and the `dependency_mapping` created when visiting the `modular_xxx.py` file, we get:
+    ```
+    dependency_mapping = {'bar': {'foo1'}, 'foobar': {'bar', 'foo2'}}
+    find_all_dependencies('foobar', dependency_mapping)
+    >>> [('bar', 'foobar'), ('foo2', 'foobar'), ('foo1', 'bar')]
+    ```
+    That is, all the functions needed (and their immediate parent) so that the function to be added in MyLayer (`foobar`) can
+    work correctly.
+    """
     all_dependencies = deque(dependency_mapping[function])
     all_dependencies_with_parent = [(dep, function) for dep in dependency_mapping[function]]
     checked_dependencies = set(function)
