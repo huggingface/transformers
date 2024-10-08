@@ -1041,7 +1041,7 @@ class PretrainedConfig(PushToHubMixin):
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
             else:
-                decoder_config = None
+                default_config = None
 
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
