@@ -364,7 +364,7 @@ def main():
         args=training_args,
         train_dataset=ds["train"] if training_args.do_train else None,
         eval_dataset=ds["validation"] if training_args.do_eval else None,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
     )
 

@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # 使用Trainer API进行超参数搜索
 
-🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，相比于手动编写自己的训练循环，这更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。 
+🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，相比于手动编写自己的训练循环，这更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。
 
 
 ## 超参数搜索后端
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 在使用它们之前，您应该先安装它们作为超参数搜索后端。
 
 ```bash
-pip install optuna/sigopt/wandb/ray[tune] 
+pip install optuna/sigopt/wandb/ray[tune]
 ```
 
 ## 如何在示例中启用超参数搜索
@@ -115,7 +115,7 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
 ...     compute_metrics=compute_metrics,
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     model_init=model_init,
 ...     data_collator=data_collator,
 ... )

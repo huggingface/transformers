@@ -58,7 +58,6 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGenerationModelOutput with Blip2->InstructBlipVideo
 class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
     """
     Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
@@ -91,7 +90,6 @@ class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->InstructBlipVideo
 class InstructBlipVideoVisionEmbeddings(nn.Module):
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__()
@@ -111,7 +109,6 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -123,14 +120,14 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, :1]
+        patch_pos_embed = self.position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -167,7 +164,6 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2Attention with Blip2->InstructBlipVideo
 class InstructBlipVideoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -249,7 +245,6 @@ class InstructBlipVideoAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipMLP
 class InstructBlipVideoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -265,7 +260,6 @@ class InstructBlipVideoMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->InstructBlipVideo
 class InstructBlipVideoEncoderLayer(nn.Module):
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__()
@@ -331,7 +325,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     ]
     _keep_in_fp32_modules = []
 
-    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlipVideo
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
@@ -451,7 +444,6 @@ INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlipVideo
 class InstructBlipVideoEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -538,7 +530,6 @@ class InstructBlipVideoEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlipVideo, BLIP->INSTRUCTBLIPVIDEO
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = InstructBlipVideoVisionConfig
@@ -739,7 +730,6 @@ class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->InstructBlipVideoQFormer
 class InstructBlipVideoQFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -754,7 +744,6 @@ class InstructBlipVideoQFormerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerAttention with Blip2->InstructBlipVideo
 class InstructBlipVideoQFormerAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -804,7 +793,6 @@ class InstructBlipVideoQFormerAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->InstructBlipVideoQFormer
 class InstructBlipVideoQFormerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -820,7 +808,6 @@ class InstructBlipVideoQFormerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->InstructBlipVideoQFormer
 class InstructBlipVideoQFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -938,7 +925,6 @@ class InstructBlipVideoQFormerLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerEncoder with Blip2->InstructBlipVideo
 class InstructBlipVideoQFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()

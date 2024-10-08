@@ -116,7 +116,7 @@ class ChameleonModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         sequence_labels = None
         token_labels = None
@@ -350,7 +350,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         processor.tokenizer.padding_side = "right"
 
-        inputs = processor(texts, return_tensors="pt", padding=True).to(0)
+        inputs = processor(text=texts, return_tensors="pt", padding=True).to(0)
 
         output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_native = processor.tokenizer.batch_decode(output_native)
@@ -392,7 +392,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and']  # fmt: skip
@@ -420,7 +420,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
             "What constellation is this image showing?<image>",
         ]
 
-        inputs = processor(prompts, images=[image, image_2], padding=True, return_tensors="pt").to(
+        inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
             model.device, torch.float16
         )
 
@@ -450,7 +450,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between two things that are not necessarily related. The first image shows a group of stars, while the second image shows a network of lines connecting two points. The connection between']  # fmt: skip
