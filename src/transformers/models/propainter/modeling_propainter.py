@@ -698,19 +698,19 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                     )  # two order feature_propagation -1 & -2
                     feature_propagation = self.deform_align[module_name](feature_propagation, condition_features)
                 # fuse current features
-                features = (
+                feat = (
                     [feat_current]
                     + [features[k][idx] for k in features if k not in ["spatial", module_name]]
                     + [feature_propagation]
                 )
 
-                features = torch.cat(features, dim=1)
+                feat = torch.cat(feat, dim=1)
                 # embed current features
-                feature_propagation = feature_propagation + self.backbone[module_name](features)
+                feature_propagation = feature_propagation + self.backbone[module_name](feat)
                 features[module_name].append(feature_propagation)
             # end for
             if "backward" in module_name:
-                features[module_name] = features[module_name].reverse()
+                features[module_name] = features[module_name][::-1]
 
         outputs = []
         for i in range(0, timesteps):
@@ -865,7 +865,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
             is_backward = "backward" in module_name
 
-            frame_idx = range(timesteps - 1, -1, -1) if is_backward else range(timesteps)
+            frame_idx = range(0, timesteps)[::-1] if is_backward else range(timesteps)
             flow_idx = frame_idx if is_backward else range(-1, timesteps - 1)
 
             flows_for_prop, flows_for_check = (
@@ -912,15 +912,15 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
                 # refine
                 if self.learnable:
-                    features = torch.cat([feat_current, feat_prop, mask_current], dim=1)
-                    feat_prop += self.backbone[module_name](features)
+                    feat = torch.cat([feat_current, feat_prop, mask_current], dim=1)
+                    feat_prop = feat_prop + self.backbone[module_name](feat)
 
                 features[module_name].append(feat_prop)
                 masks[module_name].append(mask_prop)
             # end for
             if "backward" in module_name:
-                features[module_name] = features[module_name].reverse()
-                masks[module_name] = masks[module_name].reverse()
+                features[module_name] = features[module_name][::-1]
+                masks[module_name] = masks[module_name][::-1]
 
         outputs_backward = torch.stack(features["backward_1"], dim=1).view(-1, num_channels, height, width)
         outputs_forward = torch.stack(features["forward_1"], dim=1).view(-1, num_channels, height, width)

@@ -54,7 +54,7 @@ class ProPainterProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_video_processor(self):
         video_processor = self.get_video_processor()
 
-        processor = ProPainterProcessor(video_processor=video_processor).video_processor
+        processor = ProPainterProcessor(video_processor=video_processor)
 
         video_input = self.prepare_video_inputs()
         mask_inptut = self.prepare_mask_inputs()
@@ -74,7 +74,7 @@ class ProPainterProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         mask_inptut = self.prepare_mask_inputs()
         inputs = processor(videos=video_input, masks=mask_inptut, return_tensors="pt")
 
-        self.assertListEqual(list(inputs.keys()), self.input_keys)
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

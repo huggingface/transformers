@@ -192,6 +192,10 @@ imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'outpaint_out.mp4'), reconst
 
 [[autodoc]] ProPainterConfig
 
+## ProPainterProcessor
+
+[[autodoc]] ProPainterProcessor
+
 ## ProPainterVideoProcessor
 
 [[autodoc]] ProPainterVideoProcessor

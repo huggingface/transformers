@@ -16,8 +16,8 @@
 Processor class for ProPainter.
 """
 
-import os
 import sys
+from typing import Dict, Optional
 
 
 if sys.version_info >= (3, 11):
@@ -30,16 +30,23 @@ from ...image_utils import VideoInput
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
+    VideosKwargs,
 )
 from ...utils import logging
-from ..auto import AutoImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+class ProPainterVideosKwargs(VideosKwargs, total=False):
+    video_painting_mode: str
+    scale_size: Optional[tuple[float, float]]
+    mask_dilation: int
+
+
 class ProPainterProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
+    video_kwargs: ProPainterVideosKwargs
     _defaults = {
         "video_kwargs": {
             "video_painting_mode": "video_inpainting",
@@ -69,6 +76,110 @@ class ProPainterProcessor(ProcessorMixin):
         **kwargs,
     ):
         super().__init__(video_processor)
+
+    def _merge_kwargs(
+        self,
+        ModelProcessorKwargs: ProcessingKwargs,
+        **kwargs,
+    ) -> Dict[str, Dict]:
+        """
+        Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
+        The order of operations is as follows:
+            1) kwargs passed as before have highest priority to preserve BC.
+                ```python
+                high_priority_kwargs = {"crop_size" = {"height": 222, "width": 222}, "padding" = "max_length"}
+                processor(..., **high_priority_kwargs)
+                ```
+            2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
+                ```python
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
+                ```
+            4) defaults kwargs specified at processor level have lowest priority.
+                ```python
+                class MyProcessingKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
+                    _defaults = {
+                        "text_kwargs": {
+                            "padding": "max_length",
+                            "max_length": 64,
+                        },
+                    }
+                ```
+        Args:
+            ModelProcessorKwargs (`ProcessingKwargs`):
+                Typed dictionary of kwargs specifically required by the model passed.
+
+        Returns:
+            output_kwargs (`Dict`):
+                Dictionary of per-modality kwargs to be passed to each modality-specific processor.
+
+        """
+        # Initialize dictionaries
+        output_kwargs = {
+            "text_kwargs": {},
+            "images_kwargs": {},
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+            "common_kwargs": {},
+        }
+
+        default_kwargs = {
+            "text_kwargs": {},
+            "images_kwargs": {},
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+            "common_kwargs": {},
+        }
+
+        used_keys = set()
+
+        # get defaults from set model processor kwargs if they exist
+        for modality in default_kwargs:
+            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+        # pass defaults to output dictionary
+        output_kwargs.update(default_kwargs)
+
+        # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
+        for modality in output_kwargs:
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+                # check if we received a structured kwarg dict or not to handle it correctly
+                if modality in kwargs:
+                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
+                    # check if this key was passed as a flat kwarg.
+                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+                        raise ValueError(
+                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"in a dictionary for {modality} and as a **kwarg."
+                        )
+                elif modality_key in kwargs:
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
+                else:
+                    kwarg_value = "__empty__"
+                if kwarg_value != "__empty__":
+                    output_kwargs[modality][modality_key] = kwarg_value
+                    used_keys.add(modality_key)
+
+        # Determine if kwargs is a flat dictionary or contains nested dictionaries
+        if any(key in default_kwargs for key in kwargs):
+            # kwargs is dictionary-based, and some keys match modality names
+            for modality, subdict in kwargs.items():
+                if modality in default_kwargs:
+                    for subkey, subvalue in subdict.items():
+                        if subkey not in used_keys:
+                            output_kwargs[modality][subkey] = subvalue
+                            used_keys.add(subkey)
+        else:
+            # kwargs is a flat dictionary
+            for key in kwargs:
+                if key not in used_keys:
+                    output_kwargs["common_kwargs"][key] = kwargs[key]
+
+        # all modality-specific kwargs are updated with common kwargs
+        for modality in output_kwargs:
+            output_kwargs[modality].update(output_kwargs["common_kwargs"])
+        return output_kwargs
 
     def __call__(
         self,
@@ -113,46 +224,3 @@ class ProPainterProcessor(ProcessorMixin):
     def model_input_names(self):
         video_processor_input_names = self.video_processor.model_input_names
         return list(dict.fromkeys(video_processor_input_names))
-
-    # override to save video-config in a separate config file
-    def save_pretrained(self, save_directory, **kwargs):
-        if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
-        os.makedirs(save_directory, exist_ok=True)
-        video_processor_path = os.path.join(save_directory, "video_processor")
-        self.video_processor.save_pretrained(video_processor_path)
-
-        video_processor_present = "video_processor" in self.attributes
-        if video_processor_present:
-            self.attributes.remove("video_processor")
-
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if video_processor_present:
-            self.attributes += ["video_processor"]
-        return outputs
-
-    # override to load video-config from a separate config file
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
-        if isinstance(processor, tuple):
-            processor = processor[0]
-
-        try:
-            video_processor = AutoImageProcessor.from_pretrained(
-                pretrained_model_name_or_path, subfolder="video_processor"
-            )
-            processor.video_processor = video_processor
-        except EnvironmentError:
-            # this means users are using prev version of saved processor where we had only one preprocessor_config.json
-            # for loading back that should work and load a ProPainterVideoProcessor class
-            logger.info(
-                "You are loading `ProPainterProcessor` but the indicated `path` doesn't contain a folder called "
-                "`video_processor`. It is strongly recommended to load and save the processor again so the video processor is saved "
-                "in a separate config."
-            )
-
-        return processor

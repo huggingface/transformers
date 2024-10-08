@@ -21,7 +21,10 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_propainter": ["ProPainterConfig"]}
+_import_structure = {
+    "configuration_propainter": ["ProPainterConfig"],
+    "processing_propainter": ["ProPainterProcessor"],
+}
 
 try:
     if not is_torchvision_available():
@@ -44,6 +47,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_propainter import ProPainterConfig
+    from .processing_propainter import ProPainterProcessor
 
     try:
         if not is_torchvision_available():

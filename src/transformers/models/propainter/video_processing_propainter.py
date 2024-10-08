@@ -287,7 +287,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             The number of iterations for binary dilation the mask used in video processing tasks.
     """
 
-    model_input_names = ["pixel_values_videos"]
+    model_input_names = ["pixel_values_videos", "flow_masks", "masks_dilated"]
 
     def __init__(
         self,

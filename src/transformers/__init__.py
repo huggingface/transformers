@@ -667,7 +667,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
-    "models.propainter": ["ProPainterConfig"],
+    "models.propainter": ["ProPainterConfig", "ProPainterProcessor"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -5542,7 +5542,10 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
-    from .models.propainter import ProPainterConfig
+    from .models.propainter import (
+        ProPainterConfig,
+        ProPainterProcessor,
+    )
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
