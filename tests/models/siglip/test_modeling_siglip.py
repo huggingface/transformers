@@ -99,14 +99,8 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
 
-            if hasattr(model_sdpa.config, "text_config"):
-                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
-                self.assertTrue(
-                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
-                )
-            else:
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
 
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__

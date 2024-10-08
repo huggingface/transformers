@@ -315,6 +315,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
 
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
@@ -1287,13 +1289,13 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_model = InstructBlipVisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = InstructBlipQFormerModel(config.qformer_config)
@@ -1301,13 +1303,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
 
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         if language_model._no_split_modules is not None:
             self._no_split_modules.extend(language_model._no_split_modules)

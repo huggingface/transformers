@@ -186,24 +186,20 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                audio_model_sdpa = getattr(model, "audio_tower")
-                language_model_sdpa = getattr(model, "language_model")
-                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
-                vision_attn = "sdpa" if audio_model_sdpa._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "audio_config": None})
-                self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
-                self.assertTrue(audio_model_sdpa.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.audio_tower.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(
-                    model_eager.config._attn_implementation == {"text_config": "eager", "audio_config": "eager"}
-                )
-                self.assertTrue(getattr(model_eager, "language_model").config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, "audio_tower").config._attn_implementation == "eager")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__

@@ -697,11 +697,10 @@ class EncoderDecoderMixin:
             model_sdpa = model_sdpa.eval().to(torch_device)
 
             # see https://github.com/huggingface/transformers/pull/32238
-            # `None` as it is the requested one which will be assigned to each sub-config
             # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
             encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
             decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
-            self.assertTrue(model_sdpa.config._attn_implementation == {"encoder": None, "decoder": None})
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
             self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
 
@@ -712,10 +711,7 @@ class EncoderDecoderMixin:
                 model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
-                self.assertTrue(
-                    model_sdpa_explicit.config._attn_implementation
-                    == {"encoder": encoder_attn, "decoder": decoder_attn}
-                )
+                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
             else:
                 with self.assertRaises(ValueError):
                     model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
@@ -726,7 +722,7 @@ class EncoderDecoderMixin:
             )
             model_eager = model_eager.eval().to(torch_device)
 
-            self.assertTrue(model_eager.config._attn_implementation == {"encoder": "eager", "decoder": "eager"})
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
             self.assertTrue(model_eager.encoder.config._attn_implementation == "eager")
             self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
 

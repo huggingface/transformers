@@ -1737,24 +1737,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
                 self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
                 self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
-                self.assertTrue(
-                    model_sdpa.config._attn_implementation
-                    == {
-                        "audio_encoder": None,
-                        "text_encoder": None,
-                        "decoder": None,
-                    }
-                )
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
 
                 self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
-                self.assertTrue(
-                    model_eager.config._attn_implementation
-                    == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}
-                )
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:

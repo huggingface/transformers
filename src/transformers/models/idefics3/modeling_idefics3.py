@@ -620,6 +620,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
@@ -666,6 +667,7 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     config_class = Idefics3VisionConfig
+    _supports_sdpa = False
 
     def __init__(self, config: Idefics3VisionConfig):
         super().__init__(config)
@@ -823,20 +825,16 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics3VisionTransformer._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_model = Idefics3VisionTransformer._from_config(config.vision_config)
         self.connector = Idefics3Connector(config)
-        self.text_model = AutoModel.from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = int(
             ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = "flash_attention_2" in config._attn_implementation.values()
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 

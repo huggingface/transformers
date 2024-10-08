@@ -410,6 +410,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
 
     _no_split_modules = [
         "Blip2Attention",
@@ -1446,25 +1448,22 @@ class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
 
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:
@@ -2013,25 +2012,22 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
 
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_model = Blip2VisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:

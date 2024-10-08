@@ -179,6 +179,8 @@ class EncoderDecoderModel(PreTrainedModel):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -209,31 +211,30 @@ class EncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation["encoder"])
+            encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
             from ..auto.modeling_auto import AutoModelForCausalLM
 
-            decoder = AutoModelForCausalLM.from_config(
-                config.decoder, attn_implementation=config._attn_implementation["decoder"]
-            )
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
 
-        if self.encoder.config.to_dict() != self.config.encoder.to_dict():
-            logger.warning(
-                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
-                f" {self.config.encoder}"
-            )
-        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-            logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
-                f" {self.config.decoder}"
-            )
+        # if self.encoder.config.to_dict() != self.config.encoder.to_dict():
+        #     logger.warning(
+        #         f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+        #         f" {self.config.encoder}"
+        #     )
+        # if self.decoder.config.to_dict() != self.config.decoder.to_dict():
+        #     logger.warning(
+        #         f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+        #         f" {self.config.decoder}"
+        #     )
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        # update `_attn_implementation` because the attn is set a a deepcopied config within PreTrainedMolde
         self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
         self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder

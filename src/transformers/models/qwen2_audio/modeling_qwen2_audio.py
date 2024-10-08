@@ -543,6 +543,8 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
@@ -850,15 +852,11 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
 class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(
-            config.audio_config, attn_implementation=config._attn_implementation["audio_config"]
-        )
+        self.audio_tower = AutoModel.from_config(config.audio_config)
 
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()

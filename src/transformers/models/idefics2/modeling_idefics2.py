@@ -600,6 +600,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -647,6 +648,7 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     _supports_sdpa = False
+    config_class = Idefics2VisionConfig
 
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__(config)
@@ -1149,9 +1151,7 @@ class Idefics2Connector(nn.Module):
             output_size=config.text_config.hidden_size,
             hidden_act=config.text_config.hidden_act,
         )
-        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(
-            config.perceiver_config, attn_implementation=config._attn_implementation["perceiver_config"]
-        )
+        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(config.perceiver_config)
 
     def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
@@ -1239,18 +1239,14 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics2VisionTransformer._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_model = Idefics2VisionTransformer._from_config(config.vision_config)
         self.connector = Idefics2Connector(config)
-        self.text_model = AutoModel.from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation["text_config"] == "flash_attention_2"
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 

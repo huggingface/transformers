@@ -363,18 +363,14 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
+        self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaOnevisionMultiModalProjector(config)
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.post_init()
 
     # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_input_embeddings

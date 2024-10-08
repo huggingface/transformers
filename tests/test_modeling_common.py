@@ -3801,7 +3801,11 @@ class ModelTesterMixin:
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
-            self.assertTrue(model.config._attn_implementation == attn_implementation_per_subconfig)
+            for key in model.config:
+                if isinstance(getattr(model.config, key), PretrainedConfig):
+                    sub_config = getattr(model.config, key)
+                    self.assertTrue(sub_config._attn_implementation == "eager")
+
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
                 if (
@@ -3832,6 +3836,7 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
+                print(model_sdpa.config._attn_implementation)
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
@@ -3891,15 +3896,11 @@ class ModelTesterMixin:
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
                 self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(
-                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
-                )
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -4505,7 +4506,10 @@ class ModelTesterMixin:
                     model_fa2 = model_class.from_pretrained(
                         tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
                     )
-                    self.assertTrue("flash_attention_2" in model_fa2.config._attn_implementation.values())
+                    for key in model_fa2.config:
+                        if isinstance(getattr(model_fa2.config, key), PretrainedConfig):
+                            sub_config = getattr(model_fa2.config, key)
+                            self.assertTrue(sub_config._attn_implementation == "flash_attention_2")
 
                     has_fa2 = False
                     for name, submodule in model_fa2.named_modules():

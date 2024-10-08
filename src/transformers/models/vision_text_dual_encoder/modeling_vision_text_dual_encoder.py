@@ -161,6 +161,8 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -184,14 +186,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             if isinstance(config.vision_config, CLIPVisionConfig):
                 vision_model = CLIPVisionModel(config.vision_config)
             else:
-                vision_model = AutoModel.from_config(
-                    config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-                )
+                vision_model = AutoModel.from_config(config.vision_config)
 
         if text_model is None:
-            text_model = AutoModel.from_config(
-                config.text_config, attn_implementation=config._attn_implementation["text_config"]
-            )
+            text_model = AutoModel.from_config(config.text_config)
 
         self.vision_model = vision_model
         self.text_model = text_model

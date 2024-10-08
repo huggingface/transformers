@@ -2038,12 +2038,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.vision_output_dim = config.vision_config.vision_output_dim
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
-        self.vision_model = MllamaVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
-        )
-        self.language_model = MllamaForCausalLM._from_config(
-            config.text_config, attn_implementation=config._attn_implementation["text_config"]
-        )
+        self.vision_model = MllamaVisionModel._from_config(config.vision_config)
+        self.language_model = MllamaForCausalLM._from_config(config.text_config)
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,

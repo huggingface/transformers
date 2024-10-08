@@ -579,29 +579,23 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if getattr(model, "language_model")._supports_sdpa else "eager"
-                vision_attn = "sdpa" if getattr(model, "vision_model")._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if getattr(model, "qformer")._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
+                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(
-                    model_sdpa.config._attn_implementation
-                    == {"text_config": None, "vision_config": None, "qformer_config": None}
-                )
-                self.assertTrue(getattr(model, "language_model").config._attn_implementation == text_attn)
-                self.assertTrue(getattr(model, "vision_model").config._attn_implementation == vision_attn)
-                self.assertTrue(getattr(model, "qformer").config._attn_implementation == qformer_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(
-                    model_eager.config._attn_implementation
-                    == {"text_config": "eager", "vision_config": "eager", "qformer_config": "eager"}
-                )
-                self.assertTrue(getattr(model_eager, "language_model").config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, "vision_model").config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, "qformer").config._attn_implementation == "eager")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.qformer.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__

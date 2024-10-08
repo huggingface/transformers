@@ -1419,9 +1419,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
-        config = self._autoset_attn_implementation(
-            config, torch_dtype=torch.get_default_dtype(), check_device_map=False
-        )
+        if not config._attn_implementation_autoset:
+            config = self._autoset_attn_implementation(
+                config, torch_dtype=torch.get_default_dtype(), check_device_map=False
+            )
         self.config = config
 
         self.name_or_path = config.name_or_path
@@ -1517,12 +1518,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             attn_implementation = None
 
         config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
-        config = cls._autoset_attn_implementation(
-            config,
-            use_flash_attention_2=use_flash_attention_2,
-            check_device_map=False,
-            torch_dtype=torch_dtype,
-        )
+        if not config._attn_implementation_autoset:
+            config = cls._autoset_attn_implementation(
+                config,
+                use_flash_attention_2=use_flash_attention_2,
+                check_device_map=False,
+                torch_dtype=torch_dtype,
+            )
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1588,27 +1590,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # where keys are sub-config names. But most people will specify one `str` which means that should dispatch it
         # for all sub-models.
         # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
-        # Later each sub-module will dispatch with its own attn impl, by calling `_from_config(attn_impl="sdpa/FA2/eager")`
+        # Later each sub-module will dispatch with its own attn impl, by calling `XXXModel._from_config(config.text_config)`
         # If any of sub-modules doesm't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
-        sub_configs = {
-            key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
-        }
-        if sub_configs:
-            attn_implementation_per_subconfig = {}
-            for key, sub_config in sub_configs.items():
-                attn_implementation_per_subconfig[key] = (
+        for key in config:
+            if isinstance(getattr(config, key), PretrainedConfig):
+                sub_config = getattr(config, key)
+                curr_attn_implementation = (
                     requested_attn_implementation
                     if not isinstance(requested_attn_implementation, dict)
-                    else requested_attn_implementation.get(key)
+                    else requested_attn_implementation.get(key, None)
                 )
-
-            # Some models have nested configs where text config holds vision config
-            # inside itself. So we don't set their attn implementation as dicts and leave
-            # everything as it was. There are only 3 models like that (Qwen2_VL, GIT, Chameleon)
-            # and all of them support all attn implementations
-            if len(attn_implementation_per_subconfig.keys()) != 1:
-                config._attn_implementation = attn_implementation_per_subconfig
-                requested_attn_implementation = config._attn_implementation
+                sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -1641,10 +1633,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
         elif isinstance(requested_attn_implementation, dict):
-            config._attn_implementation = requested_attn_implementation
+            config._attn_implementation = None
         else:
             config._attn_implementation = "eager"
 
+        config._attn_implementation_autoset = True
         return config
 
     @classmethod
