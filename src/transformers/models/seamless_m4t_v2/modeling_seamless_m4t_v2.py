@@ -25,8 +25,8 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
 from ...generation import GenerationMixin
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
