@@ -429,12 +429,12 @@ class Llama3Converter(TikTokenConverter):
             # Guidance from Meta: apply 3.2 changes to 3.1 as well
             # TODO: 3 should be different (no tool calling)
             from transformers import AutoTokenizer
-            t = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
+            t = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct", revision="e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14")
             additional_kwargs["chat_template"] = t.chat_template
 
         if llama_version in ["Guard-3"]:
             from transformers import AutoTokenizer
-            t = AutoTokenizer.from_pretrained("meta-llama/Llama-Guard-3-1B")
+            t = AutoTokenizer.from_pretrained("meta-llama/Llama-Guard-3-1B", revision="acf7aafa60f0410f8f42b1fa35e077d705892029")
             additional_kwargs["chat_template"] = t.chat_template
 
         self.converted_tokenizer = PreTrainedTokenizerFast(
