@@ -291,7 +291,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -325,7 +325,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
             value_states,
             causal_mask,
             tgt_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
