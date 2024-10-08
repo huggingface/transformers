@@ -166,10 +166,10 @@ LLaVa-Next can perform inference with multiple images as input, where images eit
 import requests
 from PIL import Image
 import torch
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 # Load the model in half-precision
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
 # Get three different images
@@ -246,7 +246,7 @@ We value your feedback to help identify bugs before the full release! Check out 
 Simply change the snippet above with:
 
 ```python
-from transformers import LlavaNextForConditionalGeneration, BitsAndBytesConfig
+from transformers import AutoModelForImageTextToText, BitsAndBytesConfig
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -255,7 +255,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")
 ```
 
 ### Use Flash-Attention 2 to further speed-up generation
@@ -263,9 +263,9 @@ model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-m
 First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
 
 ```python
-from transformers import LlavaNextForConditionalGeneration
+from transformers import AutoModelForImageTextToText
 
-model = LlavaNextForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
     low_cpu_mem_usage=True,

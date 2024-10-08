@@ -99,6 +99,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("trocr", "TrOCRProcessor"),
         ("tvlt", "TvltProcessor"),
         ("tvp", "TvpProcessor"),
+        ("udop", "UdopProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
         ("video_llava", "VideoLlavaProcessor"),
