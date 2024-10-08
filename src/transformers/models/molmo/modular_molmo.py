@@ -49,6 +49,7 @@ from ..clip.modeling_clip import (
     CLIPVisionTransformer,
     CLIPVisionTransformer,
     CLIPVisionModel,
+    CLIPEncoder,
 )
 
 from ..llava.modeling_llava import (
@@ -61,6 +62,8 @@ from ..llava.modeling_llava import (
 
 logger = logging.get_logger(__name__)
 
+class MolmoVisionConfig(CLIPVisionConfig):
+    pass
 
 class MolmoConfig(LlavaConfig):
     pass
@@ -144,10 +147,14 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         self.embeddings = MolmoVisionEmbeddings(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
 
+class MolmoEncoder(CLIPEncoder):
+    pass
+
 class MolmoVisionModel(CLIPVisionModel):
     def __init__(self, config):
         super().__init__()
         self.vision_model = MolmoVisionTransformer(config)
+        self.encoder = MolmoEncoder(config)
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: MolmoConfig):
@@ -162,8 +169,10 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
 
 __all__ = [
-    "MolmoVisionEmbeddings",
     "MolmoConfig",
+    "MolmoVisionConfig",
+    "MolmoVisionEmbeddings",    
+    "MolmoVisionModel",
     "MolmoModel",
     "MolmoForConditionalGeneration",
 ]
