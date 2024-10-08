@@ -119,3 +119,59 @@ Additionally, you may find a list of examples here:
 ## What it is not
 
 It is not a replacement for the modeling code (yet?), and if your model is not based on anything else that ever existed, then you can add a `modeling` file as usual.
+
+
+## Advanced usage
+
+### Removing attributes and functions
+To remove attributes that are not used in your modular model, and that you don't want to see in the unravelled modeling: 
+
+```python
+class GemmaModel(LlamaModel):                 |           class GemmaModel(PreTrainedModel):
+    def __init__(self, config):               |              def __init__(self, config):
+        super().__init__(self, eos_token)     |                 super().__init__(config)
+        del self.embed_tokens                 |                 self.padding_idx = config.pad_token_id
+                                              |                 self.vocab_size = config.vocab_size
+                                              |
+                                              |                 self.layers = nn.ModuleList(
+                                              |                     [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+                                              |                 )
+                                              |                 self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+                                              |                 self.rotary_emb = LlamaRotaryEmbedding(config=config)
+                                              |                 self.gradient_checkpointing = False
+                                              |                 
+                                              |                 # Initialize weights and apply final processing
+                                              |                 self.post_init()
+```
+If you check the original `LlamaModel`, it has a `embed_tokens` which was removed here (as you would expect!)
+
+Removing a function is pretty similar, you just need to write it with a `raise ValueError("")` to mimick the behaviour you actually want when you remove a parent function in python.
+
+```python
+class GemmaTokenizer(LlamaTokenizer):
+    ...
+
+    def get_spm_processor(self):
+        raise AttributeError("Not needed for Gemma")
+
+    def unk_token_length(self):
+        raise AttributeError("Not needed for Gemma")
+```
+
+### Calling `super()`
+We recently shipped a few features that allow you to go from:
+```python
+class GemmaTokenizer(LlamaTokenizer, PretrainedTokenizerFast):         |           class GemmaModel(nn.Module):
+    def __init__(self, eos_token="</s>"):                              |             def __init__(self):
+        eos_token = AddedToken(eos_token)                              |                eos_token = AddedToken(eos_token)
+        PretrainedTokenizerFast.__init__(self, eos_token)              |                super().__init__(eos_token)
+```
+This is useful want you **don't** want to unravel the call to `super()`, and you want to differentiate which super init call you are doing!
+
+### Special naming
+We now also support special cases like
+```python
+class GemmaVisionModel(CLIPModel):                                 
+    pass
+```
+where the name of your class `GemmaVision` is not the same as the modular `Gemma`. This is super useful for composite models
