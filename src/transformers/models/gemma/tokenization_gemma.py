@@ -118,7 +118,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-        PreTrainedTokenizer.__init__(
+        super().__init__(
             self,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -161,7 +161,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
             text: TextInput
         Simply calls PreTrainedTokenizer's method
         """
-        return PreTrainedTokenizer.tokenize(self, text, **kwargs)
+        return super().tokenize(self, text, **kwargs)
 
     def _tokenize(self, text, **kwargs):
         """

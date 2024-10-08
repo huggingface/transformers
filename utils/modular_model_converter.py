@@ -17,7 +17,7 @@ import glob
 import importlib
 import re
 from collections import defaultdict
-from typing import Dict
+from typing import Dict, List, Set
 
 import libcst as cst
 from check_copies import run_ruff
@@ -253,10 +253,42 @@ DOCSTRING_NODE = m.SimpleStatementLine(
     ]
 )
 
-
 def SUPER_CALL_NODE(func_name):
     return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
+
+def is_call_to_super(node, func_name):
+    return m.matches(
+            node,
+            m.SimpleStatementLine(
+                body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
+            )
+    )
+
+
+# Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
+class ReplaceMethodCallTransformer(cst.CSTTransformer):
+    def __init__(self, all_bases: Set[str]):
+        self.all_bases = all_bases
+
+    def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
+        # Handle ClassB.call_to_method
+        if isinstance(original_node.value, cst.Name) and original_node.value.value in self.all_bases \
+                and isinstance(original_node.attr, cst.Name):
+            # Replace with super().call_to_method
+            return updated_node.with_changes(
+                value=cst.Call(cst.Name("super")),
+            )
+        # Handle ClassB().call_to_method
+        elif isinstance(original_node.value, cst.Call) and isinstance(original_node.value.func, cst.Name) \
+                and original_node.value.func.value in self.all_bases and isinstance(original_node.attr, cst.Name):
+            # Replace with super().call_to_method
+            return updated_node.with_changes(
+                func=cst.Attribute(
+                    value=cst.Call(func=cst.Name("super"))
+                )
+            )
+        return updated_node
 
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
@@ -299,13 +331,15 @@ def merge_docstrings(original_docstring, updated_docstring):
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self, python_module: cst.Module, original_methods, updated_methods, class_name=""):
+    def __init__(self, python_module: cst.Module, original_methods, updated_methods, class_name="", all_bases=None):
         self.python_module = python_module
         self.original_methods = original_methods
         self.updated_methods = updated_methods
         self.all_assign_target = {}
         self.deleted_targets = {}  # child node can delete some arguments
         self.class_name = class_name
+        self.all_bases = all_bases or []
+        self.transformer = ReplaceMethodCallTransformer(set(self.all_bases))
 
     def update_body(self, existing_body, new_statements):
         """
@@ -363,18 +397,14 @@ class SuperTransformer(cst.CSTTransformer):
             parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
         new_body = []
         has_super_call = False
-        for idx, expr in enumerate(node.body):
-            if m.matches(
-                expr,
-                m.SimpleStatementLine(
-                    body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
-                ),
-            ):
-                if idx != 0 and func_name == "__init__":
-                    raise ValueError(f"The call to super() in {self.class_name} should be at the top of the init")
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+
+        for expr in node.body:
+            if is_call_to_super(expr, func_name):
                 has_super_call = True
-            elif m.matches(expr, DOCSTRING_NODE):
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+            else:
+                expr = expr.visit(self.transformer)
+            if m.matches(expr, DOCSTRING_NODE):
                 self.has_docstring = True
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
                     original_docstring = self.original_methods[func_name].body.body[0].body[0].value.value
@@ -412,8 +442,7 @@ class SuperTransformer(cst.CSTTransformer):
                 return updated_node.with_changes(value=updated_return_value)
         return updated_node
 
-
-def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef, class_name: str):
+def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef, class_name: str, all_bases:List[str]):
     """
     Given the `class_name`, the `updated_node`'s call to super are unpacked.
 
@@ -506,7 +535,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
     new_replacement_class = new_module.visit(
-        SuperTransformer(temp_module, original_methods, updated_methods, class_name)
+        SuperTransformer(temp_module, original_methods, updated_methods, class_name, all_bases)
     )
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
 
@@ -734,7 +763,7 @@ class ModularConverterTransformer(CSTTransformer):
                     self.inserted_deps.append(dependency)
 
             if len(list_dependencies) > 0:
-                updated_node = replace_call_to_super(class_finder, updated_node, class_name)
+                updated_node = replace_call_to_super(class_finder, updated_node, class_name, all_bases)
             else:
                 raise ValueError(
                     f"We were unable to find dependencies for {class_name} (based on inheriting from {super_class})"
