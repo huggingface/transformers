@@ -235,9 +235,6 @@ class Idefics3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        # Temporary fix for "padding_side" in init_kwargs
-        output_kwargs["text_kwargs"].pop("padding_side", None)
-
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
         n_images_in_text = []
