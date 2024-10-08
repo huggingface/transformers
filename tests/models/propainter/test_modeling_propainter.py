@@ -857,7 +857,9 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    @unittest.skip("Cant do half precision")
+    @unittest.skip(
+        "Cant do half precision as certain layer inputs needs adjusting from float to Half for half precision, as they're independent of the model's forward inputs."
+    )
     @slow
     @require_accelerate
     @require_torch_accelerator
