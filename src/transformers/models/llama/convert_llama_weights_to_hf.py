@@ -95,7 +95,8 @@ NUM_SHARDS = {
 CONTEXT_LENGTH_FOR_VERSION = {"Guard-3": 131072, "3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
 
 BOS_ADDED_TOKEN = AddedToken("<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
-EOS_ADDED_TOKEN = AddedToken("<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
+EOS_ADDED_TOKEN = AddedToken("<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
+EOT_ADDED_TOKEN = AddedToken("<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
 
 DEFAULT_LLAMA_SPECIAL_TOKENS = {
     "3": [
@@ -449,7 +450,7 @@ class Llama3Converter(TikTokenConverter):
         self.update_post_processor(self.converted_tokenizer)
         # finer special_tokens_map.json
         self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
-        self.converted_tokenizer._eos_token = EOS_ADDED_TOKEN
+        self.converted_tokenizer._eos_token = EOT_ADDED_TOKEN if instruct else EOS_ADDED_TOKEN
     
     # We can't do this while building the tokenizer because we have no easy access to the bos token id
     def update_post_processor(self, tokenizer):
