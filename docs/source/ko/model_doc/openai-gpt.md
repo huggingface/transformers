@@ -87,7 +87,7 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 ## OpenAIGPTTokenizer [[transformers.OpenAIGPTTokenizer]]
 
 [[autodoc]] OpenAIGPTTokenizer
-- save_vocabulary
+    - save_vocabulary
 
 ## OpenAIGPTTokenizerFast [[transformers.OpenAIGPTTokenizerFast]]
 
