@@ -118,7 +118,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         super().__init__(
-            self,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -160,7 +159,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
             text: TextInput
         Simply calls PreTrainedTokenizer's method
         """
-        return super().tokenize(self, text, **kwargs)
+        return super().tokenize(text, **kwargs)
 
     def _tokenize(self, text, **kwargs):
         """

@@ -291,6 +291,23 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
             return updated_node.with_changes(func=cst.Attribute(value=cst.Call(func=cst.Name("super"))))
         return updated_node
 
+    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
+        # Check if the function being called is of the form ClassB().func_a or ClassB.func_a
+        if isinstance(original_node.func, cst.Attribute) and (
+            # Match ClassB().func_a(...)
+            (isinstance(original_node.func.value, cst.Call) and isinstance(original_node.func.value.func, cst.Name) and original_node.func.value.func.value in self.all_bases) or
+            # Match ClassB.func_a(...)
+            (isinstance(original_node.func.value, cst.Name) and original_node.func.value.value in self.all_bases)
+        ):
+            # Check if the first argument is 'self', and remove it
+            if len(original_node.args) > 0 and m.matches(original_node.args[0].value, m.Name("self")):
+                # Create the new argument list without 'self'
+                new_args = updated_node.args[1:]
+            else:
+                new_args = updated_node.args
+
+            return updated_node.with_changes(args=new_args)
+        return updated_node
 
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
