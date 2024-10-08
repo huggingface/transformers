@@ -35,6 +35,7 @@ from ..granite.modeling_granite import (
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaModel,
+    LlamaPreTrainedModel,
 )
 from ..phi3.modeling_phi3 import (
     Phi3MLP,
@@ -169,7 +170,10 @@ class GlmDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class GlmModel(LlamaModel):
+class GlmPreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+class GlmModel(GlmPreTrainedModel, LlamaModel):
     def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -208,6 +212,7 @@ class GlmForTokenClassification(GemmaForTokenClassification):
 
 __all__ = [
     "GlmConfig",
+    "GlmPreTrainedModel",
     "GlmModel",
     "GlmForCausalLM",
     "GlmForSequenceClassification",

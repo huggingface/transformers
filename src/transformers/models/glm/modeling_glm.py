@@ -1304,4 +1304,10 @@ class GlmForTokenClassification(GlmPreTrainedModel):
         )
 
 
-__all__ = ["GlmModel", "GlmForCausalLM", "GlmForSequenceClassification", "GlmForTokenClassification"]
+__all__ = [
+    "GlmPreTrainedModel",
+    "GlmModel",
+    "GlmForCausalLM",
+    "GlmForSequenceClassification",
+    "GlmForTokenClassification",
+]
