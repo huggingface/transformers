@@ -1137,7 +1137,7 @@ class FalconModel(FalconPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         batch_size, sequence_length, _ = input_tensor.shape
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
