@@ -103,10 +103,6 @@ class ObjectDetectionPipeline(Pipeline):
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
         if "images" in kwargs and "inputs" not in kwargs:
-            warnings.warn(
-                "The `images` argument has been renamed to `inputs`. In version 5 of Transformers, `images` will no longer be accepted",
-                FutureWarning,
-            )
             kwargs["inputs"] = kwargs.pop("images")
         return super().__call__(*args, **kwargs)
 

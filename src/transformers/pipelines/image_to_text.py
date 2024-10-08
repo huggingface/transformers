@@ -125,10 +125,6 @@ class ImageToTextPipeline(Pipeline):
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
         if "images" in kwargs:
-            warnings.warn(
-                "The `images` argument has been renamed to `inputs`. In version 5 of Transformers, `images` will no longer be accepted",
-                FutureWarning,
-            )
             inputs = kwargs.pop("images")
         if inputs is None:
             raise ValueError("Cannot call the image-to-text pipeline without an inputs argument!")

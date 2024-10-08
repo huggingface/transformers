@@ -103,10 +103,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         """
         # After deprecation of this is completed, remove the default `None` value for `image`
         if "images" in kwargs:
-            warnings.warn(
-                "The `images` argument has been renamed to `image`. In version 5 of Transformers, `images` will no longer be accepted",
-                FutureWarning,
-            )
             image = kwargs.pop("images")
         if image is None:
             raise ValueError("Cannot call the zero-shot-image-classification pipeline without an images argument!")
