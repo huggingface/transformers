@@ -31,6 +31,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
+    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -41,6 +42,7 @@ from ..utils import (
     ModelOutput,
     is_accelerate_available,
     is_hqq_available,
+    is_optimum_quanto_available,
     is_quanto_available,
     is_torchdynamo_compiling,
     logging,
@@ -342,10 +344,99 @@ class GenerationMixin:
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
-    def prepare_inputs_for_generation(self, *args, **kwargs):
-        raise NotImplementedError(
-            "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        use_cache: bool = True,
+        num_logits_to_keep: Optional[int] = None,
+        **kwargs,
+    ):
+        """
+        Prepare the model inputs for generation. In includes operations like computing the 4D attention mask or
+        slicing inputs given the existing cache.
+
+        See the documentation in the used model for the arguments (different models might have different requirements
+        for e.g. `past_key_values`). Should work as is for most LLMs.
+        """
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        if past_key_values is not None:
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s
+                # `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the
+                # decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case,
+                # `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
+            # the 4D causal mask exists, it should be present in the base model (XXXModel class).
+            base_model = getattr(self, self.base_model_prefix)
+            causal_mask_creation_function = getattr(
+                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+            )
+            if causal_mask_creation_function is None:
+                logger.warning_once(
+                    f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
+                    "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
+                    "writing code, see Llama for an example implementation. If you're a user, please report this "
+                    "issue on GitHub."
+                )
+            else:
+                attention_mask = causal_mask_creation_function(
+                    attention_mask,
+                    sequence_length=sequence_length,
+                    target_length=past_key_values.get_max_length(),
+                    dtype=self.get_output_embeddings().weight.dtype,
+                    device=device,
+                    cache_position=cache_position,
+                    batch_size=batch_size,
+                )
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
         )
+        return model_inputs
 
     def _prepare_model_inputs(
         self,
@@ -1490,7 +1581,11 @@ class GenerationMixin:
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
-        return self._supports_cache_class and "jamba" not in self.__class__.__name__.lower()
+        return (
+            self._supports_cache_class
+            and "jamba" not in self.__class__.__name__.lower()
+            and "zamba" not in self.__class__.__name__.lower()
+        )
 
     def _prepare_cache_for_generation(
         self,
@@ -1584,10 +1679,10 @@ class GenerationMixin:
                 )
                 cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
-                if cache_config.backend == "quanto" and not is_quanto_available():
+                if cache_config.backend == "quanto" and not (is_optimum_quanto_available() or is_quanto_available()):
                     raise ImportError(
-                        "You need to install `quanto` in order to use KV cache quantization with quanto backend. "
-                        "Please install it via  with `pip install quanto`"
+                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
+                        "Please install it via  with `pip install optimum-quanto`"
                     )
                 elif cache_config.backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
@@ -1602,11 +1697,10 @@ class GenerationMixin:
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
-            num_hidden_layers = self.config.get_text_config().num_hidden_layers
             model_kwargs[cache_name] = (
-                DynamicCache(num_hidden_layers)
+                DynamicCache()
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
+                else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
 
     def _supports_num_logits_to_keep(self) -> bool:

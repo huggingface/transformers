@@ -155,7 +155,7 @@ En este punto, solo faltan tres pasos:
 ...     args=training_args,
 ...     train_dataset=tokenized_billsum["train"],
 ...     eval_dataset=tokenized_billsum["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )
 

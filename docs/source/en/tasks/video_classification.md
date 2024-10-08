@@ -61,7 +61,7 @@ Start by loading a subset of the [UCF-101 dataset](https://www.crcv.ucf.edu/data
 
 After the subset has been downloaded, you need to extract the compressed archive:
 
-```py 
+```py
 >>> import tarfile
 
 >>> with tarfile.open(file_path) as t:
@@ -106,13 +106,13 @@ UCF101_subset/
 
 You can then count the number of total videos.
 
-```py 
+```py
 >>> import pathlib
 >>> dataset_root_path = "UCF101_subset"
 >>> dataset_root_path = pathlib.Path(dataset_root_path)
 ```
 
-```py 
+```py
 >>> video_count_train = len(list(dataset_root_path.glob("train/*/*.avi")))
 >>> video_count_val = len(list(dataset_root_path.glob("val/*/*.avi")))
 >>> video_count_test = len(list(dataset_root_path.glob("test/*/*.avi")))
@@ -120,7 +120,7 @@ You can then count the number of total videos.
 >>> print(f"Total videos: {video_total}")
 ```
 
-```py 
+```py
 >>> all_video_file_paths = (
 ...     list(dataset_root_path.glob("train/*/*.avi"))
 ...     + list(dataset_root_path.glob("val/*/*.avi"))
@@ -148,9 +148,9 @@ For the validation and evaluation splits, you wouldn't want to have video clips 
 Next up, you will derive the set of labels present in the dataset. Also, create two dictionaries that'll be helpful when initializing the model:
 
 * `label2id`: maps the class names to integers.
-* `id2label`: maps the integers to class names. 
+* `id2label`: maps the integers to class names.
 
-```py 
+```py
 >>> class_labels = sorted({str(path).split("/")[2] for path in all_video_file_paths})
 >>> label2id = {label: i for i, label in enumerate(class_labels)}
 >>> id2label = {i: label for label, i in label2id.items()}
@@ -166,7 +166,7 @@ There are 10 unique classes. For each class, there are 30 videos in the training
 
 Instantiate a video classification model from a pretrained checkpoint and its associated image processor. The model's encoder comes with pre-trained parameters, and the classification head is randomly initialized. The image processor will come in handy when writing the preprocessing pipeline for our dataset.
 
-```py 
+```py
 >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
 
 >>> model_ckpt = "MCG-NJU/videomae-base"
@@ -191,13 +191,13 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 The warning is telling us we are throwing away some weights (e.g. the weights and bias of the `classifier` layer) and randomly initializing some others (the weights and bias of a new `classifier` layer). This is expected in this case, because we are adding a new head for which we don't have pretrained weights, so the library warns us we should fine-tune this model before using it for inference, which is exactly what we are going to do.
 
-**Note** that [this checkpoint](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics) leads to better performance on this task as the checkpoint was obtained by fine-tuning on a similar downstream task having considerable domain overlap. You can check out [this checkpoint](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset) which was obtained by fine-tuning `MCG-NJU/videomae-base-finetuned-kinetics`.  
+**Note** that [this checkpoint](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics) leads to better performance on this task as the checkpoint was obtained fine-tuning on a similar downstream task having considerable domain overlap. You can check out [this checkpoint](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset) which was obtained by fine-tuning `MCG-NJU/videomae-base-finetuned-kinetics`.
 
 ## Prepare the datasets for training
 
-For preprocessing the videos, you will leverage the [PyTorchVideo library](https://pytorchvideo.org/). Start by importing the dependencies we need. 
+For preprocessing the videos, you will leverage the [PyTorchVideo library](https://pytorchvideo.org/). Start by importing the dependencies we need.
 
-```py 
+```py
 >>> import pytorchvideo.data
 
 >>> from pytorchvideo.transforms import (
@@ -218,7 +218,7 @@ For preprocessing the videos, you will leverage the [PyTorchVideo library](https
 ... )
 ```
 
-For the training dataset transformations, use a combination of uniform temporal subsampling, pixel normalization, random cropping, and random horizontal flipping. For the validation and evaluation dataset transformations, keep the same transformation chain except for random cropping and horizontal flipping. To learn more about the details of these transformations check out the [official documentation of PyTorchVideo](https://pytorchvideo.org).  
+For the training dataset transformations, use a combination of uniform temporal subsampling, pixel normalization, random cropping, and random horizontal flipping. For the validation and evaluation dataset transformations, keep the same transformation chain except for random cropping and horizontal flipping. To learn more about the details of these transformations check out the [official documentation of PyTorchVideo](https://pytorchvideo.org).
 
 Use the `image_processor` associated with the pre-trained model to obtain the following information:
 
@@ -243,9 +243,9 @@ Start by defining some constants.
 >>> clip_duration = num_frames_to_sample * sample_rate / fps
 ```
 
-Now, define the dataset-specific transformations and the datasets respectively. Starting with the training set: 
+Now, define the dataset-specific transformations and the datasets respectively. Starting with the training set:
 
-```py 
+```py
 >>> train_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -272,9 +272,9 @@ Now, define the dataset-specific transformations and the datasets respectively. 
 ... )
 ```
 
-The same sequence of workflow can be applied to the validation and evaluation sets: 
+The same sequence of workflow can be applied to the validation and evaluation sets:
 
-```py 
+```py
 >>> val_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -306,7 +306,7 @@ The same sequence of workflow can be applied to the validation and evaluation se
 ... )
 ```
 
-**Note**: The above dataset pipelines are taken from the [official PyTorchVideo example](https://pytorchvideo.org/docs/tutorial_classification#dataset). We're using the [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) function because it's tailored for the UCF-101 dataset. Under the hood, it returns a [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) object. `LabeledVideoDataset` class is the base class for all things video in the PyTorchVideo dataset. So, if you want to use a custom dataset not supported off-the-shelf by PyTorchVideo, you can extend the `LabeledVideoDataset` class accordingly. Refer to the `data` API [documentation to](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) learn more. Also, if your dataset follows a similar structure (as shown above), then using the `pytorchvideo.data.Ucf101()` should work just fine. 
+**Note**: The above dataset pipelines are taken from the [official PyTorchVideo example](https://pytorchvideo.org/docs/tutorial_classification#dataset). We're using the [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) function because it's tailored for the UCF-101 dataset. Under the hood, it returns a [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) object. `LabeledVideoDataset` class is the base class for all things video in the PyTorchVideo dataset. So, if you want to use a custom dataset not supported off-the-shelf by PyTorchVideo, you can extend the `LabeledVideoDataset` class accordingly. Refer to the `data` API [documentation to](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) learn more. Also, if your dataset follows a similar structure (as shown above), then using the `pytorchvideo.data.Ucf101()` should work just fine.
 
 You can access the `num_videos` argument to know the number of videos in the dataset.
 
@@ -315,9 +315,9 @@ You can access the `num_videos` argument to know the number of videos in the dat
 # (300, 30, 75)
 ```
 
-## Visualize the preprocessed video for better debugging 
+## Visualize the preprocessed video for better debugging
 
-```py 
+```py
 >>> import imageio
 >>> import numpy as np
 >>> from IPython.display import Image
@@ -330,7 +330,7 @@ You can access the `num_videos` argument to know the number of videos in the dat
 
 >>> def create_gif(video_tensor, filename="sample.gif"):
 ...     """Prepares a GIF from a video tensor.
-...     
+...
 ...     The video tensor is expected to have the following shape:
 ...     (num_frames, num_channels, height, width).
 ...     """
@@ -357,14 +357,14 @@ You can access the `num_videos` argument to know the number of videos in the dat
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif.gif" alt="Person playing basketball"/>
 </div>
 
-## Train the model 
+## Train the model
 
 Leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer) from  🤗 Transformers for training the model. To instantiate a `Trainer`, you need to define the training configuration and an evaluation metric. The most important is the [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments), which is a class that contains all the attributes to configure the training. It requires an output folder name, which will be used to save the checkpoints of the model. It also helps sync all the information in the model repository on 🤗 Hub.
 
 Most of the training arguments are self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in this case, you need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
 
 
-```py 
+```py
 >>> from transformers import TrainingArguments, Trainer
 
 >>> model_name = model_ckpt.split("/")[-1]
@@ -388,7 +388,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 ... )
 ```
 
-The dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__` method. As such, we must define `max_steps` when instantiating `TrainingArguments`. 
+The dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__` method. As such, we must define `max_steps` when instantiating `TrainingArguments`.
 
 Next, you need to define a function to compute the metrics from the predictions, which will use the `metric` you'll load now. The only preprocessing you have to do is to take the argmax of our predicted logits:
 
@@ -409,7 +409,7 @@ In the [VideoMAE paper](https://arxiv.org/abs/2203.12602), the authors use the f
 
 Also, define a `collate_fn`, which will be used to batch examples together. Each batch consists of 2 keys, namely `pixel_values` and `labels`.
 
-```py 
+```py
 >>> def collate_fn(examples):
 ...     # permute to (num_frames, num_channels, height, width)
 ...     pixel_values = torch.stack(
@@ -421,13 +421,13 @@ Also, define a `collate_fn`, which will be used to batch examples together. Each
 
 Then you just pass all of this along with the datasets to `Trainer`:
 
-```py 
+```py
 >>> trainer = Trainer(
 ...     model,
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )
@@ -437,7 +437,7 @@ You might wonder why you passed along the `image_processor` as a tokenizer when 
 
 Now fine-tune our model by calling the `train` method:
 
-```py 
+```py
 >>> train_results = trainer.train()
 ```
 
@@ -453,7 +453,7 @@ Great, now that you have fine-tuned a model, you can use it for inference!
 
 Load a video for inference:
 
-```py 
+```py
 >>> sample_test_video = next(iter(test_dataset))
 ```
 
@@ -507,9 +507,9 @@ Now, pass your input to the model and return the `logits`:
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 
-Decoding the `logits`, we get: 
+Decoding the `logits`, we get:
 
-```py 
+```py
 >>> predicted_class_idx = logits.argmax(-1).item()
 >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 # Predicted class: BasketballDunk
