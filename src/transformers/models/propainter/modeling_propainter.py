@@ -2413,7 +2413,7 @@ class ProPainterSpectralNorm(object):
                     v = v.clone()
 
         sigma = torch.dot(u, torch.mv(weight_mat, v))
-        weight = weight / sigma  # 🐺
+        weight = weight / sigma
         return weight
 
     def remove(self, module):
