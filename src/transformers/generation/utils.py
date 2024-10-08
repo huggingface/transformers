@@ -2182,7 +2182,7 @@ class GenerationMixin:
                 raise ValueError(
                     f"contrastive search is not supported with stateful models, such as {self.__class__.__name__}"
                 )
-            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache) and getattr(model_kwargs, "low_memory", False):
+            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache) and getattr(generation_config, "low_memory", False):
                 raise ValueError("DynamicSlidingWindowCache cannot be used in contrastive generation with `low_memory=True`.")
 
             result = self._contrastive_search(
