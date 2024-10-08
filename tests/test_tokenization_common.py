@@ -1125,6 +1125,8 @@ class TokenizerTesterMixin:
                     # Assert the chat template is not in the config when it's saved as a separate file
                     self.assertNotIn("chat_template", config_dict)
                     tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                    # TODO Figure out how "chat_template" gets into init_kwargs
+                    # TODO Ensure "chat_template_file" doesn't end up anywhere! Where is it getting into the config?
 
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
                 output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
