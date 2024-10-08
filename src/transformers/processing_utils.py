@@ -829,7 +829,12 @@ class ProcessorMixin(PushToHubMixin):
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    value = (
+                        getattr(self.tokenizer, modality_key)
+                        if hasattr(self.tokenizer, modality_key)
+                        else tokenizer_init_kwargs[modality_key]
+                    )
+                    default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
