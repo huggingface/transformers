@@ -224,14 +224,15 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def convert_to_camelcase(self, text):
         # Regex pattern to match consecutive uppercase letters and lowercase the first set
-        result = re.sub(r"^[A-Z]+(?=[A-Z][a-z])", lambda m: m.group(0).capitalize(), text, count=1)
+        result = re.sub(rf"^({self.old_name})(?=[a-z])", lambda m: m.group(0).capitalize(), text,  flags=re.IGNORECASE, count=1)
         return result
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
-        update = self.preserve_case_replace(updated_node.value)
+        update = self.convert_to_camelcase(updated_node.value)
+        update = self.preserve_case_replace(update)
         return updated_node.with_changes(value=update)
 
     def leave_ClassDef(self, original_node, updated_node):
