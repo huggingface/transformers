@@ -222,12 +222,20 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
         return compiled_regex.sub(replace, text)
 
+    def convert_to_camelcase(self, text):
+        # Regex pattern to match consecutive uppercase letters and lowercase the first set
+        result = re.sub(r"^[A-Z]+(?=[A-Z][a-z])", lambda m: m.group(0).capitalize(), text, count=1)
+        return result
+
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
         update = self.preserve_case_replace(updated_node.value)
         return updated_node.with_changes(value=update)
+
+    def leave_ClassDef(self, original_node, updated_node):
+        return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
 
 
 def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma", given_old_name=None, given_new_name=None):
@@ -731,8 +739,14 @@ class ModularConverterTransformer(CSTTransformer):
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
+            else:  # we are re-using the previously parsed data
+                class_finder = visited_module[super_file_name]
 
-            elif visited_module[super_file_name].class_dependency_mapping.get(class_name, []) == []:
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
+            if list_dependencies == []:
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
@@ -744,14 +758,6 @@ class ModularConverterTransformer(CSTTransformer):
                     self.model_name,
                     potential_given_name,
                 )
-                list_dependencies = {
-                    dep: class_finder.class_start_line.get(dep, 1000)
-                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
-                }
-
-            else:  # we are re-using the previously parsed data
-                class_finder = visited_module[super_file_name]
-
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
