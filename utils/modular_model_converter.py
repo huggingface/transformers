@@ -253,16 +253,14 @@ DOCSTRING_NODE = m.SimpleStatementLine(
     ]
 )
 
+
 def SUPER_CALL_NODE(func_name):
     return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
 
 def is_call_to_super(node, func_name):
     return m.matches(
-            node,
-            m.SimpleStatementLine(
-                body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
-            )
+        node, m.SimpleStatementLine(body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))])
     )
 
 
@@ -273,22 +271,26 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
 
     def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
         # Handle ClassB.call_to_method
-        if isinstance(original_node.value, cst.Name) and original_node.value.value in self.all_bases \
-                and isinstance(original_node.attr, cst.Name):
+        if (
+            isinstance(original_node.value, cst.Name)
+            and original_node.value.value in self.all_bases
+            and isinstance(original_node.attr, cst.Name)
+        ):
             # Replace with super().call_to_method
             return updated_node.with_changes(
                 value=cst.Call(cst.Name("super")),
             )
         # Handle ClassB().call_to_method
-        elif isinstance(original_node.value, cst.Call) and isinstance(original_node.value.func, cst.Name) \
-                and original_node.value.func.value in self.all_bases and isinstance(original_node.attr, cst.Name):
+        elif (
+            isinstance(original_node.value, cst.Call)
+            and isinstance(original_node.value.func, cst.Name)
+            and original_node.value.func.value in self.all_bases
+            and isinstance(original_node.attr, cst.Name)
+        ):
             # Replace with super().call_to_method
-            return updated_node.with_changes(
-                func=cst.Attribute(
-                    value=cst.Call(func=cst.Name("super"))
-                )
-            )
+            return updated_node.with_changes(func=cst.Attribute(value=cst.Call(func=cst.Name("super"))))
         return updated_node
+
 
 def get_docstring_indent(docstring):
     # Match the first line after the opening triple quotes
@@ -442,7 +444,10 @@ class SuperTransformer(cst.CSTTransformer):
                 return updated_node.with_changes(value=updated_return_value)
         return updated_node
 
-def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef, class_name: str, all_bases:List[str]):
+
+def replace_call_to_super(
+    class_finder: ClassFinder, updated_node: cst.ClassDef, class_name: str, all_bases: List[str]
+):
     """
     Given the `class_name`, the `updated_node`'s call to super are unpacked.
 
