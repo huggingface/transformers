@@ -445,3 +445,12 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+
+def is_deepspeed_sp_enabled():
+    if is_deepspeed_available():
+        from deepspeed.utils import groups
+
+        return groups._get_sequence_parallel_world_size() > 1
+    else:
+        return False

@@ -20,7 +20,16 @@ from typing import Optional, Tuple
 import torch
 import torch.nn.functional as F
 
+from .integrations.deepspeed import (  # DeepSpeed seq parallelism (aka Ulysses)
+    is_deepspeed_available,
+    is_deepspeed_sp_enabled,
+)
 from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
+
+
+if is_deepspeed_available():
+    from deepspeed.sequence.layer import _SeqAllToAll
+    from deepspeed.utils import groups as ds_comm_groups
 
 
 if is_flash_attn_2_available():
@@ -220,6 +229,16 @@ def _flash_attention_forward(
         deterministic (`bool`, *optional*):
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
     """
+    if is_deepspeed_sp_enabled():
+        spg = ds_comm_groups._get_sequence_parallel_group()
+        # qkv tensors are of shape (batch_size, seq_len, num_heads, head_dim)
+        scatter_idx = 2  # Scatter on num_heads dimension
+        gather_idx = 1  # Gather on seq_len dimension
+        batch_dim_idx = 0  # Synonymous with the batch_first==true
+        query_states = _SeqAllToAll.apply(spg, query_states, scatter_idx, gather_idx, batch_dim_idx)
+        key_states = _SeqAllToAll.apply(spg, key_states, scatter_idx, gather_idx, batch_dim_idx)
+        value_states = _SeqAllToAll.apply(spg, value_states, scatter_idx, gather_idx, batch_dim_idx)
+
     if not use_top_left_mask:
         causal = is_causal
     else:
@@ -297,5 +316,11 @@ def _flash_attention_forward(
         attn_output = flash_attn_func(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
         )
+
+    if is_deepspeed_sp_enabled():
+        scatter_idx = 1  # Scatter back on seq_len dimension
+        gather_idx = 2  # Gather on num_heads dimension
+        batch_dim_idx = 0
+        attn_output = _SeqAllToAll.apply(spg, attn_output, scatter_idx, gather_idx, batch_dim_idx)
 
     return attn_output
