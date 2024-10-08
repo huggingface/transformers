@@ -52,7 +52,6 @@ from ..utils import (
     logging,
 )
 
-from accelerate import infer_auto_device_map
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
 
@@ -849,7 +848,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = next(iter(hf_device_map.values()))
             else:
                 device = 0
-
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:
