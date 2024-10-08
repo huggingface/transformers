@@ -37,7 +37,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
-# fmt: on
 
 
 class GemmaTokenizer(PreTrainedTokenizer):

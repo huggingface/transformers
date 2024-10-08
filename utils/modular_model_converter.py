@@ -454,8 +454,8 @@ def replace_call_to_super(
                     |    ```python                          |               |    ```python
                     |    class GemmaModel(LlamaModel):      |               |       class GemmaModel(nn.Module):
                     |        def __init__(self):            |               |           def __init__(self):
-    Going from:     |            self.dropout = 0.2         |       to:     |               self.dropout = 0.2
-                    |            super().__init__()         |               |               super().__init__(config)
+    Going from:     |            super().__init__()         |       to:     |               super().__init__(config)
+                    |            self.dropout = 0.2         |               |               self.dropout = 0.2
                     |     ```                               |               |               self.padding_idx = config.pad_token_id
                                                                             |               self.vocab_size = config.vocab_size
                                                                             |               self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
@@ -558,23 +558,19 @@ TYPE_TO_FILE_TYPE = {
 
 def get_new_part(class_name, base_class):
     """
-    When MyClassNameAttention inherits from MistralAttention, we need
+    When `MyClassNameAttention` inherits from `MistralAttention`, we need
     to process the name to properly find dependencies.
 
     Here we take what is the same (Attention) and what is different
     when finding the dependencies.
     """
-    # Find the common suffix between the two class names
     common_suffix_len = 0
-
-    # Compare the strings from the end to find the length of the common suffix
     for i in range(1, min(len(class_name), len(base_class)) + 1):
         if class_name[-i] == base_class[-i]:
             common_suffix_len += 1
         else:
             break
 
-    # Remove the common suffix from the class_name
     if common_suffix_len > 0:
         new_part = class_name[:-common_suffix_len]
     else:
@@ -582,7 +578,6 @@ def get_new_part(class_name, base_class):
 
     # Convert the remaining new part to snake_case
     snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", new_part).lower()
-
     return snake_case
 
 
@@ -716,6 +711,7 @@ class ModularConverterTransformer(CSTTransformer):
 
             elif visited_module[super_file_name].class_dependency_mapping.get(class_name, []) == []:
                 # so, maybe standard renaming did not work (the class name is different)
+                # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
                 del visited_module[super_file_name]
                 class_finder = find_classes_in_file(
@@ -824,7 +820,7 @@ class ModularConverterTransformer(CSTTransformer):
             if re.search(r"[\s\S]*is_.*available", full_statement):
                 self.all_safe_imports.append(node)
             elif full_statement not in self.all_imports:
-                logger.warning(f"one import is protected so hard to guess where it's used {full_statement}")
+                logger.warning(f"one import is protected with `if`. Hard guess where it's used {full_statement}")
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):
