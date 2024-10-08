@@ -231,11 +231,13 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
-        update = self.preserve_case_replace(updated_node.value)
+        if re.findall(rf"{self.old_name}", updated_node.value, re.IGNORECASE) and m.matches(original_node, m.Name()):
+            update = self.convert_to_camelcase(updated_node.value)
+            update = self.preserve_case_replace(update)
+        else:
+            update = self.preserve_case_replace(updated_node.value)
         return updated_node.with_changes(value=update)
 
-    def leave_ClassDef(self, original_node, updated_node):
-        return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
 
 
 def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma", given_old_name=None, given_new_name=None):
@@ -916,7 +918,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/modular_gemma.py"],
+        default=["src/transformers/models/molmo/modular_molmo.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )

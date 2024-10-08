@@ -59,7 +59,7 @@ from ...utils import (
     is_flash_attn_2_available,
     torch_int,
 )
-from .configuration_molmo import MOLMOConfig, MOLMOVisionConfig
+from .configuration_molmo import MolmoTextConfig, MolmoVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1359,6 +1359,71 @@ class MolmoVisionEmbeddings(nn.Module):
         return embeddings
 
 
+class MOLMOMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class MolmoEncoderLayer(nn.Module):
+    def __init__(self, config: MolmoConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = MOLMO_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MOLMOMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
 MOLMO_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1377,6 +1442,39 @@ MOLMO_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
+class MolmoTextEmbeddings(nn.Module):
+    def __init__(self, config: MolmoTextConfig):
+        super().__init__()
+        embed_dim = config.hidden_size
+
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        position_embeddings = self.position_embedding(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+
+        return embeddings
+
+
 class MolmoVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1384,11 +1482,11 @@ class MolmoVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = MolmoVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MOLMOEncoder(config)
+        self.encoder = MolmoEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
 
     @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MOLMOVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1444,10 +1542,10 @@ class MolmoEncoder(nn.Module):
         config: MOLMOConfig
     """
 
-    def __init__(self, config: MOLMOConfig):
+    def __init__(self, config: MolmoConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([MOLMOEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MolmoEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1536,8 +1634,8 @@ class MolmoEncoder(nn.Module):
     """The vision model from MOLMO without any head or projection on top.""",
     MOLMO_START_DOCSTRING,
 )
-class MolmoVisionModel(MOLMOPreTrainedModel):
-    config_class = MOLMOVisionConfig
+class MolmoVisionModel(MolmoPreTrainedModel):
+    config_class = MolmoVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MOLMOEncoderLayer"]
 
@@ -1552,7 +1650,7 @@ class MolmoVisionModel(MOLMOPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MOLMOVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
