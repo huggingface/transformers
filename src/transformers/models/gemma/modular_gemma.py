@@ -281,6 +281,8 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
+        Args:
+            text: TextInput
         Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
         """
         return self.sp_model.encode(text, out_type=str)

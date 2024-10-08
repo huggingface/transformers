@@ -163,14 +163,8 @@ class GemmaTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
-        Returns a tokenized string.
-
-        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
-        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
-        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
-        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
-
+        Args:
+            text: TextInput
         Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
         """
         return self.sp_model.encode(text, out_type=str)
