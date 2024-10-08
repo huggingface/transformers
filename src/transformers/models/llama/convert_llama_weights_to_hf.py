@@ -15,15 +15,16 @@ import argparse
 import gc
 import json
 import os
+import tempfile
 import warnings
 from typing import List
 
 import torch
+from tokenizers import AddedToken, processors
 
-from tokenizers import processors, AddedToken
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM, LlamaTokenizer, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
-import tempfile
+
 
 try:
     from transformers import LlamaTokenizerFast
@@ -94,9 +95,15 @@ NUM_SHARDS = {
 
 CONTEXT_LENGTH_FOR_VERSION = {"Guard-3": 131072, "3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
 
-BOS_ADDED_TOKEN = AddedToken("<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
-EOS_ADDED_TOKEN = AddedToken("<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
-EOT_ADDED_TOKEN = AddedToken("<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
+BOS_ADDED_TOKEN = AddedToken(
+    "<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+)
+EOS_ADDED_TOKEN = AddedToken(
+    "<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+)
+EOT_ADDED_TOKEN = AddedToken(
+    "<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+)
 
 DEFAULT_LLAMA_SPECIAL_TOKENS = {
     "3": [
@@ -247,8 +254,12 @@ def write_model(
                     f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
                     f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
                     f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
-                    f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"layers.{layer_i}.attention_norm.weight"],
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
+                    f"model.layers.{layer_i}.input_layernorm.weight": loaded[
+                        f"layers.{layer_i}.attention_norm.weight"
+                    ],
+                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                        f"layers.{layer_i}.ffn_norm.weight"
+                    ],
                 }
             else:
                 # Sharded
@@ -267,7 +278,9 @@ def write_model(
                 state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
                     torch.cat(
                         [
-                            loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                            loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(
+                                n_heads_per_shard, dims_per_head, dim
+                            )
                             for i in range(len(loaded))
                         ],
                         dim=0,
@@ -363,7 +376,7 @@ def write_model(
                 "low_freq_factor": 1.0,
                 "high_freq_factor": 4.0,
                 "original_max_position_embeddings": 8192,
-                "rope_type": "llama3"
+                "rope_type": "llama3",
             }
         else:
             rope_scaling = None
@@ -429,12 +442,18 @@ class Llama3Converter(TikTokenConverter):
             # Guidance from Meta: apply 3.2 changes to 3.1 as well
             # TODO: 3 should be different (no tool calling)
             from transformers import AutoTokenizer
-            t = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct", revision="e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14")
+
+            t = AutoTokenizer.from_pretrained(
+                "meta-llama/Llama-3.2-1B-Instruct", revision="e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"
+            )
             additional_kwargs["chat_template"] = t.chat_template
 
         if llama_version in ["Guard-3"]:
             from transformers import AutoTokenizer
-            t = AutoTokenizer.from_pretrained("meta-llama/Llama-Guard-3-1B", revision="acf7aafa60f0410f8f42b1fa35e077d705892029")
+
+            t = AutoTokenizer.from_pretrained(
+                "meta-llama/Llama-Guard-3-1B", revision="acf7aafa60f0410f8f42b1fa35e077d705892029"
+            )
             additional_kwargs["chat_template"] = t.chat_template
 
         self.converted_tokenizer = PreTrainedTokenizerFast(
@@ -450,27 +469,34 @@ class Llama3Converter(TikTokenConverter):
         # finer special_tokens_map.json
         self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
         self.converted_tokenizer._eos_token = EOT_ADDED_TOKEN if instruct else EOS_ADDED_TOKEN
-    
+
     # We can't do this while building the tokenizer because we have no easy access to the bos token id
     def update_post_processor(self, tokenizer):
-        tokenizer._tokenizer.post_processor = processors.Sequence([
-            processors.ByteLevel(trim_offsets=False),
-            processors.TemplateProcessing(
-                single="<|begin_of_text|> $A",
-                pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
-                special_tokens=[
-                    ("<|begin_of_text|>", tokenizer.convert_tokens_to_ids("<|begin_of_text|>")),
-                ],
-            )
-        ])
+        tokenizer._tokenizer.post_processor = processors.Sequence(
+            [
+                processors.ByteLevel(trim_offsets=False),
+                processors.TemplateProcessing(
+                    single="<|begin_of_text|> $A",
+                    pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
+                    special_tokens=[
+                        ("<|begin_of_text|>", tokenizer.convert_tokens_to_ids("<|begin_of_text|>")),
+                    ],
+                ),
+            ]
+        )
 
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path, llama_version="2", special_tokens=None, instruct=False, push_to_hub=False):
+def write_tokenizer(
+    tokenizer_path, input_tokenizer_path, llama_version="2", special_tokens=None, instruct=False, push_to_hub=False
+):
     print("Converting the tokenizer.")
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     if is_llama_3(llama_version):
         tokenizer = Llama3Converter(
-            input_tokenizer_path, special_tokens, instruct, llama_version,
+            input_tokenizer_path,
+            special_tokens,
+            instruct,
+            llama_version,
         ).converted_tokenizer
     else:
         tokenizer = tokenizer_class(input_tokenizer_path)
@@ -482,7 +508,6 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path, llama_version="2", spe
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         tokenizer.save_pretrained(tokenizer_path)
     return tokenizer
-
 
 
 def main():
@@ -503,11 +528,11 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
-        action='store_true',
-        default=False
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
-        "--safe_serialization", action='store_true', default=True, help="Whether or not to save using `safetensors`."
+        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
     )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
@@ -531,7 +556,7 @@ def main():
     )
     parser.add_argument(
         "--instruct",
-        action='store_true',
+        action="store_true",
         default=False,
         help="Whether the model is an instruct model or not. Will affect special tokens and chat template.",
     )
