@@ -969,10 +969,7 @@ class SpecialTokensMixin:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
-                    if (
-                        not replace_additional_special_tokens
-                        and str(token) in self._special_tokens_map["additional_special_tokens"]
-                    ):
+                    if not replace_additional_special_tokens and str(token) in self.additional_special_tokens:
                         continue
                     to_add.append(token)
                 if replace_additional_special_tokens and len(to_add) > 0:
