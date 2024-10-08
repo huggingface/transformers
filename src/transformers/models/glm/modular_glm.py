@@ -173,6 +173,7 @@ class GlmDecoderLayer(LlamaDecoderLayer):
 class GlmPreTrainedModel(LlamaPreTrainedModel):
     pass
 
+
 class GlmModel(GlmPreTrainedModel, LlamaModel):
     def __init__(self, config: GlmConfig):
         super().__init__(config)

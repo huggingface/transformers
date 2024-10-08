@@ -2294,8 +2294,8 @@ else:
             "GlmForCausalLM",
             "GlmForSequenceClassification",
             "GlmForTokenClassification",
-            "GlmPreTrainedModel",
             "GlmModel",
+            "GlmPreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -7017,8 +7017,8 @@ if TYPE_CHECKING:
             GlmForCausalLM,
             GlmForSequenceClassification,
             GlmForTokenClassification,
-            GlmPreTrainedModel,
             GlmModel,
+            GlmPreTrainedModel,
         )
         from .models.glpn import (
             GLPNForDepthEstimation,
