@@ -985,10 +985,9 @@ class Qwen2Model(Qwen2PreTrainedModel):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
-
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
