@@ -1419,7 +1419,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
-        if not config._attn_implementation_autoset:
+        if not getattr(config, "_attn_implementation_autoset", False):
             config = self._autoset_attn_implementation(
                 config, torch_dtype=torch.get_default_dtype(), check_device_map=False
             )
@@ -1518,7 +1518,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             attn_implementation = None
 
         config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
-        if not config._attn_implementation_autoset:
+        if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
                 config,
                 use_flash_attention_2=use_flash_attention_2,
@@ -3933,9 +3933,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
-        config = cls._autoset_attn_implementation(
-            config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
-        )
+        if not getattr(config, "_attn_implementation_autoset", False):
+            config = cls._autoset_attn_implementation(
+                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
+            )
 
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules

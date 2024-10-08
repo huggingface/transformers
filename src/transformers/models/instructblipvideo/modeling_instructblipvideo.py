@@ -1296,8 +1296,8 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
 class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
     config_class = InstructBlipVideoConfig
     main_input_name = "pixel_values"
-    _supports_flash_attn_2 = False
-    _supports_sdpa = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__(config)
