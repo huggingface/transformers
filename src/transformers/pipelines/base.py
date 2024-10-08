@@ -875,7 +875,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             elif is_torch_mps_available():
                 self.device = torch.device(f"mps:{device}")
             else:
-                self.device = -1
+                self.device = "cpu"
         else:
             self.device = device if device is not None else -1
 
