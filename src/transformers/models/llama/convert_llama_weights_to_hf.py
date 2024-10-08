@@ -386,15 +386,14 @@ def write_model(
 
         config.save_pretrained(tmp_model_path)
 
-        if instruct:
-            generation_config = GenerationConfig(
-                do_sample=True,
-                temperature=0.6,
-                top_p=0.9,
-                bos_token_id=bos_token_id,
-                eos_token_id=eos_token_id,
-            )
-            generation_config.save_pretrained(tmp_model_path)
+        generation_config = GenerationConfig(
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+        )
+        generation_config.save_pretrained(tmp_model_path)
 
         # Make space so we can load the model properly now.
         del state_dict
