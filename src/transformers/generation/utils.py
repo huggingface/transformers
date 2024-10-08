@@ -28,6 +28,7 @@ from torch.nn import functional as F
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    DynamicSlidingWindowCache,
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
@@ -2130,6 +2131,8 @@ class GenerationMixin:
                 raise ValueError(
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
+            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache):
+                raise ValueError("DynamicSlidingWindowCache cannot be used in assisted generation.")
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
@@ -2179,6 +2182,8 @@ class GenerationMixin:
                 raise ValueError(
                     f"contrastive search is not supported with stateful models, such as {self.__class__.__name__}"
                 )
+            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache) and getattr(model_kwargs, "low_memory", False):
+                raise ValueError("DynamicSlidingWindowCache cannot be used in contrastive generation with `low_memory=True`.")
 
             result = self._contrastive_search(
                 input_ids,
