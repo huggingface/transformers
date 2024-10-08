@@ -225,7 +225,7 @@ En este punto, solo quedan tres pasos:
 ...     args=training_args,
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
 ... )
 
