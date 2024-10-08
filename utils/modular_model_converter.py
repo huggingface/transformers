@@ -123,8 +123,9 @@ class ClassFinder(CSTVisitor):
             self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
         ):
             left_hand_side = node.body[0].targets[0].target
-            if hasattr(left_hand_side, "value") and left_hand_side.value not in ASSIGNMENTS_TO_KEEP.keys():
-                self.assignments[left_hand_side.value] = node
+            if hasattr(left_hand_side, "value"):
+                if left_hand_side.value not in ASSIGNMENTS_TO_KEEP.keys():
+                    self.assignments[left_hand_side.value] = node
             else:
                 for idx, target in enumerate(list(left_hand_side.elements)):
                     if target.value.value not in ASSIGNMENTS_TO_KEEP.keys():
