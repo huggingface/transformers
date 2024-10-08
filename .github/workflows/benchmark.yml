@@ -27,6 +27,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Install libpq-dev
+        run: |
+          apt update
+          apt install -y libpq-dev
+
       - name: Install benchmark script dependencies
         run: python3 -m pip install -r benchmark/requirements.txt
 
