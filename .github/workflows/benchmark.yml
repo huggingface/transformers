@@ -27,10 +27,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Install libpq-dev
+      - name: Install libpq-dev & psql
         run: |
           apt update
-          apt install -y libpq-dev
+          apt install -y libpq-dev postgresql-client
 
       - name: Install benchmark script dependencies
         run: python3 -m pip install -r benchmark/requirements.txt
