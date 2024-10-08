@@ -1,7 +1,5 @@
 import argparse
 import os
-import random
-import string
 from threading import Event, Thread
 from time import perf_counter, sleep
 
@@ -10,7 +8,11 @@ import psutil
 import psycopg2
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+
+
+os.environ["TOKENIZERS_PARALLELISM"] = "1"
+torch.set_float32_matmul_precision("high")
 
 
 def parse_arguments():
@@ -44,7 +46,7 @@ def parse_arguments():
 
 def collect_metrics(benchmark_id, continue_metric_collection):
     p = psutil.Process(os.getpid())
-    conn = psycopg2.connect("dbname=metrics host=localhost user=postgres password=postgres")
+    conn = psycopg2.connect("dbname=metrics")
     cur = conn.cursor()
     while not continue_metric_collection.is_set():
         with p.oneshot():
@@ -66,7 +68,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
     continue_metric_collection = Event()
     gpu_stats = gpustat.GPUStatCollection.new_query()
     gpu_name = gpu_stats[0]["name"]
-    conn = psycopg2.connect("dbname=metrics host=localhost user=postgres password=postgres")
+    conn = psycopg2.connect("dbname=metrics")
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO benchmarks (branch, commit_id, commit_msg, gpu_name) VALUES (%s, %s, %s, %s) RETURNING benchmark_id",
@@ -80,13 +82,14 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
     try:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
 
-        device = "cuda"
+        device = "cuda:1"
         ckpt = "bert-base-uncased"
 
         # This is to avoid counting download in model load time measurement
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16)
+        gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
         start = perf_counter()
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, generation_config=gen_config)
         model.to(device)
         end = perf_counter()
         model_load_time = end - start
@@ -112,6 +115,8 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
+
+        torch.compiler.reset()
 
         # `torch.compile(model, ...)` is not recommended as you compile callbacks
         # and full generate. We recommend compiling only the forward for now.

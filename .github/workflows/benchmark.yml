@@ -9,7 +9,7 @@ on:
 jobs:
   benchmark:
     name: Benchmark
-    runs-on: 
+    runs-on:
       group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -41,9 +41,10 @@ jobs:
 
       - name: Run database init script
         run: |
-          psql -U transformers_benchmarks -f benchmark/init_db.sql
+          psql -f benchmark/init_db.sql
         env:
           PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
+          PGUSER: transformers_benchmarks
           PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
 
       - name: Run benchmark
@@ -56,3 +57,7 @@ jobs:
           fi
           commit_msg=$(git show -s --format=%s | cut -c1-70)
           python3 benchmark/llama.py "${{ github.head_ref || github.ref_name }}" "$commit_id" "$commit_msg"
+        env:
+          PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
+          PGUSER: transformers_benchmarks
+          PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
