@@ -403,7 +403,7 @@ def main():
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=default_data_collator,
     )
 
