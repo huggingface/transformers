@@ -46,7 +46,7 @@ BARTpho 모델은 Nguyen Luong Tran, Duong Minh Le, Dat Quoc Nguyen에 의해 [B
 >>> input_ids = tokenizer(line, return_tensors="pt")
 
 >>> with torch.no_grad():
-...     features = bartpho(**input_ids)  # Models outputs are now tuples
+...     features = bartpho(**input_ids)  # 이제 모델 출력은 튜플입니다
 
 >>> # With TensorFlow 2.0+:
 >>> from transformers import TFAutoModel
