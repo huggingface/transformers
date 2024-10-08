@@ -53,6 +53,10 @@ class AwqQuantizer(HfQuantizer):
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
         if self.quantization_config.version == AWQLinearVersion.IPEX:
+            if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
+                raise RuntimeError(
+                    "To use IPEX backend, you need autoawq>0.6.2. Please install the latest version or from source."
+                )
             if (
                 device_map is not None
                 and isinstance(device_map, dict)
