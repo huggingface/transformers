@@ -55,7 +55,7 @@ class Seq2SeqTrainer(Trainer):
         model: Union["PreTrainedModel", nn.Module] = None,
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
+        train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
