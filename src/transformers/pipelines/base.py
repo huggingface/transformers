@@ -849,17 +849,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = next(iter(hf_device_map.values()))
             else:
                 device = 0
-                # if (
-                #     is_torch_mlu_available()
-                #     or is_torch_cuda_available()
-                #     or is_torch_npu_available()
-                #     or is_torch_xpu_available(check_device=True)
-                #     or is_torch_mps_available()
-                # ):
-                #     logger.warning(
-                #         "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
-                #         " is passed to the `Pipeline` object. Model will be on CPU."
-                #     )
+
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:
@@ -890,6 +880,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
+
+        logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
