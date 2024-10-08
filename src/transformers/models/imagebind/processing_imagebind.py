@@ -20,16 +20,12 @@ from typing import List, Optional, Union
 import numpy as np
 
 
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
 
 from ...image_utils import (
     ImageInput,
     VideoInput,
 )
-from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     BatchEncoding,
     PreTokenizedInput,
