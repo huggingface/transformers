@@ -2177,6 +2177,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
+        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
@@ -2438,7 +2439,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f.write(self.chat_template)
                 logger.info(f"chat template saved in {chat_template_file}")
                 if "chat_template" in tokenizer_config:
-                    breakpoint()
                     tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
             else:
                 tokenizer_config["chat_template"] = self.chat_template
