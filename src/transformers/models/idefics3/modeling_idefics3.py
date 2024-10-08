@@ -1258,7 +1258,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         if past_key_values is not None:
             # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
             past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_length()
+            max_cache_length = past_key_values.get_max_cache_shape()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
