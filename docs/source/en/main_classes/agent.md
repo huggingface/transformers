@@ -60,6 +60,10 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] load_tool
 
+### tool
+
+[[autodoc]] tool
+
 ### Tool
 
 [[autodoc]] Tool

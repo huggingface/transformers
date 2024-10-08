@@ -135,8 +135,8 @@
     title: 커뮤니티 리소스
   - local: troubleshooting
     title: 문제 해결
-  - local: in_translation
-    title: (번역중) Interoperability with GGUF files
+  - local: gguf
+    title: GGUF 파일들과의 상호 운용성
   title: (번역중) 개발자 가이드
 - sections:
   - local: in_translation
@@ -270,8 +270,8 @@
   - sections:
     - local: main_classes/agent
       title: 에이전트와 도구
-    - local: in_translation
-      title: (번역중) Auto Classes
+    - local: model_doc/auto
+      title: 자동 클래스
     - local: in_translation
       title: (번역중) Backbones
     - local: in_translation
@@ -282,8 +282,8 @@
       title: (번역중) Data Collator
     - local: in_translation
       title: (번역중) Keras callbacks
-    - local: in_translation
-      title: (번역중) Logging
+    - local: main_classes/logging
+      title: 로깅
     - local: in_translation
       title: (번역중) Models
     - local: in_translation
@@ -302,8 +302,8 @@
       title: (번역중) Quantization
     - local: in_translation
       title: (번역중) Tokenizer
-    - local: in_translation
-      title: (번역중) Trainer
+    - local: main_classes/trainer
+      title: Trainer
     - local: deepspeed
       title: DeepSpeed
     - local: in_translation
@@ -378,8 +378,8 @@
         title: (번역중) ERNIE
       - local: in_translation
         title: (번역중) ErnieM
-      - local: in_translation
-        title: (번역중) ESM
+      - local: model_doc/esm
+        title: ESM
       - local: in_translation
         title: (번역중) FLAN-T5
       - local: in_translation
@@ -392,6 +392,8 @@
         title: (번역중) FSMT
       - local: in_translation
         title: (번역중) Funnel Transformer
+      - local: model_doc/gemma
+        title: Gemma
       - local: in_translation
         title: (번역중) GPT
       - local: in_translation
@@ -606,8 +608,8 @@
       - local: in_translation
         title: (번역중) VideoMAE
       - local: in_translation
-        title: (번역중) Vision Transformer (ViT)
-      - local: in_translation
+        title: Vision Transformer (ViT)
+      - local: model_doc/vit
         title: (번역중) ViT Hybrid
       - local: in_translation
         title: (번역중) ViTMAE
@@ -667,6 +669,8 @@
         title: (번역중) BLIP-2
       - local: in_translation
         title: (번역중) BridgeTower
+      - local: model_doc/chameleon
+        title: Chameleon
       - local: in_translation
         title: (번역중) Chinese-CLIP
       - local: in_translation
@@ -753,8 +757,8 @@
   - sections:
     - local: in_translation
       title: (번역중) Custom Layers and Utilities
-    - local: in_translation
-      title: (번역중) Utilities for pipelines
+    - local: internal/pipelines_utils
+      title: 파이프라인을 위한 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Tokenizers
     - local: in_translation
@@ -763,11 +767,11 @@
       title: (번역중) Utilities for Generation
     - local: in_translation
       title: (번역중) Utilities for Image Processors
-    - local: in_translation
-      title: (번역중) Utilities for Audio processing
+    - local: internal/audio_utils
+      title: 오디오 처리를 위한 유틸리티
     - local: in_translation
       title: (번역중) General Utilities
-    - local: in_translation
-      title: (번역중) Utilities for Time Series
+    - local: internal/time_series_utils
+      title: 시계열을 위한 유틸리티
     title: (번역중) Internal Helpers
   title: (번역중) API

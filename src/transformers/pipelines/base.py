@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import csv
 import importlib
 import json
@@ -899,22 +900,26 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         ):
             self.model.to(self.device)
 
-        # Update config and generation_config with task specific parameters
-        task_specific_params = self.model.config.task_specific_params
-        if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
-            if self.model.can_generate():
-                self.model.generation_config.update(**task_specific_params.get(task))
-
-        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
-        # forward params so that `generate` is aware of the pad token.
-        if (
-            self.tokenizer is not None
-            and self.model.can_generate()
-            and self.tokenizer.pad_token_id is not None
-            and self.model.generation_config.pad_token_id is None
-        ):
-            self.model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+        # If the model can generate, create a local generation config. This is done to avoid side-effects on the model
+        # as we apply local tweaks to the generation config.
+        if self.model.can_generate():
+            self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
+            self.generation_config = copy.deepcopy(self.model.generation_config)
+            # Update the generation config with task specific params if they exist
+            # NOTE: `prefix` is pipeline-specific and doesn't exist in the generation config.
+            task_specific_params = self.model.config.task_specific_params
+            if task_specific_params is not None and task in task_specific_params:
+                this_task_params = task_specific_params.get(task)
+                if "prefix" in this_task_params:
+                    self.prefix = this_task_params.pop("prefix")
+                self.generation_config.update(**this_task_params)
+            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
+            if (
+                self.tokenizer is not None
+                and self.tokenizer.pad_token_id is not None
+                and self.generation_config.pad_token_id is None
+            ):
+                self.generation_config.pad_token_id = self.tokenizer.pad_token_id
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)

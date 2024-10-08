@@ -325,62 +325,37 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-This code can be converted into a class that inherits from the [`Tool`] superclass.
+This code can quickly be converted into a tool, just by wrapping it in a function and adding the `tool` decorator:
 
 
-The custom tool needs:
-- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name is `model_download_counter`.
-- An attribute `description` is used to populate the agent's system prompt.
-- An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
-- An `output_type` attribute, which specifies the output type.
-- A `forward` method which contains the inference code to be executed.
+```py
+from transformers import tool
 
+@tool
+def model_download_counter(task: str) -> str:
+    """
+    This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub.
+    It returns the name of the checkpoint.
 
-```python
-from transformers import Tool
-from huggingface_hub import list_models
-
-class HFModelDownloadsTool(Tool):
-    name = "model_download_counter"
-    description = (
-        "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
-        "It returns the name of the checkpoint."
-    )
-
-    inputs = {
-        "task": {
-            "type": "text",
-            "description": "the task category (such as text-classification, depth-estimation, etc)",
-        }
-    }
-    output_type = "text"
-
-    def forward(self, task: str):
-        model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
-        return model.id
+    Args:
+        task: The task for which
+    """
+    model = next(iter(list_models(filter="text-classification", sort="downloads", direction=-1)))
+    return model.id
 ```
 
-Now that the custom `HfModelDownloadsTool` class is ready, you can save it to a file named `model_downloads.py` and import it for use.
+The function needs:
+- A clear name. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's put `model_download_counter`.
+- Type hints on both inputs and output
+- A description, that includes an 'Args:' part where each argument is described (without a type indication this time, it will be pulled from the type hint).
+All these will be automatically baked into the agent's system prompt upon initialization: so strive to make them as clear as possible!
 
+> [!TIP]
+> This definition format is the same as tool schemas used in `apply_chat_template`, the only difference is the added `tool` decorator: read more on our tool use API [here](https://huggingface.co/blog/unified-tool-use#passing-tools-to-a-chat-template).
 
-```python
-from model_downloads import HFModelDownloadsTool
-
-tool = HFModelDownloadsTool()
-```
-
-You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and are using a token with read access.
-
-```python
-tool.push_to_hub("{your_username}/hf-model-downloads")
-```
-
-Load the tool with the [`~Tool.load_tool`] function and pass it to the `tools` parameter in your agent.
-
-```python
-from transformers import load_tool, CodeAgent
-
-model_download_tool = load_tool("m-ric/hf-model-downloads")
+Then you can directly initialize your agent:
+```py
+from transformers import CodeAgent
 agent = CodeAgent(tools=[model_download_tool], llm_engine=llm_engine)
 agent.run(
     "Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
@@ -399,7 +374,6 @@ print(f"The most downloaded model for the 'text-to-video' task is {most_download
 
 And the output:
 `"The most downloaded model for the 'text-to-video' task is ByteDance/AnimateDiff-Lightning."`
-
 
 ### Manage your agent's toolbox
 

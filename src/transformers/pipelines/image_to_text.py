@@ -181,6 +181,10 @@ class ImageToTextPipeline(Pipeline):
         ):
             model_inputs["input_ids"] = None
 
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`

@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -751,7 +752,7 @@ class RwkvModel(RwkvPreTrainedModel):
     """,
     RWKV_START_DOCSTRING,
 )
-class RwkvForCausalLM(RwkvPreTrainedModel):
+class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["head.weight"]
 
     def __init__(self, config):
