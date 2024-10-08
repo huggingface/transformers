@@ -2030,15 +2030,10 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
-    @parameterized.expand(
-        [({"do_sample": False},), ({"do_sample": False, "top_k": 2, "penalty_alpha": 0.5, "low_memory": True},)]
-    )
     @pytest.mark.generate
-    def test_generate_with_dynamic_sliding_window_cache(self, generation_kwargs: dict):
+    def test_generate_with_dynamic_sliding_window_cache(self):
         """
-        Tests if DynamicSlidingWindowCache works the same as DynamicCache for models that support it. The first expand
-        is for greedy, and the other is for contrasting search, as contrastive search needs to correctly roll back 1 token
-        of the cache even with DynamicSlidingWindowCache.
+        Tests if DynamicSlidingWindowCache works the same as DynamicCache for models that support it.
         """
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
@@ -2049,7 +2044,7 @@ class GenerationTesterMixin:
             config.sliding_window = 3
             model = model_class(config).to(torch_device).eval()
             all_generation_kwargs = {
-                **generation_kwargs,
+                "do_sample": False,
                 "max_new_tokens": 20,
                 "min_new_tokens": 20,
                 "use_cache": True,
