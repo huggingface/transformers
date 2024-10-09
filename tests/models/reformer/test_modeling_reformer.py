@@ -17,7 +17,6 @@ import unittest
 
 from transformers import ReformerConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -695,7 +694,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.model_tester.seq_length = original_sequence_length
         return test_inputs
 
-    @unittest.skip(reason="Resizing sometimes goes bad") #  not worth investigating for now (it's not a popular model)
+    @unittest.skip(reason="Resizing sometimes goes bad")  #  not worth investigating for now (it's not a popular model)
     def test_resize_tokens_embeddings(self):
         pass
 
