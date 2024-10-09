@@ -711,6 +711,8 @@
         title: (번역중) OneFormer
       - local: in_translation
         title: (번역중) OWL-ViT
+      - local: model_doc/paligemma
+        title: PaliGemma
       - local: in_translation
         title: (번역중) Perceiver
       - local: in_translation
