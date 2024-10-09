@@ -193,10 +193,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-<<<<<<< HEAD
-=======
-    _supports_flash_attn_2 = True
->>>>>>> 26e93c741 (Enabled Flash Attention for PaliGemma models)
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -303,9 +299,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(
-            config=config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_tower = AutoModel.from_config(config=config.vision_config, attn_implementation=config._attn_implementation)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
