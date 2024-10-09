@@ -785,8 +785,8 @@
       title: 토크나이저를 위한 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Trainer
-    - local: in_translation
-      title: (번역중) Utilities for Generation
+    - local: internal/generation_utils
+      title: 생성을 위한 유틸리티
     - local: internal/image_processing_utils
       title: 이미지 프로세서를 위한 유틸리티
     - local: internal/audio_utils
