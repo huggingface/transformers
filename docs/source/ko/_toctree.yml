@@ -400,8 +400,8 @@
         title: (번역중) GPT Neo
       - local: in_translation
         title: (번역중) GPT NeoX
-      - local: in_translation
-        title: (번역중) GPT NeoX Japanese
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: in_translation
         title: (번역중) GPT-J
       - local: in_translation
