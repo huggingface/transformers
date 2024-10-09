@@ -52,7 +52,8 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Slow & FA2 tests
-    runs-on: [single-gpu, nvidia-gpu, a10, ci]
+    runs-on:
+      group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

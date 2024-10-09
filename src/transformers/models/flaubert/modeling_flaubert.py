@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -644,7 +645,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
+class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
     def __init__(self, config):

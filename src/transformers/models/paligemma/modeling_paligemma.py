@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 
-# Adapted from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
+# Adapted from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
 # But Paligemma has no causal mask on prefix
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
@@ -56,8 +57,8 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
-    is_training: bool,
-    token_type_ids: torch.Tensor,
+    is_training: bool = False,
+    token_type_ids: torch.Tensor = None,
 ):
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -93,7 +94,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             if is_training:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             else:
-                causal_mask = torch.zeros_like(causal_mask)
+                causal_mask[:, :sequence_length] = 0.0
 
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
@@ -302,7 +303,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
@@ -377,7 +378,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             if is_training:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             else:
-                causal_mask = torch.zeros_like(causal_mask)
+                causal_mask[:, :sequence_length] = 0.0
 
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
@@ -452,9 +453,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -594,7 +593,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
             dtype = self.get_output_embeddings().weight.dtype
             min_dtype = torch.finfo(dtype).min
-            is_training = token_type_ids is not None and kwargs.get("labels", None) is not None
 
             model_inputs["attention_mask"] = _prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
@@ -605,8 +603,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 min_dtype=min_dtype,
                 cache_position=cache_position,
                 batch_size=batch_size,
-                is_training=is_training,
-                token_type_ids=token_type_ids,
             )
 
         model_inputs["token_type_ids"] = token_type_ids

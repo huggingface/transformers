@@ -330,7 +330,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
 
-        inputs = processor(text=text_prompt_coco_captioning, images=image, return_tensors="pt")
+        inputs = processor(images=image, text=text_prompt_coco_captioning, return_tensors="pt")
         generated_ids = model.generate(**inputs, max_new_tokens=10)
 
         # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them
