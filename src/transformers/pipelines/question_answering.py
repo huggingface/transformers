@@ -358,7 +358,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 `question` argument).
             top_k (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
-                topk answers if there are not enough options available within the context.
+                top_k answers if there are not enough options available within the context.
             doc_stride (`int`, *optional*, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
@@ -372,7 +372,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
             align_to_words (`bool`, *optional*, defaults to `True`):
-                Attempts to align the answer to real words. Improves quality on space separated langages. Might hurt on
+                Attempts to align the answer to real words. Improves quality on space separated languages. Might hurt on
                 non-space-separated languages (like Japanese or Chinese)
 
         Return:
