@@ -761,8 +761,8 @@
       sections:
       - local: model_doc/autoformer
         title: Autoformer
-      - local: in_translation
-        title: (번역중) Informer
+      - local: model_doc/informer
+        title: Informer
       - local: model_doc/patchtsmixer
         title: PatchTSMixer
       - local: model_doc/time_series_transformer
