@@ -179,6 +179,8 @@
     title: Optimum
   - local: quantization/torchao
     title: TorchAO
+  - local: quantization/bitnet
+    title: BitNet
   - local: quantization/compressed_tensors
     title: compressed-tensors
   - local: quantization/contribute

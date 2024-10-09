@@ -68,3 +68,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## TorchAoConfig
 
 [[autodoc]] TorchAoConfig
+
+## BitNetConfig
+
+[[autodoc]] BitNetConfig
