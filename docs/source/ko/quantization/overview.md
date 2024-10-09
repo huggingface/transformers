@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-트랜스포머에 새로운 양자화 방법을 추가하고 싶으신가요? [HfQuantizer](./contribute) 가이드를 읽고 방법을 알아보세요!
+Transformers에 새로운 양자화 방법을 추가하고 싶으신가요? [HfQuantizer](./contribute) 가이드를 읽고 방법을 알아보세요!
 
 </Tip>
 
