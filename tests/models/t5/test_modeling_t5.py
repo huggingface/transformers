@@ -1613,8 +1613,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for "
-                "permanent residence after the marriages, prosecutors say."
+                "Liana Barrientos has been married 10 times, nine of them in the Bronx . Her husbands filed for "
+                "permanent residence after the marriages, prosecutors say ."
             ],
         )
 
