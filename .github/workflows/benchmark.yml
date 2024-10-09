@@ -50,6 +50,7 @@ jobs:
 
       - name: Run benchmark
         run: |
+          git config --global --add safe.directory /__w/transformers/transformers
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             commit_id=$(echo "${{ github.event.pull_request.head.sha }}")
           elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
