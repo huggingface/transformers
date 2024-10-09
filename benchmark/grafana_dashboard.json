@@ -30,7 +30,7 @@
       "title": "Go to data",
       "tooltip": "Go to data",
       "type": "link",
-      "url": "http://localhost:8080/d/fdz33iyzln9c0a/transformers-benchmarks?orgId=1&from=${StartTime}&to=${EndTime}"
+      "url": "http://transformers-benchmarks.huggingface.co/d/fdz33iyzln9c0a/transformers-benchmarks?orgId=1&from=${StartTime}&to=${EndTime}"
     }
   ],
   "liveNow": true,
@@ -38,7 +38,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -88,17 +89,16 @@
         },
         "showHeader": true
       },
-      "pluginVersion": "11.2.0",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "type": "grafana-postgresql-datasource"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT gpu_name, commit_id FROM benchmarks WHERE branch = ${branch};",
+          "rawSql": "SELECT gpu_name, commit_message FROM benchmarks WHERE branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -181,7 +181,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -260,7 +261,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}",
+          "rawSql": "SELECT m.first_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}",
           "refId": "A",
           "sql": {
             "columns": [
@@ -286,7 +287,11 @@
       "type": "barchart"
     },
     {
-      "datasource": {},
+      "datasource": {
+        "default": true,
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -368,7 +373,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}",
+          "rawSql": "SELECT m.second_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}",
           "refId": "A",
           "sql": {
             "columns": [
@@ -410,7 +415,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "cdznuzn76lo8we"
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -489,7 +494,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.first_compile_forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}; -- TODO",
+          "rawSql": "SELECT m.first_compile_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -518,7 +523,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "cdznuzn76lo8we"
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -597,7 +602,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.second_compile_forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}; -- TODO",
+          "rawSql": "SELECT m.second_compile_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -626,7 +631,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "cdznuzn76lo8we"
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -705,7 +710,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.third_compile_forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}; -- TODO",
+          "rawSql": "SELECT m.third_compile_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -734,7 +739,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "cdznuzn76lo8we"
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -813,7 +818,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.third_compile_forward_pass_time, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch}; -- TODO",
+          "rawSql": "SELECT m.fourth_compile_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -854,7 +859,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -877,7 +883,7 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
+            "insertNulls": 60000,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1038,7 +1044,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -1061,7 +1068,7 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
+            "insertNulls": 60000,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1221,7 +1228,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -1244,7 +1252,7 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
+            "insertNulls": 60000,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1405,7 +1413,8 @@
     {
       "datasource": {
         "default": true,
-        "type": "grafana-postgresql-datasource"
+        "type": "grafana-postgresql-datasource",
+        "uid": "fe09l2dru48w0a"
       },
       "fieldConfig": {
         "defaults": {
@@ -1428,7 +1437,7 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
+            "insertNulls": 60000,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1595,15 +1604,15 @@
         "current": {
           "selected": true,
           "text": [
-            "feat/add_transformers_ci"
+            "refactor/benchmarks"
           ],
           "value": [
-            "feat/add_transformers_ci"
+            "refactor/benchmarks"
           ]
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "bdz2yss7sxo1sc"
+          "uid": "fe09l2dru48w0a"
         },
         "definition": "SELECT DISTINCT branch FROM benchmarks;",
         "hide": 0,
@@ -1622,12 +1631,12 @@
       {
         "current": {
           "selected": false,
-          "text": "1727450996541",
-          "value": "1727450996541"
+          "text": "1728483147602",
+          "value": "1728483147602"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "bdz2yss7sxo1sc"
+          "uid": "fe09l2dru48w0a"
         },
         "definition": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = ${branch} ORDER BY benchmark_id ASC LIMIT 1;",
         "description": "",
@@ -1646,12 +1655,12 @@
       {
         "current": {
           "selected": false,
-          "text": "1727453334868",
-          "value": "1727453334868"
+          "text": "1728489986242",
+          "value": "1728489986242"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "bdz2yss7sxo1sc"
+          "uid": "fe09l2dru48w0a"
         },
         "definition": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = ${branch} ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
         "description": "",
@@ -1670,8 +1679,8 @@
     ]
   },
   "time": {
-    "from": "2024-09-27T15:29:56.541Z",
-    "to": "2024-09-27T16:08:54.868Z"
+    "from": "2024-10-09T14:12:27.602Z",
+    "to": "2024-10-09T16:06:26.242Z"
   },
   "timepicker": {
     "hidden": false
@@ -1679,6 +1688,6 @@
   "timezone": "browser",
   "title": "Transformers benchmarks",
   "uid": "fdz33iyzln9c0a",
-  "version": 5,
+  "version": 8,
   "weekStart": ""
 }
