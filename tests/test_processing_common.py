@@ -18,6 +18,7 @@ import inspect
 import json
 import random
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -519,3 +520,18 @@ class ProcessorTesterMixin:
             processor.prepare_and_validate_optional_call_args(
                 *(f"optional_{i}" for i in range(num_optional_call_args + 1))
             )
+
+    def test_chat_template_save_loading(self):
+        processor = self.get_processor()
+        processor.chat_template = "test template"
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor.save_pretrained(tmpdirname)
+            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor.save_pretrained(tmpdirname, save_naked_chat_template=True)
+            self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
