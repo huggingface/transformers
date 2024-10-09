@@ -137,6 +137,8 @@
     title: 문제 해결
   - local: gguf
     title: GGUF 파일들과의 상호 운용성
+  - local: modular_transformers
+    title: transformers에서의 모듈성
   title: (번역중) 개발자 가이드
 - sections:
   - local: in_translation
@@ -276,8 +278,8 @@
       title: (번역중) Backbones
     - local: in_translation
       title: (번역중) Callbacks
-    - local: in_translation
-      title: (번역중) Configuration
+    - local: main_classes/configuration
+      title: 구성
     - local: in_translation
       title: (번역중) Data Collator
     - local: in_translation
@@ -288,26 +290,26 @@
       title: (번역중) Models
     - local: in_translation
       title: (번역중) Text Generation
-    - local: in_translation
-      title: (번역중) ONNX
+    - local: main_classes/onnx
+      title: ONNX
     - local: in_translation
       title: (번역중) Optimization
     - local: in_translation
-      title: (번역중) Model outputs
-    - local: in_translation
+      title: 모델 출력
+    - local: main_classes/output
       title: (번역중) Pipelines
     - local: in_translation
       title: (번역중) Processors
-    - local: in_translation
-      title: (번역중) Quantization
+    - local: main_classes/quantization
+      title: 양자화
     - local: in_translation
       title: (번역중) Tokenizer
     - local: main_classes/trainer
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
-    - local: in_translation
-      title: (번역중) Feature Extractor
+    - local: main_classes/feature_extractor
+      title: 특성 추출기
     - local: in_translation
       title: (번역중) Image Processor
     title: (번역중) 메인 클래스
@@ -328,14 +330,14 @@
         title: (번역중) BertGeneration
       - local: in_translation
         title: (번역중) BertJapanese
-      - local: in_translation
-        title: (번역중) Bertweet
+      - local: model_doc/bertweet
+        title: Bertweet
       - local: in_translation
         title: (번역중) BigBird
       - local: in_translation
         title: (번역중) BigBirdPegasus
-      - local: in_translation
-        title: (번역중) BioGpt
+      - local: model_doc/biogpt
+        title: BioGpt
       - local: in_translation
         title: (번역중) Blenderbot
       - local: in_translation
@@ -352,6 +354,8 @@
         title: (번역중) CANINE
       - local: in_translation
         title: (번역중) CodeGen
+      - local: model_doc/cohere
+        title: Cohere
       - local: in_translation
         title: (번역중) ConvBERT
       - local: in_translation
@@ -360,10 +364,12 @@
         title: (번역중) CPMANT
       - local: in_translation
         title: (번역중) CTRL
+      - local: model_doc/dbrx
+        title: DBRX
       - local: in_translation
         title: (번역중) DeBERTa
-      - local: in_translation
-        title: (번역중) DeBERTa-v2
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
       - local: in_translation
         title: (번역중) DialoGPT
       - local: in_translation
@@ -394,14 +400,14 @@
         title: (번역중) Funnel Transformer
       - local: model_doc/gemma
         title: Gemma
-      - local: in_translation
-        title: (번역중) GPT
+      - local: model_doc/openai-gpt
+        title: GPT
       - local: in_translation
         title: (번역중) GPT Neo
       - local: in_translation
         title: (번역중) GPT NeoX
-      - local: in_translation
-        title: (번역중) GPT NeoX Japanese
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: in_translation
         title: (번역중) GPT-J
       - local: in_translation
@@ -424,6 +430,8 @@
         title: LLaMA
       - local: model_doc/llama2
         title: LLaMA2
+      - local: model_doc/llama3
+        title: LLaMA3
       - local: in_translation
         title: (번역중) Longformer
       - local: in_translation
@@ -432,6 +440,8 @@
         title: (번역중) LUKE
       - local: in_translation
         title: (번역중) M2M100
+      - local: model_doc/mamba
+        title: Mamba
       - local: in_translation
         title: (번역중) MarianMT
       - local: in_translation
@@ -444,6 +454,8 @@
         title: (번역중) MegatronBERT
       - local: in_translation
         title: (번역중) MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
       - local: in_translation
         title: (번역중) mLUKE
       - local: in_translation
@@ -478,8 +490,8 @@
         title: (번역중) ProphetNet
       - local: in_translation
         title: (번역중) QDQBert
-      - local: in_translation
-        title: (번역중) RAG
+      - local: model_doc/rag
+        title: RAG(검색 증강 생성)
       - local: in_translation
         title: (번역중) REALM
       - local: in_translation
@@ -591,13 +603,13 @@
         title: (번역중) ResNet
       - local: in_translation
         title: (번역중) SegFormer
-      - local: in_translation
-        title: (번역중) Swin Transformer
+      - local: model_doc/swin
+        title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
-      - local: in_translation
-        title: Swin2SR
       - local: model_doc/swin2sr
+        title: Swin2SR
+      - local: in_translation
         title: (번역중) Table Transformer
       - local: in_translation
         title: (번역중) TimeSformer
@@ -663,8 +675,8 @@
         title: (번역중) ALIGN
       - local: in_translation
         title: (번역중) AltCLIP
-      - local: in_translation
-        title: (번역중) BLIP
+      - local: model_doc/blip
+        title: BLIP
       - local: in_translation
         title: (번역중) BLIP-2
       - local: in_translation
@@ -673,8 +685,8 @@
         title: Chameleon
       - local: in_translation
         title: (번역중) Chinese-CLIP
-      - local: in_translation
-        title: (번역중) CLIP
+      - local: model_doc/clip
+        title: CLIP
       - local: in_translation
         title: (번역중) CLIPSeg
       - local: in_translation
@@ -709,6 +721,8 @@
         title: (번역중) OneFormer
       - local: in_translation
         title: (번역중) OWL-ViT
+      - local: model_doc/paligemma
+        title: PaliGemma
       - local: in_translation
         title: (번역중) Perceiver
       - local: in_translation
@@ -743,11 +757,15 @@
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
+      - local: model_doc/autoformer
+        title: Autoformer
       - local: in_translation
         title: (번역중) Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
       - local: in_translation
         title: (번역중) Time Series Transformer
-      title: (번역중) 시계열 모델
+      title: 시계열 모델
     - isExpanded: false
       sections:
       - local: in_translation
@@ -757,20 +775,24 @@
   - sections:
     - local: in_translation
       title: (번역중) Custom Layers and Utilities
+    - local: in_translation
+      title: (번역중) Utilities for pipelines
+    - local: internal/tokenization_utils
+      title: 토크나이저를 위한 유틸리티
     - local: internal/pipelines_utils
       title: 파이프라인을 위한 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Tokenizers
+    - local: internal/tokenization_utils
+      title: 토크나이저를 위한 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Trainer
     - local: in_translation
       title: (번역중) Utilities for Generation
-    - local: in_translation
-      title: (번역중) Utilities for Image Processors
+    - local: internal/image_processing_utils
+      title: 이미지 프로세서를 위한 유틸리티
     - local: internal/audio_utils
       title: 오디오 처리를 위한 유틸리티
-    - local: in_translation
-      title: (번역중) General Utilities
+    - local: internal/file_utils
+      title: 일반 유틸리티
     - local: internal/time_series_utils
       title: 시계열을 위한 유틸리티
     title: (번역중) Internal Helpers
