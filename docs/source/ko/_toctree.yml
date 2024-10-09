@@ -328,8 +328,8 @@
         title: (번역중) BertGeneration
       - local: in_translation
         title: (번역중) BertJapanese
-      - local: in_translation
-        title: (번역중) Bertweet
+      - local: model_doc/bertweet
+        title: Bertweet
       - local: in_translation
         title: (번역중) BigBird
       - local: in_translation
