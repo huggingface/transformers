@@ -14,6 +14,8 @@
 
 import unittest
 
+from huggingface_hub import ObjectDetectionOutputElement
+
 from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
     AutoFeatureExtractor,
@@ -22,7 +24,8 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import (
+from transformers.testing_utils import (  #
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_pytesseract,
@@ -101,6 +104,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
                     },
                 )
+                compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
 
     @require_tf
     @unittest.skip(reason="Object detection not implemented in TF")
