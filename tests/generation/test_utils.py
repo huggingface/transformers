@@ -3887,6 +3887,10 @@ class TokenHealingTestCase(unittest.TestCase):
             revision="main",
             use_cache=True,
         )
+		"""
+			tokenizer.pad_token value can be empty but it is required in the latter codes
+			so assigned it here with eos_token
+		"""
         tokenizer.pad_token = tokenizer.eos_token
 
         input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
