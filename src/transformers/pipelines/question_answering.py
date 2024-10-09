@@ -183,8 +183,14 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         # Generic compatibility with sklearn and Keras
         # Batched data
         elif "X" in kwargs:
+            warnings.warn(
+                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5.", FutureWarning
+            )
             inputs = kwargs["X"]
         elif "data" in kwargs:
+            warnings.warn(
+                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5.", FutureWarning
+            )
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
             if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
@@ -345,20 +351,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            args ([`SquadExample`] or a list of [`SquadExample`]):
-                One or several [`SquadExample`] containing the question and context.
-            X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
-                passed as the first positional argument).
-            data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
-                passed as the first positional argument).
             question (`str` or `List[str]`):
                 One or several question(s) (must be used in conjunction with the `context` argument).
             context (`str` or `List[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 `question` argument).
-            topk (`int`, *optional*, defaults to 1):
+            top_k (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
                 topk answers if there are not enough options available within the context.
             doc_stride (`int`, *optional*, defaults to 128):
@@ -387,6 +385,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         """
 
         # Convert inputs to features
+        if args:
+            warnings.warn(
+                "Passing a list of SQuAD examples to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
+            )
 
         examples = self._args_parser(*args, **kwargs)
         if isinstance(examples, (list, tuple)) and len(examples) == 1:
