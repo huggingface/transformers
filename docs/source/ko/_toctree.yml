@@ -276,8 +276,8 @@
       title: 자동 클래스
     - local: in_translation
       title: (번역중) Backbones
-    - local: in_translation
-      title: (번역중) Callbacks
+    - local: main_classes/callback
+      title: 콜백
     - local: main_classes/configuration
       title: 구성
     - local: main_classes/data_collator
