@@ -280,8 +280,8 @@
       title: (번역중) Callbacks
     - local: main_classes/configuration
       title: 구성
-    - local: in_translation
-      title: (번역중) Data Collator
+    - local: main_classes/data_collator
+      title: 데이터 콜레이터
     - local: main_classes/keras_callbacks
       title: 케라스 콜백
     - local: main_classes/logging
