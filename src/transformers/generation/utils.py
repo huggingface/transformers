@@ -387,7 +387,6 @@ class GenerationMixin:
                 input_ids = input_ids[:, cache_position]
 
         # 3. Prepare base model inputs
-        # Encoder-decoder models have slightly different keys for the decoder `input_ids`
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
