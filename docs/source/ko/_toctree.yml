@@ -366,8 +366,8 @@
         title: DBRX
       - local: in_translation
         title: (번역중) DeBERTa
-      - local: in_translation
-        title: (번역중) DeBERTa-v2
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
       - local: in_translation
         title: (번역중) DialoGPT
       - local: in_translation
