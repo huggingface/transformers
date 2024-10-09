@@ -387,13 +387,15 @@ class GenerationMixin:
                 input_ids = input_ids[:, cache_position]
 
         # 3. Prepare base model inputs
+        # Encoder-decoder models have slightly different keys for the decoder `input_ids`
+        input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs["input_ids"] = None
+            model_inputs[input_ids_key] = None
             model_inputs["inputs_embeds"] = inputs_embeds
         else:
             # `clone` calls in this function ensure a consistent stride. See #32227
-            model_inputs["input_ids"] = input_ids.clone(memory_format=torch.contiguous_format)
+            model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
             model_inputs["inputs_embeds"] = None
 
         # 4. Create missing `position_ids` on the fly
@@ -421,8 +423,8 @@ class GenerationMixin:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
                 device = model_inputs["inputs_embeds"].device
             else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
+                batch_size, sequence_length = model_inputs[input_ids_key].shape
+                device = model_inputs[input_ids_key].device
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class).
