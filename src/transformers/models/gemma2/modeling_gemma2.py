@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    auto_class_docstring,
     auto_docstring,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
@@ -575,7 +576,7 @@ class Gemma2DecoderLayer(nn.Module):
         return outputs
 
 
-# @auto_class_docstring
+@auto_class_docstring
 class Gemma2PreTrainedModel(PreTrainedModel):
     config_class = Gemma2Config
     base_model_prefix = "model"
@@ -614,6 +615,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
         return config
 
 
+@auto_class_docstring
 class Gemma2Model(Gemma2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Gemma2DecoderLayer`]
@@ -1050,7 +1052,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-# @auto_docstring
+@auto_class_docstring
 class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
