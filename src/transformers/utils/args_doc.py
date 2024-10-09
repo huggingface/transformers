@@ -1,5 +1,6 @@
 import inspect
 from functools import wraps
+import regex as re
 
 
 class ModelArgs:
@@ -118,44 +119,59 @@ class ModelArgs:
         are not taken into account for computing the loss.
     """
 
+class ClassDocstring:
+    PreTrainedModel = r"""
+        This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+        library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+        etc.)
+
+        This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+        Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+        and behavior.
+
+        Parameters:
+            config ([`LlamaConfig`]):
+                Model configuration class with all the parameters of the model. Initializing with a config file does not
+                load the weights associated with the model, only the configuration. Check out the
+                [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
+    Model = r"""The bare {model_camel} Model outputting raw hidden-states without any specific head on top."""
+
+    ForSequenceClassification = r"""The {model_name} Model transformer with a sequence classification head on top (linear layer).
+
+        [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+        (e.g. GPT-2) do.
+
+        Since it does classification on the last token, it requires to know the position of the last token. If a
+        `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+        no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+        padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+        each row of the batch).
+    """
+
+    ForQuestionAnswering = r"""The Llama Model transformer with a span classification head on top for extractive question-answering tasks like
+        SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """
+
+    ForTokenClassificatio = r"""The Llama Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+        output) e.g. for Named-Entity-Recognition (NER) tasks.
+    """
+
+class ClassAttrs:
+    base_model_prefix = r"""TODO """
+    supports_gradient_checkpointing = r"""TODO """
+    _no_split_module = r"""TODO """
+    _skip_keys_device_placement = r"""TODO """
+    _supports_flash_attn_2 = r"""TODO """
+    _supports_sdpa = r"""TODO """
+    _supports_cache_class = r"""TODO """
+    _supports_quantized_cache = r"""TODO """
+    _supports_static_cache = r"""TODO """
+    _init_weights = r"""TODO """
 
 ARGS_TO_IGNORE = {"self", "kwargs", "args"}
 
-COMMON_FOR_QA_DOCSTRING = (
-    """
-The Llama Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-""",
-)
-
-COMMON_CLASS_SEQ_DOC = """
-    The LLaMa Model transformer with a sequence classification head on top (linear layer).
-
-    [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """
-
-COMMON_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`LlamaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 def get_indent_level(func):
@@ -215,3 +231,36 @@ def auto_docstring(func):
     wrapper.__doc__ = docstring
 
     return wrapper
+
+
+def auto_class_docstring(cls):
+    """
+    Wrapper that automatically generates a docstring for classes based on their attributes and methods.
+    """
+
+    class Wrapper(cls):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+    indent_level = get_indent_level(cls)
+
+    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)[0]
+    pre_block = getattr(ClassDocstring, name)
+    # Start building the docstring
+    docstring = f"{pre_block}\n\n"
+    docstring += "Attributes:\n"
+
+    # Get all attributes and methods of the class
+    for attr_name, attr_value in cls.__dict__.items():
+        if not callable(attr_value) and not attr_name.startswith('__'):
+            if attr_value.__class__.__name__ == 'property':
+                attr_type = 'property'
+            else:
+                attr_type = type(attr_value).__name__
+            indented_doc = getattr(ClassAttrs, attr_name, "")
+            docstring += f"{' ' * indent_level}{attr_name} (`{attr_type}`): {indented_doc}\n"
+
+    # Assign the dynamically generated docstring to the wrapper class
+    Wrapper.__doc__ = docstring
+
+    return Wrapper

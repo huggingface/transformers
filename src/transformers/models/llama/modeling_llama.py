@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    auto_class_docstring,
     auto_docstring,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -679,7 +680,7 @@ class LlamaDecoderLayer(nn.Module):
         return outputs
 
 
-# @auto_class_docstring
+@auto_class_docstring
 class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
@@ -704,6 +705,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_class_docstring
 class LlamaModel(LlamaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
@@ -1081,7 +1083,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         )
 
 
-# @auto_docstring
+@auto_class_docstring
 class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1184,6 +1186,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         )
 
 
+@auto_class_docstring
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
