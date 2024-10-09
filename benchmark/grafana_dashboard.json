@@ -47,7 +47,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "left",
             "cellOptions": {
               "type": "auto"
             },
@@ -68,7 +68,56 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gpu_name"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 364
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "left"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 407
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "commit_message"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 708
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "commit_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 388
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 6,
@@ -87,7 +136,8 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": []
       },
       "pluginVersion": "11.2.2",
       "targets": [
@@ -98,7 +148,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT gpu_name, commit_message FROM benchmarks WHERE branch = ${branch};",
+          "rawSql": "SELECT commit_id as commit_id, commit_message, gpu_name FROM benchmarks WHERE branch = ${branch};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1596,6 +1646,7 @@
       "type": "timeseries"
     }
   ],
+  "refresh": "",
   "schemaVersion": 39,
   "tags": [],
   "templating": {
@@ -1655,8 +1706,8 @@
       {
         "current": {
           "selected": false,
-          "text": "1728489986242",
-          "value": "1728489986242"
+          "text": "1728491065173",
+          "value": "1728491065173"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
@@ -1679,8 +1730,8 @@
     ]
   },
   "time": {
-    "from": "2024-10-09T14:12:27.602Z",
-    "to": "2024-10-09T16:06:26.242Z"
+    "from": "2024-10-09T16:22:18.627Z",
+    "to": "2024-10-09T16:24:25.173Z"
   },
   "timepicker": {
     "hidden": false
@@ -1688,6 +1739,6 @@
   "timezone": "browser",
   "title": "Transformers benchmarks",
   "uid": "fdz33iyzln9c0a",
-  "version": 8,
+  "version": 11,
   "weekStart": ""
 }
