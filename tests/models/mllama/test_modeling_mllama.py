@@ -380,6 +380,25 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
+    def test_generate_text_only_with_cache(self):
+        """
+        Tests that our cached generation with text-only inputs works. When mllama was introduced, this feature
+        required cache modifications (because layers are skipped in practice). This test should prevent regressions.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            model.generate(input_ids, use_cache=True)
 
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
