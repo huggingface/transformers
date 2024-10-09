@@ -775,12 +775,8 @@
       title: 그래프 모델
     title: (번역중) 모델
   - sections:
-    - local: in_translation
-      title: (번역중) Custom Layers and Utilities
-    - local: in_translation
-      title: (번역중) Utilities for pipelines
-    - local: internal/tokenization_utils
-      title: 토크나이저를 위한 유틸리티
+    - local: internal/modeling_utils
+      title: 사용자 정의 레이어 및 유틸리티
     - local: internal/pipelines_utils
       title: 파이프라인을 위한 유틸리티
     - local: internal/tokenization_utils
