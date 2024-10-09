@@ -31,7 +31,7 @@ Graphormer 모델은 Chengxuan Ying, Tianle Cai, Shengjie Luo, Shuxin Zheng, Guo
 
 이 모델은 [clefourrier](https://huggingface.co/clefourrier)가 기여했습니다. 원본 코드는 [이곳](https://github.com/microsoft/Graphormer)에서 확인할 수 있습니다.
 
-## Usage tips[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
 이 모델은 큰 그래프(100개 이상의 노드개수/엣지개수)에서는 메모리 사용량이 폭발적으로 증가하므로 잘 작동하지 않습니다. 대안으로 배치 크기를 줄이거나, RAM을 늘리거나 또는 algos_graphormer.pyx 파일의 `UNREACHABLE_NODE_DISTANCE` 매개변수를 줄이는 방법도 있지만, 700개 이상의 노드개수/엣지개수를 처리하기에는 여전히 어려울 것입니다.
 
