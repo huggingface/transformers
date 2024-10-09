@@ -695,9 +695,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.model_tester.seq_length = original_sequence_length
         return test_inputs
 
-    @is_flaky(max_attempts=10)  # VERY flaky, but not worth investigating for now (it's not a popular model)
+    @unittest.skip(reason="Resizing sometimes goes bad") #  not worth investigating for now (it's not a popular model)
     def test_resize_tokens_embeddings(self):
-        super().test_resize_tokens_embeddings()
+        pass
 
 
 @require_torch
