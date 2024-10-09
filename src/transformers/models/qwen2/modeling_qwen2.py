@@ -791,12 +791,6 @@ QWEN2_INPUTS_DOCSTRING = r"""
 
 @auto_class_docstring
 class Qwen2Model(Qwen2PreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2DecoderLayer`]
-
-    Args:
-        config: Qwen2Config
-    """
 
     def __init__(self, config: Qwen2Config):
         super().__init__(config)

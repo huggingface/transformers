@@ -600,12 +600,6 @@ class NemotronPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class NemotronModel(NemotronPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`NemotronDecoderLayer`]
-
-    Args:
-        config: NemotronConfig
-    """
 
     def __init__(self, config: NemotronConfig):
         super().__init__(config)

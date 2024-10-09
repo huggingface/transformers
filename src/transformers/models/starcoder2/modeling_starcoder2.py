@@ -672,12 +672,6 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class Starcoder2Model(Starcoder2PreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
-
-    Args:
-        config: Starcoder2Config
-    """
 
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)

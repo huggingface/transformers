@@ -859,13 +859,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class JetMoeModel(JetMoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JetMoeBlock`]
-
-    Args:
-        config:
-            JetMoeConfig
-    """
 
     def __init__(self, config: JetMoeConfig):
         super().__init__(config)

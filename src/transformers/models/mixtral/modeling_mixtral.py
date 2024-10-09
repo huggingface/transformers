@@ -807,12 +807,6 @@ class MixtralPreTrainedModel(PreTrainedModel):
 # TODO @longjie no longer copied from Mistral after static cache
 @auto_class_docstring
 class MixtralModel(MixtralPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
-
-    Args:
-        config: MixtralConfig
-    """
 
     def __init__(self, config: MixtralConfig):
         super().__init__(config)

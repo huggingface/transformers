@@ -836,12 +836,6 @@ STABLELM_INPUTS_DOCSTRING = r"""
 
 @auto_class_docstring
 class StableLmModel(StableLmPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLmDecoderLayer`]
-
-    Args:
-        config: StableLmConfig
-    """
 
     def __init__(self, config: StableLmConfig):
         super().__init__(config)

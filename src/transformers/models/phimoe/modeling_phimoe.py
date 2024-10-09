@@ -939,11 +939,6 @@ class PhimoePreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class PhimoeModel(PhimoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhimoeDecoderLayer`]
-    Args:
-        config: PhimoeConfig
-    """
 
     def __init__(self, config: PhimoeConfig):
         super().__init__(config)

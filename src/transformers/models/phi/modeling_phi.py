@@ -755,12 +755,6 @@ class PhiPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class PhiModel(PhiPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiDecoderLayer`]
-
-    Args:
-        config: PhiConfig
-    """
 
     def __init__(self, config: PhiConfig):
         super().__init__(config)

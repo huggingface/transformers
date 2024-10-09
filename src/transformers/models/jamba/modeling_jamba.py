@@ -1128,12 +1128,6 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
 @auto_class_docstring
 class JambaModel(JambaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
-
-    Args:
-        config: JambaConfig
-    """
 
     def __init__(self, config: JambaConfig):
         super().__init__(config)

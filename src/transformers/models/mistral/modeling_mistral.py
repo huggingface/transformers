@@ -601,12 +601,6 @@ class MistralPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class MistralModel(MistralPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
-
-    Args:
-        config: MistralConfig
-    """
 
     def __init__(self, config: MistralConfig):
         super().__init__(config)
