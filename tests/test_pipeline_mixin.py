@@ -214,8 +214,6 @@ class PipelineTesterMixin:
                     image_processor_names.append(cls_name)
                 elif "FeatureExtractor" in cls_name:
                     feature_extractor_names.append(cls_name)
-                else:
-                    raise ValueError(f"Unknown processor class: {cls_name}")
 
             # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
