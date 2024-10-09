@@ -3112,6 +3112,7 @@ else:
     _import_structure["models.qwen2_moe"].extend(
         [
             "Qwen2MoeForCausalLM",
+            "Qwen2MoeForQuestionAnswering",
             "Qwen2MoeForSequenceClassification",
             "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
@@ -7641,6 +7642,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
+            Qwen2MoeForQuestionAnswering,
             Qwen2MoeForSequenceClassification,
             Qwen2MoeForTokenClassification,
             Qwen2MoeModel,

@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,

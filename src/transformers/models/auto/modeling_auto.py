@@ -1010,8 +1010,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
         ("albert", "AlbertForQuestionAnswering"),
-        ("mixtral", "MixtralForQuestionAnswering"),
-        ("qwen2", "Qwen2ForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
         ("big_bird", "BigBirdForQuestionAnswering"),
@@ -1049,6 +1047,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaForQuestionAnswering"),
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
         ("mistral", "MistralForQuestionAnswering"),
+        ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
         ("mpt", "MptForQuestionAnswering"),
@@ -1060,6 +1059,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("nystromformer", "NystromformerForQuestionAnswering"),
         ("opt", "OPTForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
+        ("qwen2", "Qwen2ForQuestionAnswering"),
+        ("qwen2_moe", "Qwen2MoeForQuestionAnswering"),
         ("reformer", "ReformerForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("roberta", "RobertaForQuestionAnswering"),

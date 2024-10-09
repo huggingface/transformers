@@ -7483,6 +7483,13 @@ class Qwen2MoeForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2MoeForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Qwen2MoeForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
