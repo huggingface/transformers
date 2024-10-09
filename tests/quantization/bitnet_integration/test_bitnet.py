@@ -194,11 +194,11 @@ class BitNetTest(unittest.TestCase):
         self.assertEqual(list(model.linear.weight.shape), [out_features // 4, in_features])
         self.assertEqual(model.linear.weight_scale, 1)
 
+
 @slow
 @require_torch_gpu
 @require_accelerate
 class BitNetSerializationTest(unittest.TestCase):
-
     def test_model_serialization(self):
         model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
         device = "cuda"
