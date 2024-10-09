@@ -2718,6 +2718,7 @@ else:
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
+            "MixtralForQuestionAnswering",
             "MixtralForSequenceClassification",
             "MixtralForTokenClassification",
             "MixtralModel",
@@ -7330,6 +7331,7 @@ if TYPE_CHECKING:
         )
         from .models.mixtral import (
             MixtralForCausalLM,
+            MixtralForQuestionAnswering,
             MixtralForSequenceClassification,
             MixtralForTokenClassification,
             MixtralModel,

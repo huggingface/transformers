@@ -1244,20 +1244,14 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     base_model_prefix = "transformer"
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Nemotron
     def __init__(self, config):
         super().__init__(config)
         self.transformer = NemotronModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
-        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
-
-    def load_hook(self, state_dict, prefix, *args):
-        for k in state_dict:
-            if "model." in k:
-                state_dict[k.replace("model.", "transformer.")] = state_dict.pop(k)
-                break
 
     def get_input_embeddings(self):
         return self.transformer.embed_tokens

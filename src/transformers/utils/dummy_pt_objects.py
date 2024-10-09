@@ -5962,6 +5962,13 @@ class MixtralForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MixtralForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MixtralForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
