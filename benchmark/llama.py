@@ -1,5 +1,7 @@
 import argparse
+import logging
 import os
+import sys
 from threading import Event, Thread
 from time import perf_counter, sleep
 
@@ -10,6 +12,15 @@ import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter("[%(levelname)s - %(asctime)s] %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
@@ -93,6 +104,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.to(device)
         end = perf_counter()
         model_load_time = end - start
+        logger.info(f"loaded model in: {model_load_time}s")
 
         tokenizer = AutoTokenizer.from_pretrained(ckpt)
 
@@ -109,12 +121,15 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         first_eager_fwd_pass_time = end - start
+        logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
+
         # TODO:
         # response = tokenizer.batch_decode(outputs)[0]
         start = perf_counter()
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
+        logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
 
         torch.compiler.reset()
 
@@ -130,6 +145,8 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         first_compile_fwd_pass_time = end - start
+        logger.info(f"completed first compile fwd pass in: {first_compile_fwd_pass_time}s")
+
         # TODO:
         # response = tokenizer.batch_decode(outputs)[0]
 
@@ -138,6 +155,8 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         second_compile_fwd_pass_time = end - start
+        logger.info(f"completed second compile fwd pass in: {second_compile_fwd_pass_time}s")
+
         # TODO:
         # response = tokenizer.batch_decode(outputs)[0]
 
@@ -146,11 +165,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         third_compile_fwd_pass_time = end - start
+        logger.info(f"completed third compile fwd pass in: {third_compile_fwd_pass_time}s")
 
         start = perf_counter()
         model.generate(**inputs, do_sample=False)
         end = perf_counter()
         fourth_compile_fwd_pass_time = end - start
+        logger.info(f"completed fourth compile fwd pass in: {fourth_compile_fwd_pass_time}s")
 
         cur.execute(
             """
