@@ -843,7 +843,8 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         num_logits_to_keep=None,
         **kwargs,
     ):
-        """Different from the base `prepare_inputs_for_generation` because of `HybridCache`."""
+        # Overwritten: has a special cache type, `HybridCache`
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
