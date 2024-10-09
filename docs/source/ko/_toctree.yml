@@ -362,6 +362,8 @@
         title: (번역중) CPMANT
       - local: in_translation
         title: (번역중) CTRL
+      - local: model_doc/dbrx
+        title: DBRX
       - local: in_translation
         title: (번역중) DeBERTa
       - local: in_translation
