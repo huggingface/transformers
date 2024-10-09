@@ -14,6 +14,8 @@
 
 import unittest
 
+from huggingface_hub import ImageClassificationOutputElement
+
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -23,6 +25,7 @@ from transformers import (
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -120,6 +123,10 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        for single_output in outputs:
+            for output_element in single_output:
+                compare_pipeline_output_to_hub_spec(output_element, ImageClassificationOutputElement)
 
     @require_torch
     def test_small_model_pt(self):
