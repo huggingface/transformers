@@ -1297,7 +1297,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 )
         return causal_mask
 
-    # Copied from transformers.generation.utils.GenerationMixin.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
@@ -1356,7 +1355,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = self  # Ignore copy
+            base_model = self
             causal_mask_creation_function = getattr(
                 base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
             )
@@ -1371,8 +1370,8 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 attention_mask = causal_mask_creation_function(
                     attention_mask,
                     sequence_length=sequence_length,
-                    target_length=past_key_values.max_cache_len,  # Ignore copy
-                    dtype=self.text_embed_tokens.weight.dtype,  # Ignore copy
+                    target_length=past_key_values.max_cache_len,
+                    dtype=self.text_embed_tokens.weight.dtype,
                     device=device,
                     cache_position=cache_position,
                     batch_size=batch_size,
