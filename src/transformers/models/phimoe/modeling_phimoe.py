@@ -37,12 +37,10 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     auto_docstring,
     is_flash_attn_2_available,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
@@ -1062,7 +1060,7 @@ class PhimoeModel(PhimoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1365,9 +1363,8 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
