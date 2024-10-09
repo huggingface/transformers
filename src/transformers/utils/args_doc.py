@@ -270,5 +270,4 @@ def auto_class_docstring(cls):
         docstring += cls.__doc__
     Wrapper.__doc__ = docstring
 
-
     return Wrapper

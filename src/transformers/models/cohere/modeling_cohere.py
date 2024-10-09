@@ -42,9 +42,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
-    add_start_docstrings,
-    auto_docstring,
     auto_class_docstring,
+    auto_docstring,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,

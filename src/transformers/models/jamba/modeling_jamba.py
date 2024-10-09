@@ -41,9 +41,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
-    auto_docstring,
     auto_class_docstring,
+    auto_docstring,
     logging,
 )
 from ...utils.import_utils import (
