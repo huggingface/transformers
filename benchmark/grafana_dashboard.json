@@ -39,7 +39,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -232,7 +232,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -340,7 +340,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -465,7 +465,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -573,7 +573,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -681,7 +681,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -789,7 +789,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -910,7 +910,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -1095,7 +1095,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -1279,7 +1279,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -1464,7 +1464,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "fe09l2dru48w0a"
+        "uid": "de0dbhs18ho1sc"
       },
       "fieldConfig": {
         "defaults": {
@@ -1646,7 +1646,6 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "",
   "schemaVersion": 39,
   "tags": [],
   "templating": {
@@ -1663,9 +1662,10 @@
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "fe09l2dru48w0a"
+          "uid": "de0dbhs18ho1sc"
         },
         "definition": "SELECT DISTINCT branch FROM benchmarks;",
+        "description": "",
         "hide": 0,
         "includeAll": false,
         "label": "branch",
@@ -1673,7 +1673,7 @@
         "name": "branch",
         "options": [],
         "query": "SELECT DISTINCT branch FROM benchmarks;",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -1687,7 +1687,7 @@
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "fe09l2dru48w0a"
+          "uid": "de0dbhs18ho1sc"
         },
         "definition": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = ${branch} ORDER BY benchmark_id ASC LIMIT 1;",
         "description": "",
@@ -1706,12 +1706,12 @@
       {
         "current": {
           "selected": false,
-          "text": "1728491065173",
-          "value": "1728491065173"
+          "text": "1728492274009",
+          "value": "1728492274009"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "fe09l2dru48w0a"
+          "uid": "de0dbhs18ho1sc"
         },
         "definition": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = ${branch} ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
         "description": "",
@@ -1730,8 +1730,8 @@
     ]
   },
   "time": {
-    "from": "2024-10-09T16:22:18.627Z",
-    "to": "2024-10-09T16:24:25.173Z"
+    "from": "2024-10-09T14:12:27.602Z",
+    "to": "2024-10-09T16:44:34.009Z"
   },
   "timepicker": {
     "hidden": false
@@ -1739,6 +1739,6 @@
   "timezone": "browser",
   "title": "Transformers benchmarks",
   "uid": "fdz33iyzln9c0a",
-  "version": 11,
+  "version": 4,
   "weekStart": ""
 }
