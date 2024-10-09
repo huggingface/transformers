@@ -1243,7 +1243,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen2MooConfig`):
+            config (`Qwen2MoeConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate
