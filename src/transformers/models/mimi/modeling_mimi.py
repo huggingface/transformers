@@ -1060,7 +1060,7 @@ class MimiTransformerModel(nn.Module):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1078,6 +1078,7 @@ class MimiTransformerModel(nn.Module):
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
