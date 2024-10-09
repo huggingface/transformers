@@ -1042,7 +1042,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaSelfAttentionDecoderLayer",
     ]
     _supports_cache_class = True
-    _supports_static_cache = False
+    _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_quantized_cache = True
 
@@ -1980,6 +1980,8 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
+    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
+
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
