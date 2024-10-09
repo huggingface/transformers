@@ -1236,7 +1236,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1505,6 +1505,9 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
+        # process
+
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
@@ -1553,7 +1556,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
+                target_length=past_key_values.get_max_cache_shape(),
                 dtype=self.lm_head.weight.dtype,
                 device=device,
                 cache_position=cache_position,
