@@ -288,8 +288,8 @@
       title: (번역중) Models
     - local: in_translation
       title: (번역중) Text Generation
-    - local: in_translation
-      title: (번역중) ONNX
+    - local: main_classes/onnx
+      title: ONNX
     - local: in_translation
       title: (번역중) Optimization
     - local: in_translation
