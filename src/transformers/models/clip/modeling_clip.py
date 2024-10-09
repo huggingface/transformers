@@ -875,9 +875,20 @@ class CLIPEncoder(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if isinstance(output_hidden_states, list):
+            if (
+                any(index > self.config.num_hidden_layers for index in output_hidden_states)
+                or any(
+                    self.config.num_hidden_layers + index + 1 < 0 if index < 0 else False
+                    for index in output_hidden_states
+                )
+                or any(
+                    self.config.num_hidden_layers + index + 1 > self.config.num_hidden_layers if index < 0 else False
+                    for index in output_hidden_states
+                )
+            ):
+                raise ValueError("output_hidden_states index is out of range.")
             output_hidden_states = [
-                min(self.config.num_hidden_layers, self.config.num_hidden_layers + index + 1) if index < 0 else index
-                for index in output_hidden_states
+                self.config.num_hidden_layers + index + 1 if index < 0 else index for index in output_hidden_states
             ]
 
         if isinstance(output_hidden_states, list):
