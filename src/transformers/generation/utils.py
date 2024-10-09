@@ -2437,6 +2437,10 @@ class GenerationMixin:
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
+		"""
+			the latter code assumes the input_ids is not empty,
+			input_id has to be checked if contains elements
+		"""
         if input_ids.numel() == 0:
             return input_ids
 
@@ -2453,6 +2457,10 @@ class GenerationMixin:
                 continue  # skip empty sequences (all pad ids)
 
             # apply bias for alternatives (extensions) to the tail token
+			"""
+				seq_bias key has to be tuple with int so have to use 
+				tokenizer function to convert str to int
+			"""
             seq_bias = {
                 (tokenizer.convert_tokens_to_ids(alt_tok),): 10.0 for alt_tok in vocab_trie.extensions(prefix=tail_tok)
             }
@@ -2466,6 +2474,10 @@ class GenerationMixin:
 
             trimmed_ids = batch_ids[:-1]
 
+			"""
+				the latter code assumes trimmed_ids is not empty
+				so have to check the its element count
+			"""
             if trimmed_ids.numel() == 0:
                 continue
 
