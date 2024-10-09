@@ -78,7 +78,7 @@ if sys.version_info >= (3, 11):
 else:
     Unpack = typing_extensions.Unpack
 
-class Fa2Kwargs(TypedDict, total=False):
+class FlashAttentionKwargs(TypedDict, total=False):
     """
     Keyword arguments for Flash Attention with Compile.
 
