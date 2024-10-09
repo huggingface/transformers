@@ -1052,10 +1052,10 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 # 4/ Regular token
                 # We just append to the list of all tokens so we can handle
                 # merges later and decode into text.
-                current_tokens.append(token)
                 if return_timestamps == "word":
                     start_time = round(token_timestamps[i] + time_offset, 2)
                     if i + 1 < len(token_timestamps):
+                        current_tokens.append(token)
                         end_time = round(token_timestamps[i + 1] + time_offset, 2)
                         current_token_timestamps.append((start_time, end_time))
                     else:
@@ -1192,7 +1192,7 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                 # and have timestamps that are in order
                 matches = sum(
                     1
-                    for idx, elem in enumerate(left[:-1])
+                    for idx, elem in enumerate(left)
                     if (
                         elem == right[idx]
                         and left_token_timestamp_sequence[left_start + idx]
