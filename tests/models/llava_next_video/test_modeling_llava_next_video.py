@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -226,7 +227,7 @@ class LlavaNextVideoVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaNextVideoForConditionalGeneration`.
     """

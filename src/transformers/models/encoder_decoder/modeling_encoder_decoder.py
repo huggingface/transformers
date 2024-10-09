@@ -221,20 +221,20 @@ class EncoderDecoderModel(PreTrainedModel):
         self.encoder = encoder
         self.decoder = decoder
 
-        # if self.encoder.config.to_dict() != self.config.encoder.to_dict():
-        #     logger.warning(
-        #         f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
-        #         f" {self.config.encoder}"
-        #     )
-        # if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-        #     logger.warning(
-        #         f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
-        #         f" {self.config.decoder}"
-        #     )
+        if self.encoder.config.to_dict() != self.config.encoder.to_dict():
+            logger.warning(
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+                f" {self.config.encoder}"
+            )
+        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
+            logger.warning(
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f" {self.config.decoder}"
+            )
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        # update `_attn_implementation` because the attn is set a a deepcopied config within PreTrainedMolde
+        # update `_attn_implementation` because the attn is set in a deepcopied config within PreTrainedModel
         self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
         self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder

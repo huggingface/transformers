@@ -517,14 +517,6 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
-    def test_sdpa_can_dispatch_composite_models(self):
-        pass
-
-    @unittest.skip("Kosmos2 doesn't support attn implementation flag at all and has only eager layers")
-    def test_flash_attn_2_can_dispatch_composite_models(self):
-        pass
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():

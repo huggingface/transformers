@@ -380,11 +380,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     test_head_masking = False
     test_torchscript = False
 
-    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
-    # So we can't know if SDPA is supported before starting to load the model
-    # This flag is used by tests and is set to False because LM/vision models used in tests don't support SDPA
-    supports_sdpa = False
-
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Idefics2Config, has_text_modality=False)

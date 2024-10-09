@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -194,7 +195,7 @@ class VideoLlavaVisionText2TextModelTester:
 
 
 @require_torch
-class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
