@@ -38,12 +38,26 @@ from .test_pipelines_common import ANY
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         example_video_filepath = hf_hub_download(
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )
         video_classifier = VideoClassificationPipeline(
-            model=model, image_processor=processor, top_k=2, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+            top_k=2,
         )
         examples = [
             example_video_filepath,
