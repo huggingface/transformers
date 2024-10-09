@@ -2838,7 +2838,10 @@ class ModelTesterMixin:
     def test_inputs_embeds_matches_input_ids_with_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+            ]:
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -2854,6 +2857,13 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            # VLMs can't generate with embeds and pixels at the same time. We expect the user to pass merged
+            # embeds already
+            if model_class.__name__ in get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES):
+                inputs.pop("pixel_values", None)
+                inputs.pop("pixel_values_videos", None)
+                inputs.pop("pixel_values_images", None)
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
