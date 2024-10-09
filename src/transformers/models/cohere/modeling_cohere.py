@@ -44,6 +44,7 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     auto_docstring,
+    auto_class_docstring,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -667,27 +668,8 @@ class CohereDecoderLayer(nn.Module):
         return outputs
 
 
-COHERE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings etc.).
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`CohereConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
-    COHERE_START_DOCSTRING,
-)
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
+@auto_class_docstring
 class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
@@ -712,11 +694,8 @@ class CoherePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@add_start_docstrings(
-    "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
-    COHERE_START_DOCSTRING,
-)
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
+@auto_class_docstring
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]

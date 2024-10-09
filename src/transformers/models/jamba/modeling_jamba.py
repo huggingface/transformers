@@ -43,6 +43,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     auto_docstring,
+    auto_class_docstring,
     logging,
 )
 from ...utils.import_utils import (
@@ -1098,27 +1099,7 @@ class JambaMambaDecoderLayer(nn.Module):
         return outputs
 
 
-JAMBA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`JambaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Jamba Model outputting raw hidden-states without any specific head on top.",
-    JAMBA_START_DOCSTRING,
-)
+@auto_class_docstring
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
     base_model_prefix = "model"
@@ -1145,11 +1126,8 @@ class JambaPreTrainedModel(PreTrainedModel):
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
 
 
-@add_start_docstrings(
-    "The bare Jamba Model outputting raw hidden-states without any specific head on top.",
-    JAMBA_START_DOCSTRING,
-)
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
+@auto_class_docstring
 class JambaModel(JambaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
@@ -1407,19 +1385,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         num_logits_to_keep: Optional[Union[int, None]] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int` or `None`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
-                `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
-                can save memory, which becomes pretty significant for long sequences.
-
-        Returns:
-
         Example:
 
         ```python
@@ -1566,22 +1531,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@add_start_docstrings(
-    """
-    The Jamba Model with a sequence classification head on top (linear layer).
-
-    [`JambaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    JAMBA_START_DOCSTRING,
-)
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA
+@auto_class_docstring
 class JambaForSequenceClassification(JambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
