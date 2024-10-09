@@ -43,6 +43,7 @@ jobs:
         run: |
           psql -f benchmark/init_db.sql
         env:
+          PGDATABASE: metrics
           PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
           PGUSER: transformers_benchmarks
           PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}

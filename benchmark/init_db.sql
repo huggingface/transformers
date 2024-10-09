@@ -1,5 +1,3 @@
-\c metrics;
-
 CREATE TABLE benchmarks (
   benchmark_id SERIAL PRIMARY KEY,
   branch VARCHAR(255),
