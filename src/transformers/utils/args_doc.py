@@ -121,7 +121,8 @@ class ModelArgs:
     """
 
     output_router_logits = r"""
-
+        Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+        should not be returned during inference.
     """
 
 
