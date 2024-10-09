@@ -82,6 +82,7 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics3VisionTransformer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -132,6 +133,8 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+        "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
     ]
 )
 
@@ -167,7 +170,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapTextModelWithProjection",
     "ClapAudioModel",
     "ClapAudioModelWithProjection",
-    "Blip2ForConditionalGeneration",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
     "Blip2QFormerModel",
@@ -178,7 +180,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
-    "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
     "BlipForQuestionAnswering",
     "BlipVisionModel",
@@ -242,7 +243,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DetrForSegmentation",
     "Pix2StructVisionModel",
     "Pix2StructTextModel",
-    "Pix2StructForConditionalGeneration",
     "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
@@ -319,7 +319,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
-    "UdopForConditionalGeneration",
     "SeamlessM4Tv2NARTextToUnitModel",
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",

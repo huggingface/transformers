@@ -183,8 +183,15 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
     for imp in imports:
         try:
             importlib.import_module(imp)
-        except ImportError:
-            missing_packages.append(imp)
+        except ImportError as exception:
+            logger.warning(f"Encountered exception while importing {imp}: {exception}")
+            # Some packages can fail with an ImportError because of a dependency issue.
+            # This check avoids hiding such errors.
+            # See https://github.com/huggingface/transformers/issues/33604
+            if "No module named" in str(exception):
+                missing_packages.append(imp)
+            else:
+                raise
 
     if len(missing_packages) > 0:
         raise ImportError(
