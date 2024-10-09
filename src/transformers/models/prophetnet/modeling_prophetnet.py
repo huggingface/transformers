@@ -2290,6 +2290,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         use_cache=None,
         **kwargs,
     ):
+        # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
+
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)

@@ -25,9 +25,27 @@ from pathlib import Path
 from textwrap import dedent
 from typing import get_args
 
-from huggingface_hub import AudioClassificationInput, AutomaticSpeechRecognitionInput
+from huggingface_hub import (
+    AudioClassificationInput,
+    AutomaticSpeechRecognitionInput,
+    DepthEstimationInput,
+    ImageClassificationInput,
+    ImageSegmentationInput,
+    ImageToTextInput,
+    ObjectDetectionInput,
+    ZeroShotImageClassificationInput,
+)
 
-from transformers.pipelines import AudioClassificationPipeline, AutomaticSpeechRecognitionPipeline
+from transformers.pipelines import (
+    AudioClassificationPipeline,
+    AutomaticSpeechRecognitionPipeline,
+    DepthEstimationPipeline,
+    ImageClassificationPipeline,
+    ImageSegmentationPipeline,
+    ImageToTextPipeline,
+    ObjectDetectionPipeline,
+    ZeroShotImageClassificationPipeline,
+)
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -105,6 +123,12 @@ task_to_pipeline_and_spec_mapping = {
     # task spec in the HF Hub
     "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
     "automatic-speech-recognition": (AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionInput),
+    "depth-estimation": (DepthEstimationPipeline, DepthEstimationInput),
+    "image-classification": (ImageClassificationPipeline, ImageClassificationInput),
+    "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
+    "image-to-text": (ImageToTextPipeline, ImageToTextInput),
+    "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
+    "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
 for task, task_info in pipeline_test_mapping.items():
