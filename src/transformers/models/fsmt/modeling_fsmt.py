@@ -35,6 +35,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1173,7 +1174,7 @@ class FSMTModel(PretrainedFSMTModel):
 @add_start_docstrings(
     "The FSMT Model with a language modeling head. Can be used for summarization.", FSMT_START_DOCSTRING
 )
-class FSMTForConditionalGeneration(PretrainedFSMTModel):
+class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 

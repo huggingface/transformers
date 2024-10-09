@@ -39,8 +39,8 @@ The original code can be found [here](https://github.com/state-spaces/mamba).
 
 # Usage
 
-### A simple generation example: 
-```python 
+### A simple generation example:
+```python
 from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
 import torch
 
@@ -55,7 +55,7 @@ print(tokenizer.batch_decode(out))
 ### Peft finetuning
 The slow version is not very stable for training, and the fast one needs `float32`!
 
-```python 
+```python
 from datasets import load_dataset
 from trl import SFTTrainer
 from peft import LoraConfig
@@ -80,7 +80,7 @@ lora_config =  LoraConfig(
 )
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     args=training_args,
     peft_config=lora_config,
     train_dataset=dataset,

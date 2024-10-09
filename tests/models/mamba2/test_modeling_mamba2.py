@@ -35,7 +35,7 @@ if is_torch_available():
         Mamba2ForCausalLM,
         Mamba2Model,
     )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -291,6 +291,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
+    @require_read_token
     @parameterized.expand(
         [
             (torch_device,),
@@ -319,6 +320,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_batched_equivalence_with_cache(self):
@@ -349,6 +351,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_batched_equivalence_without_cache(self):
@@ -378,3 +381,27 @@ class Mamba2IntegrationTest(unittest.TestCase):
             individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
+
+    @slow
+    @require_torch_gpu
+    def test_mamba2_mixer_train_vs_eval_equivalence(self):
+        # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
+        # Credit to zhixuan-lin
+
+        B, T, D = 4, 512, 768
+        dtype = torch.bfloat16
+        config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
+
+        torch.manual_seed(42)
+        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+            with torch.no_grad():
+                mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
+                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
+
+                mixer.train()
+                out_train = mixer(hidden_states)
+
+                mixer.eval()
+                out_eval = mixer(hidden_states)
+
+                self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))
