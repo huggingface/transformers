@@ -286,8 +286,8 @@
       title: 케라스 콜백
     - local: main_classes/logging
       title: 로깅
-    - local: in_translation
-      title: (번역중) Models
+    - local: main_classes/model
+      title: Models
     - local: in_translation
       title: (번역중) Text Generation
     - local: main_classes/onnx
