@@ -789,8 +789,8 @@
       title: (번역중) Utilities for Image Processors
     - local: internal/audio_utils
       title: 오디오 처리를 위한 유틸리티
-    - local: in_translation
-      title: (번역중) General Utilities
+    - local: internal/file_utils
+      title: 일반 유틸리티
     - local: internal/time_series_utils
       title: 시계열을 위한 유틸리티
     title: (번역중) Internal Helpers
