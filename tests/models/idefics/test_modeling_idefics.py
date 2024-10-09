@@ -616,10 +616,15 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             return model_kwargs
 
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, inputs_dict = self._get_input_ids_and_config()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            input_ids = inputs_dict.pop("input_ids")
+            attention_mask = inputs_dict.pop("attention_mask")
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
+            image_attention_mask = inputs_dict.pop("image_attention_mask", None)
+
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
-            image_attention_mask = inputs_dict.pop("image_attention_mask", None)
 
             # no cache as some models require special cache classes to be init outside forward
             model.generation_config.use_cache = False
@@ -715,7 +720,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_generate_without_input_ids(self):
         """Overwrite because IDEFICS needs image attention mask to be also processed and requires image at input always."""
 
-        config, _, _, input_dict = self._get_input_ids_and_config()
+        config, input_dict = self.prepare_config_and_inputs_for_generate()
         pixel_values = input_dict["pixel_values"]
         image_attention_mask = input_dict["image_attention_mask"][:, -1:, :]
 
