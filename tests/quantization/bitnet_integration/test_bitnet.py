@@ -193,3 +193,34 @@ class BitNetTest(unittest.TestCase):
 
         self.assertEqual(list(model.linear.weight.shape), [out_features // 4, in_features])
         self.assertEqual(model.linear.weight_scale, 1)
+
+@slow
+@require_torch_gpu
+@require_accelerate
+class BitNetSerializationTest(unittest.TestCase):
+
+    def test_model_serialization(self):
+        model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
+        device = "cuda"
+        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device)
+        input_tensor = torch.zeros((1, 8), dtype=torch.int32, device=device)
+
+        with torch.no_grad():
+            logits_ref = quantized_model.forward(input_tensor).logits
+
+        # Save
+        saved_model_id = "quant_model"
+        quantized_model.save_pretrained(saved_model_id)
+
+        # Remove old model
+        torch.cuda.empty_cache()
+
+        # Load and check if the logits match
+        model_loaded = AutoModelForCausalLM.from_pretrained(
+            "quant_model", torch_dtype=torch.float16, device_map=device, low_cpu_mem_usage=True
+        )
+
+        with torch.no_grad():
+            logits_loaded = model_loaded.forward(input_tensor).logits
+
+        self.assertEqual((logits_loaded - logits_ref).abs().mean().item(), 0)
