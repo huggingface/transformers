@@ -242,11 +242,11 @@ class PipelineTesterMixin:
                 commit=commit,
                 torch_dtype=torch_dtype,
             )
+            at_least_one_model_is_tested = True
+
         if task in task_to_pipeline_and_spec_mapping:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
-
-            at_least_one_model_is_tested = True
 
         if not at_least_one_model_is_tested:
             self.skipTest(
