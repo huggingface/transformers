@@ -1342,8 +1342,8 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
 class StableLmForTokenClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

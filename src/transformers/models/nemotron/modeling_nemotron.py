@@ -988,8 +988,8 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForSequenceClassification(NemotronPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1092,8 +1092,8 @@ class NemotronForSequenceClassification(NemotronPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -1176,8 +1176,8 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForTokenClassification(NemotronPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

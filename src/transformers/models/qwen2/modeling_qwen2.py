@@ -1290,8 +1290,8 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2, LLAMA->QWEN2
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2, LLAMA->QWEN2
 class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

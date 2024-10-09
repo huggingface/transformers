@@ -1071,8 +1071,8 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Starcoder2, LLAMA->STARCODER2
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Starcoder2, LLAMA->STARCODER2
 class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1175,8 +1175,8 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Starcoder2, LLAMA->STARCODER2
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Starcoder2, LLAMA->STARCODER2
 class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

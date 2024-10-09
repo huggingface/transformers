@@ -1162,8 +1162,8 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PHI,Llama->Phi with self.transformer->self.model, transformer_outputs->model_outputs
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PHI,Llama->Phi with self.transformer->self.model, transformer_outputs->model_outputs
 class PhiForSequenceClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1266,8 +1266,8 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
         )
 
 
-# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->PHI,Mpt->Phi,self.transformer->self.model,transformer_outputs->model_outputs
 @auto_class_docstring
+# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->PHI,Mpt->Phi,self.transformer->self.model,transformer_outputs->model_outputs
 class PhiForTokenClassification(PhiPreTrainedModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)

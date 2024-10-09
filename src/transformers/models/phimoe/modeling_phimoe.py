@@ -913,8 +913,8 @@ class PhimoeDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
 @auto_class_docstring
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig
     base_model_prefix = "model"
@@ -1474,8 +1474,8 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE
 class PhimoeForSequenceClassification(PhimoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

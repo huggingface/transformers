@@ -1272,8 +1272,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -667,8 +667,8 @@ class CohereDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
 class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
@@ -693,8 +693,8 @@ class CoherePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]

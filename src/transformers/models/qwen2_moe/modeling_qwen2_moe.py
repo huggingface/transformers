@@ -1391,8 +1391,8 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1495,8 +1495,8 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
 class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

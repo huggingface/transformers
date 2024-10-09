@@ -1237,8 +1237,8 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mixtral, LLAMA->MIXTRAL
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mixtral, LLAMA->MIXTRAL
 class MixtralForSequenceClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1341,8 +1341,8 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mixtral, LLAMA->MIXTRAL
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mixtral, LLAMA->MIXTRAL
 class MixtralForTokenClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

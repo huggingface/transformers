@@ -967,8 +967,8 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mistral, LLAMA->MISTRAL
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mistral, LLAMA->MISTRAL
 class MistralForSequenceClassification(MistralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1071,8 +1071,8 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mistral, LLAMA->MISTRAL
 @auto_class_docstring
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mistral, LLAMA->MISTRAL
 class MistralForTokenClassification(MistralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
