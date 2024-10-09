@@ -773,10 +773,14 @@
   - sections:
     - local: in_translation
       title: (번역중) Custom Layers and Utilities
+    - local: in_translation
+      title: (번역중) Utilities for pipelines
+    - local: internal/tokenization_utils
+      title: 토크나이저를 위한 유틸리티
     - local: internal/pipelines_utils
       title: 파이프라인을 위한 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Tokenizers
+    - local: internal/tokenization_utils
+      title: 토크나이저를 위한 유틸리티
     - local: in_translation
       title: (번역중) Utilities for Trainer
     - local: in_translation
