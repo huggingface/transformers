@@ -448,6 +448,8 @@
         title: (번역중) MegatronBERT
       - local: in_translation
         title: (번역중) MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
       - local: in_translation
         title: (번역중) mLUKE
       - local: in_translation
