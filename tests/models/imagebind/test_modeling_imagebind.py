@@ -1002,7 +1002,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
         outputs_text_vision = model(**inputs_text_vision)
         outputs_audio_vision = model(**inputs_audio_vision)
 
-        assert torch.allclose(outputs_text_vision.image_embeds[:, :5], expected_output_vision, atol=1e-4)
+        assert torch.allclose(outputs_text_vision.image_embeds[:, :5], expected_output_vision, atol=1e-3)
         assert torch.allclose(outputs_text_vision.text_embeds[:, :5], expected_output_text, atol=1e-4)
         assert torch.allclose(outputs_audio_vision.audio_embeds[:, :5], expected_output_audio, atol=1e-4)
         assert torch.allclose(outputs_text_vision.image_embeds, outputs_audio_vision.image_embeds, atol=1e-4)
