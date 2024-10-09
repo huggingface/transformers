@@ -1,5 +1,6 @@
 import inspect
 from functools import wraps
+
 import regex as re
 
 
@@ -119,6 +120,7 @@ class ModelArgs:
         are not taken into account for computing the loss.
     """
 
+
 class ClassDocstring:
     PreTrainedModel = r"""
         This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -158,6 +160,7 @@ class ClassDocstring:
         output) e.g. for Named-Entity-Recognition (NER) tasks.
     """
 
+
 class ClassAttrs:
     base_model_prefix = r"""TODO """
     supports_gradient_checkpointing = r"""TODO """
@@ -170,8 +173,8 @@ class ClassAttrs:
     _supports_static_cache = r"""TODO """
     _init_weights = r"""TODO """
 
-ARGS_TO_IGNORE = {"self", "kwargs", "args"}
 
+ARGS_TO_IGNORE = {"self", "kwargs", "args"}
 
 
 def get_indent_level(func):
@@ -219,7 +222,7 @@ def auto_docstring(func):
             # Check if the parameter has a default value (considered optional)
             # is_optional = param.default != inspect.Parameter.empty
 
-            indented_doc = getattr(ModelArgs, param_name)#.replace("\n    ", "\n")
+            indented_doc = getattr(ModelArgs, param_name)  # .replace("\n    ", "\n")
             docstring += f"{' '*indent_level}{param_name} (`{param_type}`{indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
@@ -252,9 +255,9 @@ def auto_class_docstring(cls):
 
     # Get all attributes and methods of the class
     for attr_name, attr_value in cls.__dict__.items():
-        if not callable(attr_value) and not attr_name.startswith('__'):
-            if attr_value.__class__.__name__ == 'property':
-                attr_type = 'property'
+        if not callable(attr_value) and not attr_name.startswith("__"):
+            if attr_value.__class__.__name__ == "property":
+                attr_type = "property"
             else:
                 attr_type = type(attr_value).__name__
             indented_doc = getattr(ClassAttrs, attr_name, "")
