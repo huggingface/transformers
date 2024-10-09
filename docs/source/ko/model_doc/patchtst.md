@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # PatchTST[[patchtst]]
 
-## Overview[[overview]]
+## 개요[[overview]]
 
 The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam이 제안한 [시계열 하나가 64개의 단어만큼 가치있다: 트랜스포머를 이용한 장기예측](https://arxiv.org/abs/2211.14730)라는 논문에서 소개되었습니다.
 
@@ -33,9 +33,9 @@ The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalag
     - 지역적 의미 정보가 임베딩에 유지됩니다; 
     - 동일한 룩백 윈도우에 대해 어텐션 맵의 계산과 메모리 사용량이 제곱으로 감소합니다
     - 모델이 더 긴 과거를 참조할 수 있습니다. 
-    우리의 채널 독립적 패치 시계열 트랜스포머(PatchTST)는 최신 트랜스포머 기반 모델들과 비교했을 때 장기 예측 정확도를 크게 향상시킬 수 있습니다. 또한 모델을 자기 감독 사전 훈련 작업에 적용하여, 대규모 데이터셋에 대해 감독 학습시키는 것을 능가하는 아주 뛰어난 미세 조정 성능을 달성했습니다. 한 데이터셋에서 마스크된 사전 훈련 표현을 다른 데이터셋으로 전이하는 것도 최고 수준의 예측 정확도(SOTA)를 산출했습니다.*
+    우리의 채널 독립적 패치 시계열 트랜스포머(PatchTST)는 최신 트랜스포머 기반 모델들과 비교했을 때 장기 예측 정확도를 크게 향상시킬 수 있습니다. 또한 모델을 자기지도 사전 훈련 작업에 적용하여, 대규모 데이터셋에 대한 지도 학습을 능가하는 아주 뛰어난 미세 조정 성능을 달성했습니다. 한 데이터셋에서 마스크된 사전 훈련 표현을 다른 데이터셋으로 전이하는 것도 최고 수준의 예측 정확도(SOTA)를 산출했습니다.*
 
-이 모델은 [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif). The original code can be found [here](https://github.com/yuqinie98/PatchTST)에 의해 기여 되었습니다.
+이 모델은 [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)에 의해 기여 되었습니다. 원본코드는 [이곳](https://github.com/yuqinie98/PatchTST)에서 확인할 수 있습니다.
 
 ## Usage tips[[usage-tips]]
 
