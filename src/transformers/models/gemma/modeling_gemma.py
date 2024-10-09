@@ -40,6 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    auto_class_docstring,
     auto_docstring,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -575,7 +576,7 @@ class GemmaDecoderLayer(nn.Module):
         return outputs
 
 
-# @auto_class_docstring
+@auto_class_docstring
 class GemmaPreTrainedModel(PreTrainedModel):
     config_class = GemmaConfig
     base_model_prefix = "model"
@@ -600,6 +601,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_class_docstring
 class GemmaModel(GemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
@@ -990,7 +992,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
         )
 
 
-# @auto_docstring
+@auto_class_docstring
 class GemmaForSequenceClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
