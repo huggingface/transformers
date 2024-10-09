@@ -352,11 +352,11 @@ class ImageBindVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def image_to_video(self, pixel_values: torch.FloatTensor, time_dim: int = 2, ntimes: int = 2):
+    def image_to_video(self, pixel_values: torch.FloatTensor, time_dim: int = 2, num_frames: int = 2):
         """
         Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
         time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
-        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `ntimes` to get
+        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `num_frames` to get
         shape (B, N, C, H, W).
         """
         if pixel_values.ndim not in [4, 5]:
@@ -368,10 +368,10 @@ class ImageBindVisionEmbeddings(nn.Module):
         if pixel_values.ndim == 4:
             pixel_values = pixel_values.unsqueeze(time_dim)
 
-        # Repeat image across the time dimension ntimes.
+        # Repeat image across the time dimension num_frames.
         if pixel_values.shape[time_dim] == 1:
             new_shape = [1] * len(pixel_values.shape)
-            new_shape[time_dim] = ntimes
+            new_shape[time_dim] = num_frames
             pixel_values = pixel_values.repeat(new_shape)
 
         return pixel_values
@@ -381,7 +381,7 @@ class ImageBindVisionEmbeddings(nn.Module):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        pixel_values = self.image_to_video(pixel_values, ntimes=self.num_frames)
+        pixel_values = self.image_to_video(pixel_values, num_frames=self.num_frames)
         batch_size, num_channels, num_frames, height, width = pixel_values.shape
 
         embeddings = self.patch_embedding(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
