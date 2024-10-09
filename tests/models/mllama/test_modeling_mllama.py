@@ -400,6 +400,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             model.generate(input_ids, use_cache=True)
 
+
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
