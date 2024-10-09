@@ -57,7 +57,7 @@ Transformers에 새로운 양자화 방법을 추가하고 싶으신가요? [HfQ
 | [HQQ](./hqq)                                 | 🟢                       | 🟢    | 🟢        | 🔴              | 🔴                     | 🟢                       | 1 - 8          | 🟢                                   | 🔴            | 🟢                      | https://github.com/mobiusml/hqq/            |
 | [Quanto](./quanto)                              | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🟢                       | 2 / 4 / 8      | 🔴                                   | 🔴            | 🟢                      | https://github.com/huggingface/quanto       |
 | [FBGEMM_FP8](./fbgemm_fp8.md)                              | 🟢                       | 🔴    | 🟢        | 🔴              | 🔴                      | 🔴                        | 8      | 🔴                                   | 🟢            | 🟢                      | https://github.com/pytorch/FBGEMM       |
-| [torchao](./torchao.md)                              | 🟢                       |     | 🟢        | 🔴              | int4가중치에 대한 부분 지원       |                       | 4 / 8      |                                   | 🟢🔴           | 🟢                      | https://github.com/pytorch/ao       |
+| [torchao](./torchao.md)                              | 🟢                       |     | 🟢        | 🔴              | partial support (int4 weight only)       |                       | 4 / 8      |                                   | 🟢🔴           | 🟢                      | https://github.com/pytorch/ao       |
 
 <Tip>
 
