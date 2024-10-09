@@ -251,13 +251,13 @@ def auto_class_docstring(cls):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
-    indent_level = get_indent_level(cls)
+    indent_level = get_indent_level(cls) + 8
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)[0]
     pre_block = getattr(ClassDocstring, name)
     # Start building the docstring
     docstring = f"{pre_block}\n\n"
-    docstring += "Attributes:\n"
+    docstring += f"{' ' * indent_level}Attributes:\n"
 
     # Get all attributes and methods of the class
     for attr_name, attr_value in cls.__dict__.items():
@@ -267,7 +267,7 @@ def auto_class_docstring(cls):
             else:
                 attr_type = type(attr_value).__name__
             indented_doc = getattr(ClassAttrs, attr_name, "")
-            docstring += f"{' ' * indent_level}{attr_name} (`{attr_type}`): {indented_doc}\n"
+            docstring += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
 
     # Assign the dynamically generated docstring to the wrapper class
     if cls.__doc__ is not None:
