@@ -478,8 +478,8 @@
         title: (번역중) ProphetNet
       - local: in_translation
         title: (번역중) QDQBert
-      - local: in_translation
-        title: (번역중) RAG
+      - local: model_doc/rag
+        title: RAG(검색 증강 생성)
       - local: in_translation
         title: (번역중) REALM
       - local: in_translation
