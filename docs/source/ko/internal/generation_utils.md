@@ -51,7 +51,7 @@ generation_output = model.generate(**inputs, return_dict_in_generate=True, outpu
 generation_output[:2]
 ```
 
-는 `(generation_output.sequences, generation_output.scores)` 튜플을 반환합니다.
+위 코드는 `(generation_output.sequences, generation_output.scores)` 튜플을 반환합니다.
 
 `generation_output` 객체를 딕셔너리로 사용할 경우, `None` 값이 아닌 속성만 포함됩니다. 예를 들어, `sequences`와 `scores`라는 두 개의 키를 가질 수 있습니다.
 
