@@ -16,25 +16,18 @@
 Processor class for OmDet-Turbo.
 """
 
-import sys
 from typing import List, Optional, Tuple, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     is_torch_available,
     is_torchvision_available,
 )
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):

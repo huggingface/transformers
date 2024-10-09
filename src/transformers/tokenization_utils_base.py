@@ -598,7 +598,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            `int`: Index of the token.
+            `int`: Index of the token, or None if the char index refers to a whitespace only token and whitespace is
+                   trimmed with `trim_offsets=True`.
         """
 
         if not self._encodings:
@@ -808,12 +809,13 @@ class BatchEncoding(UserDict):
             [`BatchEncoding`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
+        import torch
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items() if v is not None}
+            self.data = {k: v.to(device=device) for k, v in self.data.items() if isinstance(v, torch.Tensor)}
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
