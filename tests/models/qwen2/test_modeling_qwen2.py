@@ -300,7 +300,13 @@ class Qwen2ModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2
 class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification, Qwen2ForTokenClassification)
+        (
+            Qwen2Model,
+            Qwen2ForCausalLM,
+            Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
+            Qwen2ForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -312,6 +318,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "token-classification": Qwen2ForTokenClassification,
             "text-generation": Qwen2ForCausalLM,
             "zero-shot": Qwen2ForSequenceClassification,
+            "question-answering": Qwen2ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
