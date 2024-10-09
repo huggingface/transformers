@@ -49,7 +49,6 @@ jobs:
           PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
 
       - name: Run benchmark
-        working-directory: /transformers
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             commit_id=$(echo "${{ github.event.pull_request.head.sha }}")
