@@ -963,6 +963,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
+        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+
         if inputs_embeds is not None:
             past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:

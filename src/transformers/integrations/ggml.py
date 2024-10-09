@@ -148,6 +148,21 @@ GGUF_TENSOR_MAPPING = {
         ".output.": ".lm_head.",
         "output_norm": "ln_f",
     },
+    "stablelm": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
 }
 
 
@@ -244,6 +259,17 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "n_head",
         "vocab_size": "vocab_size",
         "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "stablelm": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "vocab_size": "vocab_size",
     },
 }
 
@@ -554,7 +580,7 @@ class GGUFPhi3Converter(LlamaConverter):
         return tokenizer
 
 
-class GGUFBloomConverter(GPT2Converter):
+class GGUFGPTConverter(GPT2Converter):
     def __init__(self, tokenizer_dict):
         self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
         self.additional_kwargs = {}
@@ -571,8 +597,9 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
-    "bloom": GGUFBloomConverter,
-    "falcon": GGUFBloomConverter,
+    "bloom": GGUFGPTConverter,
+    "falcon": GGUFGPTConverter,
+    "stablelm": GGUFGPTConverter,
 }
 
 

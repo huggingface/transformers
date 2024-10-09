@@ -282,8 +282,8 @@
       title: 구성
     - local: main_classes/data_collator
       title: 데이터 콜레이터
-    - local: in_translation
-      title: (번역중) Keras callbacks
+    - local: main_classes/keras_callbacks
+      title: 케라스 콜백
     - local: main_classes/logging
       title: 로깅
     - local: in_translation
@@ -318,8 +318,8 @@
       sections:
       - local: in_translation
         title: (번역중) ALBERT
-      - local: in_translation
-        title: (번역중) BART
+      - local: model_doc/bart
+        title: BART
       - local: in_translation
         title: (번역중) BARThez
       - local: in_translation
@@ -366,8 +366,8 @@
         title: (번역중) CTRL
       - local: model_doc/dbrx
         title: DBRX
-      - local: in_translation
-        title: (번역중) DeBERTa
+      - local: model_doc/deberta
+        title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
       - local: in_translation
