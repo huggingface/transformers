@@ -135,17 +135,13 @@ class ClassDocstring:
         This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
         Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
         and behavior.
-
-        Parameters:
-            config ([`LlamaConfig`]):
-                Model configuration class with all the parameters of the model. Initializing with a config file does not
-                load the weights associated with the model, only the configuration. Check out the
-                [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    Model = r"""The bare {model_camel} Model outputting raw hidden-states without any specific head on top."""
+    Model = r"""
+        The bare {model_camel} Model outputting raw hidden-states without any specific head on top."""
 
-    ForSequenceClassification = r"""The {model_name} Model transformer with a sequence classification head on top (linear layer).
+    ForSequenceClassification = r"""
+        The {model_name} Model transformer with a sequence classification head on top (linear layer).
 
         [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
         (e.g. GPT-2) do.
@@ -157,11 +153,13 @@ class ClassDocstring:
         each row of the batch).
     """
 
-    ForQuestionAnswering = r"""The Llama Model transformer with a span classification head on top for extractive question-answering tasks like
+    ForQuestionAnswering = r"""
+        The Llama Model transformer with a span classification head on top for extractive question-answering tasks like
         SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """
 
-    ForTokenClassificatio = r"""The Llama Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    ForTokenClassificatio = r"""
+        The Llama Model transformer with a token classification head on top (a linear layer on top of the hidden-states
         output) e.g. for Named-Entity-Recognition (NER) tasks.
     """
 
@@ -257,8 +255,7 @@ def auto_class_docstring(cls):
     pre_block = getattr(ClassDocstring, name)
     # Start building the docstring
     docstring = f"{pre_block}\n\n"
-    docstring += f"{' ' * indent_level}Attributes:\n"
-
+    attr_docs = ""
     # Get all attributes and methods of the class
     for attr_name, attr_value in cls.__dict__.items():
         if not callable(attr_value) and not attr_name.startswith("__"):
@@ -267,8 +264,9 @@ def auto_class_docstring(cls):
             else:
                 attr_type = type(attr_value).__name__
             indented_doc = getattr(ClassAttrs, attr_name, "")
-            docstring += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
-
+            attr_docs += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
+    if len(attr_docs.replace(" ", "")):
+        docstring += f"{' ' * indent_level}Attributes:\n" + attr_docs
     # Assign the dynamically generated docstring to the wrapper class
     if cls.__doc__ is not None:
         docstring += cls.__doc__

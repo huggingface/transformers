@@ -603,13 +603,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class GemmaModel(GemmaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
-
-    Args:
-        config: GemmaConfig
-    """
-
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

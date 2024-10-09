@@ -696,12 +696,6 @@ class CoherePreTrainedModel(PreTrainedModel):
 @auto_class_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
 class CohereModel(CoherePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]
-
-    Args:
-        config: CohereConfig
-    """
 
     # Ignore copy
     def __init__(self, config: CohereConfig):

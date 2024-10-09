@@ -707,12 +707,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class LlamaModel(LlamaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
-
-    Args:
-        config: LlamaConfig
-    """
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
