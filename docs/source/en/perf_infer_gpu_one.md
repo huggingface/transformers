@@ -79,7 +79,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
-* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
+* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
 * [PhiMoE](https://huggingface.co/docs/transformers/model_doc/phimoe#transformers.PhimoeModel)
