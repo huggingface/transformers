@@ -346,10 +346,10 @@ generation_output[:2]
     - update
 
 [[autodoc]] CacheConfig
-	- update
+    - update
 
 [[autodoc]] QuantizedCacheConfig
-	- validate
+    - validate
 
 [[autodoc]] DynamicCache
     - update
