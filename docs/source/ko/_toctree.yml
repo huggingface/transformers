@@ -298,8 +298,8 @@
       title: (번역중) Pipelines
     - local: in_translation
       title: (번역중) Processors
-    - local: in_translation
-      title: (번역중) Quantization
+    - local: main_classes/quantization
+      title: 양자화
     - local: in_translation
       title: (번역중) Tokenizer
     - local: main_classes/trainer
