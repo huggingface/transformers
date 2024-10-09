@@ -590,6 +590,10 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.moshi": [
+        "MoshiConfig",
+        "MoshiDepthConfig",
+    ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -600,10 +604,6 @@ _import_structure = {
     "models.musicgen": [
         "MusicgenConfig",
         "MusicgenDecoderConfig",
-    ],
-    "models.moshi": [
-        "MoshiConfig",
-        "MoshiDepthConfig",
     ],
     "models.musicgen_melody": [
         "MusicgenMelodyConfig",
@@ -2784,6 +2784,14 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.moshi"].extend(
+        [
+            "MoshiForCausalLM",
+            "MoshiForConditionalGeneration",
+            "MoshiModel",
+            "MoshiPreTrainedModel",
+        ]
+    )
     _import_structure["models.mpnet"].extend(
         [
             "MPNetForMaskedLM",
@@ -2834,14 +2842,6 @@ else:
             "MusicgenModel",
             "MusicgenPreTrainedModel",
             "MusicgenProcessor",
-        ]
-    )
-    _import_structure["models.moshi"].extend(
-        [
-            "MoshiForCausalLM",
-            "MoshiForConditionalGeneration",
-            "MoshiModel",
-            "MoshiPreTrainedModel",
         ]
     )
     _import_structure["models.musicgen_melody"].extend(
