@@ -191,7 +191,23 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 else:
                     weights = reverse_reshape_bias(weights, num_heads, n_embed)
 
+            if architecture == "gpt2":
+                if (
+                    "attn_qkv.weight" in name
+                    or "ffn_down.weight" in name
+                    or "ffn_up.weight" in name
+                    or "attn_output.weight" in name
+                ):
+                    # Original transpose implementation
+                    # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
+                    weights = weights.T
+
             for tensor_name in tensor_key_mapping:
+                # output.weight has conflicts with attn_output.weight in name checking
+                # we have to explicitly check that name is exactly output.weight
+                if architecture == "gpt2" and name == "output.weight":
+                    name = "lm_head.weight"
+                    break
                 if tensor_name in name:
                     name = name.replace(tensor_name, tensor_key_mapping[tensor_name])
 
