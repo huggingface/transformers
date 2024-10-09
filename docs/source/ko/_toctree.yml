@@ -334,8 +334,8 @@
         title: (번역중) BigBird
       - local: in_translation
         title: (번역중) BigBirdPegasus
-      - local: in_translation
-        title: (번역중) BioGpt
+      - local: model_doc/biogpt
+        title: BioGpt
       - local: in_translation
         title: (번역중) Blenderbot
       - local: in_translation
