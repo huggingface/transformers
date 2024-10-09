@@ -71,7 +71,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
     conn = psycopg2.connect("dbname=metrics")
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO benchmarks (branch, commit_id, commit_msg, gpu_name) VALUES (%s, %s, %s, %s) RETURNING benchmark_id",
+        "INSERT INTO benchmarks (branch, commit_id, commit_message, gpu_name) VALUES (%s, %s, %s, %s) RETURNING benchmark_id",
         (branch, commit_id, commit_msg, gpu_name),
     )
     conn.commit()
