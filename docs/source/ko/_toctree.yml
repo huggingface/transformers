@@ -748,7 +748,7 @@
       sections:
       - local: model_doc/graphormer
         title: Graphormer
-      title: (번역중) Graph models
+      title: 그래프 모델
     title: (번역중) 모델
   - sections:
     - local: in_translation
