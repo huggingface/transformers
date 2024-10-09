@@ -2064,6 +2064,13 @@ class TrainingArguments:
                 "This is not supported and we recommend you to update your version."
             )
 
+        if self.data_seed is not None:
+            if not is_accelerate_available("1.1.0"):
+                raise NotImplementedError(
+                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
+                    "This is not supported and we recommend you to update your version."
+                )
+
     def __str__(self):
         self_as_dict = asdict(self)
 

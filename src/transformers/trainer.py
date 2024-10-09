@@ -405,18 +405,6 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
-        generator = torch.Generator()
-        if self.args.data_seed is not None:
-            # TODO change min version of accelerate
-            if self.args.accelerator_config.use_seedable_sampler and is_accelerate_available(min_version="0.34.0"):
-                raise RuntimeError(
-                    "data_seed requires accelerate >= 0.34.0, please install the latest version of accelerate"
-                )
-            generator.manual_seed(self.args.data_seed)
-        else:
-            generator.manual_seed(self.args.seed)
-        self.data_sampler_generator = generator
-
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -905,7 +893,7 @@ class Trainer:
             )
 
         else:
-            return RandomSampler(self.train_dataset, generator=self.data_sampler_generator)
+            return RandomSampler(self.train_dataset)
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -4843,6 +4831,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+            if is_accelerate_available("1.1.0"):
+                dataloader_config.data_seed = self.args.data_seed
+
         non_blocking = accelerator_config.pop("non_blocking")
         if not is_accelerate_available("0.30.0"):
             if non_blocking:
