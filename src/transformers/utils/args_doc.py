@@ -16,7 +16,7 @@ ARGS_TO_DOC = {
 
     [What are input IDs?](../glossary#input-ids)
     """,
-    "attention_mask": r"""
+    "attention_mask": r"""(`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
     Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
     - 1 for tokens that are **not masked**,
@@ -76,9 +76,12 @@ ARGS_TO_DOC = {
     this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
     the complete sequence length.
     """,
+    "hidden_states": r"""(`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)""" #TODO how do you handle != naming for special models -> merge doc
 }
 
-
+ARGS_TO_IGNORE = {
+    "self"
+}
 
 COMMON_FOR_QA_DOCSTRING = """
 The Llama Model transformer with a span classification head on top for extractive question-answering tasks like

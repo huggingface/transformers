@@ -31,6 +31,7 @@ from .doc import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     copy_func,
     replace_return_docstrings,
 )

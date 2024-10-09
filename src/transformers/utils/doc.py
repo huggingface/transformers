@@ -18,18 +18,61 @@ Doc utilities: Utilities related to documentation
 import functools
 import re
 import types
+import inspect
+from functools import wraps
+from .args_doc import ARGS_TO_DOC, ARGS_TO_IGNORE
+
+def get_indent_level(func):
+    # Get the source code of the function
+    source_code = inspect.getsource(func)
+    
+    # Get the first line of the source (the function definition)
+    first_line = source_code.splitlines()[0]
+
+    # Calculate the indentation level (number of spaces at the start)
+    indent_level = len(first_line) - len(first_line.lstrip())
+
+    return indent_level
 
 
-def auto_docstring(*docstr):
-    # Automatically writes docstring based on ast for module when building the doc
-    def docstring_decorator(fn):
-        class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
+def auto_docstring(func):
+    """
+    Wrapper that automatically generates docstring using ARG_TO_DOC.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Call the original function
+        return func(*args, **kwargs)
 
-        fn.__doc__ = "".join("Dummy docstring for now") + (fn.__doc__ if fn.__doc__ is not None else "")
-        return fn
+    # Use inspect to retrieve the function's signature
+    sig = inspect.signature(func)
+    indent_level = get_indent_level(func)
+    # Build the docstring dynamically
+    docstring = f"{func.__name__}("
+    docstring += ", ".join([f"{param}" for param in sig.parameters])
+    docstring += ")\n\n"
+    docstring += "Args:\n"
+    # Adding description for each parameter from ARG_TO_DOC
+    for param_name, param in sig.parameters.items():
+        if param_name in ARGS_TO_DOC:
+            if param.annotation != inspect.Parameter.empty:
+                param_type = param.annotation
+                param_type = f"{param_type.__module__}.{param.annotation.__name__}"
+            else:
+                param_type = ""
+            # Check if the parameter has a default value (considered optional)
+            # is_optional = param.default != inspect.Parameter.empty
 
-    return docstring_decorator
+            indented_doc = ARGS_TO_DOC[param_name].replace("\n    ", "\n        ")
+            docstring += f"{' '*indent_level}{param_name} ({param_type} {indented_doc}\n"
+        elif param_name in ARGS_TO_IGNORE:
+            continue
+        else:
+            raise ValueError(f"No pre-defined documentation was found for {param_name}. Make sure to define in in `src/transformers/utils/args_doc.py`: `ARGS_TO_DOC`.")
+    # Assign the dynamically generated docstring to the wrapper function
+    wrapper.__doc__ = docstring
 
+    return wrapper
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):

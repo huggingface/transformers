@@ -631,6 +631,7 @@ class LlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -678,7 +679,7 @@ class LlamaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring()
+# @auto_class_docstring
 class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
@@ -733,7 +734,7 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1007,7 +1008,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1080,22 +1081,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
-    The LLaMa Model transformer with a sequence classification head on top (linear layer).
-
-    [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    LLAMA_START_DOCSTRING,
-)
+@auto_docstring
 class LlamaForSequenceClassification(LlamaPreTrainedModel):
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1111,7 +1099,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1215,7 +1203,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.transformer.embed_tokens = value
 
-    @auto_docstrign()
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1302,7 +1290,7 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
