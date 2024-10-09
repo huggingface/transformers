@@ -37,11 +37,11 @@ The PatchTST 모델은 Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalag
 
 이 모델은 [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif)에 의해 기여 되었습니다. 원본코드는 [이곳](https://github.com/yuqinie98/PatchTST)에서 확인할 수 있습니다.
 
-## Usage tips[[usage-tips]]
+## 사용 팁[[usage-tips]]
 
-이 모델은 시계열 분류와 시계열 회기에도 사용될 수 있습니다. 각각 [`PatchTSTForClassification`]와 [`PatchTSTForRegression`] 클래스를 참조하세요.
+이 모델은 시계열 분류와 시계열 회귀에도 사용될 수 있습니다. 각각 [`PatchTSTForClassification`]와 [`PatchTSTForRegression`] 클래스를 참조하세요.
 
-## Resources[[resources]]
+## 자료[[resources]]
 
 - PatchTST를 자세히 설명하는 블로그 포스트는 [이곳](https://huggingface.co/blog/patchtst)에서 찾을 수 있습니다. 
 이 블로그는 Google Colab에서도 열어볼 수 있습니다.
