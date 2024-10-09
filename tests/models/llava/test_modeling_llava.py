@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -80,7 +81,7 @@ class LlavaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -106,7 +107,7 @@ class LlavaVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -118,6 +119,8 @@ class LlavaVisionText2TextModelTester:
         self.num_channels = 3
         self.image_size = 336
         self.encoder_seq_length = 231
+        self.num_image_tokens = 224
+        self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return LlavaConfig(
@@ -128,6 +131,7 @@ class LlavaVisionText2TextModelTester:
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
+            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -148,8 +152,8 @@ class LlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
-        input_ids[:, 1] = config.image_token_index
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -172,12 +176,13 @@ class LlavaVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False

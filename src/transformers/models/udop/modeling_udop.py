@@ -34,6 +34,7 @@ from transformers.modeling_outputs import (
 )
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -1679,7 +1680,7 @@ class UdopModel(UdopPreTrainedModel):
     This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
     UDOP_START_DOCSTRING,
 )
-class UdopForConditionalGeneration(UdopPreTrainedModel):
+class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
@@ -1790,7 +1791,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> # one can use the various task prefixes (prompts) used during pre-training
         >>> # e.g. the task prefix for DocVQA is "Question answering. "
         >>> question = "Question answering. What is the date on the form?"
-        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
+        >>> encoding = processor(image, question, text_pair=words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
