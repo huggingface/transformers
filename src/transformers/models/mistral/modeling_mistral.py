@@ -895,12 +895,9 @@ class MistralModel(MistralPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        # SlidingWindowCache
-        if using_sliding_window_cache:
-            target_length = max(sequence_length, self.config.sliding_window)
-        # StaticCache
-        elif using_static_cache:
-            target_length = past_key_values.get_max_length()
+        # SlidingWindowCache or StaticCache
+        if using_sliding_window_cache or using_static_cache:
+            target_length = past_key_values.get_max_cache_shape()
         # DynamicCache or no cache
         else:
             target_length = (
