@@ -213,12 +213,11 @@ class BitNetSerializationTest(unittest.TestCase):
         quantized_model.save_pretrained(saved_model_id)
 
         # Remove old model
+        del quantized_model
         torch.cuda.empty_cache()
 
         # Load and check if the logits match
-        model_loaded = AutoModelForCausalLM.from_pretrained(
-            "quant_model", torch_dtype=torch.float16, device_map=device, low_cpu_mem_usage=True
-        )
+        model_loaded = AutoModelForCausalLM.from_pretrained("quant_model", device_map=device)
 
         with torch.no_grad():
             logits_loaded = model_loaded.forward(input_tensor).logits
