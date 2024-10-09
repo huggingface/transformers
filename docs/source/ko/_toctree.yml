@@ -754,8 +754,8 @@
       sections:
       - local: in_translation
         title: (번역중) Decision Transformer
-      - local: in_translation
-        title: (번역중) Trajectory Transformer
+      - local: model_doc/trajectory_transformer
+        title: 궤적 트랜스포머
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
