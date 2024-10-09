@@ -1,9 +1,7 @@
 import inspect
-from dataclasses import dataclass
 from functools import wraps
 
 
-@dataclass
 class ModelArgs:
     labels = r"""of shape `(batch_size, sequence_length)`, *optional*):
         Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -193,7 +191,7 @@ def auto_docstring(func):
     docstring += "Args:\n"
     # Adding description for each parameter from ARG_TO_DOC
     for param_name, param in sig.parameters.items():
-        if param_name in ModelArgs.__dict__():
+        if param_name in ModelArgs.__dict__:
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
                 if "typing" in str(param_type):
