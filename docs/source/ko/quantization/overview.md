@@ -33,7 +33,7 @@ rendered properly in your Markdown viewer.
 
 </Tip>
 
-## When to use what?
+## 언제 무엇을 사용하나요?
 
 개발자 커뮤니티에서는 다양한 사용 사례를 위해 많은 양자화 방법을 개발해 왔습니다. 각 방법에는 고유한 장단점이 있기 때문에 Transformers를 사용하면 사용 사례에 따라 이러한 통합된 방법 중 하나를 실행할 수 있습니다.
 
