@@ -217,32 +217,32 @@
 #     title: التحقق من طلب السحب
 #   title: المساهمة
 - sections:
-  # - local: philosophy
-  #   title: الفلسفة
+  - local: philosophy
+    title: الفلسفة
   - local: glossary
     title: (قاموس المصطلحات (قائمة الكلمات
-  # - local: task_summary
-  #   title: ما الذي يمكن أن تفعله 🤗 المحولات
-  # - local: tasks_explained
-  #   title: كيف تحل المحولات المهام
-  # - local: model_summary
-  #   title: عائلة نماذج المحول
-  # - local: tokenizer_summary
-  #   title: ملخص برنامج مقسم النصوص (tokenizers)
-  # - local: attention
-  #   title: الانتباه Attention
-  # - local: pad_truncation
-  #   title: الحشو والتقليم
-  # - local: bertology
-  #   title: BERTology
-  # - local: perplexity
-  #   title: حيرة النماذج ذات الطول الثابت
-  # - local: pipeline_webserver
-  #   title: خطوط الأنابيب للاستدلال على خادم الويب
-  # - local: model_memory_anatomy
-  #   title: تشريح تدريب النموذج
-  # - local: llm_tutorial_optimization
-  #   title: الاستفادة القصوى من LLMs
+  - local: task_summary
+    title: ما الذي يمكن أن تفعله 🤗 المحولات
+  - local: tasks_explained
+    title: كيف تحل المحولات المهام
+  - local: model_summary
+    title: عائلة نماذج المحول
+  - local: tokenizer_summary
+    title: ملخص برنامج مقسم النصوص (tokenizers)
+  - local: attention
+    title: الانتباه Attention
+  - local: pad_truncation
+    title: الحشو والتقليم
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: حيرة النماذج ذات الطول الثابت
+  - local: pipeline_webserver
+    title: خطوط الأنابيب للاستدلال على خادم الويب
+  - local: model_memory_anatomy
+    title: تشريح تدريب النموذج
+  - local: llm_tutorial_optimization
+    title: الاستفادة القصوى من LLMs
   title: أطر مفاهيمية
 # - sections:
 #   - sections:
