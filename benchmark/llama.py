@@ -93,7 +93,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
     try:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
 
-        device = "cuda:1"
+        device = "cuda"
         ckpt = "bert-base-uncased"
 
         # This is to avoid counting download in model load time measurement
