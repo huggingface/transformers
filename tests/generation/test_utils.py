@@ -1492,13 +1492,14 @@ class GenerationTesterMixin:
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
 
+            text_config = config.get_text_config()
             num_hidden_layers = (
-                getattr(config, "decoder_layers", None)
-                or getattr(config, "num_decoder_layers", None)
-                or config.num_hidden_layers
+                getattr(text_config, "decoder_layers", None)
+                or getattr(text_config, "num_decoder_layers", None)
+                or text_config.num_hidden_layers
             )
-            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
-            embed_dim = getattr(config, "d_model", config.hidden_size)
+            num_attention_heads = getattr(text_config, "decoder_attention_heads", text_config.num_attention_heads)
+            embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
             past_kv = outputs["past_key_values"]
@@ -1563,13 +1564,13 @@ class GenerationTesterMixin:
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
             if config.is_encoder_decoder:
-                continue
+                self.skipTest("This test is for decoder-only models")
 
             # Skip models without explicit support
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
-                continue
+                self.skipTest("This model doesn't accept `inputs_embeds` in generate")
 
             input_ids = inputs_dict.pop("input_ids")
 

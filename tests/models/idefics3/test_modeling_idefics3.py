@@ -344,6 +344,18 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
