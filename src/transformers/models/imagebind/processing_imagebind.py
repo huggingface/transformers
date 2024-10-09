@@ -19,8 +19,6 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-
-
 from ...image_utils import (
     ImageInput,
     VideoInput,
@@ -43,7 +41,6 @@ class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
 
 
 class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
-    sampling_rate: Optional[int]
     do_normalize: Optional[bool]
     mean: Optional[float]
     std: Optional[float]
