@@ -340,17 +340,18 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
-        model_outputs = [{'tokens': np.array([[
-            50258, 13,   286,   841,   264,
-            596,   346,    13,   583,   406, 281]]), 'token_timestamps': np.array([[
-            0.0000,  0.0000,  0.0000,  0.0000,  0.0000,
-            0.3200,  0.3400,  0.5000, 0.6600,  0.8600,  1.0000,
-           ]]), 'stride': (10.0, 0.0, 5.0)}, {'tokens': np.array([[
-            50258, 50259, 50359, 50363,  1449,
-            466,   498,   436,   536,   385, 6588]]), 'token_timestamps': np.array([[
-            0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
-            0.2600, 0.6800, 0.9800, 1.2400, 1.3000, 1.5600,
-          ]]), 'stride': (10, 5.0, 0.0)}]
+        model_outputs = [
+            {
+                'stride': [10, 0, 5],
+                'tokens': np.array([[50257, 50362, 3363, 11, 345, 460, 0, 2329, 466, 340, 0, 50256]]),
+                'token_timestamps': np.array([[0, 0, 5.18, 5.56, 5.56, 5.84, 6.36, 7.12, 7.54, 7.82, 8.16, 9.48]])
+            },
+            {
+                'stride': [10, 5, 0],
+                'tokens': np.array([[50257, 50362, 2329, 466, 340, 0, 3363, 345, 460, 0, 2329, 466, 340, 50256]]),
+                'token_timestamps': np.array([[0, 0, 0, 2.44, 4.3, 5.04, 5.06, 5.56, 5.8, 6.32, 7.12, 7.56, 7.8, 8.72]])
+            }
+        ]
         # fmt: on
 
         tokenizer = WhisperTokenizer.from_pretrained("onnx-community/whisper-tiny.en_timestamped")
