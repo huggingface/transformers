@@ -16,17 +16,18 @@ Doc utilities: Utilities related to documentation
 """
 
 import functools
+import inspect
 import re
 import types
-import inspect
 from functools import wraps
-from .args_doc import ARGS_TO_DOC, ARGS_TO_IGNORE
-from typing import get_origin, get_args
+
+from .args_doc import ARGS_TO_IGNORE, ModelArgs
+
 
 def get_indent_level(func):
     # Get the source code of the function
     source_code = inspect.getsource(func)
-    
+
     # Get the first line of the source (the function definition)
     first_line = source_code.splitlines()[0]
 
@@ -40,6 +41,7 @@ def auto_docstring(func):
     """
     Wrapper that automatically generates docstring using ARG_TO_DOC.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Call the original function
@@ -55,7 +57,7 @@ def auto_docstring(func):
     docstring += "Args:\n"
     # Adding description for each parameter from ARG_TO_DOC
     for param_name, param in sig.parameters.items():
-        if param_name in ARGS_TO_DOC:
+        if param_name in ModelArgs.__dict__():
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
                 if "typing" in str(param_type):
@@ -67,16 +69,19 @@ def auto_docstring(func):
             # Check if the parameter has a default value (considered optional)
             # is_optional = param.default != inspect.Parameter.empty
 
-            indented_doc = ARGS_TO_DOC[param_name].replace("\n    ", "\n        ")
+            indented_doc = getattr(ModelArgs, param_name).replace("\n    ", "\n        ")
             docstring += f"{' '*indent_level}{param_name} (`{param_type}`{indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
         else:
-            raise ValueError(f"No pre-defined documentation was found for {param_name}. Make sure to define in in `src/transformers/utils/args_doc.py`: `ARGS_TO_DOC`.")
+            raise ValueError(
+                f"No pre-defined documentation was found for {param_name}. Make sure to define in in `src/transformers/utils/args_doc.py`: `ARGS_TO_DOC`."
+            )
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring
 
     return wrapper
+
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
