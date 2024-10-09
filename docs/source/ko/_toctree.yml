@@ -288,8 +288,8 @@
       title: 로깅
     - local: main_classes/model
       title: Models
-    - local: in_translation
-      title: (번역중) Text Generation
+    - local: main_classes/text_generation
+      title: 텍스트 생성
     - local: main_classes/onnx
       title: ONNX
     - local: in_translation
