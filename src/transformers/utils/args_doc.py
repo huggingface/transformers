@@ -9,13 +9,13 @@ class ModelArgs:
         (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
     """
 
-    num_logits_to_keep = r"""
+    num_logits_to_keep = r""":
         Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
         `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
         token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
     """
 
-    input_ids = r"""
+    input_ids = r""":
         Indices of input sequence tokens in the vocabulary. Padding will be ignored by default.
         Indices can be obtained using `AutoTokenizer`. See `PreTrainedTokenizer.encode` and
         `PreTrainedTokenizer.__call__` for details.
@@ -35,13 +35,13 @@ class ModelArgs:
         `PreTrainedTokenizer.__call__` for details.
     """
 
-    position_ids = r"""
+    position_ids = r""":
         Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
 
         [What are position IDs?](../glossary#position-ids)
     """
 
-    past_key_values = r"""
+    past_key_values = r""":
         Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
         blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
         returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
@@ -60,34 +60,34 @@ class ModelArgs:
         of shape `(batch_size, sequence_length)`.
     """
 
-    past_key_value = r"""deprecated in favor of `past_key_values`"""
+    past_key_value = r""":deprecated in favor of `past_key_values`"""
 
-    inputs_embeds = r"""
+    inputs_embeds = r""":
         Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
         is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
         model's internal embedding lookup matrix.
     """
 
-    use_cache = r"""
+    use_cache = r""":
         If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
         `past_key_values`).
     """
 
-    output_attentions = r"""
+    output_attentions = r""":
         Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
         tensors for more detail.
     """
 
-    output_hidden_states = r"""
+    output_hidden_states = r""":
         Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
         more detail.
     """
 
-    return_dict = r"""
+    return_dict = r""":
         Whether or not to return a `~utils.ModelOutput` instead of a plain tuple.
     """
 
-    cache_position = r"""
+    cache_position = r""":
         Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
         this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
         the complete sequence length.
@@ -100,7 +100,7 @@ class ModelArgs:
         with `head_dim` being the embedding dimension of each attention head.
     """
 
-    config = r""")
+    config = r"""):
         Model configuration class with all the parameters of the model. Initializing with a config file does not
         load the weights associated with the model, only the configuration. Check out the
         [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -203,7 +203,7 @@ def auto_docstring(func):
             # Check if the parameter has a default value (considered optional)
             # is_optional = param.default != inspect.Parameter.empty
 
-            indented_doc = getattr(ModelArgs, param_name).replace("\n    ", "\n        ")
+            indented_doc = getattr(ModelArgs, param_name)#.replace("\n    ", "\n")
             docstring += f"{' '*indent_level}{param_name} (`{param_type}`{indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
