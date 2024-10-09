@@ -230,6 +230,8 @@ def auto_docstring(func):
             raise ValueError(
                 f"No pre-defined documentation was found for {param_name}. Make sure to define in in `src/transformers/utils/args_doc.py`: `ARGS_TO_DOC`."
             )
+    if func.__doc__ is not None:
+        docstring += func.__doc__
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring + func.__doc__
 
@@ -264,6 +266,9 @@ def auto_class_docstring(cls):
             docstring += f"{' ' * indent_level}{attr_name} (`{attr_type}`): {indented_doc}\n"
 
     # Assign the dynamically generated docstring to the wrapper class
-    Wrapper.__doc__ = docstring + cls.__doc__
+    if cls.__doc__ is not None:
+        docstring += cls.__doc__
+    Wrapper.__doc__ = docstring
+
 
     return Wrapper
