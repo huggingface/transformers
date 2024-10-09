@@ -1095,7 +1095,6 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         )
 
 
-@auto_class_docstring
 class GemmaForTokenClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

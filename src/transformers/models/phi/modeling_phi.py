@@ -1286,6 +1286,7 @@ class PhiForTokenClassification(PhiPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Ignore copy
     @auto_docstring
     def forward(
         self,

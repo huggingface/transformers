@@ -120,6 +120,10 @@ class ModelArgs:
         are not taken into account for computing the loss.
     """
 
+    output_router_logits = r"""
+
+    """
+
 
 class ClassDocstring:
     PreTrainedModel = r"""
@@ -174,7 +178,7 @@ class ClassAttrs:
     _init_weights = r"""TODO """
 
 
-ARGS_TO_IGNORE = {"self", "kwargs", "args"}
+ARGS_TO_IGNORE = {"self", "kwargs", "args", "deprecated_arguments"}
 
 
 def get_indent_level(func):
@@ -233,8 +237,7 @@ def auto_docstring(func):
     if func.__doc__ is not None:
         docstring += func.__doc__
     # Assign the dynamically generated docstring to the wrapper function
-    wrapper.__doc__ = docstring + func.__doc__
-
+    wrapper.__doc__ = docstring
     return wrapper
 
 
