@@ -2484,6 +2484,7 @@ class Trainer:
                     self.optimizer.step()
 
                     self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
+                    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
 
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
@@ -2516,7 +2517,6 @@ class Trainer:
                 self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_xla_available():
