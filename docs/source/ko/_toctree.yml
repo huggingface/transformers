@@ -138,7 +138,7 @@
   - local: gguf
     title: GGUF 파일들과의 상호 운용성
   - local: modular_transformers
-    title: `transformers`에서의 모듈성
+    title: transformers에서의 모듈성
   title: (번역중) 개발자 가이드
 - sections:
   - local: in_translation
