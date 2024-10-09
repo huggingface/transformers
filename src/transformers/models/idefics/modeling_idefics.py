@@ -28,12 +28,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PretrainedConfig
+from ...modeling_utils import PretrainedConfig, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -666,12 +666,6 @@ class IdeficsAttention(nn.Module):
         if self.qk_layer_norms:
             query_states = self.q_layer_norm(query_states)
             key_states = self.k_layer_norm(key_states)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -1539,7 +1533,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return causal_mask
 
 
-class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
+class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
@@ -1723,13 +1717,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             inputs.pop(kwarg, None)
         return inputs
 
-    @staticmethod
-    def _expand_inputs_for_generation(
-        *args,
-        **model_kwargs,
-    ):
-        return expand_inputs_for_generation(*args, **model_kwargs)
-
     def _update_model_kwargs_for_generation(
         self,
         outputs: ModelOutput,
@@ -1747,7 +1734,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         if "image_attention_mask" in model_kwargs:
             image_attention_mask = model_kwargs["image_attention_mask"]
             last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
-            model_kwargs["image_attention_mask"] = last_mask
+            if model_kwargs.get("use_cache", True):
+                model_kwargs["image_attention_mask"] = last_mask
+            else:
+                model_kwargs["image_attention_mask"] = torch.cat([image_attention_mask, last_mask], dim=1)
 
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states

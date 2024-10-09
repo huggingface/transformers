@@ -4227,7 +4227,8 @@ class GenerationMixin:
                             added_len,
                             is_decoder_attention=True,
                         )
-                    else:
+                    # some (V)LLMs have hard requirement on SDPA and thus never return attn
+                    elif outputs.attentions[0] is not None:
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
