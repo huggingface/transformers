@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache  # we need __iter__ and __len__ of pkv
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -50,7 +51,6 @@ from ...utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
-    is_torchdynamo_compiling,
 )
 from .configuration_jamba import JambaConfig
 
@@ -82,11 +82,11 @@ _CONFIG_FOR_DOC = "JambaConfig"
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func with gate->router
 def load_balancing_loss_func(
-    router_logits: torch.Tensor,
-    num_experts: torch.Tensor = None,
+    router_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
     top_k=2,
     attention_mask: Optional[torch.Tensor] = None,
-) -> float:
+) -> Union[torch.Tensor, int]:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -95,14 +95,17 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        router_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        router_logits:
             Logits from the `router`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
         attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
-        num_experts (`int`, *optional*):
-            Number of experts
 
     Returns:
         The auxiliary loss.
@@ -709,11 +712,14 @@ class JambaMambaMixer(nn.Module):
         # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
         # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
         # linear layers, and requires to call the forward pass directly.
-        # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-        time_proj_bias = self.dt_proj.bias
-        self.dt_proj.bias = None
+        # Quantized model can't work with the original code:
+        # ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
+        time_proj_bias = self.dt_proj.bias.data
+        with torch.no_grad():
+            self.dt_proj.bias.data = torch.zeros_like(self.dt_proj.bias.data)
         discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-        self.dt_proj.bias = time_proj_bias
+        with torch.no_grad():
+            self.dt_proj.bias.data = time_proj_bias
 
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
@@ -1276,9 +1282,7 @@ class JambaModel(JambaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1424,7 +1428,7 @@ class JambaModel(JambaPreTrainedModel):
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
-class JambaForCausalLM(JambaPreTrainedModel):
+class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: JambaConfig):
@@ -1536,12 +1540,6 @@ class JambaForCausalLM(JambaPreTrainedModel):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        if labels is None and not is_torchdynamo_compiling:
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
-        # TODO: remove the float() operations in v4.46
-        logits = logits.float()
 
         loss = None
         if labels is not None:

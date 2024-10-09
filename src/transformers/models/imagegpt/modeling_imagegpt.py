@@ -26,6 +26,7 @@ from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -689,8 +690,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -880,7 +880,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
-class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
+class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
@@ -1003,8 +1003,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -1136,8 +1135,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 

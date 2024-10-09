@@ -30,7 +30,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -676,7 +676,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
         self.assertListEqual(results["labels"], expected_labels)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         processor = self.default_processor
         image = prepare_img()
@@ -690,8 +690,8 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             cpu_outputs = model(**encoding)
 
         # 2. run model on GPU
-        model.to("cuda")
-        encoding = encoding.to("cuda")
+        model.to(torch_device)
+        encoding = encoding.to(torch_device)
         with torch.no_grad():
             gpu_outputs = model(**encoding)
 
