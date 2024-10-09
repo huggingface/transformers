@@ -1857,7 +1857,8 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
                 # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
@@ -1875,7 +1876,8 @@ class ModelTesterMixin:
                 # A distriputed launcher is needed for the forward pass when deepspeed is enabled
                 if "decoder_input_ids" in inputs_dict:
                     inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
