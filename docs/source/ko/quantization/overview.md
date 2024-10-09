@@ -45,7 +45,7 @@ Transformers에 새로운 양자화 방법을 추가하고 싶으신가요? [HfQ
 
 아래 표를 참조하여 어떤 양자화 메소드를 사용할지 결정하세요.
 
-| 양자화 메소드                 | 즉시 양자화 가능 | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() 지원 | 비트 수 | PEFT를 통한 파인튜닝 지원 | 🤗 transformers를 통한 직렬화 | 🤗 transformers 지원 | 링크                             |
+| Quantization method                 | On the fly quantization | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable with 🤗 transformers | 🤗 transformers support | Link to library                             |
 |-------------------------------------|-------------------------|-----|----------|----------------|-----------------------|-------------------------|----------------|-------------------------------------|--------------|------------------------|---------------------------------------------|
 | [AQLM](./aqlm)                                | 🔴                       |  🟢   |     🟢     | 🔴              | 🔴                     | 🟢                      | 1 / 2          | 🟢                                   | 🟢            | 🟢                      | https://github.com/Vahe1994/AQLM            |
 | [AWQ](./awq) | 🔴                       | 🔴   | 🟢        | 🟢              | 🔴                     | ?                       | 4              | 🟢                                   | 🟢            | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
