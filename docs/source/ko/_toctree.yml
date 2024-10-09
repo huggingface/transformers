@@ -765,6 +765,8 @@
         title: Informer
       - local: model_doc/patchtsmixer
         title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: 시계열 트랜스포머
       title: 시계열 모델
