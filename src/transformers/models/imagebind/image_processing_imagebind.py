@@ -14,7 +14,6 @@
 """Image processor class for ImageBind."""
 
 import math
-import warnings
 from fractions import Fraction
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
@@ -46,6 +45,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -171,6 +171,7 @@ def video_resize(
 
 
 # Same as in image_transforms.py but taking offsets like int(math.ceil((orig_height - crop_height) / 2))
+@deprecate_kwarg("return_numpy", version="5.0")
 def modified_center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
@@ -207,9 +208,6 @@ def modified_center_crop(
         `np.ndarray`: The cropped image.
     """
     requires_backends(modified_center_crop, ["vision"])
-
-    if return_numpy is not None:
-        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
 
     return_numpy = True if return_numpy is None else return_numpy
 
