@@ -271,6 +271,22 @@ def _get_fsdp_ckpt_kwargs():
     else:
         return {}
 
+def _init_fsdp(model, accelerator, device):
+    model = accelerator.prepare(model)
+    model.train()
+    with torch.no_grad():
+        # Run a forward pass with dummy inputs to initialize FSDP
+        dummy_input = {
+            name: torch.ones(
+                (1, 512),
+                dtype=torch.long,
+                device=device,
+            )
+            for name in model.forward.__code__.co_varnames
+            if name != "self"
+        }
+        _ = model(**dummy_input)
+    return model
 
 if TYPE_CHECKING:
     import optuna
@@ -599,6 +615,10 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
+
+        if self.is_fsdp_enabled:
+            self.model = _init_fsdp(self.model, self.accelerator, self.args.device)
+
         if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
