@@ -1,7 +1,7 @@
 
 
 ARGS_TO_DOC = {
-    "labels": r""""(`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+    "labels": r""""of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.""",
@@ -16,7 +16,7 @@ ARGS_TO_DOC = {
 
     [What are input IDs?](../glossary#input-ids)
     """,
-    "attention_mask": r"""(`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+    "attention_mask": r"""of shape `(batch_size, sequence_length)`, *optional*):
     Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
     - 1 for tokens that are **not masked**,
@@ -38,11 +38,10 @@ ARGS_TO_DOC = {
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
     Two formats are allowed:
-    - a `~cache_utils.Cache` instance, see our
-    [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-    - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-    shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-    cache format.
+        - a `~cache_utils.Cache` instance, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+        - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+        shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+        cache format.
 
     The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
     legacy cache format will be returned.
@@ -51,6 +50,7 @@ ARGS_TO_DOC = {
     have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
+    "past_key_value":r"""deprecated in favor of `past_key_values`""",
     "inputs_embeds": r"""
     Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
     is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -76,11 +76,26 @@ ARGS_TO_DOC = {
     this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
     the complete sequence length.
     """,
-    "hidden_states": r"""(`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)""" #TODO how do you handle != naming for special models -> merge doc
+    "hidden_states": r"""): input to the layer of shape `(batch, seq_len, embed_dim)""", #TODO how do you handle != naming for special models -> merge doc
+    "position_embeddings": r""", *optional*):
+    Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+    with `head_dim` being the embedding dimension of each attention head.""",
+    "config": r""")
+    Model configuration class with all the parameters of the model. Initializing with a config file does not
+    load the weights associated with the model, only the configuration. Check out the
+    [`~PreTrainedModel.from_pretrained`] method to load the model weights.""",
+    "start_positions": r""" of shape `(batch_size,)`, *optional*):
+    Labels for position (index) of the start of the labelled span for computing the token classification loss.
+    Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+    are not taken into account for computing the loss.""",
+    "end_positions": r""" of shape `(batch_size,)`, *optional*):
+    Labels for position (index) of the end of the labelled span for computing the token classification loss.
+    Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+    are not taken into account for computing the loss.""",
 }
 
 ARGS_TO_IGNORE = {
-    "self"
+    "self", "kwargs", "args"
 }
 
 COMMON_FOR_QA_DOCSTRING = """

@@ -21,6 +21,7 @@ import types
 import inspect
 from functools import wraps
 from .args_doc import ARGS_TO_DOC, ARGS_TO_IGNORE
+from typing import get_origin, get_args
 
 def get_indent_level(func):
     # Get the source code of the function
@@ -57,14 +58,17 @@ def auto_docstring(func):
         if param_name in ARGS_TO_DOC:
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
-                param_type = f"{param_type.__module__}.{param.annotation.__name__}"
+                if "typing" in str(param_type):
+                    param_type = str(param_type).split("typing.")[1]
+                else:
+                    param_type = f"{param_type.__module__}.{param.annotation.__name__}"
             else:
                 param_type = ""
             # Check if the parameter has a default value (considered optional)
             # is_optional = param.default != inspect.Parameter.empty
 
             indented_doc = ARGS_TO_DOC[param_name].replace("\n    ", "\n        ")
-            docstring += f"{' '*indent_level}{param_name} ({param_type} {indented_doc}\n"
+            docstring += f"{' '*indent_level}{param_name} (`{param_type}`{indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
         else:
