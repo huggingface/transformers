@@ -880,11 +880,10 @@ class CLIPEncoder(nn.Module):
                 for index in output_hidden_states
             ]
 
-        if output_hidden_states:
-            if isinstance(output_hidden_states, list):
-                encoder_states = list(output_hidden_states)
-            else:
-                encoder_states = ()
+        if isinstance(output_hidden_states, list):
+            encoder_states = list(output_hidden_states)
+        elif output_hidden_states:
+            encoder_states = ()
         else:
             encoder_states = None
         all_attentions = () if output_attentions else None
