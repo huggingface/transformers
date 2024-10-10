@@ -128,7 +128,11 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
-            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+            **inputs,
+            cache_positions=cache_position,
+            past_key_values=past_key_values,
+            return_dict=False,
+            use_cache=True,
         )
         end = perf_counter()
         first_eager_fwd_pass_time = end - start
@@ -144,7 +148,11 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
-            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+            **inputs,
+            cache_positions=cache_position,
+            past_key_values=past_key_values,
+            return_dict=False,
+            use_cache=True,
         )
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
@@ -171,7 +179,11 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         logits = model(
-            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+            **inputs,
+            cache_positions=cache_position,
+            past_key_values=past_key_values,
+            return_dict=False,
+            use_cache=True,
         )[0]
         end = perf_counter()
         time_to_first_token = end - start
@@ -183,7 +195,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             logits = model(
                 next_token,
                 position_ids=cache_position.unsqueeze(-1),
-                cache_position=cache_position,
+                cache_positions=cache_position,
                 return_dict=False,
                 use_cache=True,
             )[0]
