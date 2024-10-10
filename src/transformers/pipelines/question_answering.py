@@ -184,12 +184,14 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         # Batched data
         elif "X" in kwargs:
             warnings.warn(
-                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5.", FutureWarning
+                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
             )
             inputs = kwargs["X"]
         elif "data" in kwargs:
             warnings.warn(
-                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5.", FutureWarning
+                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
             )
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
