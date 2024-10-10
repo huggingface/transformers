@@ -721,7 +721,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         pass
 
-    @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @unittest.skip(reason="The Moshi model does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
