@@ -34,7 +34,7 @@ jobs:
     runs-on:
       group: aws-g4dn-2xlarge-cache
     container:
-      image: ${{ github.event.inputs.docker_image }}
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
