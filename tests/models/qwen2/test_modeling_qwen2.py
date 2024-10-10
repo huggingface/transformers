@@ -518,7 +518,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
