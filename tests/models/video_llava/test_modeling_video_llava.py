@@ -212,12 +212,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         self.config_tester = ConfigTester(self, config_class=VideoLlavaConfig, has_text_modality=False)
 
     @unittest.skip(
-        reason="After #33533, this still passes, but many subsequential tests fail with `device-side assert triggered`"
-    )
-    def test_mixed_input(self):
-        pass
-
-    @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
@@ -243,6 +237,9 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(
+        reason="After #33533, this still passes, but many subsequential tests fail with `device-side assert triggered`"
+    )
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
