@@ -64,7 +64,7 @@ class Qwen2MoeModelTester:
         num_hidden_layers=5,
         max_window_layers=3,
         use_sliding_window=True,
-        sliding_window=2,
+        sliding_window=50,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
