@@ -398,15 +398,10 @@ def _crop_past_key_values(model, past_key_values, max_length):
         past_key_values.crop(max_length)
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
-            if past_key_values[idx] != ([], []):
-                new_past.append(
-                    (
-                        past_key_values[idx][0][:, :, :max_length, :],
-                        past_key_values[idx][1][:, :, :max_length, :],
-                    )
-                )
+            if past_key_values[idx] != ([],) * len(past_key_values[idx]):
+                new_past.append(tuple(past_key_value[:, :, :max_length, :] for past_key_value in past_key_values[idx]))
             else:
-                new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
+                new_past.append(past_key_values[idx])
         past_key_values = tuple(new_past)
     return past_key_values
 
