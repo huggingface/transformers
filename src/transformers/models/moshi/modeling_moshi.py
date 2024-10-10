@@ -2510,7 +2510,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 device=device,
                 cache_position=cache_position,
                 batch_size=batch_size,
-                sliding_window=self.config.sliding_window,
+                config=self.config,
                 past_key_values=past_key_values,
             )
 
