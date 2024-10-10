@@ -204,22 +204,41 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
     """
 
-    def __init__(self, old_name, new_name, given_old_name=None, given_new_name=None):
+    def __init__(
+        self,
+        old_name,
+        new_name,
+        given_old_name=None,
+        given_new_name=None,
+        old_class_name: str = None,
+        new_class_name: str = None,
+    ):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
-        self.default_name = "".join(x.title() for x in new_name.split("_"))
+        default_old_name = "".join(x.title() for x in old_name.split("_"))
+        self.default_new_name = "".join(x.title() for x in new_name.split("_"))
         if self.new_name in CONFIG_MAPPING_NAMES:
-            self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
+            self.default_new_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
                 "Config", ""
             )  # the best source of truth for class names. Could also just use the ones de
+        if self.old_name in CONFIG_MAPPING_NAMES:
+            default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace("Config", "")
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
-            "".join(x.title() for x in old_name.split("_")): self.default_name,
+            default_old_name: self.default_new_name,
         }
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
+        if new_class_name is not None and old_class_name is not None and old_class_name not in self.patterns:
+            # In last recourse, when the suffix of the new class is not the same as the old class,
+            # and if the old ans new classes start with the default name, we keep the default class name
+            # and replace the old suffix with the suffix
+            # Useful when we have a class like `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`
+            # where a model extends another model, but is used for a different task.
+            if old_class_name.startswith(default_old_name) and new_class_name.startswith(self.default_new_name):
+                self.patterns[old_class_name[len(default_old_name) :]] = new_class_name[len(self.default_new_name) :]
 
     def preserve_case_replace(self, text):
         # Create a regex pattern to match all variations
@@ -228,7 +247,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
         def replace(match):
             word = match.group(0)
-            result = self.patterns.get(word, self.default_name)
+            result = self.patterns.get(word, self.default_new_name)
             return result
 
         return compiled_regex.sub(replace, text)
@@ -249,9 +268,24 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
 
 
-def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma", given_old_name=None, given_new_name=None):
+def find_classes_in_file(
+    module: cst.Module,
+    old_id="llama",
+    new_id="gemma",
+    given_old_name=None,
+    given_new_name=None,
+    old_class_name=None,
+    new_class_name=None,
+):
     """Helper function to rename and then parse a source file using the ClassFinder"""
-    transformer = ReplaceNameTransformer(old_id, new_id, given_old_name, given_new_name)
+    transformer = ReplaceNameTransformer(
+        old_id,
+        new_id,
+        given_old_name=given_old_name,
+        given_new_name=given_new_name,
+        old_class_name=old_class_name,
+        new_class_name=new_class_name,
+    )
     new_module = module.visit(transformer)
 
     wrapper = MetadataWrapper(new_module)
@@ -868,7 +902,7 @@ class ModularConverterTransformer(CSTTransformer):
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
-            if list_dependencies == []:
+            if list_dependencies == {}:
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
@@ -880,6 +914,24 @@ class ModularConverterTransformer(CSTTransformer):
                     self.model_name,
                     potential_given_name,
                 )
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
+            if list_dependencies == {}:
+                # last recourse, if the suffix of the new class is different from the one of the super class
+                # e.g. MyNewClassForSegmentation extends MyOldClassForObjectDetection
+                # we try with another renaming pattern
+                class_finder = find_classes_in_file(
+                    self.transformers_imports[super_file_name],
+                    model_name,
+                    self.model_name,
+                    self.given_old_name,
+                    self.given_new_name,
+                    super_class,
+                    class_name,
+                )
+                visited_module[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
