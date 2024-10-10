@@ -1230,10 +1230,7 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
 
-            if any(
-                model_name == model_class.__name__
-                for model_name in ["VideoLlavaForConditionalGeneration", "LlavaNextVideoForConditionalGeneration"]
-            ):
+            if any(model_name == model_class.__name__ for model_name in ["LlavaNextVideoForConditionalGeneration"]):
                 self.skipTest(f"DoLa is failing for {model_class.__name__}")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
