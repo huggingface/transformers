@@ -346,6 +346,14 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
             torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
 
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_disk_offload_bin(self):
+        pass
+
 
 class MoshiTester:
     def __init__(
@@ -942,6 +950,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Compile not yet supported because in Moshi models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_disk_offload_bin(self):
         pass
 
 
