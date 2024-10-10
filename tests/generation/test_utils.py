@@ -1232,11 +1232,7 @@ class GenerationTesterMixin:
 
             if any(
                 model_name == model_class.__name__
-                for model_name in [
-                    "VideoLlavaForConditionalGeneration",
-                    "LlavaNextForConditionalGeneration",
-                    "LlavaNextVideoForConditionalGeneration",
-                ]
+                for model_name in ["VideoLlavaForConditionalGeneration", "LlavaNextVideoForConditionalGeneration"]
             ):
                 self.skipTest(f"DoLa is failing for {model_class.__name__}")
 
