@@ -129,7 +129,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         start = perf_counter()
         model(
             **inputs,
-            cache_positions=cache_position,
+            cache_position=cache_position,
             past_key_values=past_key_values,
             return_dict=False,
             use_cache=True,
@@ -149,7 +149,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         start = perf_counter()
         model(
             **inputs,
-            cache_positions=cache_position,
+            cache_position=cache_position,
             past_key_values=past_key_values,
             return_dict=False,
             use_cache=True,
@@ -180,7 +180,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         start = perf_counter()
         logits = model(
             **inputs,
-            cache_positions=cache_position,
+            cache_position=cache_position,
             past_key_values=past_key_values,
             return_dict=False,
             use_cache=True,
@@ -195,7 +195,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             logits = model(
                 next_token,
                 position_ids=cache_position.unsqueeze(-1),
-                cache_positions=cache_position,
+                cache_position=cache_position,
                 return_dict=False,
                 use_cache=True,
             )[0]
