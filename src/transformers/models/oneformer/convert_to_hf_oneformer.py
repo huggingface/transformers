@@ -130,13 +130,13 @@ class OriginalOneFormerConfigToOursConverter:
                 backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-tiny-patch4-window7-224",
                     drop_path_rate=model.SWIN.DROP_PATH_RATE,
-                    out_features=["stage1", "stage2", "stage3", "stage4"],
+                    out_indices=[1, 2, 3, 4],
                 )
             elif model.SWIN.EMBED_DIM == 192:
                 backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-large-patch4-window12-384",
                     drop_path_rate=model.SWIN.DROP_PATH_RATE,
-                    out_features=["stage1", "stage2", "stage3", "stage4"],
+                    out_indices=[1, 2, 3, 4],
                 )
             else:
                 raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
@@ -145,7 +145,7 @@ class OriginalOneFormerConfigToOursConverter:
                 "shi-labs/dinat-large-11x11-in22k-in1k-384",
                 dilations=model.DiNAT.DILATIONS,
                 kernel_size=model.DiNAT.KERNEL_SIZE,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
+                out_indices=[1, 2, 3, 4],
             )
 
         config: OneFormerConfig = OneFormerConfig(

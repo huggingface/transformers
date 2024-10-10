@@ -1361,7 +1361,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "microsoft/swin-tiny-patch4-window7-224", out_indices=[1, 2, 3, 4]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

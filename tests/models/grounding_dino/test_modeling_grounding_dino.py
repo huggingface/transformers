@@ -140,7 +140,6 @@ class GroundingDinoModelTester:
             depths=[1, 1, 1, 1],
             num_heads=[1, 1, 1, 1],
             image_size=self.image_size,
-            out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
         text_backbone = {

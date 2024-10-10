@@ -148,17 +148,17 @@ class HieraModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         num_patches = config.image_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], num_patches, num_patches]
         )
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = HieraBackbone(config=config)
         model.to(torch_device)
         model.eval()

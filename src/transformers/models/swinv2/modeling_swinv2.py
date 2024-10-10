@@ -1410,7 +1410,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/swinv2-tiny-patch4-window8-256", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "microsoft/swinv2-tiny-patch4-window8-256", out_indices=[1, 2, 3, 4]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

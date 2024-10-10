@@ -136,17 +136,17 @@ class Dinov2ModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         expected_size = self.image_size // config.patch_size
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
         )
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = Dinov2Backbone(config=config)
         model.to(torch_device)
         model.eval()
