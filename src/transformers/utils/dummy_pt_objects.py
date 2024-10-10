@@ -5269,6 +5269,20 @@ class LevitPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LightGlueForKeypointMatching(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LightGluePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LiltForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8490,6 +8504,20 @@ class Starcoder2Model(metaclass=DummyObject):
 
 
 class Starcoder2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SuperGlueForKeypointMatching(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SuperGluePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

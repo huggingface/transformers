@@ -653,6 +653,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -683,6 +685,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
       - local: model_doc/superpoint
         title: SuperPoint
       - local: model_doc/swiftformer
