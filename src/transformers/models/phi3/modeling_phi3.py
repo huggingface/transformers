@@ -376,8 +376,12 @@ class Phi3Attention(nn.Module):
 
         rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            rotary_seq_len += cache_position[0]
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -463,18 +467,14 @@ class Phi3FlashAttention2(Phi3Attention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
         rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            rotary_seq_len += cache_position[0]
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -589,8 +589,12 @@ class Phi3SdpaAttention(Phi3Attention):
 
         rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            rotary_seq_len += cache_position[0]
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
