@@ -102,7 +102,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16)
         gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
         start = perf_counter()
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, generation_config=gen_config)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, generation_config=gen_config).eval()
         model.to(device)
         end = perf_counter()
         model_load_time = end - start
@@ -123,144 +123,144 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         #########
         # Eager #
         #########
+        with torch.no_grad():
+            past_key_values = StaticCache(
+                model.config,
+                batch_size=batch_size,
+                device=device,
+                dtype=torch.float16,
+                max_cache_len=seq_length + num_tokens_to_generate,
+            )
+            cache_position = torch.arange(seq_length, device=device)
+            start = perf_counter()
+            model(
+                **inputs,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                return_dict=False,
+                use_cache=True,
+            )
+            end = perf_counter()
+            first_eager_fwd_pass_time = end - start
+            logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
+            start = perf_counter()
+            output = model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            first_eager_generate_time = end - start
+            logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        past_key_values = StaticCache(
-            model.config,
-            batch_size=batch_size,
-            device=device,
-            dtype=torch.float16,
-            max_cache_len=seq_length + num_tokens_to_generate,
-        )
-        cache_position = torch.arange(seq_length, device=device)
-        start = perf_counter()
-        model(
-            **inputs,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            return_dict=False,
-            use_cache=True,
-        )
-        end = perf_counter()
-        first_eager_fwd_pass_time = end - start
-        logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
-        start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        first_eager_generate_time = end - start
-        logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            past_key_values = StaticCache(
+                model.config,
+                batch_size=batch_size,
+                device=device,
+                dtype=torch.float16,
+                max_cache_len=seq_length + num_tokens_to_generate,
+            )
+            cache_position = torch.arange(seq_length, device=device)
+            start = perf_counter()
+            model(
+                **inputs,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                return_dict=False,
+                use_cache=True,
+            )
+            end = perf_counter()
+            second_eager_fwd_pass_time = end - start
+            logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
+            start = perf_counter()
+            model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            second_eager_generate_time = end - start
+            logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        past_key_values = StaticCache(
-            model.config,
-            batch_size=batch_size,
-            device=device,
-            dtype=torch.float16,
-            max_cache_len=seq_length + num_tokens_to_generate,
-        )
-        cache_position = torch.arange(seq_length, device=device)
-        start = perf_counter()
-        model(
-            **inputs,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            return_dict=False,
-            use_cache=True,
-        )
-        end = perf_counter()
-        second_eager_fwd_pass_time = end - start
-        logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
-        start = perf_counter()
-        model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        second_eager_generate_time = end - start
-        logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            torch.compiler.reset()
 
-        torch.compiler.reset()
+            ################
+            # Forward pass #
+            ################
 
-        ################
-        # Forward pass #
-        ################
+            # `torch.compile(model, ...)` is not recommended as you compile callbacks
+            # and full generate. We recommend compiling only the forward for now.
+            # "reduce-overhead" will use cudagraphs.
+            model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
-        # `torch.compile(model, ...)` is not recommended as you compile callbacks
-        # and full generate. We recommend compiling only the forward for now.
-        # "reduce-overhead" will use cudagraphs.
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-
-        past_key_values = StaticCache(
-            model.config,
-            batch_size=batch_size,
-            device=device,
-            dtype=torch.float16,
-            max_cache_len=seq_length + num_tokens_to_generate,
-        )
-        cache_position = torch.arange(seq_length, device=device)
-        start = perf_counter()
-        logits = model(
-            **inputs,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            return_dict=False,
-            use_cache=True,
-        )[0]
-        end = perf_counter()
-        time_to_first_token = end - start
-        cache_position = torch.tensor([seq_length], device=device)
-        next_token_times_secs = []
-        for _ in range(1, num_tokens_to_generate):
-            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+            past_key_values = StaticCache(
+                model.config,
+                batch_size=batch_size,
+                device=device,
+                dtype=torch.float16,
+                max_cache_len=seq_length + num_tokens_to_generate,
+            )
+            cache_position = torch.arange(seq_length, device=device)
             start = perf_counter()
             logits = model(
-                next_token,
-                position_ids=cache_position.unsqueeze(-1),
+                **inputs,
                 cache_position=cache_position,
+                past_key_values=past_key_values,
                 return_dict=False,
                 use_cache=True,
             )[0]
             end = perf_counter()
-            next_token_times_secs.append(end - start)
-            cache_position += 1
-        time_to_second_token = next_token_times_secs[0]
-        time_to_third_token = next_token_times_secs[1]
-        mean_time_to_next_token = mean(next_token_times_secs[2:])
+            time_to_first_token = end - start
+            cache_position = torch.tensor([seq_length], device=device)
+            next_token_times_secs = []
+            for _ in range(1, num_tokens_to_generate):
+                next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+                start = perf_counter()
+                logits = model(
+                    next_token,
+                    position_ids=cache_position.unsqueeze(-1),
+                    cache_position=cache_position,
+                    return_dict=False,
+                    use_cache=True,
+                )[0]
+                end = perf_counter()
+                next_token_times_secs.append(end - start)
+                cache_position += 1
+            time_to_second_token = next_token_times_secs[0]
+            time_to_third_token = next_token_times_secs[1]
+            mean_time_to_next_token = mean(next_token_times_secs[2:])
 
-        ####################
-        # Generate compile #
-        ####################
-        torch.compiler.reset()
-        model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+            ####################
+            # Generate compile #
+            ####################
+            torch.compiler.reset()
+            model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 
-        # 1st call
-        start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        first_compile_generate_time = end - start
-        logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            # 1st call
+            start = perf_counter()
+            output = model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            first_compile_generate_time = end - start
+            logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        # 2nd call
-        start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        second_compile_generate_time = end - start
-        logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            # 2nd call
+            start = perf_counter()
+            output = model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            second_compile_generate_time = end - start
+            logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        # 3nd call
-        start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        third_compile_generate_time = end - start
-        logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            # 3nd call
+            start = perf_counter()
+            output = model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            third_compile_generate_time = end - start
+            logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        # 4th call
-        start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
-        end = perf_counter()
-        fourth_compile_generate_time = end - start
-        logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+            # 4th call
+            start = perf_counter()
+            output = model.generate(**inputs, do_sample=False)
+            end = perf_counter()
+            fourth_compile_generate_time = end - start
+            logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+            logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         cur.execute(
             """
