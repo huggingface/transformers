@@ -221,6 +221,13 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
 
+        if self.old_name in CONFIG_MAPPING_NAMES:
+            self.default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace(
+                "Config", ""
+            )
+            if self.default_old_name.isupper():
+                self.default_old_name = self.default_old_name.capitalize()
+
     def preserve_case_replace(self, text):
         # Create a regex pattern to match all variations
         regex_pattern = "|".join(re.escape(key) for key in self.patterns.keys())
@@ -236,7 +243,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def convert_to_camelcase(self, text):
         # Regex pattern to match consecutive uppercase letters and lowercase the first set
         result = re.sub(
-            rf"^({self.old_name})(?=[a-z])", lambda m: m.group(0).capitalize(), text, flags=re.IGNORECASE, count=1
+            rf"^({self.old_name})(?=[a-z]+)", lambda m: self.default_old_name, text, flags=re.IGNORECASE, count=1
         )
         return result
 
@@ -248,8 +255,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         update = self.preserve_case_replace(update)
         return updated_node.with_changes(value=update)
 
-    def leave_ClassDef(self, original_node, updated_node):
-        return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
+    # def leave_ClassDef(self, original_node, updated_node):
+    #     return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
 
 
 def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma", given_old_name=None, given_new_name=None):
@@ -871,7 +878,7 @@ class ModularConverterTransformer(CSTTransformer):
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
-            if list_dependencies == []:
+            if len(list_dependencies) == 0:
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
@@ -887,6 +894,12 @@ class ModularConverterTransformer(CSTTransformer):
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
+                if len(list_dependencies) == 0:
+                    raise ValueError(
+                        f"We were unable to find dependencies for {class_name} (based on inheriting from {super_class})"
+                        f"   Here are all the global dependencies that we found in you modular file: {list(class_finder.class_dependency_mapping.keys())}."
+                        f"   This usually means that the name of `{class_name}` does not match the pattern of `{super_class}`"
+                    )
 
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
             start_insert_idx = self.global_scope_index
@@ -920,12 +933,7 @@ class ModularConverterTransformer(CSTTransformer):
 
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name, all_bases)
-            else:
-                raise ValueError(
-                    f"We were unable to find dependencies for {class_name} (based on inheriting from {super_class})"
-                    f"   Here are all the global dependencies that we found in you modular file: {list(class_finder.class_dependency_mapping.keys())}."
-                    f"   This usually means that the name of `{class_name}` does not match the pattern of `{super_class}`"
-                )
+
 
         # Now, if a class was defined without parents, we look for the name
         match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())

@@ -19,8 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -52,9 +52,11 @@ from .configuration_molmo import MolmoConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+from dataclasses import dataclass
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...utils import (
+    ModelOutput,
     is_flash_attn_2_available,
     torch_int,
 )

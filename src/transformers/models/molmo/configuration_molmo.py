@@ -19,16 +19,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import os
 from typing import TYPE_CHECKING, Union
 
-from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 
 if TYPE_CHECKING:
     pass
+
+from ...configuration_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
