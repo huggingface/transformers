@@ -225,24 +225,23 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         # Create a regex pattern to match all variations
         regex_pattern = "|".join(re.escape(key) for key in self.patterns.keys())
         compiled_regex = re.compile(regex_pattern, re.IGNORECASE)
-
         def replace(match):
             word = match.group(0)
             result = self.patterns.get(word, self.default_name)
             return result
-
         return compiled_regex.sub(replace, text)
 
     def convert_to_camelcase(self, text):
         # Regex pattern to match consecutive uppercase letters and lowercase the first set
-        result = re.sub(r"^[A-Z]+(?=[A-Z][a-z])", lambda m: m.group(0).capitalize(), text, count=1)
+        result = re.sub(rf"^({self.old_name})(?=[a-z])", lambda m: m.group(0).capitalize(), text,  flags=re.IGNORECASE, count=1)
         return result
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
-        update = self.preserve_case_replace(updated_node.value)
+        update = self.convert_to_camelcase(updated_node.value)
+        update = self.preserve_case_replace(update)
         return updated_node.with_changes(value=update)
 
     def leave_ClassDef(self, original_node, updated_node):
@@ -1125,7 +1124,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/roberta/modular_roberta.py"],
+        default=["src/transformers/models/molmo/modular_molmo.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
