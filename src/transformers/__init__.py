@@ -2149,6 +2149,8 @@ else:
         [
             "EncodecModel",
             "EncodecPreTrainedModel",
+            "EncodecDiscriminatorConfig",
+            "EncodecDiscriminator",
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
@@ -6884,6 +6886,8 @@ if TYPE_CHECKING:
         from .models.encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
+            EncodecDiscriminatorConfig,
+            EncodecDiscriminator,
         )
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.ernie import (

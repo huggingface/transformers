@@ -34,6 +34,8 @@ else:
     _import_structure["modeling_encodec"] = [
         "EncodecModel",
         "EncodecPreTrainedModel",
+        "EncodecDiscriminatorConfig",
+        "EncodecDiscriminator",
     ]
 
 if TYPE_CHECKING:
@@ -51,6 +53,8 @@ if TYPE_CHECKING:
         from .modeling_encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
+            EncodecDiscriminatorConfig,
+            EncodecDiscriminator,
         )
 
 else:
