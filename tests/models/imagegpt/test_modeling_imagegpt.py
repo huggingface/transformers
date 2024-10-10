@@ -257,7 +257,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    @unittest.skip(reason="After #33632, this test still passes, but many subsequential tests fail with `device-side assert triggered`")
+    @unittest.skip(
+        reason="After #33632, this test still passes, but many subsequential tests fail with `device-side assert triggered`"
+    )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
