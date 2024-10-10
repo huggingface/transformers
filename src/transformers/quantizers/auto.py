@@ -18,6 +18,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
+    BitNetConfig,
     BitsAndBytesConfig,
     CompressedTensorsConfig,
     EetqConfig,
@@ -31,6 +32,7 @@ from ..utils.quantization_config import (
 )
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
+from .quantizer_bitnet import BitNetHfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
@@ -54,6 +56,7 @@ AUTO_QUANTIZER_MAPPING = {
     "compressed-tensors": CompressedTensorsHfQuantizer,
     "fbgemm_fp8": FbgemmFp8HfQuantizer,
     "torchao": TorchAoHfQuantizer,
+    "bitnet": BitNetHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -68,6 +71,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
     "torchao": TorchAoConfig,
+    "bitnet": BitNetConfig,
 }
 
 
