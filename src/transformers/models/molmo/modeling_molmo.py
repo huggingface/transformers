@@ -57,7 +57,6 @@ from dataclasses import dataclass
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...utils import (
-    ModelOutput,
     is_flash_attn_2_available,
     torch_int,
 )
@@ -1362,28 +1361,13 @@ class MolmoVisionEmbeddings(nn.Module):
         return embeddings
 
 
-class MOLMOMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
 class MolmoEncoderLayer(nn.Module):
-    def __init__(self, config: MolmoVisionConfig):
+    def __init__(self, config: MolmoConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = MOLMO_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MOLMOMLP(config)
+        self.mlp = MolmoMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -1443,6 +1427,64 @@ MOLMO_VISION_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
+class MolmoVisionTransformer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+        self.embeddings = MolmoVisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = MolmoEncoder(config)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
+
+    @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class MolmoEncoder(nn.Module):

@@ -53,8 +53,6 @@ from typing import Optional
 logger = logging.get_logger(__name__)
 
 
-# TODO Update with Molmo params
-
 class MolmoVisionConfig(CLIPVisionConfig):
     model_type = "clip_vision_model"
 
@@ -169,6 +167,7 @@ class MolmoConfig(PretrainedConfig):
 
 # text modules inherited from Qwen2
 
+
 class MolmoMLP(Qwen2MLP):
     def __init__(self, config):
         super().__init__()
@@ -274,6 +273,7 @@ MOLMO_VISION_ATTENTION_CLASSES = {
     "flash_attention_2": MolmoVisionFlashAttention2
     }
 
+
 # This needs to be in caps for some reason in the modular renaming
 class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
     def __init__(self, config: MolmoVisionConfig):
@@ -337,6 +337,7 @@ class MolmoImagePooling2d(CLIPAttention): # It's an attention layer, so should b
             )
 
 
+
 class MolmoVisionModel(CLIPVisionModel):
     config_class = MolmoVisionConfig  # needed because renames
 
@@ -345,6 +346,7 @@ class MolmoVisionModel(CLIPVisionModel):
 
         self.vision_model = MolmoVisionTransformer(config)
         self.image_pooling_2d = MolmoImagePooling2d(config, is_vit_layer=False)
+
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: MolmoConfig):
