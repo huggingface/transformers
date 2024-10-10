@@ -330,9 +330,9 @@ class MixtralAttention(nn.Module):
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
             if past_key_value.get_max_cache_shape() is not None:
-                rotary_seq_length = past_key_value.get_max_cache_shape()
+                rotary_seq_len = past_key_value.get_max_cache_shape()
             else:
-                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -413,9 +413,9 @@ class MixtralFlashAttention2(MixtralAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
             if past_key_value.get_max_cache_shape() is not None:
-                rotary_seq_length = past_key_value.get_max_cache_shape()
+                rotary_seq_len = past_key_value.get_max_cache_shape()
             else:
-                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -526,9 +526,9 @@ class MixtralSdpaAttention(MixtralAttention):
         rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             if past_key_value.get_max_cache_shape() is not None:
-                rotary_seq_length = past_key_value.get_max_cache_shape()
+                rotary_seq_len = past_key_value.get_max_cache_shape()
             else:
-                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
