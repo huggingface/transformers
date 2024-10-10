@@ -233,7 +233,6 @@ class TokenClassificationPipeline(ChunkPipeline):
               exists if the offsets are available within the tokenizer
             - **end** (`int`, *optional*) -- The index of the end of the corresponding entity in the sentence. Only
               exists if the offsets are available within the tokenizer
-
         """
 
         _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
