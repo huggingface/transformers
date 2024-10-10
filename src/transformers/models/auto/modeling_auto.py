@@ -111,6 +111,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gemma", "GemmaModel"),
         ("gemma2", "Gemma2Model"),
         ("git", "GitModel"),
+        ("glm", "GLMModel"),
         ("glpn", "GLPNModel"),
         ("gpt-sw3", "GPT2Model"),
         ("gpt2", "GPT2Model"),
@@ -287,7 +288,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("zamba", "ZambaModel"),
     ]
 )
-
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
@@ -485,6 +485,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gemma", "GemmaForCausalLM"),
         ("gemma2", "Gemma2ForCausalLM"),
         ("git", "GitForCausalLM"),
+        ("glm", "GLMForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
@@ -939,6 +940,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForSequenceClassification"),
         ("gemma", "GemmaForSequenceClassification"),
         ("gemma2", "Gemma2ForSequenceClassification"),
+        ("glm", "GLMForSequenceClassification"),
         ("gpt-sw3", "GPT2ForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
@@ -1125,6 +1127,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForTokenClassification"),
         ("gemma", "GemmaForTokenClassification"),
         ("gemma2", "Gemma2ForTokenClassification"),
+        ("glm", "GLMForTokenClassification"),
         ("gpt-sw3", "GPT2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("gpt_bigcode", "GPTBigCodeForTokenClassification"),
