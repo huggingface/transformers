@@ -515,6 +515,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
             if getattr(self, "chat_template", None) is not None and getattr(attribute, "chat_template", None) is not None and kwargs.get("save_naked_chat_template", False):
+                # If we're saving a chat template file, it clobbers any chat template in the tokenizer
                 attribute.save_pretrained(save_directory, skip_chat_template_save=True)
             else:
                 attribute.save_pretrained(save_directory)
