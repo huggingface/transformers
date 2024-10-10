@@ -312,8 +312,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+        if version.parse(torch.__version__) < version.parse("2.5.0"):
+            self.skipTest(reason="This test requires torch >= 2.5 to run.")
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
