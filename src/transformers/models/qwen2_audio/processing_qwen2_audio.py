@@ -57,6 +57,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         audios: Union[np.ndarray, List[np.ndarray]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         sampling_rate: Optional[int] = None,
+        device: Optional[str] = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
@@ -89,10 +90,17 @@ class Qwen2AudioProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
         inputs = self.tokenizer(text, padding=padding, **kwargs)
+        for k in inputs.data:
+            inputs.data[k] = inputs.data[k].to(device)
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
+                audios,
+                sampling_rate=sampling_rate,
+                return_attention_mask=True,
+                padding="max_length",
+                device=device,
+                **kwargs,
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
