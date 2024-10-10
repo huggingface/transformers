@@ -18,7 +18,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(build_pipeline_init_args(has_processor=True))
 class ZeroShotObjectDetectionPipeline(Pipeline):
     """
     Zero shot object detection pipeline using `OwlViTForObjectDetection`. This pipeline predicts bounding boxes of
@@ -152,18 +152,16 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             postprocess_params["top_k"] = kwargs["top_k"]
         return preprocess_params, {}, postprocess_params
 
-    @deprecate_kwarg("images", new_name="image", version="4.48.0")
-    @deprecate_kwarg("text", new_name="candidate_labels", version="4.48.0")
-    @deprecate_kwarg("text_queries", new_name="candidate_labels", version="4.48.0")
+    @deprecate_kwarg("text_queries", new_name="candidate_labels", version="5.0.0")
     def _preprocess_input_keys(self, image, candidate_labels):
         """
-        The method is used to convert input keys to pipline specific keys, taking into consideration
+        The method is used to convert input keys to pipeline specific keys, taking into consideration
         backward compatibility for deprecated ones.
         """
         return {"image": image, "candidate_labels": candidate_labels}
 
     def preprocess(self, inputs, timeout=None):
-        # convert some old keys to unified format: image + candidate_labels
+        # convert keys to unified format: image + candidate_labels
         inputs = self._preprocess_input_keys(**inputs)
 
         image = load_image(inputs["image"], timeout=timeout)
@@ -173,27 +171,27 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         model_inputs = self.processor(images=image, text=candidate_labels, return_tensors=self.framework)
 
         # save extra data for post processing
-        width, height = image.size
-        model_inputs["_target_size"] = [height, width]
+        model_inputs["_target_size"] = [image.height, image.width]
         model_inputs["_candidate_labels"] = candidate_labels
 
         return model_inputs
 
     def _forward(self, model_inputs):
-        # filter out extra data for model forward
+        # separate extra data and model inputs for forward
+        extras = {k: v for k, v in model_inputs.items() if k.startswith("_")}
         inputs = {k: v for k, v in model_inputs.items() if not k.startswith("_")}
+
+        # forward
         model_outputs = self.model(**inputs)
 
         # pass extra data for post processing
-        model_outputs["_target_size"] = model_inputs["_target_size"]
-        model_outputs["_candidate_labels"] = model_inputs["_candidate_labels"]
-        model_outputs["_input_ids"] = model_inputs["input_ids"]
+        outputs = {**model_outputs, **extras}
 
-        return model_outputs
+        return outputs
 
     def postprocess(self, model_outputs, threshold=0.1, top_k=None):
         if hasattr(self.processor, "post_process_grounded_object_detection"):
-            # Grounding Dino case
+            # Grounding Dino and OmDet cases
             outputs = self.processor.post_process_grounded_object_detection(
                 model_outputs,
                 model_outputs["_input_ids"],
@@ -202,6 +200,7 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
                 target_sizes=[model_outputs["_target_size"]],
             )[0]
         else:
+            # OwlViT and OwlV2 cases
             outputs = self.processor.post_process_object_detection(
                 outputs=model_outputs, threshold=threshold, target_sizes=[model_outputs["_target_size"]]
             )[0]
