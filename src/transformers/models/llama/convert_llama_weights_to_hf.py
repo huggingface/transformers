@@ -332,7 +332,7 @@ def write_model(
 
 class Llama3Converter(TikTokenConverter):
     def __init__(self, vocab_file, special_tokens=None, instruct=False, model_max_length=None, **kwargs):
-        super().__init__(vocab_file, **kwargs)
+        super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
         chat_template = (
             "{% set loop_messages = messages %}"
@@ -345,7 +345,6 @@ class Llama3Converter(TikTokenConverter):
             "{% endfor %}"
             "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
         )
-        tokenizer.add_special_tokens(special_tokens)
 
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,

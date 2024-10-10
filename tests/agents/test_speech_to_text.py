@@ -24,7 +24,7 @@ from .test_tools_common import ToolTesterMixin
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("speech-to-text")
+        self.tool = load_tool("speech_to_text")
         self.tool.setup()
 
     def test_exact_match_arg(self):

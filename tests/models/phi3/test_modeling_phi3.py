@@ -47,12 +47,12 @@ if is_torch_available():
     end_of_text_token = 32000
 
     class Phi3MiniWithStaticCache(torch.nn.Module):
-        def __init__(self, model: Phi3ForCausalLM, max_batch_size: int, max_seq_len: int):
+        def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
             self.cache = StaticCache(
                 config=model.config,
-                max_batch_size=max_batch_size,
+                batch_size=batch_size,
                 max_cache_len=max_seq_len,
                 device=self.model.device,
                 dtype=self.model.dtype,
@@ -151,7 +151,7 @@ class Phi3ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -351,7 +351,14 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -441,6 +448,47 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # Scaling changes the RoPE embeddings, both for the short and long outputs
         self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    @parameterized.expand([("longrope",)])
+    def test_model_rope_scaling_short_long_factor(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        n_factors = config.hidden_size // config.num_key_value_heads // 2
+        config.rope_scaling = {
+            "type": scaling_type,
+            "short_factor": [3.0 for _ in range(n_factors)],
+            "long_factor": [5.0 for _ in range(n_factors)],
+        }
+        input_tensor = ids_tensor([1, 4090], config.vocab_size)
+        model = Phi3ForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        generation_args_short = {
+            "max_length": config.original_max_position_embeddings,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+        }
+        output_with_short_factor = model.generate(input_tensor, **generation_args_short)
+        keys_with_short_factor = output_with_short_factor.past_key_values[0][0]
+        generation_args_long = {
+            "max_length": config.original_max_position_embeddings + 5,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        output_with_long_factor = model.generate(input_tensor, **generation_args_long)
+        keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
+        last_token_logits = output_with_long_factor.logits[-1][-1]
+        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
+        keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
+
+        # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-2, rtol=1e-2))
+        # Last token generated using long factor
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
 
 
 @slow

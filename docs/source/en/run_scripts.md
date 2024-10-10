@@ -126,7 +126,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 
 The [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) supports distributed training and mixed precision, which means you can also use it in a script. To enable both of these features:
 
-- Add the `fp16` argument to enable mixed precision.
+- Add the `fp16` or `bf16` argument to enable mixed precision. XPU devices only supports `bf16` for mixed precision training.
 - Set the number of GPUs to use with the `nproc_per_node` argument.
 
 ```bash
@@ -287,7 +287,7 @@ Another helpful option to enable is resuming training from a previous checkpoint
 The first method uses the `output_dir previous_output_dir` argument to resume training from the latest checkpoint stored in `output_dir`. In this case, you should remove `overwrite_output_dir`:
 
 ```bash
-python examples/pytorch/summarization/run_summarization.py
+python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -304,7 +304,7 @@ python examples/pytorch/summarization/run_summarization.py
 The second method uses the `resume_from_checkpoint path_to_specific_checkpoint` argument to resume training from a specific checkpoint folder.
 
 ```bash
-python examples/pytorch/summarization/run_summarization.py
+python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -334,7 +334,7 @@ To give your repository a specific name, use the `push_to_hub_model_id` argument
 The following example shows how to upload a model with a specific repository name:
 
 ```bash
-python examples/pytorch/summarization/run_summarization.py
+python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \

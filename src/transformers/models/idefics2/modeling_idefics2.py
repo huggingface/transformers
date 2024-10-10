@@ -23,11 +23,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -434,7 +435,7 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
 
 
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -1096,7 +1097,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = (
-            self.config.text_config.initializer_range
+            self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
@@ -1255,6 +1256,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             make_inputs_require_grads
         )
 
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
+
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
 
@@ -1340,11 +1345,20 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            if not isinstance(past_key_values, Cache):
                 return_legacy_cache = True
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                if past_key_values is None:
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                    logger.warning_once(
+                        "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                        "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                        "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                    )
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1383,7 +1397,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
             patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1437,7 +1451,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
-class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1464,6 +1478,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
             make_inputs_require_grads
         )
+
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
 
     def get_input_embeddings(self):
         return self.model.text_model.get_input_embeddings()
@@ -1520,6 +1538,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, Idefics2CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1528,6 +1547,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
                 Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
                 computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
         Returns:
 
         Example:
@@ -1558,7 +1583,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         ...   "In which city is that bridge located?<image>",
         ... ]
         >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to("cuda")
+        >>> inputs = processor(images=images, text=prompts, padding=True, return_tensors="pt").to("cuda")
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=20)
@@ -1591,11 +1616,13 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
@@ -1623,14 +1650,20 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        num_logits_to_keep=None,
+        **kwargs,
     ):
         past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
             # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
             past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_length()
+            max_cache_length = past_key_values.get_max_cache_shape()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1665,6 +1698,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
 
         image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:

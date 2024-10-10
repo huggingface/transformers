@@ -26,9 +26,14 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.configuration_utils import GenerationConfig, GenerationMode
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation import (
+    ClassifierFreeGuidanceLogitsProcessor,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+    StoppingCriteriaList,
+)
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -441,7 +446,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1117,7 +1122,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
     MUSICGEN_MELODY_START_DOCSTRING,
 )
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,MusicGen->Musicgen Melody
-class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
+class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
 
@@ -1531,13 +1536,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -1545,11 +1543,10 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
@@ -1593,7 +1590,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
     """,
 )
-class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
+class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
@@ -2490,13 +2487,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -2505,11 +2495,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,

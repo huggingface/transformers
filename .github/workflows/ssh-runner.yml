@@ -53,11 +53,33 @@ jobs:
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
-      
+
+      - name: Store Slack infos
+        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
+        shell: bash
+        run: |
+          echo "${{ github.actor }}"
+          github_actor=${{ github.actor }}
+          github_actor=${github_actor/'-'/'_'}
+          echo "$github_actor"
+          echo "github_actor=$github_actor" >> $GITHUB_ENV
+
+      - name: Store Slack infos
+        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
+        shell: bash
+        run: |
+          echo "${{ env.github_actor }}"
+          if [ "${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" != "" ]; then
+            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
+          else
+            echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
+          fi
+
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
+          slackChannel: ${{ env.SLACKCHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
+          sshTimeout: 15m

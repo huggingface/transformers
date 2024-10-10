@@ -26,11 +26,18 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .utils import is_protobuf_available, requires_backends
+from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
+logger = logging.get_logger(__name__)
+
+
 def import_protobuf(error_message=""):
+    if is_sentencepiece_available():
+        from sentencepiece import sentencepiece_model_pb2
+
+        return sentencepiece_model_pb2
     if is_protobuf_available():
         import google.protobuf
 
@@ -321,9 +328,11 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks)
 
         tokenizer = Tokenizer(
             BPE(
@@ -336,9 +345,10 @@ class GPT2Converter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        if self.original_tokenizer.add_bos_token:
+        if getattr(self.original_tokenizer, "add_bos_token", False):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
@@ -602,33 +612,12 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokens_to_add = [
-            AddedToken(token, normalized=False, special=special)
-            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-        ]
-
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            for token in tokens_to_add:
-                is_special = token.special
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    if is_last_special:
-                        tokenizer.add_special_tokens(tokens)
-                    else:
-                        tokenizer.add_tokens(tokens)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                if is_last_special:
-                    tokenizer.add_special_tokens(tokens)
-                else:
-                    tokenizer.add_tokens(tokens)
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
 
         return tokenizer
 
@@ -1451,12 +1440,15 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
+        additional_special_tokens=None,
         *args,
+        **kwargs,
     ):
         super().__init__(*args)
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = additional_special_tokens
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1505,7 +1497,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.add_special_tokens(self.additional_special_tokens)
+
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
         return tokenizer
 
 
@@ -1566,10 +1561,11 @@ SLOW_TO_FAST_CONVERTERS = {
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConvert,
+    "Phi3Tokenizer": LlamaConverter,
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1577,6 +1573,8 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+       from_tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
+            Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
@@ -1584,14 +1582,20 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
+        converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer).converted()
 
-    if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
-        raise ValueError(
-            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
-            " No converter was found. Currently available slow->fast convertors:"
-            f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
-        )
-
-    converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-
-    return converter_class(transformer_tokenizer).converted()
+    else:
+        try:
+            logger.info("Converting from Tiktoken")
+            return TikTokenConverter(
+                vocab_file=transformer_tokenizer.vocab_file,
+                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
+            ).converted()
+        except Exception:
+            raise ValueError(
+                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"with a SentencePiece tokenizer.model file."
+                f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+            )

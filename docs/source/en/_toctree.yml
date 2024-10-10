@@ -5,6 +5,8 @@
     title: Quick tour
   - local: installation
     title: Installation
+  - local: add_new_model
+    title: Adding a new model to `transformers`
   title: Get started
 - sections:
   - local: pipeline_tutorial
@@ -24,7 +26,9 @@
   - local: model_sharing
     title: Share your model
   - local: agents
-    title: Agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools, and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
@@ -79,6 +83,8 @@
       title: Image Feature Extraction
     - local: tasks/mask_generation
       title: Mask Generation
+    - local: tasks/keypoint_detection
+      title: Keypoint Detection
     - local: tasks/knowledge_distillation_for_image_classification
       title: Knowledge Distillation for Computer Vision
     title: Computer Vision
@@ -94,6 +100,8 @@
       title: Text to speech
     - local: tasks/image_text_to_text
       title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
@@ -120,7 +128,7 @@
   - local: custom_models
     title: Share a custom model
   - local: chat_templating
-    title: Templates for chat models
+    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -141,6 +149,12 @@
     title: Troubleshoot
   - local: gguf
     title: Interoperability with GGUF files
+  - local: tiktoken
+    title: Interoperability with TikToken files
+  - local: modular_transformers
+    title: Modularity in `transformers`
+  - local: how_to_hack_models
+    title: Model Hacking (overwriting a class to your usage)
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -163,6 +177,12 @@
     title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
+  - local: quantization/bitnet
+    title: BitNet
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -288,6 +308,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
@@ -370,6 +392,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
@@ -408,6 +432,10 @@
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
         title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
+      - local: model_doc/granitemoe
+        title: GraniteMoe
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -470,6 +498,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/myt5
+        title: myt5
       - local: model_doc/nemotron
         title: Nemotron
       - local: model_doc/nezha
@@ -482,6 +512,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmoe
+        title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
@@ -496,6 +528,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -506,8 +540,6 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
-      - local: model_doc/qwen2_audio
-        title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
       - local: model_doc/rag
@@ -681,6 +713,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zamba
+        title: Zamba
       - local: model_doc/zoedepth
         title: ZoeDepth
       title: Vision models
@@ -692,6 +726,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/dac
+        title: dac
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/hiera
@@ -700,6 +736,8 @@
         title: Hubert
       - local: model_doc/mctct
         title: MCTCT
+      - local: model_doc/mimi
+        title: Mimi
       - local: model_doc/mms
         title: MMS
       - local: model_doc/musicgen
@@ -798,6 +836,8 @@
         title: IDEFICS
       - local: model_doc/idefics2
         title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
@@ -818,16 +858,22 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
-      - local: model_doc/llava-next-video
+      - local: model_doc/llava_next_video
         title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mllama
+        title: mllama
       - local: model_doc/nougat
         title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
@@ -840,6 +886,12 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip
