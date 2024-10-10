@@ -1425,7 +1425,9 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2, MISTRAL->QWEN2
 class Qwen2ForQuestionAnswering(Qwen2PreTrainedModel):
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.__init__ with Llama->Qwen2,transformer->model
+    base_model_prefix = "model"
+
+    # Copied from models.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Qwen2
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen2Model(config)
@@ -1434,16 +1436,13 @@ class Qwen2ForQuestionAnswering(Qwen2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.get_input_embeddings with transformer->model
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.set_input_embeddings with transformer->model
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(QWEN2_INPUTS_DOCSTRING)
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.forward with Llama->Qwen2, transformer->model
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
