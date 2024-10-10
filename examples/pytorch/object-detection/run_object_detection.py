@@ -25,6 +25,7 @@ from typing import Any, List, Mapping, Optional, Tuple, Union
 import albumentations as A
 import numpy as np
 import torch
+from accelerate import Accelerator
 from datasets import load_dataset
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
@@ -203,8 +204,11 @@ def compute_metrics(
     # Collect predictions in the required format for metric computation,
     # model produce boxes in YOLO format, then image_processor convert them to Pascal VOC format
     for batch, target_sizes in zip(predictions, image_sizes):
-        batch_logits, batch_boxes = batch[1], batch[2]
-        output = ModelOutput(logits=torch.tensor(batch_logits), pred_boxes=torch.tensor(batch_boxes))
+        nested_integer = len(batch) // len(target_sizes)
+        batch_logits, batch_boxes = batch[1::nested_integer], batch[2::nested_integer]
+        output = ModelOutput(
+            logits=torch.tensor(batch_logits).squeeze(1), pred_boxes=torch.tensor(batch_boxes).squeeze(1)
+        )
         post_processed_output = image_processor.post_process_object_detection(
             output, threshold=threshold, target_sizes=target_sizes
         )
@@ -337,6 +341,19 @@ def main():
     # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_object_detection", model_args, data_args)
+
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    # If we're using training_args.report_to, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator_log_kwargs = {}
+
+    if training_args.report_to:
+        accelerator_log_kwargs["log_with"] = training_args.report_to
+        accelerator_log_kwargs["project_dir"] = training_args.output_dir
+
+    accelerator = Accelerator(
+        gradient_accumulation_steps=training_args.gradient_accumulation_steps, **accelerator_log_kwargs
+    )
 
     # Setup logging
     logging.basicConfig(
@@ -471,9 +488,19 @@ def main():
         augment_and_transform_batch, transform=validation_transform, image_processor=image_processor
     )
 
-    dataset["train"] = dataset["train"].with_transform(train_transform_batch)
-    dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
-    dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
+    with accelerator.main_process_first():
+        dataset["train"] = dataset["train"].with_transform(train_transform_batch)
+        dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
+        dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
+
+    # ------------------------------------------------------------------------------------------------
+    # Prepare everything with the accelerator
+    # ------------------------------------------------------------------------------------------------
+
+    # Prepare everything with our `accelerator`.
+    model, dataset["train"], dataset["validation"] = accelerator.prepare(
+        model, dataset["train"], dataset["validation"]
+    )
 
     # ------------------------------------------------------------------------------------------------
     # Model training and evaluation with Trainer API
@@ -482,6 +509,7 @@ def main():
     eval_compute_metrics_fn = partial(
         compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0
     )
+    training_args.label_names = ["labels"]
 
     trainer = Trainer(
         model=model,
