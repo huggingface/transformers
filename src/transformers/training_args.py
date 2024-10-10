@@ -563,6 +563,8 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+                - device_mesh (`DeviceMesh`, *optional*):
+                    The device mesh used for device management and sharding.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -1228,7 +1230,7 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_config: Optional[Union[dict, str]] = field(
+    fsdp_config: Optional[Union[dict, Union[str, int, bool, dict, "DeviceMesh"]]] = field(
         default=None,
         metadata={
             "help": (
@@ -1936,6 +1938,7 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
+        self.fsdp_plugin = None
         if len(self.fsdp) > 0 and is_accelerate_available("0.28.0"):
             os.environ["ACCELERATE_USE_FSDP"] = "true"
             from accelerate.utils.constants import (
@@ -1977,6 +1980,13 @@ class TrainingArguments:
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+
+            fsdp_plugin_kwargs = {}
+            if self.fsdp_config.get("device_mesh", None):
+                fsdp_plugin_kwargs["device_mesh"] = self.fsdp_config["device_mesh"]
+
+            from accelerate.utils import FullyShardedDataParallelPlugin
+            self.fsdp_plugin = FullyShardedDataParallelPlugin(**fsdp_plugin_kwargs)
 
         if self.tpu_metrics_debug:
             warnings.warn(
