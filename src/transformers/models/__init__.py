@@ -80,6 +80,7 @@ from . import (
     dpt,
     efficientnet,
     electra,
+    emu3,
     encodec,
     encoder_decoder,
     ernie,
