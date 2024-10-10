@@ -229,6 +229,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
+    from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
@@ -416,6 +417,7 @@ class Trainer:
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -1675,6 +1677,10 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
             self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
+
+            # From 1.0 on, we need to fully wipe the DS plugin when doing sweeps.
+            # Simply calling `_reset_state` is enough and doesn't need a version pin.
+            AcceleratorState()._reset_state()
 
         self.create_accelerator_and_postprocess()
 
@@ -4859,6 +4865,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+            if is_accelerate_available("1.1.0"):
+                dataloader_config.data_seed = self.args.data_seed
+
         non_blocking = accelerator_config.pop("non_blocking")
         if not is_accelerate_available("0.30.0"):
             if non_blocking:
