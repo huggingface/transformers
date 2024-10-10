@@ -1195,6 +1195,7 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
                 attention_mask,
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_cache_shape(),
+                initial_mask_position=0,
                 dtype=self.lm_head.weight.dtype,
                 device=device,
                 cache_position=cache_position,
