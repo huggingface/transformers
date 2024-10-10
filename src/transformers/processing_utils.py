@@ -23,11 +23,11 @@ import os
 import sys
 import typing
 import warnings
-import torch
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
+import torch
 import typing_extensions
 
 from .dynamic_module_utils import custom_object_save
@@ -77,6 +77,7 @@ if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
 else:
     Unpack = typing_extensions.Unpack
+
 
 class FlashAttentionKwargs(TypedDict, total=False):
     """

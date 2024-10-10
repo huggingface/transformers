@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import List, Optional, Tuple, Union, Unpack
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -40,6 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import FlashAttentionKwargs, Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -48,9 +49,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...processing_utils import (
-    FlashAttentionKwargs,
-)    
 from .configuration_llama import LlamaConfig
 
 
@@ -515,7 +513,7 @@ class LlamaFlashAttention2(LlamaAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
             batch_size=batch_size,
-            **kwargs
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -961,7 +959,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    **flash_attn_kwargs
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
