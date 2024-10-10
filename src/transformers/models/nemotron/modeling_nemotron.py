@@ -1252,10 +1252,10 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(NEMOTRON_INPUTS_DOCSTRING)
     def forward(
@@ -1283,7 +1283,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
