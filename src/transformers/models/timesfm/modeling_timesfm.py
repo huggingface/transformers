@@ -23,7 +23,6 @@
 
 
 import logging
-import multiprocessing
 from typing import Any, Sequence
 import pandas as pd
 import numpy as np
@@ -32,9 +31,6 @@ import torch.nn as nn
 from ...modeling_utils import PreTrainedModel
 from .configuration_timesfm import TimesFMConfig
 from .timesfm_layers import *
-
-# TODO: shall remove this dependency after API design is finalized.
-from utilsforecast.processing import make_future_dataframe
 
 
 class TimesFMPreTrainedModel(PreTrainedModel):
@@ -366,7 +362,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
             pmap_pad,
         )
 
-    def forecast(
+    def forward(
         self,
         inputs: Sequence[Any],
         freq: Sequence[int] | None = None,
@@ -374,7 +370,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
         forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-    ) -> tuple[np.array, np.array]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Forecasts on a list of time series.
 
         Args:
@@ -400,109 +396,90 @@ class TimesFMModel(TimesFMPreTrainedModel):
         Raises:
         ValueError: If the checkpoint is not properly loaded.
         """
-        raise NotImplementedError("`forecast` is not implemented.")
 
-    def forecast_on_df(
-        self,
-        inputs: pd.DataFrame,
-        freq: str,
-        forecast_context_len: int = 0,
-        value_name: str = "values",
-        model_name: str = "timesfm",
-        window_size: int | None = None,
-        num_jobs: int = 1,
-        verbose: bool = True,
-    ) -> pd.DataFrame:
-        """Forecasts on a list of time series.
-
-        Args:
-          inputs: A pd.DataFrame of all time series. The dataframe should have a
-            `unique_id` column for identifying the time series, a `ds` column for
-            timestamps and a value column for the time series values.
-          freq: string valued `freq` of data. Notice this is different from the
-            `freq` required by `forecast`. See `freq_map` for allowed values.
-          forecast_context_len: If provided none zero, we take the last
-            `forecast_context_len` time-points from each series as the forecast
-            context instead of the `context_len` set by the model.
-          value_name: The name of the value column.
-          model_name: name of the model to be written into future df.
-          window_size: window size of trend + residual decomposition. If None then
-            we do not do decomposition.
-          num_jobs: number of parallel processes to use for dataframe processing.
-          verbose: output model states in terminal.
-
-        Returns:
-          Future forecasts dataframe.
-        """
-        if not (
-            "unique_id" in inputs.columns
-            and "ds" in inputs.columns
-            and value_name in inputs.columns
-        ):
-            raise ValueError(
-                f"DataFrame must have unique_id, ds and {value_name} columns."
-            )
-        if not forecast_context_len:
-            forecast_context_len = self.context_len
-        logging.info("Preprocessing dataframe.")
-        df_sorted = inputs.sort_values(by=["unique_id", "ds"])
-        new_inputs = []
-        uids = []
-        if num_jobs == 1:
-            if verbose:
-                print("Processing dataframe with single process.")
-            for key, group in df_sorted.groupby("unique_id"):
-                inp, uid = process_group(
-                    key,
-                    group,
-                    value_name,
-                    forecast_context_len,
-                )
-                new_inputs.append(inp)
-                uids.append(uid)
+        if forecast_context_len is None:
+            fcontext_len = self.context_len
         else:
-            if num_jobs == -1:
-                num_jobs = multiprocessing.cpu_count()
-            if verbose:
-                print("Processing dataframe with multiple processes.")
-            with multiprocessing.Pool(processes=num_jobs) as pool:
-                results = pool.starmap(
-                    process_group,
-                    [
-                        (key, group, value_name, forecast_context_len)
-                        for key, group in df_sorted.groupby("unique_id")
-                    ],
+            fcontext_len = forecast_context_len
+        inputs = [np.array(ts)[-fcontext_len:] for ts in inputs]
+        inp_min = np.min([np.min(ts) for ts in inputs])
+
+        if window_size is not None:
+            new_inputs = []
+            for ts in inputs:
+                new_inputs.extend(moving_average(ts, window_size))
+            inputs = new_inputs
+
+        if freq is None:
+            logging.info("No frequency provided via `freq`. Default to high (0).")
+            freq = [0] * len(inputs)
+
+        input_ts, input_padding, inp_freq, pmap_pad = self._preprocess(inputs, freq)
+        with torch.no_grad():
+            mean_outputs = []
+            full_outputs = []
+            assert input_ts.shape[0] % self.global_batch_size == 0
+            for i in range(input_ts.shape[0] // self.global_batch_size):
+                input_ts_in = torch.from_numpy(
+                    np.array(
+                        input_ts[
+                            i
+                            * self.global_batch_size : (i + 1)
+                            * self.global_batch_size
+                        ],
+                        dtype=np.float32,
+                    )
+                ).to(self._device)
+                input_padding_in = torch.from_numpy(
+                    np.array(
+                        input_padding[
+                            i
+                            * self.global_batch_size : (i + 1)
+                            * self.global_batch_size
+                        ],
+                        dtype=np.float32,
+                    )
+                ).to(self._device)
+                inp_freq_in = (
+                    torch.from_numpy(
+                        np.array(
+                            inp_freq[
+                                i
+                                * self.global_batch_size : (i + 1)
+                                * self.global_batch_size,
+                                :,
+                            ],
+                            dtype=np.int32,
+                        )
+                    )
+                    .long()
+                    .to(self._device)
                 )
-            new_inputs, uids = zip(*results)
-        if verbose:
-            print("Finished preprocessing dataframe.")
-        freq_inps = [freq_map(freq)] * len(new_inputs)
-        _, full_forecast = self.forecast(
-            new_inputs, freq=freq_inps, window_size=window_size
-        )
-        if verbose:
-            print("Finished forecasting.")
-        fcst_df = make_future_dataframe(
-            uids=uids,
-            last_times=df_sorted.groupby("unique_id")["ds"].tail(1),
-            h=self.horizon_len,
-            freq=freq,
-        )
-        fcst_df[model_name] = full_forecast[:, 0 : self.horizon_len, 0].reshape(-1, 1)
+                mean_output, full_output = self.decoder.decode(
+                    input_ts=input_ts_in,
+                    paddings=input_padding_in,
+                    freq=inp_freq_in,
+                    horizon_len=self.horizon_len,
+                    return_forecast_on_context=return_forecast_on_context,
+                )
+                mean_output = mean_output.detach().cpu().numpy()
+                full_output = full_output.detach().cpu().numpy()
+                mean_output = np.array(mean_output)
+                full_output = np.array(full_output)
+                mean_outputs.append(mean_output)
+                full_outputs.append(full_output)
 
-        for i, q in enumerate(self.quantiles):
-            q_col = f"{model_name}-q-{q}"
-            fcst_df[q_col] = full_forecast[:, 0 : self.horizon_len, 1 + i].reshape(
-                -1, 1
-            )
-            if q == 0.5:
-                fcst_df[model_name] = fcst_df[q_col]
-        logging.info("Finished creating output dataframe.")
-        return fcst_df
+        mean_outputs = np.concatenate(mean_outputs, axis=0)
+        full_outputs = np.concatenate(full_outputs, axis=0)
 
-    def forward(self, x, **kwargs):
-        if isinstance(x, pd.DataFrame):
-            assert "freq" in kwargs, "Frequency must be provided for DataFrame input."
-            return self.forecast_on_df(x, **kwargs)
-        else:
-            return self.forecast(x, **kwargs)
+        if pmap_pad > 0:
+            mean_outputs = mean_outputs[:-pmap_pad, ...]
+            full_outputs = full_outputs[:-pmap_pad, ...]
+
+        if window_size is not None:
+            mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
+            full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
+        if inp_min >= 0 and truncate_negative:
+            mean_outputs = np.maximum(mean_outputs, 0.0)
+            full_outputs = np.maximum(full_outputs, 0.0)
+        return mean_outputs, full_outputs
