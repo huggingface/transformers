@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
@@ -327,7 +328,13 @@ class Qwen2MoeModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
 class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        (
+            Qwen2MoeModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
+            Qwen2MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -339,6 +346,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
             "zero-shot": Qwen2MoeForSequenceClassification,
+            "question-answering": Qwen2MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}

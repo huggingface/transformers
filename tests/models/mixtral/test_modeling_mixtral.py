@@ -41,6 +41,7 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
+        MixtralForQuestionAnswering,
         MixtralForSequenceClassification,
         MixtralForTokenClassification,
         MixtralModel,
@@ -291,7 +292,13 @@ class MixtralModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
 class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification, MixtralForTokenClassification)
+        (
+            MixtralModel,
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralForTokenClassification,
+            MixtralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -303,6 +310,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "token-classification": MixtralForTokenClassification,
             "text-generation": MixtralForCausalLM,
             "zero-shot": MixtralForSequenceClassification,
+            "question-answering": MixtralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
