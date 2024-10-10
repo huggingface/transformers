@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 이 페이지는 [`Trainer`]에서 사용되는 모든 유틸리티 함수들을 나열합니다.
 
-이 함수들 대부분은 라이브러리 내 Trainer 코드를 연구할 때만 유용합니다.
+이 함수들 대부분은 라이브러리에 있는 Trainer 코드를 자세히 알아보고 싶을 때만 유용합니다.
 
 ## 유틸리티 (Utilities) [[transformers.EvalPrediction]]
 
