@@ -534,11 +534,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
                 shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                logger.warning_once(
-                    "The final logits were masked using attention mask before calculating the loss. "
-                    "This behavior will be removed in v4.48, you should be masking the `labels` with `-100` "
-                    "in data collator before training starts."
-                )
                 shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
             else:
