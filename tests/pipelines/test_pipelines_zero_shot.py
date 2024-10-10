@@ -14,7 +14,7 @@
 
 import unittest
 
-from huggingface_hub import ZeroShotImageClassificationOutputElement
+from huggingface_hub import ZeroShotClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -79,36 +79,36 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, classifier, _):
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         # No kwarg
         outputs = classifier("Who are you voting for in 2020?", ["politics"])
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         outputs = classifier("Who are you voting for in 2020?", candidate_labels=["politics"])
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics, public health")
         self.assertEqual(
             outputs, {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
         )
         self.assertAlmostEqual(sum(nested_simplify(outputs["scores"])), 1.0)
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         outputs = classifier("Who are you voting for in 2020?", candidate_labels=["politics", "public health"])
         self.assertEqual(
             outputs, {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
         )
         self.assertAlmostEqual(sum(nested_simplify(outputs["scores"])), 1.0)
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         outputs = classifier(
             "Who are you voting for in 2020?", candidate_labels="politics", hypothesis_template="This text is about {}"
         )
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
-        compare_pipeline_output_to_hub_spec(outputs, ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs, ZeroShotClassificationOutputElement)
 
         # https://github.com/huggingface/transformers/issues/13846
         outputs = classifier(["I am happy"], ["positive", "negative"])
