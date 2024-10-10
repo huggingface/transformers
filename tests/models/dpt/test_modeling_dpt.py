@@ -384,3 +384,29 @@ class DPTModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((480, 480))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+    def test_post_processing_depth_estimation(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]["predicted_depth"]
+        expected_shape = torch.Size((384, 384))
+        self.assertTrue(predicted_depth.shape == expected_shape)
+
+        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])
+        predicted_depth_l = predicted_depth_l[0]["predicted_depth"]
+        expected_shape = torch.Size((500, 500))
+        self.assertTrue(predicted_depth_l.shape == expected_shape)
+
+        output_enlarged = torch.nn.functional.interpolate(
+            predicted_depth.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
+        ).squeeze()
+        self.assertTrue(output_enlarged.shape == expected_shape)
+        self.assertTrue(torch.allclose(predicted_depth_l, output_enlarged, rtol=1e-3))
