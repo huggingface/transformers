@@ -397,9 +397,16 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name in [
+        if pipeline_test_case_name in [
             "AutomaticSpeechRecognitionPipelineTests",
             "AudioClassificationPipelineTests",
         ]:
@@ -2099,6 +2106,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_distil_token_timestamp_generation(self):
+        # we actually just want to check that returning segments with distil model works
+        processor = WhisperProcessor.from_pretrained("distil-whisper/distil-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("distil-whisper/distil-large-v3")
+        model.to(torch_device)
+
+        input_speech = np.concatenate(self._load_datasamples(4))
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        _ = model.generate(
+            input_features, max_length=448, return_timestamps=True, return_token_timestamps=True, return_segments=True
+        )
 
     @slow
     def test_tiny_longform_timestamps_generation(self):

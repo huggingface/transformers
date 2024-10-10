@@ -51,7 +51,6 @@ from ...utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
-    is_torchdynamo_compiling,
 )
 from .configuration_jamba import JambaConfig
 
@@ -1283,9 +1282,7 @@ class JambaModel(JambaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1543,12 +1540,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        if labels is None and not is_torchdynamo_compiling:
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
-        # TODO: remove the float() operations in v4.46
-        logits = logits.float()
 
         loss = None
         if labels is not None:
@@ -1604,6 +1595,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
+        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+
         empty_past_kv = past_key_values is None
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
