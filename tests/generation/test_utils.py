@@ -1499,6 +1499,7 @@ class GenerationTesterMixin:
                 or config.num_hidden_layers
             )
             num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
+            num_key_value_heads = getattr(config, "num_key_value_heads", num_attention_heads)
             embed_dim = getattr(config, "d_model", config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
@@ -1513,10 +1514,10 @@ class GenerationTesterMixin:
                 for i in range(num_hidden_layers):
                     self.assertEqual(len(past_kv[i]), 4)  # K V for the decoder + K V for the encoder = 4
                     self.assertEqual(
-                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv[i][0].shape, (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
                     )
                     self.assertEqual(
-                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv[i][1].shape, (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
                     )
                     # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
                     # autoregressive generation, I'm keeping the test general and not checking the 3rd dim
@@ -1539,10 +1540,12 @@ class GenerationTesterMixin:
                 for i in range(num_hidden_layers):
                     self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                     self.assertEqual(
-                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv[i][0].shape,
+                        (batch_size, num_key_value_heads, seq_length, per_head_embed_dim),
                     )
                     self.assertEqual(
-                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv[i][1].shape,
+                        (batch_size, num_key_value_heads, seq_length, per_head_embed_dim),
                     )
 
     @pytest.mark.generate

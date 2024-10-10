@@ -3475,6 +3475,7 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "DeepseekForSequenceClassification",
             ]
             special_param_names = [
                 r"^bit\.",
@@ -3502,6 +3503,7 @@ class ModelTesterMixin:
                 r"^wav2vec2_bert\.",
                 r"^wav2vec2_conformer\.",
                 r"^wavlm\.",
+                r"^model\.layers\..+\.mlp\.gate\.weight",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
@@ -3969,8 +3971,10 @@ class ModelTesterMixin:
         atols = {
             ("cpu", False, torch.float32): 1e-6,
             ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", True, torch.float32): 1e-6,
             ("cpu", True, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float16): 5e-3,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
@@ -3981,8 +3985,10 @@ class ModelTesterMixin:
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
             ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", True, torch.float32): 1e-4,
             ("cpu", True, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float16): 5e-3,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
