@@ -85,7 +85,7 @@ class Owlv2Output(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
+    logits_per_text: torch.FloatFloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
