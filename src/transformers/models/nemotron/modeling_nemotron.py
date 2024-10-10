@@ -1242,12 +1242,10 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForQuestionAnswering(NemotronPreTrainedModel):
-    base_model_prefix = "transformer"
-
-    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Nemotron
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Nemotron,transformer->model
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = NemotronModel(config)
+        self.model = NemotronModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
