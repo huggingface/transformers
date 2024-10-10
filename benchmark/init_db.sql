@@ -1,4 +1,8 @@
-CREATE TABLE benchmarks (
+DROP TABLE benchmarks;
+DROP TABLE device_measurements;
+DROP TABLE model_measurements;
+
+CREATE TABLE IF NOT EXISTS benchmarks (
   benchmark_id SERIAL PRIMARY KEY,
   branch VARCHAR(255),
   commit_id VARCHAR(72),
@@ -7,7 +11,7 @@ CREATE TABLE benchmarks (
   created_at timestamp without time zone NOT NULL DEFAULT (current_timestamp AT TIME ZONE 'UTC')
 );
 
-CREATE TABLE device_measurements (
+CREATE TABLE IF NOT EXISTS device_measurements (
   measurement_id SERIAL PRIMARY KEY,
   benchmark_id int REFERENCES benchmarks (benchmark_id),
   cpu_util double precision,
@@ -17,16 +21,10 @@ CREATE TABLE device_measurements (
   time timestamp without time zone NOT NULL DEFAULT (current_timestamp AT TIME ZONE 'UTC')
 );
 
-CREATE TABLE model_measurements (
+CREATE TABLE IF NOT EXISTS model_measurements (
   measurement_id SERIAL PRIMARY KEY,
   benchmark_id int REFERENCES benchmarks (benchmark_id),
-  model_load_time double precision,
-  first_eager_forward_pass_time_secs double precision,
-  second_eager_forward_pass_time_secs double precision,
-  first_compile_forward_pass_time_secs double precision,
-  second_compile_forward_pass_time_secs double precision,
-  third_compile_forward_pass_time_secs double precision,
-  fourth_compile_forward_pass_time_secs double precision,
+  measurements jsonb,
   time timestamp without time zone NOT NULL DEFAULT (current_timestamp AT TIME ZONE 'UTC')
 );
 

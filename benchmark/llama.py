@@ -1,7 +1,9 @@
 import argparse
+import json
 import logging
 import os
 import sys
+from statistics import mean
 from threading import Event, Thread
 from time import perf_counter, sleep
 
@@ -10,7 +12,7 @@ import psutil
 import psycopg2
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +77,7 @@ def collect_metrics(benchmark_id, continue_metric_collection):
     conn.close()
 
 
-def run_benchmark(branch: str, commit_id: str, commit_msg: str):
+def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
     continue_metric_collection = Event()
     gpu_stats = gpustat.GPUStatCollection.new_query()
     gpu_name = gpu_stats[0]["name"]
@@ -114,93 +116,158 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
         # Specify the max length (including both the prompt and the response)
         # When calling `generate` with `cache_implementation="static" later, this is also used to create a `StaticCache` object
         # with sequence length = `max_length`. The longer the more you will re-use it
-        model.generation_config.max_length = 128
+        seq_length = inputs["input_ids"].shape[1]
+        model.generation_config.max_length = seq_length + num_tokens_to_generate
+        batch_size = inputs["input_ids"].shape[0]
 
-        # without `torch.compile`: each call takes ~ 5.0 seconds (on A100 80G + torch 2.3)
+        #########
+        # Eager #
+        #########
+
+        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        cache_position = torch.arrange(seq_length, device=device)
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        model(
+            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+        )
         end = perf_counter()
         first_eager_fwd_pass_time = end - start
         logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
-
-        # TODO:
-        # response = tokenizer.batch_decode(outputs)[0]
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, do_sample=False)
+        end = perf_counter()
+        first_eager_generate_time = end - start
+        logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
+
+        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        cache_position = torch.arrange(seq_length, device=device)
+        start = perf_counter()
+        model(
+            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+        )
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
         logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
+        start = perf_counter()
+        model.generate(**inputs, do_sample=False)
+        end = perf_counter()
+        second_eager_generate_time = end - start
+        logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
         torch.compiler.reset()
+
+        ################
+        # Forward pass #
+        ################
 
         # `torch.compile(model, ...)` is not recommended as you compile callbacks
         # and full generate. We recommend compiling only the forward for now.
         # "reduce-overhead" will use cudagraphs.
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        model.generation_config.cache_implementation = "static"
 
-        # with `torch.compile` (on A100 80G + torch 2.3)
-        # 1st call: ~ 90 seconds
+        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        cache_position = torch.arrange(seq_length, device=device)
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        logits = model(
+            **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
+        )[0]
         end = perf_counter()
-        first_compile_fwd_pass_time = end - start
-        logger.info(f"completed first compile fwd pass in: {first_compile_fwd_pass_time}s")
+        time_to_first_token = end - start
+        cache_position = torch.tensor([seq_length], device=device)
+        next_token_times_secs = []
+        for _ in range(1, num_tokens_to_generate):
+            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+            start = perf_counter()
+            logits = model(
+                next_token,
+                position_ids=cache_position.unsqueeze(-1),
+                cache_position=cache_position,
+                return_dict=False,
+                use_cache=True,
+            )[0]
+            end = perf_counter()
+            next_token_times_secs.append(end - start)
+            cache_position += 1
+        time_to_second_token = next_token_times_secs[0]
+        time_to_third_token = next_token_times_secs[1]
+        mean_time_to_next_token = mean(next_token_times_secs[2:])
+
+        ####################
+        # Generate compile #
+        ####################
+        torch.compiler.reset()
+        model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+
+        # 1st call
+        start = perf_counter()
+        output = model.generate(**inputs, do_sample=False)
+        end = perf_counter()
+        first_compile_generate_time = end - start
+        logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
         # TODO:
         # response = tokenizer.batch_decode(outputs)[0]
 
-        # 2nd call: ~ 60 seconds
+        # 2nd call
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, do_sample=False)
         end = perf_counter()
-        second_compile_fwd_pass_time = end - start
-        logger.info(f"completed second compile fwd pass in: {second_compile_fwd_pass_time}s")
+        second_compile_generate_time = end - start
+        logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
         # TODO:
         # response = tokenizer.batch_decode(outputs)[0]
 
-        # 3nd call: ~ 1.5 seconds
+        # 3nd call
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, do_sample=False)
         end = perf_counter()
-        third_compile_fwd_pass_time = end - start
-        logger.info(f"completed third compile fwd pass in: {third_compile_fwd_pass_time}s")
+        third_compile_generate_time = end - start
+        logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
+        # 4th call
         start = perf_counter()
-        model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, do_sample=False)
         end = perf_counter()
-        fourth_compile_fwd_pass_time = end - start
-        logger.info(f"completed fourth compile fwd pass in: {fourth_compile_fwd_pass_time}s")
+        fourth_compile_generate_time = end - start
+        logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+        logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
         cur.execute(
             """
             INSERT INTO model_measurements (
                 benchmark_id,
-                model_load_time,
-                first_eager_forward_pass_time_secs,
-                second_eager_forward_pass_time_secs,
-                first_compile_forward_pass_time_secs,
-                second_compile_forward_pass_time_secs,
-                third_compile_forward_pass_time_secs,
-                fourth_compile_forward_pass_time_secs
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                measurements,
+            ) VALUES (%s, %s)
             """,
             (
                 benchmark_id,
-                model_load_time,
-                first_eager_fwd_pass_time,
-                second_eager_fwd_pass_time,
-                first_compile_fwd_pass_time,
-                second_compile_fwd_pass_time,
-                third_compile_fwd_pass_time,
-                fourth_compile_fwd_pass_time,
+                json.dumps(
+                    {
+                        "model_load_time": model_load_time,
+                        "first_eager_forward_pass_time_secs": first_eager_fwd_pass_time,
+                        "second_eager_forward_pass_time_secs": second_eager_fwd_pass_time,
+                        "first_eager_generate_time_secs": first_eager_generate_time,
+                        "second_eager_generate_time_secs": second_eager_generate_time,
+                        "time_to_first_token_secs": time_to_first_token,
+                        "time_to_second_token_secs": time_to_second_token,
+                        "time_to_third_token_secs": time_to_third_token,
+                        "time_to_next_token_mean_secs": mean_time_to_next_token,
+                        "first_compile_generate_time_secs": first_compile_generate_time,
+                        "second_compile_generate_time_secs": second_compile_generate_time,
+                        "third_compile_generate_time_secs": third_compile_generate_time,
+                        "fourth_compile_generate_time_secs": fourth_compile_generate_time,
+                    }
+                ),
             ),
         )
         conn.commit()
         conn.close()
-        # TODO:
-        # response = tokenizer.batch_decode(outputs)[0]
     except Exception as e:
         print(f"error: {e}")
 
@@ -210,4 +277,4 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str):
 
 if __name__ == "__main__":
     branch, commit_id, commit_msg = parse_arguments()
-    run_benchmark(branch, commit_id, commit_msg)
+    run_benchmark(branch, commit_id, commit_msg, num_tokens_to_generate=20)
