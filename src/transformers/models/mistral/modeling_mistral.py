@@ -1293,7 +1293,7 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     MISTRAL_START_DOCSTRING,
 )
 class MistralForQuestionAnswering(MistralPreTrainedModel):
-    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Mistral,transformer->model
+    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.__init__ with Llama->Mistral,transformer->model
     def __init__(self, config):
         super().__init__(config)
         self.model = MistralModel(config)
@@ -1302,14 +1302,16 @@ class MistralForQuestionAnswering(MistralPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.get_input_embeddings with transformer->model
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.set_input_embeddings with transformer->model
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.forward with Llama->Mistral, LLAMA->MISTRAL, transformer->model
+    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.forward with Llama->Mistral, transformer->model
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
