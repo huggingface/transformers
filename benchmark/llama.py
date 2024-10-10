@@ -124,7 +124,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # Eager #
         #########
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device, dtype=torch.float16)
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + num_tokens_to_generate,
+        )
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
@@ -144,7 +150,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device, dtype=torch.float16)
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + num_tokens_to_generate,
+        )
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
@@ -175,7 +187,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # "reduce-overhead" will use cudagraphs.
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device, dtype=torch.float16)
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + num_tokens_to_generate,
+        )
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         logits = model(
