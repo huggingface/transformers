@@ -125,7 +125,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         #########
 
         past_key_values = StaticCache(model.config, batch_size=batch_size)
-        cache_position = torch.arrange(seq_length, device=device)
+        cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
             **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
@@ -141,7 +141,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"generated: {tokenizer.batch_decode(output)}")
 
         past_key_values = StaticCache(model.config, batch_size=batch_size)
-        cache_position = torch.arrange(seq_length, device=device)
+        cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
             **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
@@ -168,7 +168,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
         past_key_values = StaticCache(model.config, batch_size=batch_size)
-        cache_position = torch.arrange(seq_length, device=device)
+        cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         logits = model(
             **inputs, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache=True
