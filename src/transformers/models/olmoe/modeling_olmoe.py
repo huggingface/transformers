@@ -891,12 +891,6 @@ OLMOE_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
 class OlmoeModel(OlmoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OlmoeDecoderLayer`]
-
-    Args:
-        config: OlmoeConfig
-    """
 
     def __init__(self, config: OlmoeConfig):
         super().__init__(config)
