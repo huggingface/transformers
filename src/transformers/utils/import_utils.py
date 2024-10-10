@@ -102,6 +102,7 @@ _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
+_adam_mini_torch_available = _is_package_available("adam_mini")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
@@ -361,6 +362,10 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_adam_mini_torch_available():
+    return _adam_mini_torch_available
 
 
 def is_galore_torch_available():

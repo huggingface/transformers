@@ -115,6 +115,7 @@ from .import_utils import (
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,
+    is_adam_mini_torch_available,
     is_apex_available,
     is_aqlm_available,
     is_auto_awq_available,
