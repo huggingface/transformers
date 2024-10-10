@@ -544,7 +544,7 @@ class ProcessorTesterMixin:
         processor.tokenizer.chat_template = "test_template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname, save_naked_chat_template=True)
-
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            self.assertEqual(processor.tokenizer.chat_template, reloaded_processor.tokenizer.chat_template)
+            # Check that the processor clobbers the tokenizer's template
+            self.assertEqual(processor.tokenizer.chat_template, None)
