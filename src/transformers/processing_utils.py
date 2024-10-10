@@ -514,7 +514,10 @@ class ProcessorMixin(PushToHubMixin):
             # `AutoProcessor` API.
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
-            attribute.save_pretrained(save_directory)
+            if getattr(self, "chat_template", None) is not None and getattr(attribute, "chat_template", None) is not None and kwargs.get("save_naked_chat_template", False):
+                attribute.save_pretrained(save_directory, skip_chat_template_save=True)
+            else:
+                attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
