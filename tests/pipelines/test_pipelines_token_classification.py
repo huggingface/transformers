@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-
 from huggingface_hub import TokenClassificationOutputElement
 
 from transformers import (
@@ -142,7 +141,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
 
         for output_element in nested_simplify(outputs):
             compare_pipeline_output_to_hub_spec(output_element, TokenClassificationOutputElement)
-
 
         self.run_aggregation_strategy(model, tokenizer)
 

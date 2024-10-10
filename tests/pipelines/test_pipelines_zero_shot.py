@@ -14,6 +14,8 @@
 
 import unittest
 
+from huggingface_hub import ZeroShotImageClassificationOutputElement
+
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -21,7 +23,6 @@ from transformers import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
-from huggingface_hub import ZeroShotClassificationOutputElement, ZeroShotImageClassificationOutputElement
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
