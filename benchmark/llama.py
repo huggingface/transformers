@@ -124,7 +124,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # Eager #
         #########
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device)
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
@@ -142,9 +142,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         first_eager_generate_time = end - start
         logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device)
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         model(
@@ -162,7 +162,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         second_eager_generate_time = end - start
         logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         torch.compiler.reset()
 
@@ -175,7 +175,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # "reduce-overhead" will use cudagraphs.
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
-        past_key_values = StaticCache(model.config, batch_size=batch_size)
+        past_key_values = StaticCache(model.config, batch_size=batch_size, device=device)
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         logits = model(
@@ -218,10 +218,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         first_compile_generate_time = end - start
         logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
-
-        # TODO:
-        # response = tokenizer.batch_decode(outputs)[0]
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         # 2nd call
         start = perf_counter()
@@ -229,10 +226,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         second_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
-
-        # TODO:
-        # response = tokenizer.batch_decode(outputs)[0]
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         # 3nd call
         start = perf_counter()
@@ -240,7 +234,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         third_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         # 4th call
         start = perf_counter()
@@ -248,7 +242,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         fourth_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
-        logger.info(f"generated: {tokenizer.batch_decode(output)}")
+        logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         cur.execute(
             """
