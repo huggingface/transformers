@@ -1434,7 +1434,13 @@ class Qwen2ForQuestionAnswering(Qwen2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QWEN2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(QWEN2_INPUTS_DOCSTRING)
     # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.forward with Llama->Qwen2, LLAMA->QWEN2, transformer->model
     def forward(
         self,
