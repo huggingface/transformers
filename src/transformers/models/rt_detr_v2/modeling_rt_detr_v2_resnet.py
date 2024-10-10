@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-PyTorch RTDetr specific ResNet model. The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
+PyTorch RTDetrV2 specific ResNet model. The main difference between hugginface ResNet model is that this RTDetrV2ResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
 See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L126 for details.
 """
 
@@ -35,20 +35,20 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
-from .configuration_rt_detr_resnet import RTDetrResNetConfig
+from .configuration_rt_detr_v2_resnet import RTDetrV2ResNetConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "RTDetrResNetConfig"
+_CONFIG_FOR_DOC = "RTDetrV2ResNetConfig"
 
 # Base docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer -> RTDetrResNetConvLayer
-class RTDetrResNetConvLayer(nn.Module):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer -> RTDetrV2ResNetConvLayer
+class RTDetrV2ResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
@@ -66,30 +66,30 @@ class RTDetrResNetConvLayer(nn.Module):
         return hidden_state
 
 
-class RTDetrResNetEmbeddings(nn.Module):
+class RTDetrV2ResNetEmbeddings(nn.Module):
     """
     ResNet Embeddings (stem) composed of a deep aggressive convolution.
     """
 
-    def __init__(self, config: RTDetrResNetConfig):
+    def __init__(self, config: RTDetrV2ResNetConfig):
         super().__init__()
         self.embedder = nn.Sequential(
             *[
-                RTDetrResNetConvLayer(
+                RTDetrV2ResNetConvLayer(
                     config.num_channels,
                     config.embedding_size // 2,
                     kernel_size=3,
                     stride=2,
                     activation=config.hidden_act,
                 ),
-                RTDetrResNetConvLayer(
+                RTDetrV2ResNetConvLayer(
                     config.embedding_size // 2,
                     config.embedding_size // 2,
                     kernel_size=3,
                     stride=1,
                     activation=config.hidden_act,
                 ),
-                RTDetrResNetConvLayer(
+                RTDetrV2ResNetConvLayer(
                     config.embedding_size // 2,
                     config.embedding_size,
                     kernel_size=3,
@@ -112,8 +112,8 @@ class RTDetrResNetEmbeddings(nn.Module):
         return embedding
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut -> RTDetrResNetChortCut
-class RTDetrResNetShortCut(nn.Module):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut -> RTDetrV2ResNetChortCut
+class RTDetrV2ResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -130,7 +130,7 @@ class RTDetrResNetShortCut(nn.Module):
         return hidden_state
 
 
-class RTDetrResNetBasicLayer(nn.Module):
+class RTDetrV2ResNetBasicLayer(nn.Module):
     """
     A classic ResNet's residual layer composed by two `3x3` convolutions.
     See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L34.
@@ -138,7 +138,7 @@ class RTDetrResNetBasicLayer(nn.Module):
 
     def __init__(
         self,
-        config: RTDetrResNetConfig,
+        config: RTDetrV2ResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 1,
@@ -148,20 +148,23 @@ class RTDetrResNetBasicLayer(nn.Module):
         if in_channels != out_channels:
             self.shortcut = (
                 nn.Sequential(
-                    *[nn.AvgPool2d(2, 2, 0, ceil_mode=True), RTDetrResNetShortCut(in_channels, out_channels, stride=1)]
+                    *[
+                        nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                        RTDetrV2ResNetShortCut(in_channels, out_channels, stride=1),
+                    ]
                 )
                 if should_apply_shortcut
                 else nn.Identity()
             )
         else:
             self.shortcut = (
-                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
+                RTDetrV2ResNetShortCut(in_channels, out_channels, stride=stride)
                 if should_apply_shortcut
                 else nn.Identity()
             )
         self.layer = nn.Sequential(
-            RTDetrResNetConvLayer(in_channels, out_channels, stride=stride),
-            RTDetrResNetConvLayer(out_channels, out_channels, activation=None),
+            RTDetrV2ResNetConvLayer(in_channels, out_channels, stride=stride),
+            RTDetrV2ResNetConvLayer(out_channels, out_channels, activation=None),
         )
         self.activation = ACT2FN[config.hidden_act]
 
@@ -174,9 +177,9 @@ class RTDetrResNetBasicLayer(nn.Module):
         return hidden_state
 
 
-class RTDetrResNetBottleNeckLayer(nn.Module):
+class RTDetrV2ResNetBottleNeckLayer(nn.Module):
     """
-    A classic RTDetrResNet's bottleneck layer composed by three `3x3` convolutions.
+    A classic RTDetrV2ResNet's bottleneck layer composed by three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
@@ -185,7 +188,7 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
 
     def __init__(
         self,
-        config: RTDetrResNetConfig,
+        config: RTDetrV2ResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 1,
@@ -198,25 +201,25 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
             self.shortcut = nn.Sequential(
                 *[
                     nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
+                    RTDetrV2ResNetShortCut(in_channels, out_channels, stride=1)
                     if should_apply_shortcut
                     else nn.Identity(),
                 ]
             )
         else:
             self.shortcut = (
-                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
+                RTDetrV2ResNetShortCut(in_channels, out_channels, stride=stride)
                 if should_apply_shortcut
                 else nn.Identity()
             )
         self.layer = nn.Sequential(
-            RTDetrResNetConvLayer(
+            RTDetrV2ResNetConvLayer(
                 in_channels, reduces_channels, kernel_size=1, stride=stride if config.downsample_in_bottleneck else 1
             ),
-            RTDetrResNetConvLayer(
+            RTDetrV2ResNetConvLayer(
                 reduces_channels, reduces_channels, stride=stride if not config.downsample_in_bottleneck else 1
             ),
-            RTDetrResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
+            RTDetrV2ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
         self.activation = ACT2FN[config.hidden_act]
 
@@ -229,14 +232,14 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-class RTDetrResNetStage(nn.Module):
+class RTDetrV2ResNetStage(nn.Module):
     """
-    A RTDetrResNet stage composed by stacked layers.
+    A RTDetrV2ResNet stage composed by stacked layers.
     """
 
     def __init__(
         self,
-        config: RTDetrResNetConfig,
+        config: RTDetrV2ResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 2,
@@ -244,7 +247,7 @@ class RTDetrResNetStage(nn.Module):
     ):
         super().__init__()
 
-        layer = RTDetrResNetBottleNeckLayer if config.layer_type == "bottleneck" else RTDetrResNetBasicLayer
+        layer = RTDetrV2ResNetBottleNeckLayer if config.layer_type == "bottleneck" else RTDetrV2ResNetBasicLayer
 
         if config.layer_type == "bottleneck":
             first_layer = layer(
@@ -266,14 +269,14 @@ class RTDetrResNetStage(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNet->RTDetrResNet
-class RTDetrResNetEncoder(nn.Module):
-    def __init__(self, config: RTDetrResNetConfig):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNet->RTDetrV2ResNet
+class RTDetrV2ResNetEncoder(nn.Module):
+    def __init__(self, config: RTDetrV2ResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
         self.stages.append(
-            RTDetrResNetStage(
+            RTDetrV2ResNetStage(
                 config,
                 config.embedding_size,
                 config.hidden_sizes[0],
@@ -283,7 +286,7 @@ class RTDetrResNetEncoder(nn.Module):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(RTDetrResNetStage(config, in_channels, out_channels, depth=depth))
+            self.stages.append(RTDetrV2ResNetStage(config, in_channels, out_channels, depth=depth))
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
@@ -308,17 +311,17 @@ class RTDetrResNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrResNet
-class RTDetrResNetPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrV2ResNet
+class RTDetrV2ResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = RTDetrResNetConfig
+    config_class = RTDetrV2ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
+    _no_split_modules = ["RTDetrV2ResNetConvLayer", "RTDetrV2ResNetShortCut"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
@@ -335,22 +338,22 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-RTDETR_RESNET_START_DOCSTRING = r"""
+RTDetrV2_RESNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`RTDetrResNetConfig`]): Model configuration class with all the parameters of the model.
+        config ([`RTDetrV2ResNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-RTDETR_RESNET_INPUTS_DOCSTRING = r"""
+RTDetrV2_RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`RTDetrImageProcessor.__call__`] for details.
+            [`RTDetrV2ImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -362,23 +365,23 @@ RTDETR_RESNET_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """
-    ResNet backbone, to be used with frameworks like RTDETR.
+    ResNet backbone, to be used with frameworks like RTDetrV2.
     """,
-    RTDETR_RESNET_START_DOCSTRING,
+    RTDetrV2_RESNET_START_DOCSTRING,
 )
-class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+class RTDetrV2ResNetBackbone(RTDetrV2ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes
-        self.embedder = RTDetrResNetEmbeddings(config)
-        self.encoder = RTDetrResNetEncoder(config)
+        self.embedder = RTDetrV2ResNetEmbeddings(config)
+        self.encoder = RTDetrV2ResNetEncoder(config)
 
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RTDETR_RESNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RTDetrV2_RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
@@ -389,11 +392,11 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+        >>> from transformers import RTDetrV2ResNetConfig, RTDetrV2ResNetBackbone
         >>> import torch
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+        >>> config = RTDetrV2ResNetConfig()
+        >>> model = RTDetrV2ResNetBackbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 224, 224)
 
