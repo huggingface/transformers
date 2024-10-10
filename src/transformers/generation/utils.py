@@ -4174,7 +4174,6 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-            print(model_inputs["input_ids"].shape, candidate_input_ids.shape)
             outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
