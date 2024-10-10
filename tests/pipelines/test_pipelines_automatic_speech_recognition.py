@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import AutomaticSpeechRecognitionOutput, hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -36,6 +36,7 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -66,14 +67,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
             self.skipTest(reason="No tokenizer available")
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
 
         # test with a raw waveform
@@ -85,6 +99,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         audio = np.zeros((34000,))
         outputs = speech_recognizer(audio)
         self.assertEqual(outputs, {"text": ANY(str)})
+
+        compare_pipeline_output_to_hub_spec(outputs, AutomaticSpeechRecognitionOutput)
 
         # Striding
         audio = {"raw": audio, "stride": (0, 4000), "sampling_rate": speech_recognizer.feature_extractor.sampling_rate}
