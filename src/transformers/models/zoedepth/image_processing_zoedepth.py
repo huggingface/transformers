@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -38,19 +38,13 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
-    is_torch_available,
     is_vision_available,
     logging,
-    requires_backends,
 )
 
 
 if is_vision_available():
     import PIL
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -220,25 +214,14 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-        height, width = output_size
-
-        torch_image = torch.from_numpy(image).unsqueeze(0)
-        torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
-
-        # TODO support align_corners=True in image_transforms.resize
-        requires_backends(self, "torch")
-        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
-        mode = resample_to_mode[resample]
-        resized_image = nn.functional.interpolate(
-            torch_image, (int(height), int(width)), mode=mode, align_corners=True
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            align_corners=True,
         )
-        resized_image = resized_image.squeeze().numpy()
-
-        resized_image = to_channel_dimension_format(
-            resized_image, data_format, input_channel_dim=ChannelDimension.FIRST
-        )
-
-        return resized_image
 
     def pad_image(
         self,
