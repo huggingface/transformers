@@ -30,6 +30,7 @@ from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
     get_file_from_repo,
+    is_timm_checkpoint,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -134,6 +135,7 @@ else:
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor",)),
             ("timesformer", ("VideoMAEImageProcessor",)),
+            ("timm_wrapper", ("TimmWrapperImageProcessor",)),
             ("tvlt", ("TvltImageProcessor",)),
             ("tvp", ("TvpImageProcessor",)),
             ("udop", ("LayoutLMv3ImageProcessor",)),
@@ -411,6 +413,10 @@ class AutoImageProcessor:
         use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+        default_image_processor_filename = (
+            "config.json" if is_timm_checkpoint(pretrained_model_name_or_path) else IMAGE_PROCESSOR_NAME
+        )
+        kwargs["image_processor_filename"] = kwargs.get("image_processor_filename", default_image_processor_filename)
 
         config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
         image_processor_class = config_dict.get("image_processor_type", None)
