@@ -63,7 +63,7 @@ def get_checkpoint_from_config_class(config_class):
         if ckpt_link.endswith("/"):
             ckpt_link = ckpt_link[:-1]
 
-        # verify the checkpoint name corresponds to the checkpoint link
+        # verify if the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
         if ckpt_link == ckpt_link_from_name:
             checkpoint = ckpt_name
@@ -90,7 +90,7 @@ def check_config_docstrings_have_checkpoints():
         raise ValueError(
             f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
             "The requirement is to include a link pointing to one of the models of this architecture in the "
-            "docstring of the config classes listed above. The link should have be a markdown format like "
+            "docstring of config classes listed above. The link should have a markdown format like "
             "[myorg/mymodel](https://huggingface.co/myorg/mymodel)."
         )
 

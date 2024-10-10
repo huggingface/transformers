@@ -20,18 +20,18 @@ To create the package for pypi.
 1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
    current release branch.
 
-   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   If releasing on a special branch, copy the updated README.md on the main branch for your commit which you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
    "Release: <VERSION>" and push.
 
 3. Go back to the main branch and run `make post-release` then `make fix-copies`. Commit these changes with the
-   message "v<NEXT_VERSION>.dev.0" and push to main.
+   message "v<NEXT_VERSION>.dev.0" and push that to the main branch.
 
 # If you were just cutting the branch in preparation for a release, you can stop here for now.
 
-4. Wait for the tests on the release branch to be completed and be green (otherwise revert and fix bugs)
+4. Wait for the tests on the release branch to be completed and turn green (otherwise revert and fix bugs)
 
 5. On the release branch, add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin v<RELEASE>-release
@@ -51,7 +51,7 @@ To create the package for pypi.
    You may have to specify the repository url, use the following command then:
    twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
-   Check that you can install it in a virtualenv by running:
+   Check if you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
    Check you can run the following commands:
@@ -69,11 +69,8 @@ To create the package for pypi.
 
 import os
 import re
-import shutil
 from pathlib import Path
-
 from setuptools import Command, find_packages, setup
-
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
@@ -88,7 +85,7 @@ if stale_egg_info.exists():
             "See https://github.com/pypa/pip/issues/5466 for details.\n"
         ).format(stale_egg_info)
     )
-    shutil.rmtree(stale_egg_info)
+    # shutil.rmtree(stale_egg_info)  # Commented out for safety
 
 
 # IMPORTANT:
@@ -206,7 +203,7 @@ _deps = [
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
-# anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
+# anywhere. If you need to quickly access the data from this table in a shell, you can do that easily with:
 #
 # python -c 'import sys; from transformers.dependency_versions_table import deps; \
 # print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
