@@ -119,7 +119,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
                 for i in range(1)
             ],
         )
-        compare_pipeline_output_to_hub_spec(outputs[0], ZeroShotImageClassificationOutputElement)
+        compare_pipeline_output_to_hub_spec(outputs[0], ZeroShotClassificationOutputElement)
         outputs = classifier(["I am happy", "I am sad"], ["positive", "negative"])
         self.assertEqual(
             outputs,
@@ -129,7 +129,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
             ],
         )
         for element in outputs:
-            compare_pipeline_output_to_hub_spec(element, ZeroShotImageClassificationOutputElement)
+            compare_pipeline_output_to_hub_spec(element, ZeroShotClassificationOutputElement)
 
         with self.assertRaises(ValueError):
             classifier("", candidate_labels="politics")
