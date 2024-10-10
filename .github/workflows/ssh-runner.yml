@@ -1,6 +1,9 @@
 name: SSH into our runners
 
 on:
+  push:
+    branches:
+      - update_ssh
   workflow_dispatch:
     inputs:
       runner_type:
@@ -28,7 +31,8 @@ env:
 jobs:
   ssh_runner:
     name: "SSH"
-    runs-on: ["${{ github.event.inputs.num_gpus }}-gpu", nvidia-gpu, "${{ github.event.inputs.runner_type }}", ci]
+    runs-on:
+      group: aws-g4dn-2xlarge-cache
     container:
       image: ${{ github.event.inputs.docker_image }}
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
