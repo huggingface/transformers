@@ -83,6 +83,7 @@ For now the supported model architectures are the architectures that have been v
 - Bloom
 - Falcon
 - StableLM
+- GPT2
 
 ## Example usage
 

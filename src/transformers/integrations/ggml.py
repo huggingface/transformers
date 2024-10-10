@@ -163,6 +163,19 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "gpt2": {
+        "token_embd": "transformer.wte",
+        "blk": "transformer.h",
+        "position_embd": "transformer.wpe",
+        "output_norm": "transformer.ln_f",
+        "attn_norm": "ln_1",
+        "attn_qkv": "attn.c_attn",
+        "attn_output.weight": "attn.c_proj.weight",
+        "attn_output.bias": "attn.c_proj.bias",
+        "ffn_norm": "ln_2",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+    },
 }
 
 
@@ -270,6 +283,14 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_epsilon": "layer_norm_eps",
         "vocab_size": "vocab_size",
+    },
+    "gpt2": {
+        "block_count": "n_layer",
+        "context_length": "n_ctx",
+        "embedding_length": "n_embd",
+        "feed_forward_length": "feed_forward_length",
+        "attention.head_count": "n_head",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
     },
 }
 
@@ -600,6 +621,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "bloom": GGUFGPTConverter,
     "falcon": GGUFGPTConverter,
     "stablelm": GGUFGPTConverter,
+    "gpt2": GGUFGPTConverter,
 }
 
 
