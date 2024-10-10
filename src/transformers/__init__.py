@@ -7200,6 +7200,9 @@ if TYPE_CHECKING:
             LlamaModel,
             LlamaPreTrainedModel,
         )
+        from .models.openlm import (
+            OpenLMForCausalLM
+        )
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
