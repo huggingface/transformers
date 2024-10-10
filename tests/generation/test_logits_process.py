@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import unittest
 from typing import List, Union
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -49,13 +49,13 @@ if is_torch_available():
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         SequenceBiasLogitsProcessor,
+        SynthIDTextWatermarkLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
         WatermarkLogitsProcessor,
-        SynthIDTextWatermarkLogitsProcessor,
     )
     from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
@@ -1077,11 +1077,11 @@ class LogitsProcessorTest(unittest.TestCase):
             updated_softmaxes += (
                 torch.nn.functional.softmax(updated_scores, dim=1).cpu().numpy()
             )
-        
+
         updated_softmaxes = np.mean(updated_softmaxes, axis=0) / num_keys
         for softmax in updated_softmaxes:
             self.assertAlmostEqual(softmax, 0.5, delta=0.002)
-    
+
     """Test SynthID watermarking bais matches theoretical value."""
     @parameterized.expand([(2, 10, 1, 0.01), (100, 5, 1, 0.01), (100, 10, 2, 0.02)])
     def test_synthidtext_watermark_processor_bias_test(self, vocab_size, ngram_len, num_layers, atol):

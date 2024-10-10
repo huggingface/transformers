@@ -180,7 +180,13 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig, GreenRedWatermarkingConfig, SynthIDTextWatermarkingConfig
+    from .configuration_utils import (
+        GenerationConfig,
+        GenerationMode,
+        GreenRedWatermarkingConfig,
+        SynthIDTextWatermarkingConfig,
+        WatermarkingConfig,
+    )
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -219,6 +225,7 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
@@ -226,7 +233,6 @@ if TYPE_CHECKING:
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
-            SynthIDTextWatermarkLogitsProcessor,
         )
         from .stopping_criteria import (
             EosTokenCriteria,

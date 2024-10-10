@@ -14,13 +14,13 @@
 # limitations under the License.
 """Generation configuration class and utilities."""
 
-from abc import ABC, abstractmethod
 import copy
 import json
 import os
 import warnings
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -35,7 +35,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 if TYPE_CHECKING:
@@ -707,7 +707,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, GreenRedWatermarkingConfig) or 
+            if not (isinstance(self.watermarking_config, GreenRedWatermarkingConfig) or
                     isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)):
                 warnings.warn(
                     "`watermarking_config` as a dict is deprecated. Please construct `watermarking_config` object with "
@@ -1368,7 +1368,7 @@ class GreenRedWatermarkingConfig(WatermarkingConfig):
                     found_value=self.context_width,
                 ),
             )
-        
+
     def construct_processor(self, vocab_size: int, device) -> WatermarkLogitsProcessor:
         return WatermarkLogitsProcessor(
             vocab_size=vocab_size,

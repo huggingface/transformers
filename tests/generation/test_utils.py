@@ -73,6 +73,7 @@ if is_torch_available():
         GenerationConfig,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
+        GreenRedWatermarkingConfig,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -82,9 +83,8 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
-        WatermarkDetector,
-        GreenRedWatermarkingConfig,
         SynthIDTextWatermarkingConfig,
+        WatermarkDetector,
     )
     from transformers.generation.utils import _speculative_sampling
 
@@ -2377,7 +2377,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
         self.assertListEqual(detection_out.prediction.tolist(), [False])
-    
+
     """Check the mean bias inserted by the watermarking algorithm."""
     @slow
     def test_synthid_text_watermark_generation_mean_expected_bias(self):
@@ -2403,7 +2403,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 'attention_mask': torch.ones_like(input_ids, device=torch_device),
             }
             output = model.generate(
-                **model_inputs, watermarking_config=watermark_config, 
+                **model_inputs, watermarking_config=watermark_config,
                 do_sample=True, max_length=500, top_k=1000)
             g_values = logits_processor.compute_g_values(input_ids=output[:, input_len:])
             context_repetition_mask = logits_processor.compute_context_repetition_mask(

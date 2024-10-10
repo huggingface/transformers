@@ -2572,7 +2572,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             Updated scores (batch_size, vocab_size).
         """
         _, _, depth = g_values.shape
-        device = scores.device
 
         probs = torch.softmax(scores, dim=1)
 
@@ -2586,7 +2585,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             torch.isfinite(log_probs), log_probs, torch.finfo(log_probs.dtype).min
         )
         return log_probs
-    
+
 
     def __call__(
         self,
@@ -2627,7 +2626,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         else:
             # Append last input id (which is the input id added in last call) to the
             # previous context so we have the context to be used for current
-            # watermarking. 
+            # watermarking.
             self.state.context = torch.concat(
                 (self.state.context, input_ids[:, -1:]),
                 dim=1,
@@ -2675,7 +2674,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             other=updated_scores,
         )
         return updated_watermarked_scores
-    
+
     def accumulate_hash(
         self,
         current_hash: torch.LongTensor,
@@ -2912,7 +2911,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
                 noneos_mask[nonzero_idx[0][0] :] = 0
             noneos_masks.append(noneos_mask)
         return torch.stack(noneos_masks, dim=0)
-    
+
     def expected_mean_g_value(
         self,
         vocab_size: int,

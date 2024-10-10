@@ -67,7 +67,10 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig, GenerationMode
+from .configuration_utils import (
+    GenerationConfig,
+    GenerationMode,
+)
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -96,11 +99,6 @@ from .logits_process import (
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
-    WatermarkLogitsProcessor,
-)
-from .configuration_utils import (
-    GreenRedWatermarkingConfig,
-    SynthIDTextWatermarkingConfig,
 )
 from .stopping_criteria import (
     EosTokenCriteria,
