@@ -1395,3 +1395,211 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+@dataclass
+class FSDPConfig:
+    """
+    A set of arguments to be used for FSDP (Pytorch Distributed Parallel Training).
+
+    Parameters:
+        min_num_params (`int`, *optional*, defaults to `0`):
+            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
+            passed).
+        transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+            List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
+            `T5Block` .... (useful only when `fsdp` flag is passed).
+        backward_prefetch (`str`, defaults to `no_prefetch`)
+            FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
+            `fsdp` field is passed).
+
+            A list of options along the following:
+
+            - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
+                gradient
+                computation.
+            - `"backward_post"` : This prefetches the next set of parameters after the current set of
+                parameter's
+                gradient computation.
+        forward_prefetch (`bool`, *optional*, defaults to `False`)
+            FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
+                If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
+                forward pass.
+        limit_all_gathers (`bool`, *optional*, defaults to `False`)
+            FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
+                If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
+                all-gathers.
+        use_orig_params (`bool`, *optional*, defaults to `True`)
+            If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
+            frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
+            refer this
+            [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
+        sync_module_states (`bool`, *optional*, defaults to `True`)
+            If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
+            ensure they are the same across all ranks after initialization
+        cpu_ram_efficient_loading (`bool`, *optional*, defaults to `False`)
+            If `"True"`, only the first process loads the pretrained model checkpoint while all other processes
+            have empty weights.  When this setting as `"True"`, `sync_module_states` also must to be `"True"`,
+            otherwise all the processes except the main process would have random weights leading to unexpected
+            behaviour during training.
+        activation_checkpointing (`bool`, *optional*, defaults to `False`):
+            If `"True"`, activation checkpointing is a technique to reduce memory usage by clearing activations of
+            certain layers and recomputing them during a backward pass. Effectively, this trades extra
+            computation time for reduced memory usage.
+        state_dict_type (`str`, *optional*, defaults to `FULL_STATE_DICT`):
+            State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or `sharded_state_dict`
+        xla (`bool`, *optional*, defaults to `False`):
+            Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
+            and its API may evolve in the future.
+        xla_fsdp_settings (`dict`, *optional*)
+            The value is a dictionary which stores the XLA FSDP wrapping parameters.
+
+            For a complete list of options, please see [here](
+            https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
+        xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
+            Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
+            used when the xla flag is set to true, and an auto wrapping policy is specified through
+            fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+        xla_fsdp_v2 (`bool`, *optional*, defaults to `False`):
+            Whether to use PyTorch/XLA Fully Sharded Data Parallel Training v2.
+
+    """
+
+    min_num_params: int = field(
+        default=0,
+        metadata={
+            "help": "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
+            " passed)."
+        },
+    )
+    transformer_layer_cls_to_wrap: List[str] = field(
+        default=None,
+        metadata={
+            "help": "List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,"
+            "`T5Block` .... (useful only when `fsdp` flag is passed)."
+        },
+    )
+    backward_prefetch: str = field(
+        default="no_prefetch",
+        metadata={
+            "help": "FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when"
+            "`fsdp` field is passed)."
+            "A list of options along the following:"
+            '`"backward_pre"` : Prefetches the next set of parameters before the current set of parameter\'s gradient computation.'
+            '`"backward_post"` : This prefetches the next set of parameters after the current set of parameter\'s gradient computation.'
+        },
+    )
+    forward_prefetch: bool = field(
+        default=False,
+        metadata={
+            "help": "FSDP's forward prefetch mode (useful only when `fsdp` field is passed)."
+            " If `True`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the"
+            "forward pass."
+        },
+    )
+    limit_all_gathers: bool = field(
+        default=False,
+        metadata={
+            "help": "FSDP's limit_all_gathers (useful only when `fsdp` field is passed)."
+            " If `True`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight"
+            " all-gathers."
+        },
+    )
+    use_orig_params: bool = field(
+        default=True,
+        metadata={
+            "help": "If `True`, allows non-uniform `requires_grad` during init, which means support for interspersed"
+            " frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please"
+            " refer this"
+            " [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019"
+        },
+    )
+    sync_module_states: bool = field(
+        default=True,
+        metadata={
+            "help": "If `True`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to"
+            " ensure they are the same across all ranks after initialization"
+        },
+    )
+    cpu_ram_efficient_loading: bool = field(
+        default=False,
+        metadata={
+            "help": "If `True`, only the first process loads the pretrained model checkpoint while all other processes"
+            " have empty weights.  When this setting as `True`, `sync_module_states` also must to be `True`,"
+            " otherwise all the processes except the main process would have random weights leading to unexpected"
+            " behaviour during training."
+        },
+    )
+    activation_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If `True`, activation checkpointing is a technique to reduce memory usage by clearing activations of"
+            " certain layers and recomputing them during a backward pass. Effectively, this trades extra"
+            " computation time for reduced memory usage."
+        },
+    )
+    state_dict_type: str = field(
+        default="FULL_STATE_DICT",
+        metadata={
+            "help": "State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or `sharded_state_dict`"
+        },
+    )
+    xla: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature"
+            " and its API may evolve in the future."
+        },
+    )
+    xla_fsdp_settings: Dict = field(
+        default=None,
+        metadata={
+            "help": "The value is a dictionary which stores the XLA FSDP wrapping parameters."
+            " For a complete list of options, please see [here]("
+            " https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py)."
+        },
+    )
+    xla_fsdp_grad_ckpt: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be"
+            " used when the xla flag is set to true, and an auto wrapping policy is specified through"
+            " fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap."
+        },
+    )
+    xla_fsdp_v2: bool = field(
+        default=False,
+        metadata={"help": "Whether to use PyTorch/XLA Fully Sharded Data Parallel Training v2."},
+    )
+
+    @classmethod
+    def from_json_file(cls, json_file):
+        # Check if exists
+        open_file = io.open if os.path.exists(json_file) else open
+        with open_file(json_file, "r", encoding="utf-8") as f:
+            config_dict = json.load(f)
+        # for backward compatibility for keys starting with fsdp_ prefix
+        for k in list(config_dict.keys()):
+            if k.startswith("fsdp_"):
+                v = config_dict.pop(k)
+                config_dict[k[5:]] = v
+        # Check for keys and load sensible defaults
+        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        if len(extra_keys) > 0:
+            raise ValueError(
+                f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
+                " version or fix (and potentially remove these keys) from your config file."
+            )
+        return cls(**config_dict)
+
+    def to_dict(self):
+        return copy.deepcopy(self.__dict__)
+
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
+
+    def __getitem__(self, key):
+        return self.__dict__.get(key)
+
+    def get(self, key, default=None):
+        return self.__dict__.get(key, default)
