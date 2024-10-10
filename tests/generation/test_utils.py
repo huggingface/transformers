@@ -2187,10 +2187,10 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
-            if getattr(config, "sliding_window", None) is None:
+            if not hasattr(config, "sliding_window"):
                 self.skipTest(reason="This model does not support sliding window.")
-            if "qwen2" in str(model_class).lower():
-                self.skipTest(reason="Sliding window attention is not implemented for sdpa in Qwen2 models.")
+            if hasattr(config, "cache_implementation"):
+                self.skipTest(reason="This model uses a specific cache format.")
 
             input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
             if left_padding:
@@ -2241,10 +2241,10 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
-            if getattr(config, "sliding_window", None) is None:
+            if not hasattr(config, "sliding_window"):
                 self.skipTest(reason="This model does not support sliding window.")
-            if "qwen2" in str(model_class).lower():
-                self.skipTest(reason="Sliding window attention is not implemented for sdpa in Qwen2 models.")
+            if hasattr(config, "cache_implementation"):
+                self.skipTest(reason="This model uses a specific cache format.")
 
             # We need to be sure to always have shape (2, 7) for the different test assumptions to hold
             input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
