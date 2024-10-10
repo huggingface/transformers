@@ -21,8 +21,15 @@ _import_structure = {
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
+        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
+    ],
+    "bitnet": [
+        "BitLinear",
+        "pack_weights",
+        "replace_with_bitnet_linear",
+        "unpack_weights",
     ],
     "bitsandbytes": [
         "dequantize_and_replace",
@@ -115,8 +122,15 @@ if TYPE_CHECKING:
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
+        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
+    )
+    from .bitnet import (
+        BitLinear,
+        pack_weights,
+        replace_with_bitnet_linear,
+        unpack_weights,
     )
     from .bitsandbytes import (
         dequantize_and_replace,

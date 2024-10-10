@@ -214,7 +214,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=tokenized_billsum["train"],
 ...     eval_dataset=tokenized_billsum["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )
