@@ -526,12 +526,12 @@ class ProcessorTesterMixin:
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            self.assertFalse(Path(tmpdirname, "processor_chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname, save_naked_chat_template=True)
-            self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+            self.assertTrue(Path(tmpdirname, "processor_chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
