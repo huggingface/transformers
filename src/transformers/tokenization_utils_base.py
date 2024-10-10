@@ -31,6 +31,7 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import torch
 from packaging import version
 
 from . import __version__
@@ -815,7 +816,9 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items() if isinstance(v, torch.Tensor)}
+            self.data = {
+                k: v.to(device=device) for k, v in self.data.items() if v is not None and isinstance(v, torch.Tensor)
+            }
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
