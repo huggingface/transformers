@@ -28,7 +28,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
@@ -1089,12 +1089,18 @@ class MixtralModel(MixtralPreTrainedModel):
                 if isinstance(attention_mask, torch.Tensor)
                 else past_seen_tokens + sequence_length + 1
             )
+        initial_mask_position = (
+            max(0, past_seen_tokens - self.config.sliding_window + 1)
+            if isinstance(past_key_values, DynamicSlidingWindowCache)
+            else 0
+        )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
+            initial_mask_position=initial_mask_position,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -1122,6 +1128,7 @@ class MixtralModel(MixtralPreTrainedModel):
         attention_mask: torch.Tensor,
         sequence_length: int,
         target_length: int,
+        initial_mask_position: int,
         dtype: torch.dtype,
         device: torch.device,
         cache_position: torch.Tensor,
@@ -1140,6 +1147,9 @@ class MixtralModel(MixtralPreTrainedModel):
                 The sequence length being processed.
             target_length (`int`):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+            initial_mask_position (`int`):
+                The initial mask position to use when creating the 4d mask. If the Cache does not keep all states in memory (e.g. only `sliding_window` states),
+                this is needed to know where to start from to create the new mask (because the new mask).
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
@@ -1159,14 +1169,19 @@ class MixtralModel(MixtralPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length - initial_mask_position),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            diagonal_attend_mask = torch.arange(
+                initial_mask_position, target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             if config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
+                    sliding_attend_mask = torch.arange(initial_mask_position, target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
@@ -1177,7 +1192,9 @@ class MixtralModel(MixtralPreTrainedModel):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = (
+                    causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, initial_mask_position:]
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
