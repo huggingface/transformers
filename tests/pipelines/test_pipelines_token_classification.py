@@ -16,6 +16,8 @@ import unittest
 
 import numpy as np
 
+from huggingface_hub import TokenClassificationOutputElement
+
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -26,6 +28,7 @@ from transformers import (
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -136,6 +139,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        for output_element in nested_simplify(outputs):
+            compare_pipeline_output_to_hub_spec(output_element, TokenClassificationOutputElement)
+
 
         self.run_aggregation_strategy(model, tokenizer)
 
