@@ -623,7 +623,7 @@ def get_new_part(class_name, base_class):
     return snake_case
 
 
-def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
+def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
     """Return all the dependencies of the given top-level function. Given the following structure in the `modular_xxx.py` file:
     ```
     def foo1():
@@ -1001,8 +1001,8 @@ class ModularConverterTransformer(CSTTransformer):
         top_level_function: str,
         body: dict,
         function_node: cst.FunctionDef,
-        matching_callers: set | None = None,
-        parent: str | None = None,
+        matching_callers: set = None,
+        parent: str = None,
     ) -> bool:
         """Check if the `top_level_function` should be added to the body (i.e. it is not already present, and `matching_callers`
         is not empy, or `parent`is provided). If it should be added, do it (in the correct location, just before its caller) and return

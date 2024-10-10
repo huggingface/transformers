@@ -1973,6 +1973,7 @@ class GenerationMixin:
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
             model_kwargs["use_cache"] = True
+            generation_config.use_cache = True
         else:
             model_kwargs["use_cache"] = generation_config.use_cache
 
@@ -4173,6 +4174,7 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
+            print(model_inputs["input_ids"].shape, candidate_input_ids.shape)
             outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
