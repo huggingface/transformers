@@ -564,7 +564,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model.language_model.config._attn_implementation == text_attn)
                 self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
                 self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)

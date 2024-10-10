@@ -317,8 +317,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = False
-    _supports_sdpa = False
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -1283,13 +1281,11 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
 class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
     config_class = InstructBlipVideoConfig
     main_input_name = "pixel_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
 
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVideoVisionModel._from_config(config.vision_config)
+        self.vision_model = InstructBlipVideoVisionModel(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = InstructBlipVideoQFormerModel(config.qformer_config)

@@ -2791,7 +2791,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Unset attn implementation so it can be set to another one when loading back
         model_to_save.config._attn_implementation_autoset = False
-        model_to_save.config._attn_implementation_internal = None
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
