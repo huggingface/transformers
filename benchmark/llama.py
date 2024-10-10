@@ -294,6 +294,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         conn.close()
     except Exception as e:
         print(f"error: {e}")
+        raise ValueError("Failed to benchmark!")
 
     continue_metric_collection.set()
     metrics_thread.join()
