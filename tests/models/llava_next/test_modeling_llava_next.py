@@ -218,6 +218,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaNextVisionText2TextModelTester(self)

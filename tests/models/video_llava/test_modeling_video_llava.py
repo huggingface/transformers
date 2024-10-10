@@ -206,6 +206,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = VideoLlavaVisionText2TextModelTester(self)
