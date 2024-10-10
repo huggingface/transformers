@@ -299,8 +299,8 @@ def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
         return torch.zeros((0, 4), device=masks.device)
 
     h, w = masks.shape[-2:]
-    y = torch.arange(0, h, dtype=torch.float32)
-    x = torch.arange(0, w, dtype=torch.float32)
+    y = torch.arange(0, h, dtype=torch.float32, device=masks.device)
+    x = torch.arange(0, w, dtype=torch.float32, device=masks.device)
     # see https://github.com/pytorch/pytorch/issues/50276
     y, x = torch.meshgrid(y, x, indexing="ij")
 
@@ -354,7 +354,7 @@ def prepare_coco_panoptic_annotation(
     new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32)
+        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
         masks = rgb_to_id(masks)
 
         ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
