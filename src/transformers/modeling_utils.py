@@ -1499,7 +1499,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype (`torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype.
         """
-        torch_dtype = kwargs.pop("torch_dtype", None)
+        torch_dtype = kwargs.pop("torch_dtype", torch.get_default_dtype())
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         # override default dtype if needed
