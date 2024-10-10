@@ -535,16 +535,3 @@ class ProcessorTesterMixin:
             self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-
-    def test_chat_template_tokenizer_interactions(self):
-        processor = self.get_processor()
-        if not hasattr(processor, "tokenizer"):
-            self.skipTest("This processor doesn't have a tokenizer.")
-        processor.chat_template = "test template"
-        processor.tokenizer.chat_template = "test_template"
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_naked_chat_template=True)
-            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
-            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # Check that the processor clobbers the tokenizer's template
-            self.assertEqual(processor.tokenizer.chat_template, None)

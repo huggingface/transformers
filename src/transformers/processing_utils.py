@@ -514,15 +514,7 @@ class ProcessorMixin(PushToHubMixin):
             # `AutoProcessor` API.
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
-            if (
-                getattr(self, "chat_template", None) is not None
-                and getattr(attribute, "chat_template", None) is not None
-                and kwargs.get("save_naked_chat_template", False)
-            ):
-                # If we're saving a chat template file, it clobbers any chat template in the tokenizer
-                attribute.save_pretrained(save_directory, skip_chat_template_save=True)
-            else:
-                attribute.save_pretrained(save_directory)
+            attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -534,7 +526,7 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_naked_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
+        output_naked_chat_template_file = os.path.join(save_directory, "processor_chat_template.jinja")
         output_chat_template_file = os.path.join(save_directory, "chat_template.json")
 
         processor_dict = self.to_dict()
@@ -630,7 +622,7 @@ class ProcessorMixin(PushToHubMixin):
         else:
             processor_file = PROCESSOR_NAME
             chat_template_file = "chat_template.json"
-            naked_chat_template_file = "chat_template.jinja"
+            naked_chat_template_file = "processor_chat_template.jinja"
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
