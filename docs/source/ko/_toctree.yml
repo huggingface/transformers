@@ -392,9 +392,9 @@
         title: (번역중) FSMT
       - local: in_translation
         title: (번역중) Funnel Transformer
-      - local: in_translation
       - local: model_doc/gemma2
         title: Gemma2
+      - local: in_translation
         title: (번역중) GPT
       - local: in_translation
         title: (번역중) GPT Neo
