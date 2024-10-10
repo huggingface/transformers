@@ -1,7 +1,3 @@
-DROP TABLE benchmarks;
-DROP TABLE device_measurements;
-DROP TABLE model_measurements;
-
 CREATE TABLE IF NOT EXISTS benchmarks (
   benchmark_id SERIAL PRIMARY KEY,
   branch VARCHAR(255),
