@@ -1662,7 +1662,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
-        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
+        num_labels = config.num_labels + 1 if config.is_multiclass else config.num_labels
+        self.enc_score_head = nn.Linear(config.d_model, num_labels)
         self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
@@ -2011,40 +2012,61 @@ class RTDetrLoss(nn.Module):
     Args:
         matcher (`DetrHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
-        weight_dict (`Dict`):
+        losses_weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
-            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
+            `weight_loss_vfl`, `weight_loss_cross_entropy`, `labels_binary_cross_entropy`, `weight_loss_focal`,
+            `weight_loss_bbox`, `weight_loss_giou`.
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.
         gamma (`float`):
             Parameter gamma used to compute the focal loss.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
         num_classes (`int`):
             Number of object categories, omitting the special no-object category.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
 
         self.matcher = RTDetrHungarianMatcher(config)
         self.num_classes = config.num_labels
-        self.weight_dict = {
-            "loss_vfl": config.weight_loss_vfl,
-            "loss_bbox": config.weight_loss_bbox,
-            "loss_giou": config.weight_loss_giou,
+        self.losses_weight_dict = {
+            "labels_varifocal": config.weight_loss_vfl,
+            "labels_cross_entropy": config.weight_loss_cross_entropy,
+            "labels_binary_cross_entropy": config.weight_loss_binary_cross_entropy,
+            "labels_focal": config.weight_loss_focal,
+            "bbox": config.weight_loss_bbox,
+            "giou": config.weight_loss_giou,
         }
-        self.losses = ["vfl", "boxes"]
-        self.eos_coef = config.eos_coefficient
-        empty_weight = torch.ones(config.num_labels + 1)
-        empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
-        self.alpha = config.focal_loss_alpha
-        self.gamma = config.focal_loss_gamma
 
-    def loss_labels_vfl(self, outputs, targets, indices, num_boxes, log=True):
+        loss_names = [
+            "labels_varifocal",
+            "labels_cross_entropy",
+            "labels_binary_cross_entropy",
+            "labels_focal",
+            "boxes",
+        ]
+        not_matched_losses = set(config.losses) - set(loss_names)
+        if not_matched_losses:
+            raise ValueError(
+                f"Unsupported losses: {not_matched_losses}, should be in {self.losses_weight_dict.keys()}"
+            )
+
+        self.losses = config.losses
+
+        # for multiclass classfication with cross-entropy loss
+        if "labels_cross_entropy" in self.losses:
+            class_weights = torch.ones(config.num_labels + 1)
+            class_weights[-1] = config.eos_coefficient
+            self.register_buffer("class_weights", class_weights)
+
+        # for multi-label classification with focal loss
+        if "labels_focal" in self.losses or "labels_varifocal" in self.losses:
+            self.alpha = config.focal_loss_alpha
+            self.gamma = config.focal_loss_gamma
+
+    def loss_labels_varifocal(self, outputs, targets, indices, num_boxes):
         if "pred_boxes" not in outputs:
             raise KeyError("No predicted boxes found in outputs")
         if "logits" not in outputs:
@@ -2073,9 +2095,9 @@ class RTDetrLoss(nn.Module):
 
         loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
-        return {"loss_vfl": loss}
+        return {"labels_varifocal": loss}
 
-    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
+    def loss_labels_cross_entropy(self, outputs, targets, indices, num_boxes):
         """Classification loss (NLL)
         targets dicts must contain the key "class_labels" containing a tensor of dim [nb_target_boxes]
         """
@@ -2091,8 +2113,8 @@ class RTDetrLoss(nn.Module):
         )
         target_classes[idx] = target_classes_original
 
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.class_weight)
-        losses = {"loss_ce": loss_ce}
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, weight=self.class_weights)
+        losses = {"labels_cross_entropy": loss_ce}
         return losses
 
     @torch.no_grad()
@@ -2125,46 +2147,15 @@ class RTDetrLoss(nn.Module):
         losses = {}
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
-        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+        losses["bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
             generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
         )
-        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        losses["giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss. Targets dicts must contain the key
-        "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        if "pred_masks" not in outputs:
-            raise KeyError("No predicted masks found in outputs")
-
-        source_idx = self._get_source_permutation_idx(indices)
-        target_idx = self._get_target_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
-        masks = [t["masks"] for t in targets]
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(source_masks)
-        target_masks = target_masks[target_idx]
-
-        # upsample predictions to the target size
-        source_masks = nn.functional.interpolate(
-            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        source_masks = source_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(source_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
-        }
-        return losses
-
-    def loss_labels_bce(self, outputs, targets, indices, num_boxes, log=True):
+    def loss_labels_binary_cross_entropy(self, outputs, targets, indices, num_boxes):
         src_logits = outputs["logits"]
         idx = self._get_source_permutation_idx(indices)
         target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
@@ -2176,7 +2167,7 @@ class RTDetrLoss(nn.Module):
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
         loss = F.binary_cross_entropy_with_logits(src_logits, target * 1.0, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
-        return {"loss_bce": loss}
+        return {"labels_binary_cross_entropy": loss}
 
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
@@ -2190,7 +2181,7 @@ class RTDetrLoss(nn.Module):
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
-    def loss_labels_focal(self, outputs, targets, indices, num_boxes, log=True):
+    def loss_labels_focal(self, outputs, targets, indices, num_boxes):
         if "logits" not in outputs:
             raise KeyError("No logits found in outputs")
 
@@ -2204,19 +2195,19 @@ class RTDetrLoss(nn.Module):
         target_classes[idx] = target_classes_original
 
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
-        loss = sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma)
-        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
-        return {"loss_focal": loss}
+        target = target.to(src_logits.dtype)
+        loss = sigmoid_focal_loss(src_logits, target, num_boxes, self.alpha, self.gamma)
+        loss = loss * src_logits.shape[1]
+        return {"labels_focal": loss}
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
-            "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
-            "bce": self.loss_labels_bce,
-            "focal": self.loss_labels_focal,
-            "vfl": self.loss_labels_vfl,
+            "labels_cross_entropy": self.loss_labels_cross_entropy,
+            "labels_binary_cross_entropy": self.loss_labels_binary_cross_entropy,
+            "labels_focal": self.loss_labels_focal,
+            "labels_varifocal": self.loss_labels_varifocal,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
@@ -2270,7 +2261,7 @@ class RTDetrLoss(nn.Module):
         losses = {}
         for loss in self.losses:
             l_dict = self.get_loss(loss, outputs, targets, indices, num_boxes)
-            l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+            l_dict = {k: l_dict[k] * self.losses_weight_dict[k] for k in l_dict}
             losses.update(l_dict)
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
@@ -2278,11 +2269,10 @@ class RTDetrLoss(nn.Module):
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
-                    l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+                    l_dict = {
+                        k: l_dict[k] * self.losses_weight_dict[k] for k in l_dict if k in self.losses_weight_dict
+                    }
                     l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -2298,12 +2288,11 @@ class RTDetrLoss(nn.Module):
             for i, auxiliary_outputs in enumerate(outputs["dn_auxiliary_outputs"]):
                 # indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
                     kwargs = {}
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes, **kwargs)
-                    l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+                    l_dict = {
+                        k: l_dict[k] * self.losses_weight_dict[k] for k in l_dict if k in self.losses_weight_dict
+                    }
                     l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -2353,6 +2342,8 @@ class RTDetrHungarianMatcher(nn.Module):
         self.giou_cost = config.matcher_giou_cost
 
         self.use_focal_loss = config.use_focal_loss
+
+        # for focal loss
         self.alpha = config.matcher_alpha
         self.gamma = config.matcher_gamma
 
@@ -2552,7 +2543,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.model = RTDetrModel(config)
 
         # Detection heads on top
-        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
+        num_labels = config.num_labels + 1 if config.is_multiclass else config.num_labels
+        self.class_embed = partial(nn.Linear, config.d_model, num_labels)
         self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
