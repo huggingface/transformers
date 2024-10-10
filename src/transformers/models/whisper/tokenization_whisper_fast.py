@@ -181,7 +181,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         prev_segments_len = 0.0
 
         for token in token_ids:
-            if token >= timestamp_begin:
+            if self._is_timestamp_token(token):
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
@@ -218,7 +218,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
         timestamp_begin = self.all_special_ids[-1] + 1
-        timestamp_tokens = token_ids >= timestamp_begin
+        timestamp_tokens = np.array([self._is_timestamp_token(tok) for tok in token_ids])
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
@@ -619,3 +619,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+    def _is_timestamp_token(self, token_id) -> bool:
+        token = self.convert_ids_to_tokens(int(token_id))
+        return bool(self.timestamp_pat.match(token))
