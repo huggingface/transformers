@@ -248,6 +248,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
+* [OPT](https://huggingface.co/docs/transformers/en/model_doc/opt)
 * [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
