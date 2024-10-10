@@ -1536,6 +1536,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "MarkupLMTokenizer": MarkupLMConverter,
     "MBartTokenizer": MBartConverter,
     "MBart50Tokenizer": MBart50Converter,
+    "MinGRUTokenizer": GPT2Converter,
     "MPNetTokenizer": MPNetConverter,
     "MobileBertTokenizer": BertConverter,
     "MvpTokenizer": RobertaConverter,
