@@ -12,11 +12,15 @@
 
 import torch
 
-from transformers import (
-    PreTrainedModel,
-    StaticCache,
-)
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+from ..utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    from transformers import (
+        PreTrainedModel,
+        StaticCache,
+    )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 
 
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
