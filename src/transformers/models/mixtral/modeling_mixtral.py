@@ -329,6 +329,7 @@ class MixtralAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        rotary_seq_length = kv_seq_len
         if past_key_value is not None:
             if self.layer_idx is None:
                 raise ValueError(
@@ -337,7 +338,12 @@ class MixtralAttention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_length)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -412,6 +418,7 @@ class MixtralFlashAttention2(MixtralAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        rotary_seq_length = kv_seq_len
         if past_key_value is not None:
             if self.layer_idx is None:
                 raise ValueError(
@@ -420,13 +427,12 @@ class MixtralFlashAttention2(MixtralAttention):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
 
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = (
-            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
-        )
-
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_length)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -558,10 +564,13 @@ class MixtralSdpaAttention(MixtralAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
+        rotary_seq_length = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_length = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_length += past_key_value.get_past_seen_tokens(self.layer_idx)
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_length)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
