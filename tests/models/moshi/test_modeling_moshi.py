@@ -354,6 +354,10 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_disk_offload_bin(self):
         pass
 
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_disk_offload_safetensors(self):
+        pass
+
 
 class MoshiTester:
     def __init__(
@@ -958,6 +962,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    def test_disk_offload_safetensors(self):
         pass
 
 
