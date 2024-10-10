@@ -1,0 +1,35 @@
+{
+  "_name_or_path": "distilbert-base-uncased",
+  "activation": "gelu",
+  "architectures": [
+    "DistilBertForSequenceClassification"
+  ],
+  "attention_dropout": 0.1,
+  "dim": 768,
+  "dropout": 0.1,
+  "hidden_dim": 3072,
+  "id2label": {
+    "0": "LABEL_0",
+    "1": "LABEL_1",
+    "2": "LABEL_2"
+  },
+  "initializer_range": 0.02,
+  "label2id": {
+    "LABEL_0": 0,
+    "LABEL_1": 1,
+    "LABEL_2": 2
+  },
+  "max_position_embeddings": 512,
+  "model_type": "distilbert",
+  "n_heads": 12,
+  "n_layers": 6,
+  "pad_token_id": 0,
+  "problem_type": "single_label_classification",
+  "qa_dropout": 0.1,
+  "seq_classif_dropout": 0.2,
+  "sinusoidal_pos_embds": false,
+  "tie_weights_": true,
+  "torch_dtype": "float32",
+  "transformers_version": "4.45.1",
+  "vocab_size": 30522
+}
