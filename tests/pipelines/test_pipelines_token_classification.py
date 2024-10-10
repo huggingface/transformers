@@ -105,6 +105,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 for i in range(n)
             ],
         )
+        for output_element in nested_simplify(outputs):
+            compare_pipeline_output_to_hub_spec(output_element, TokenClassificationOutputElement)
+
         outputs = token_classifier(["list of strings", "A simple string that is quite a bit longer"])
         self.assertIsInstance(outputs, list)
         self.assertEqual(len(outputs), 2)
