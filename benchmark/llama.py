@@ -96,7 +96,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
 
         device = "cuda"
-        ckpt = "bert-base-uncased"
+        ckpt = "meta-llama/Llama-2-7b-hf"
 
         # This is to avoid counting download in model load time measurement
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16)
