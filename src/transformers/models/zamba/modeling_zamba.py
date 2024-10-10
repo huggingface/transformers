@@ -1519,6 +1519,8 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
+        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+
         empty_past_kv = past_key_values is None
 
         # Omit tokens covered by past_key_values
