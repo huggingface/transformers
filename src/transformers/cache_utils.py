@@ -623,8 +623,8 @@ class DynamicSlidingWindowCache(DynamicCache):
             # Update the number of seen tokens
             self._seen_tokens.append(key_states.shape[-2])
             # Add only up to sliding window size if larger
-            self.key_cache.append(key_states[..., -self.sliding_window+1 :, :])
-            self.value_cache.append(value_states[..., -self.sliding_window+1 :, :])
+            self.key_cache.append(key_states[..., -self.sliding_window + 1 :, :])
+            self.value_cache.append(value_states[..., -self.sliding_window + 1 :, :])
             # We should return full states during prefill even though we only save up to sliding window-1
             return key_states, value_states
         else:
@@ -633,8 +633,8 @@ class DynamicSlidingWindowCache(DynamicCache):
             # the last `sliding_window-1` states in the cache for next forward
             full_key_states = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             full_value_states = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-            self.key_cache[layer_idx] = full_key_states[..., -self.sliding_window+1 :, :]
-            self.value_cache[layer_idx] = full_value_states[..., -self.sliding_window+1 :, :]
+            self.key_cache[layer_idx] = full_key_states[..., -self.sliding_window + 1 :, :]
+            self.value_cache[layer_idx] = full_value_states[..., -self.sliding_window + 1 :, :]
             return full_key_states, full_value_states
 
     def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
@@ -650,8 +650,7 @@ class DynamicSlidingWindowCache(DynamicCache):
         return out
 
     @classmethod
-    def from_batch_splits(
-        cls, splits: List["DynamicSlidingWindowCache"]) -> "DynamicSlidingWindowCache":
+    def from_batch_splits(cls, splits: List["DynamicSlidingWindowCache"]) -> "DynamicSlidingWindowCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls(splits[0].sliding_window)
@@ -666,11 +665,12 @@ class DynamicSlidingWindowCache(DynamicCache):
         # We need this because _seen_tokens may be bigger than what will be automatically set with `update` (if cache > sliding_window)
         cache._seen_tokens = splits[0]._seen_tokens
         return cache
-    
-    def crop(self, max_length: int):
 
+    def crop(self, max_length: int):
         if self.get_past_seen_tokens() >= self.sliding_window - 1:
-            raise RuntimeError(f"The current DynamicSlidingWindowCache is full. It cannot be cropped as this would mean losing past states.")
+            raise RuntimeError(
+                "The current DynamicSlidingWindowCache is full. It cannot be cropped as this would mean losing past states."
+            )
         else:
             super().crop(max_length)
 
