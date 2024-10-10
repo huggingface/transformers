@@ -31,7 +31,6 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-import torch
 from packaging import version
 
 from . import __version__
