@@ -790,6 +790,7 @@ class MimiIntegrationTest(unittest.TestCase):
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
@@ -840,6 +841,7 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 1803071,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)
