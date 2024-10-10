@@ -2346,7 +2346,6 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
             if hasattr(epoch_iterator, "set_epoch"):
@@ -2376,8 +2375,6 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
-                total_batched_samples += 1
-
                 if self.args.include_num_input_tokens_seen:
                     main_input_name = getattr(self.model, "main_input_name", "input_ids")
                     if main_input_name not in inputs:
@@ -2436,21 +2433,7 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                is_last_step_and_steps_less_than_grad_acc = (
-                    steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                )
-
-                if (
-                    total_batched_samples % args.gradient_accumulation_steps == 0
-                    or
-                    # last step in epoch but step is always smaller than gradient_accumulation_steps
-                    is_last_step_and_steps_less_than_grad_acc
-                ):
-                    # the `or` condition of `is_last_step_and_steps_less_than_grad_acc` is not covered
-                    # in accelerate. So, explicitly enable sync gradients to True in that case.
-                    if is_last_step_and_steps_less_than_grad_acc:
-                        self.accelerator.gradient_state._set_sync_gradients(True)
-
+                if self.accelerator.sync_gradients:
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         # deepspeed does its own clipping
@@ -4851,8 +4834,6 @@ class Trainer:
         elif "num_steps" not in grad_acc_kwargs:
             # take the gradient_accumulation_steps setting from TrainingArguments.
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-
-        grad_acc_kwargs["sync_with_dataloader"] = False
 
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
