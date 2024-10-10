@@ -67,6 +67,7 @@ else:
             ("convnext", ("ConvNextImageProcessor",)),
             ("convnextv2", ("ConvNextImageProcessor",)),
             ("cvt", ("ConvNextImageProcessor",)),
+            ("dab-detr", "DABDETRImageProcessor"),
             ("data2vec-vision", ("BeitImageProcessor",)),
             ("deformable_detr", ("DeformableDetrImageProcessor",)),
             ("deit", ("DeiTImageProcessor",)),
