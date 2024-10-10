@@ -1226,8 +1226,6 @@ class Kosmos2_5TextBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -1455,8 +1453,6 @@ class Kosmos2_5TextTransformer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         image_embeds: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1544,13 +1540,6 @@ class Kosmos2_5TextTransformer(nn.Module):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_ids.size(1)
-            )
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1566,15 +1555,12 @@ class Kosmos2_5TextTransformer(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    encoder_hidden_states,
                     causal_mask,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
