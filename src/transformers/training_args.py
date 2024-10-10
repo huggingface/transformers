@@ -179,6 +179,8 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAMW_LAYERWISE = "galore_adamw_layerwise"
     GALORE_ADAMW_8BIT_LAYERWISE = "galore_adamw_8bit_layerwise"
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
+    QGALORE_ADAMW_8BIT = "qgalore_adamw_8bit"
+    QGALORE_ADAMW_8BIT_LAYERWISE = "qgalore_adamw_8bit_layerwise"
     LOMO = "lomo"
     ADALOMO = "adalomo"
     GROKADAMW = "grokadamw"
