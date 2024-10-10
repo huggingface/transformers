@@ -28,6 +28,7 @@ from torch.nn import functional as F
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    DynamicSlidingWindowCache,
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
@@ -1532,8 +1533,8 @@ class GenerationMixin:
             past_length = 0
             if not isinstance(cache, Cache):
                 past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
-                past_length = cache.get_seq_length()
+            elif hasattr(cache, "get_past_seen_tokens") and cache.get_past_seen_tokens() is not None:
+                past_length = cache.get_past_seen_tokens()
 
             # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
             # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
@@ -2130,6 +2131,8 @@ class GenerationMixin:
                 raise ValueError(
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
+            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache):
+                raise ValueError("DynamicSlidingWindowCache cannot be used in assisted generation.")
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
@@ -2178,6 +2181,12 @@ class GenerationMixin:
                 # Just like assisted generation, we need to be able to rollback to a previous state (see comment above)
                 raise ValueError(
                     f"contrastive search is not supported with stateful models, such as {self.__class__.__name__}"
+                )
+            if isinstance(getattr(model_kwargs, "past_key_values", None), DynamicSlidingWindowCache) and getattr(
+                generation_config, "low_memory", False
+            ):
+                raise ValueError(
+                    "DynamicSlidingWindowCache cannot be used in contrastive generation with `low_memory=True`."
                 )
 
             result = self._contrastive_search(
@@ -2764,7 +2773,7 @@ class GenerationMixin:
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None or (
                 isinstance(model_kwargs["past_key_values"], (Cache, EncoderDecoderCache))
-                and model_kwargs["past_key_values"].get_seq_length() == 0
+                and model_kwargs["past_key_values"].get_past_seen_tokens() == 0
             ):
                 # prepare inputs
                 model_kwargs["use_cache"] = True
@@ -4166,7 +4175,7 @@ class GenerationMixin:
             isinstance(past_key_values, EncoderDecoderCache)
             and isinstance(past_key_values.self_attention_cache, DynamicCache)
         ):
-            if past_key_values.get_seq_length() == 0:
+            if past_key_values.get_past_seen_tokens() == 0:
                 start_from_empty_dynamic_cache = True
 
         this_peer_finished = False
@@ -4603,10 +4612,8 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
         # New cache format
-        elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
-        elif isinstance(data[0], EncoderDecoderCache):
-            return EncoderDecoderCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
+        elif isinstance(data[0], (DynamicCache, EncoderDecoderCache)):
+            return data[0].__class__.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
