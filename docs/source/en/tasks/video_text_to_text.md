@@ -56,6 +56,7 @@ Some models directly consume the `<video>` token, and others accept `<image>` to
 import uuid
 import requests
 import cv2
+from PIL import Image
 
 def replace_video_with_images(text, frames):
   return text.replace("<video>", "<image>" * frames)
