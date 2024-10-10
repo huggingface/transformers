@@ -2425,14 +2425,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        if self.chat_template is not None and not kwargs.get("skip_chat_template_save", False):
+        if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
                 # Chat template dicts are saved to the config as lists of dicts with fixed key names.
                 # They will be reconstructed as a single dict during loading.
                 # We're trying to discourage chat template dicts, and they are always
                 # saved in the config, never as single files.
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-            elif kwargs.get("save_chat_template_file", False):
+            elif kwargs.get("save_raw_chat_template", False):
                 with open(chat_template_file, "w", encoding="utf-8") as f:
                     f.write(self.chat_template)
                 logger.info(f"chat template saved in {chat_template_file}")
