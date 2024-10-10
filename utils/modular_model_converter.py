@@ -18,7 +18,7 @@ import importlib
 import os
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Optional, Set
 
 import libcst as cst
 from check_copies import run_ruff
