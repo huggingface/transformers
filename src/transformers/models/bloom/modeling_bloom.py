@@ -887,6 +887,8 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
+        # Overwriten because of the fixed-shape attention mask creation
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
