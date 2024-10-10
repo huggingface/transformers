@@ -55,7 +55,6 @@ if is_flash_attn_2_available():
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...utils import (
-    ModelOutput,
     is_flash_attn_2_available,
     torch_int,
 )

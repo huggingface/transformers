@@ -13,60 +13,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
-import torch
-import torch.utils.checkpoint
-from torch.nn import CrossEntropyLoss
+from torch import nn
 
+from transformers.models.clip.configuration_clip import CLIPVisionConfig
 from transformers.models.llava.configuration_llava import (
     LlavaConfig,
 )
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 
-from transformers.models.clip.configuration_clip import (
-    CLIPVisionConfig
-)
-
-from ...activations import ACT2FN
-
-from ...configuration_utils import PretrainedConfig
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import AutoModel, CONFIG_MAPPING
-from torch import nn
-
-from ..qwen2.modeling_qwen2 import (
-    Qwen2DecoderLayer,
-    Qwen2MLP,
-    Qwen2Model,
-    Qwen2ForCausalLM
-)
-
 from ..clip.modeling_clip import (
-    CLIPVisionEmbeddings,
-    CLIPVisionTransformer,
-    CLIPVisionTransformer,
-    CLIPVisionModel,
     CLIPEncoder,
+    CLIPVisionEmbeddings,
+    CLIPVisionModel,
+    CLIPVisionTransformer,
 )
-
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
-    LlavaPreTrainedModel,
     LlavaMultiModalProjector,
-    LlavaCausalLMOutputWithPast,
 )
+from ..qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2ForCausalLM, Qwen2MLP, Qwen2Model
 
 
 logger = logging.get_logger(__name__)
 
+
 class MolmoVisionConfig(CLIPVisionConfig):
     pass
 
+
 class MolmoConfig(LlavaConfig):
     pass
+
 
 class MolmoMLP(Qwen2MLP):
     def __init__(self, config):
@@ -80,14 +58,13 @@ class MolmoDecoderLayer(Qwen2DecoderLayer):
         self.mlp = MolmoMLP(config)
 
 
-
 class MolmoModel(Qwen2Model):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(
             config.vocab_size + config.additional_vocab_size,
-              config.hidden_size,
-              )
+            config.hidden_size,
+        )
 
         self.layers = nn.ModuleList(
             [MolmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -109,18 +86,18 @@ class MolmoMultiModalProjector(LlavaMultiModalProjector):
             config.vision_config.hidden_size,
             config.text_config.intermediate_size // 2,
             bias=False,
-            )
+        )
         self.linear_2 = nn.Linear(
             config.text_config.intermediate_size // 2,
             config.text_config.hidden_size,
             bias=False,
-            )
+        )
         self.linear_3 = nn.Linear(
             config.vision_config.hidden_size,
             config.text_config.intermediate_size // 2,
             bias=False,
-            )
-    
+        )
+
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
@@ -128,10 +105,12 @@ class MolmoMultiModalProjector(LlavaMultiModalProjector):
         hidden_states = self.linear_2(hidden_states, intermediate_states)
         return hidden_states
 
+
 """
 class MolmoImagePooling2D(nn.Module):
     self.image_pooling_2d = MultiHeadDotProductAttention(config, is_vit_layer=False)
 """
+
 
 # This needs to be in caps for some reason in the modular renaming
 class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
@@ -140,21 +119,23 @@ class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
 
 
-
 class MolmoVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config):
         super().__init__()
         self.embeddings = MolmoVisionEmbeddings(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
 
+
 class MolmoEncoder(CLIPEncoder):
     pass
+
 
 class MolmoVisionModel(CLIPVisionModel):
     def __init__(self, config):
         super().__init__()
         self.vision_model = MolmoVisionTransformer(config)
         self.encoder = MolmoEncoder(config)
+
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: MolmoConfig):
@@ -171,7 +152,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 __all__ = [
     "MolmoConfig",
     "MolmoVisionConfig",
-    "MolmoVisionEmbeddings",    
+    "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoModel",
     "MolmoForConditionalGeneration",

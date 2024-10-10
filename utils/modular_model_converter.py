@@ -225,15 +225,19 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         # Create a regex pattern to match all variations
         regex_pattern = "|".join(re.escape(key) for key in self.patterns.keys())
         compiled_regex = re.compile(regex_pattern, re.IGNORECASE)
+
         def replace(match):
             word = match.group(0)
             result = self.patterns.get(word, self.default_name)
             return result
+
         return compiled_regex.sub(replace, text)
 
     def convert_to_camelcase(self, text):
         # Regex pattern to match consecutive uppercase letters and lowercase the first set
-        result = re.sub(rf"^({self.old_name})(?=[a-z])", lambda m: m.group(0).capitalize(), text,  flags=re.IGNORECASE, count=1)
+        result = re.sub(
+            rf"^({self.old_name})(?=[a-z])", lambda m: m.group(0).capitalize(), text, flags=re.IGNORECASE, count=1
+        )
         return result
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
@@ -246,7 +250,6 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def leave_ClassDef(self, original_node, updated_node):
         return updated_node.with_changes(name=cst.Name(self.convert_to_camelcase(updated_node.name.value)))
-
 
 
 def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma", given_old_name=None, given_new_name=None):

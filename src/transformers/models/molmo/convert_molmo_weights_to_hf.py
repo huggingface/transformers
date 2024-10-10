@@ -16,8 +16,7 @@ import argparse
 import gc
 import glob
 import json
-import os
-from typing import List, Optional
+from typing import List
 
 import regex as re
 import torch
@@ -32,10 +31,8 @@ from transformers import (
     # MolmoConfig,
     # MolmoForConditionalGeneration,
     # MolmoImageProcessor,
-    PreTrainedTokenizerFast,
     Qwen2Config,
 )
-from transformers.convert_slow_tokenizer import TikTokenConverter
 
 # TODO why is this import not solved at modular parsing?
 from transformers.models.molmo import MolmoForConditionalGeneration
@@ -257,7 +254,6 @@ def write_model(
 
     model.load_state_dict(state_dict, strict=True, assign=True)
 
-
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
@@ -323,6 +319,7 @@ def main():
         safe_serialization=args.safe_serialization,
         instruct=args.instruct,
     )
+
 
 if __name__ == "__main__":
     main()
