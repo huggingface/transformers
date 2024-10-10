@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for ViT."""
+"""Fast Image processor class for DETR."""
 
 import functools
 import io
@@ -22,11 +22,9 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_base import BatchFeature
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import (
-    _cast_tensor_to_float,
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
@@ -59,11 +57,6 @@ from ...utils import (
 )
 
 
-logger = logging.get_logger(__name__)
-
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
-
-
 if is_torch_available():
     import torch
     from torch import nn
@@ -73,10 +66,16 @@ if is_vision_available():
 
 
 if is_torchvision_v2_available():
+    from torchvision.io import read_image
     from torchvision.transforms.v2 import functional as F
 elif is_torchvision_available():
+    from torchvision.io import read_image
     from torchvision.transforms import functional as F
 
+
+logger = logging.get_logger(__name__)
+
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 InterpolationModeConverter = {
     0: F.InterpolationMode.NEAREST,
     1: F.InterpolationMode.LANCZOS,
@@ -85,37 +84,6 @@ InterpolationModeConverter = {
     4: F.InterpolationMode.BOX,
     5: F.InterpolationMode.HAMMING,
 }
-
-
-def get_image_size_for_max_height_width(
-    image_size: Tuple[int, int],
-    max_height: int,
-    max_width: int,
-) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
-    Important, even if image_height < max_height and image_width < max_width, the image will be resized
-    to at least one of the edges be equal to max_height or max_width.
-
-    For example:
-        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
-        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The image to resize.
-        max_height (`int`):
-            The maximum allowed height.
-        max_width (`int`):
-            The maximum allowed width.
-    """
-    height, width = image_size
-    height_scale = max_height / height
-    width_scale = max_width / width
-    min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
-    return new_height, new_width
 
 
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
@@ -157,6 +125,50 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     return (oh, ow)
 
 
+def get_image_size_for_max_height_width(
+    image_size: Tuple[int, int],
+    max_height: int,
+    max_width: int,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
+
+
+def safe_squeeze(arr: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
+    """
+    Squeezes a tensor, but only if the axis specified has dim 1.
+    """
+    if axis is None:
+        return arr.squeeze()
+
+    try:
+        return arr.squeeze(axis=axis)
+    except ValueError:
+        return arr
+
+
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -174,21 +186,8 @@ def get_max_height_width(images: List[torch.Tensor]) -> Tuple[int]:
     return (max_height, max_width)
 
 
-def safe_squeeze(arr: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
-    """
-    Squeezes an tensor, but only if the axis specified has dim 1.
-    """
-    if axis is None:
-        return arr.squeeze()
-
-    try:
-        return arr.squeeze(axis=axis)
-    except ValueError:
-        return arr
-
-
 # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
-def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> torch.Tensor:
+def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: torch.device) -> torch.Tensor:
     """
     Convert a COCO polygon annotation to a mask.
 
@@ -211,13 +210,13 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> torch.T
         mask = coco_mask.decode(rles)
         if len(mask.shape) < 3:
             mask = mask[..., None]
-        mask = torch.as_tensor(mask, dtype=torch.uint8)
+        mask = torch.as_tensor(mask, dtype=torch.uint8, device=device)
         mask = torch.any(mask, axis=2)
         masks.append(mask)
     if masks:
         masks = torch.stack(masks, axis=0)
     else:
-        masks = torch.zeros((0, height, width), dtype=torch.uint8)
+        masks = torch.zeros((0, height, width), dtype=torch.uint8, device=device)
 
     return masks
 
@@ -232,25 +231,27 @@ def prepare_coco_detection_annotation(
     """
     Convert the target in COCO format into the format expected by DETR.
     """
-    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
+    image_height, image_width = image.size()[-2:]
 
     image_id = target["image_id"]
-    image_id = torch.as_tensor([image_id], dtype=torch.int64)
+    image_id = torch.as_tensor([image_id], dtype=torch.int64, device=image.device)
 
     # Get all COCO annotations for the given image.
     annotations = target["annotations"]
     annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
 
     classes = [obj["category_id"] for obj in annotations]
-    classes = torch.as_tensor(classes, dtype=torch.int64)
+    classes = torch.as_tensor(classes, dtype=torch.int64, device=image.device)
 
     # for conversion to coco api
-    area = torch.as_tensor([obj["area"] for obj in annotations], dtype=torch.float32)
-    iscrowd = torch.as_tensor([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=torch.int64)
+    area = torch.as_tensor([obj["area"] for obj in annotations], dtype=torch.float32, device=image.device)
+    iscrowd = torch.as_tensor(
+        [obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=torch.int64, device=image.device
+    )
 
     boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
@@ -263,12 +264,14 @@ def prepare_coco_detection_annotation(
     new_target["boxes"] = boxes[keep]
     new_target["area"] = area[keep]
     new_target["iscrowd"] = iscrowd[keep]
-    new_target["orig_size"] = torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64)
+    new_target["orig_size"] = torch.as_tensor(
+        [int(image_height), int(image_width)], dtype=torch.int64, device=image.device
+    )
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
         # Converting the filtered keypoints list to a numpy array
-        keypoints = torch.as_tensor(keypoints, dtype=torch.float32)
+        keypoints = torch.as_tensor(keypoints, dtype=torch.float32, device=image.device)
         # Apply the keep mask here to filter the relevant annotations
         keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
@@ -277,7 +280,7 @@ def prepare_coco_detection_annotation(
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width)
+        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width, device=image.device)
         new_target["masks"] = masks[keep]
 
     return new_target
@@ -294,7 +297,7 @@ def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
         boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
     """
     if masks.numel() == 0:
-        return torch.zeros((0, 4))
+        return torch.zeros((0, 4), device=masks.device)
 
     h, w = masks.shape[-2:]
     y = torch.arange(0, h, dtype=torch.float32)
@@ -317,6 +320,20 @@ def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
     return torch.stack([x_min, y_min, x_max, y_max], 1)
 
 
+# 2 functions below adapted from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
+# Copyright (c) 2018, Alexander Kirillov
+# All rights reserved.
+def rgb_to_id(color):
+    """
+    Converts RGB color to unique ID.
+    """
+    if isinstance(color, torch.Tensor) and len(color.shape) == 3:
+        if color.dtype == torch.uint8:
+            color = color.to(torch.int32)
+        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+
 def prepare_coco_panoptic_annotation(
     image: torch.Tensor,
     target: Dict,
@@ -332,29 +349,35 @@ def prepare_coco_panoptic_annotation(
 
     new_target = {}
     new_target["image_id"] = torch.as_tensor(
-        [target["image_id"] if "image_id" in target else target["id"]], dtype=torch.int64
+        [target["image_id"] if "image_id" in target else target["id"]], dtype=torch.int64, device=image.device
     )
-    new_target["size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64)
-    new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64)
+    new_target["size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
+    new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
 
     if "segments_info" in target:
-        masks = np.asarray(PIL.Image.open(annotation_path), dtype=np.uint32)
+        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32)
         masks = rgb_to_id(masks)
 
-        ids = np.array([segment_info["id"] for segment_info in target["segments_info"]])
+        ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
         masks = masks == ids[:, None, None]
-        masks = torch.as_tensor(masks, dtype=torch.bool)
+        masks = masks.to(torch.bool)
         if return_masks:
             new_target["masks"] = masks
         new_target["boxes"] = masks_to_boxes(masks)
         new_target["class_labels"] = torch.as_tensor(
-            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=torch.int64
+            [segment_info["category_id"] for segment_info in target["segments_info"]],
+            dtype=torch.int64,
+            device=image.device,
         )
         new_target["iscrowd"] = torch.as_tensor(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=torch.int64
+            [segment_info["iscrowd"] for segment_info in target["segments_info"]],
+            dtype=torch.int64,
+            device=image.device,
         )
         new_target["area"] = torch.as_tensor(
-            [segment_info["area"] for segment_info in target["segments_info"]], dtype=torch.float32
+            [segment_info["area"] for segment_info in target["segments_info"]],
+            dtype=torch.float32,
+            device=image.device,
         )
 
     return new_target
@@ -513,47 +536,58 @@ def compute_segments(
 
 class DetrImageProcessorFast(BaseImageProcessorFast):
     r"""
-    Constructs a ViT image processor.
+    Constructs a Detr image processor.
 
     Args:
+        format (`str`, *optional*, defaults to `"coco_detection"`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
+            Controls whether to resize the image's `(height, width)` dimensions to the specified `size`. Can be
+            overridden by the `do_resize` parameter in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
+            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to True):
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
+            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
+            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
     """
 
-    model_input_names = ["pixel_values"]
-    _transform_params = [
-        "do_resize",
-        "do_rescale",
-        "do_normalize",
-        "size",
-        "resample",
-        "rescale_factor",
-        "image_mean",
-        "image_std",
-        "image_type",
-    ]
+    model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
         self,
@@ -747,8 +781,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST`):
                 The resampling filter to use when resizing the masks.
         """
-        ratios = torch.as_tensor(target_size) / torch.as_tensor(orig_size)
-        ratio_height, ratio_width = ratios
+        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
         new_annotation["size"] = target_size
@@ -757,7 +790,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32
+                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
                 )
                 new_annotation["boxes"] = scaled_boxes
             elif key == "area":
@@ -784,7 +817,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 boxes = corners_to_center_format(boxes)
-                boxes /= torch.as_tensor([image_width, image_height, image_width, image_height], dtype=torch.float32)
+                boxes /= torch.as_tensor(
+                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
+                )
                 norm_annotation[key] = boxes
             else:
                 norm_annotation[key] = value
@@ -803,7 +838,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         """
         new_annotation = {}
         new_annotation["size"] = output_image_size
-        ratios = torch.as_tensor(input_image_size) / torch.as_tensor(output_image_size)
+        ratios = [input / output for output, input in zip(output_image_size, input_image_size)]
 
         for key, value in annotation.items():
             if key == "masks":
@@ -817,7 +852,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["masks"] = masks
             elif key == "boxes" and update_bboxes:
                 boxes = value
-                boxes *= torch.as_tensor([ratios[1], ratios[0], ratios[1], ratios[0]])
+                boxes *= torch.as_tensor([ratios[1], ratios[0], ratios[1], ratios[0]], device=boxes.device)
                 new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
@@ -850,7 +885,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                 )
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros(padded_size, dtype=torch.int64)
+        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
         pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, annotation
@@ -892,7 +927,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional[Union[PILImageResampling, F.InterpolationMode]] = None,  # PILImageResampling
+        resample: Optional[Union[PILImageResampling, F.InterpolationMode]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
@@ -908,41 +943,78 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocess an image or batch of images.
+        Preprocess an image or a batch of images so that it can be used by the model.
 
         Args:
             images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                List of annotations associated with the image or batch of images. If annotation is for object
+                detection, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
+                - "file_name" (`str`): The file name of the image.
+            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
+                Whether to return segmentation masks.
+            masks_path (`str` or `pathlib.Path`, *optional*):
+                Path to the directory containing the segmentation masks.
+            do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+            size (`Dict[str, int]`, *optional*, defaults to self.size):
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
+                Resampling filter to use when resizing the image.
+            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
+                Rescale factor to use when rescaling the image.
+            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Only "pt" is supported
+            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
+                Whether to convert the annotations to the format expected by the model. Converts the bounding
+                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
+                and in relative coordinates.
+            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+                Mean to use when normalizing the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+                Standard deviation to use when normalizing the image.
+            do_pad (`bool`, *optional*, defaults to self.do_pad):
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
+            format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
+                Format of the annotations.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
+                Type of tensors to return. If `None`, will return the list of images.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. The following formats are currently supported:
+                The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -972,6 +1044,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
+        device = kwargs.pop("device", None)
 
         # Make hashable for cache
         size = SizeDict(**size)
@@ -1027,6 +1100,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
             images = [torch.from_numpy(image).contiguous() for image in images]
 
+        if device is not None:
+            images = [image.to(device) for image in images]
+
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(images[0])
@@ -1067,15 +1143,16 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                     )
             images = resized_images
             del resized_images
+
         if do_rescale and do_normalize:
             # fused rescale and normalize
-            new_mean = torch.tensor(image_mean) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std) * (1.0 / rescale_factor)
-            images = [F.normalize(_cast_tensor_to_float(image), new_mean, new_std) for image in images]
+            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
+            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
+            images = [F.normalize(image.to(dtype=torch.float32), new_mean, new_std) for image in images]
         elif do_rescale:
             images = [image * rescale_factor for image in images]
         elif do_normalize:
-            images = [F.normalize(_cast_tensor_to_float(image), image_mean, image_std) for image in images]
+            images = [F.normalize(image, image_mean, image_std) for image in images]
 
         if do_convert_annotations and annotations is not None:
             annotations = [
@@ -1095,6 +1172,11 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             pixel_masks = []
             padded_annotations = []
             for image, annotation in zip(images, annotation_list):
+                if padded_size == image.size()[-2:]:
+                    padded_images.append(image)
+                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    padded_annotations.append(annotation)
+                    continue
                 padded_image, pixel_mask, padded_annotation = self.pad(
                     image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
                 )
