@@ -1269,13 +1269,8 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
                 input_ids = input_ids[:, cache_position]
 =======
             # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
-<<<<<<< HEAD
-            past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_cache_shape()
-=======
             past_length = past_key_values.get_past_seen_tokens()
-            max_cache_length = past_key_values.get_max_length()
->>>>>>> 0c098e35c (Modify all current .get_seq_length names)
+            max_cache_length = past_key_values.get_max_cache_shape()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
