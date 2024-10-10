@@ -192,7 +192,9 @@ class TextClassificationPipeline(Pipeline):
         # the more natural result containing the list.
         # Default value before `set_parameters`
         if function_to_apply is None:
-            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "regression":
+                function_to_apply = ClassificationFunction.NONE
+            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
             elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
