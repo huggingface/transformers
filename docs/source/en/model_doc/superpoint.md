@@ -86,24 +86,32 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 
 inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)
+image_sizes = [(image.height, image.width) for image in images]
+outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 
-for i in range(len(images)):
-    image_mask = outputs.mask[i]
-    image_indices = torch.nonzero(image_mask).squeeze()
-    image_keypoints = outputs.keypoints[i][image_indices]
-    image_scores = outputs.scores[i][image_indices]
-    image_descriptors = outputs.descriptors[i][image_indices]
+for output in outputs:
+    for keypoints, scores, descriptors in zip(output["keypoints"], output["scores"], output["descriptors"]):
+        print(f"Keypoints: {keypoints}")
+        print(f"Scores: {scores}")
+        print(f"Descriptors: {descriptors}")
 ```
 
-You can then print the keypoints on the image to visualize the result :
+You can then print the keypoints on the image of your choice to visualize the result:
 ```python
-import cv2
-for keypoint, score in zip(image_keypoints, image_scores):
-    keypoint_x, keypoint_y = int(keypoint[0].item()), int(keypoint[1].item())
-    color = tuple([score.item() * 255] * 3)
-    image = cv2.circle(image, (keypoint_x, keypoint_y), 2, color)
-cv2.imwrite("output_image.png", image)
+import matplotlib.pyplot as plt
+
+plt.axis("off")
+plt.imshow(image_1)
+plt.scatter(
+    outputs[0]["keypoints"][:, 0],
+    outputs[0]["keypoints"][:, 1],
+    c=outputs[0]["scores"] * 100,
+    s=outputs[0]["scores"] * 50,
+    alpha=0.8
+)
+plt.savefig(f"output_image.png")
 ```
+![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png)
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/magicleap/SuperPointPretrainedNetwork).
@@ -123,6 +131,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] SuperPointImageProcessor
 
 - preprocess
+- post_process_keypoint_detection
 
 ## SuperPointForKeypointDetection
 
