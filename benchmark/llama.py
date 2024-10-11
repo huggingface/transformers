@@ -229,33 +229,53 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             batch_size=batch_size,
             device=device,
             dtype=torch.float16,
-            max_cache_len=seq_length + num_tokens_to_generate,
+            max_cache_len=seq_length + num_tokens_to_generate + 10,
         )
         cache_position = torch.arange(seq_length, device=device)
+        ### First compile, prefill
         start = perf_counter()
         next_token = decode_one_token(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
         torch.cuda.synchronize()
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
-        all_generated_tokens = []
+
+
         cache_position = torch.tensor([seq_length], device=device)
-        next_token_times_secs = []
+        ### First compile, decoding
+        start = perf_counter()
+        next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
+        torch.cuda.synchronize()
+        end = perf_counter()
+        time_to_second_token = end - start
+        logger.info(f"completed second compile generation in: {time_to_first_token}s")
+        cache_position += 1
+
+        ### Second compile, decoding
+        start = perf_counter()
+        next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
+        torch.cuda.synchronize()
+        end = perf_counter()
+        time_to_third_token = end - start
+        logger.info(f"completed third compile forward in: {time_to_first_token}s")
+        cache_position += 1
+
+        ### Using cuda graphs decoding
+        all_generated_tokens = []
+        start = perf_counter()
         for _ in range(1, num_tokens_to_generate):
             all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
-            start = perf_counter()
             next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
-            torch.cuda.synchronize()
-            end = perf_counter()
-            next_token_times_secs.append(end - start)
-
-            logger.info(f"completed next compile generation in: {next_token_times_secs[-1]}s")
             cache_position += 1
-        time_to_second_token = next_token_times_secs[0]
-        time_to_third_token = next_token_times_secs[1]
-        mean_time_to_next_token = mean(next_token_times_secs[2:])
+        torch.cuda.synchronize()
+        end = perf_counter()
+        mean_time_to_next_token = (end-start) / num_tokens_to_generate
+        logger.info(f"completed next compile generation in: {mean_time_to_next_token}s")
+        logger.info(f"generated: {tokenizer.decode(all_generated_tokens)}")
 
-        logger.info(f"generated: {tokenizer.batch_decode(all_generated_tokens)}")
+
+
+
         ####################
         # Generate compile #
         ####################
@@ -326,7 +346,6 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
-    
     cur.execute(
         """
         INSERT INTO model_measurements (
