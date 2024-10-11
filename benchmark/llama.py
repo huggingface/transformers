@@ -275,7 +275,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         mean_time_to_next_token = (end-start) / num_tokens_to_generate
         logger.info(f"completed next compile generation in: {mean_time_to_next_token}s")
-        logger.info(f"generated: {tokenizer.decode(all_generated_tokens)}")
+        logger.info(f"generated: {tokenizer.batch_decode(all_generated_tokens)}")
 
 
 
