@@ -235,7 +235,6 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
         and hence the waveform should not be normalized before feature extraction.
         """
-        # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
         # Mean center the waveform
         waveform -= waveform.mean()
 
