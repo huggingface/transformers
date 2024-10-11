@@ -157,7 +157,6 @@ class MolmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
-    # TODO(joao): add me back asap :)
     def __init__(self, config: MolmoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -1674,7 +1673,3 @@ class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
             for k in ["images", "image_masks", "image_input_idx"]:
                 del model_kwargs[k]
         return super()._update_model_kwargs_for_generation(outputs, model_kwargs,is_encoder_decoder, num_new_tokens)
-
-
-# Always register for multi-modal features
-AutoModelForCausalLM.register(MolmoConfig, MolmoForCausalLM)
