@@ -995,8 +995,8 @@ class MoshiIntegrationTests(unittest.TestCase):
 
     @slow
     def test_moshika_conditional_greedy(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(
-            torch_device
+        model = MoshiForConditionalGeneration.from_pretrained(
+            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
         )
         inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(
             device=torch_device, dtype=torch.float16
@@ -1041,8 +1041,8 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float16, attn_implementation="eager"
-        ).to(torch_device)
+            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
+        )
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
@@ -1054,8 +1054,8 @@ class MoshiIntegrationTests(unittest.TestCase):
 
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float32).to(
-            torch_device
+        model = MoshiForConditionalGeneration.from_pretrained(
+            "kmhf/hf-moshiko", torch_dtype=torch.float32, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -1076,8 +1076,8 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", torch_dtype=torch.float16).to(
-            torch_device
+        model = MoshiForConditionalGeneration.from_pretrained(
+            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -1098,8 +1098,8 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_fp16
     def test_moshika_greedy_unconditional_fp16(self):
-        model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", torch_dtype=torch.float16).to(
-            torch_device
+        model = MoshiForConditionalGeneration.from_pretrained(
+            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72932
