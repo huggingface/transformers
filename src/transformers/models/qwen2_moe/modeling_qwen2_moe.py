@@ -1153,6 +1153,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
+        current_cache_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
@@ -1166,7 +1167,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
+                past_key_values_length=current_cache_length,
                 sliding_window=self.config.sliding_window,
                 is_training=self.training,
             ):
