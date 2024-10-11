@@ -205,6 +205,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )[0]
         end = perf_counter()
         time_to_first_token = end - start
+        logger.info(f"completed first compile generation in: {time_to_first_token}s")
         cache_position = torch.tensor([seq_length], device=device)
         next_token_times_secs = []
         for _ in range(1, num_tokens_to_generate):
@@ -219,6 +220,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             )[0]
             end = perf_counter()
             next_token_times_secs.append(end - start)
+            logger.info(f"completed next compile generation in: {next_token_times_secs}s")
             cache_position += 1
         time_to_second_token = next_token_times_secs[0]
         time_to_third_token = next_token_times_secs[1]
