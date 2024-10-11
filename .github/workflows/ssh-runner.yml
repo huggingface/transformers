@@ -47,7 +47,7 @@ jobs:
             echo "RUNNER=" >> $GITHUB_ENV
           fi
 
-      - name: Get runner to use
+      - name: Set runner to use
         id: set_runner
         run: |
           echo ${{ env.RUNNER }}
