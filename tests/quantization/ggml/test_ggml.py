@@ -691,7 +691,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(example_function_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = 'def print_hello_world():\n\tprint("Hello World")\n\ndef print'
+        EXPECTED_TEXT = 'def print_hello_world():\n    print("Hello World")\n\ndef print'
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
