@@ -81,30 +81,6 @@ def collect_metrics(benchmark_id, continue_metric_collection):
     conn.close()
 
 
-# Copied from the gpt-fast repo
-def multinomial_sample_one_no_sync(probs_sort): # Does multinomial sampling without a cuda synchronization
-    q = torch.empty_like(probs_sort).exponential_(1)
-    return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
-
-def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
-    logits = logits / max(temperature, 1e-5)
-
-    if top_k is not None:
-        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-        pivot = v.select(-1, -1).unsqueeze(-1)
-        logits = torch.where(logits < pivot, -float("Inf"), logits)
-    probs = torch.nn.functional.softmax(logits, dim=-1)
-    return probs
-
-def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
-    probs = logits_to_probs(logits[:, -1], temperature, top_k)
-    idx_next = multinomial_sample_one_no_sync(probs)
-    return idx_next, probs
-
-def decode_one_token(model, cur_token, cache_position, past_key_values):
-    logits = model(cur_token, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache = True)[0]
-    new_token = sample(logits,temperature=0.6, top_k=5)[0]
-    return new_token
 
 def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
     continue_metric_collection = Event()
@@ -148,6 +124,33 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
     seq_length = inputs["input_ids"].shape[1]
     model.generation_config.max_length = seq_length + num_tokens_to_generate
     batch_size = inputs["input_ids"].shape[0]
+
+
+
+    # Copied from the gpt-fast repo
+    def multinomial_sample_one_no_sync(probs_sort): # Does multinomial sampling without a cuda synchronization
+        q = torch.empty_like(probs_sort).exponential_(1)
+        return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
+
+    def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+        logits = logits / max(temperature, 1e-5)
+
+        if top_k is not None:
+            v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            pivot = v.select(-1, -1).unsqueeze(-1)
+            logits = torch.where(logits < pivot, -float("Inf"), logits)
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        return probs
+
+    def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+        probs = logits_to_probs(logits[:, -1], temperature, top_k)
+        idx_next = multinomial_sample_one_no_sync(probs)
+        return idx_next, probs
+
+    def decode_one_token(model, cur_token, cache_position, past_key_values):
+        logits = model(cur_token, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache = True)[0]
+        new_token = sample(logits,temperature=0.6, top_k=5)[0]
+        return new_token
 
     #########
     # Eager #
@@ -254,7 +257,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # Generate compile #
         ####################
         torch.compiler.reset()
-        # model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+        # we will not compile full generate as it' s to intensive, tho we measure full forward!
 
         past_key_values = StaticCache(
             model.config,
