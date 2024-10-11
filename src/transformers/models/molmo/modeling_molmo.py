@@ -686,7 +686,7 @@ class MolmoeDecoderLayer(nn.Module):
         return x, cache
 
 
-class Embedding(nn.Module):
+class MolmoEmbedding(nn.Module):
 
     def __init__(
         self,
@@ -1204,7 +1204,7 @@ class MolmoModel(MolmoPreTrainedModel):
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
         if self.config.additional_vocab_size is not None:
-            self.wte = Embedding(
+            self.wte = MolmoEmbedding(
                 config.vocab_size,
                 config.additional_vocab_size,
                 config.hidden_size,
