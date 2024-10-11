@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from huggingface_hub import AutomaticSpeechRecognitionOutput, hf_hub_download, snapshot_download
+from huggingface_hub import AutomaticSpeechRecognitionOutput, AutomaticSpeechRecognitionInput, hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -1442,6 +1442,40 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+    
+    @require_torch
+    def test_pipeline_output_on_unused_kwargs(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}
+
+        
+        output = speech_recognizer(inputs.copy(), chunk_length_s=10)
+        compare_pipeline_output_to_hub_spec(output, AutomaticSpeechRecognitionOutput) # passed as expected
+        
+        output = speech_recognizer(inputs.copy())
+        compare_pipeline_output_to_hub_spec(output, AutomaticSpeechRecognitionOutput) # fails as unused input kwargs are not removed
+    
+    @require_torch
+    def test_fail_on_invalid_input_kwargs(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}
+        
+        with self.assertRaises(KeyError) as e:
+            speech_recognizer(inputs)
+            self.assertContains(e.msg, "KeyError: inputs dict got an unexpected key 'id'")
+
 
     @require_torch
     def test_return_timestamps_ctc_fast(self):
