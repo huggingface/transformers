@@ -194,6 +194,34 @@ class VideoLlavaVisionText2TextModelTester:
         return config, inputs_dict
 
 
+import traceback
+from transformers.testing_utils import run_test_in_subprocess
+def _test_mixed_input(in_queue, out_queue, timeout):
+    error = None
+    try:
+        inputs = in_queue.get(timeout=timeout)
+
+        config, inputs, all_model_classes = inputs["config"], inputs["inputs"], inputs["all_model_classes"]
+        for model_class in all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            # test that the forward does not fail
+            with torch.no_grad():
+                _ = model(**inputs)
+
+            # if we remove some images from inputs leaving only one
+            # image number mismatch error should raise
+            inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
+            with unittest.TestCase().assertRaises(RuntimeError):
+                _ = model(**inputs)
+
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
+
+
 @require_torch
 class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
@@ -242,17 +270,8 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     )
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            # test that the forward does not fail
-            with torch.no_grad():
-                _ = model(**inputs)
-
-            # if we remove some images from inputs leaving only one
-            # image number mismatch error should raise
-            inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
-            with self.assertRaises(RuntimeError):
-                _ = model(**inputs)
+        all_model_classes = self.all_model_classes
+        run_test_in_subprocess(test_case=self, target_func=_test_mixed_input, inputs={"inputs": inputs, "config": config, "all_model_classes": all_model_classes})
 
     def test_video_only_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
