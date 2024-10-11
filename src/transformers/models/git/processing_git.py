@@ -101,7 +101,8 @@ class GitProcessor(ProcessorMixin):
         if legacy:
             logger.warning(
                 "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
-                "If both images and text are provided, it will remove the last token (EOS token) of the input_ids and attention_mask tensors."
+                "In the new behavior, if both images and text are provided, the last token (EOS token) "
+                "of the input_ids and attention_mask tensors will be removed."
             )
 
         if text is None and images is None:
@@ -126,6 +127,7 @@ class GitProcessor(ProcessorMixin):
             if not legacy:
                 data["input_ids"] = data["input_ids"][:, :-1]
                 data["attention_mask"] = data["attention_mask"][:, :-1]
+
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):

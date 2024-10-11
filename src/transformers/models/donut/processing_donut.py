@@ -93,10 +93,10 @@ class DonutProcessor(ProcessorMixin):
         # For backward compatibility
         legacy = kwargs.pop("legacy", True)
         if legacy:
-            logger.warning(
+            logger.warning_once(
                 "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
-                "If both images and text are provided, it will change the default value of `add_special_tokens` to `False` when calling the tokenizer, "
-                "if `add_special_tokens` is unset, and the tokenized text will be returned in the `decoder_input_ids` key instead of the `labels` key."
+                "In the new behavior, if both images and text are provided, the default value of `add_special_tokens` "
+                "will be changed to `False` when calling the tokenizer if `add_special_tokens` is unset."
             )
 
         if self._in_target_context_manager:
