@@ -153,7 +153,7 @@ class GroundingDinoModelTester:
         # When using `GroundingDino` the text input template is '{label1}. {label2}. {label3. ... {labelN}.'
         # Therefore to avoid errors when running tests with `labels` `input_ids` have to follow this structure.
         # Otherwise when running `build_label_maps` it will throw an error when trying to split the input_ids into segments.
-        input_ids = torch.tensor([101, 3869, 1012, 11420, 3869, 1012, 102])
+        input_ids = torch.tensor([101, 3869, 1012, 11420, 3869, 1012, 102], device=torch_device)
         input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
         labels = None
