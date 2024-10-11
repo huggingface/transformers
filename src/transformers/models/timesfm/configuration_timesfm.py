@@ -101,7 +101,6 @@ class TimesFMConfig(PretrainedConfig):
         use_positional_embedding: bool = True,
         per_core_batch_size: int = 32,
         initializer_factor: float = 1.0,
-        backend: str = "gpu",
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -120,7 +119,6 @@ class TimesFMConfig(PretrainedConfig):
         self.use_positional_embedding = use_positional_embedding
         self.per_core_batch_size = per_core_batch_size
         self.initializer_factor = initializer_factor
-        self.backend = backend
 
         super().__init__(
             **kwargs,

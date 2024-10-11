@@ -293,7 +293,6 @@ class TimesFMModel(TimesFMPreTrainedModel):
         self.output_patch_len = config.horizon_len
         self.num_layers = config.num_layers
         self.model_dims = config.model_dim
-        self.backend = config.backend
         self.quantiles = config.quantiles
         self.num_heads = config.num_heads
 
@@ -301,7 +300,6 @@ class TimesFMModel(TimesFMPreTrainedModel):
         self.per_core_batch_size = config.per_core_batch_size
         self.global_batch_size = config.per_core_batch_size * self.num_cores
         self._horizon_start = self.context_len - self.input_patch_len
-        self._device = config.backend
 
     def _preprocess(
         self, inputs: Sequence[np.array], freq: Sequence[int]
@@ -429,7 +427,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
                         ],
                         dtype=np.float32,
                     )
-                ).to(self._device)
+                )
                 input_padding_in = torch.from_numpy(
                     np.array(
                         input_padding[
@@ -439,22 +437,18 @@ class TimesFMModel(TimesFMPreTrainedModel):
                         ],
                         dtype=np.float32,
                     )
-                ).to(self._device)
-                inp_freq_in = (
-                    torch.from_numpy(
-                        np.array(
-                            inp_freq[
-                                i
-                                * self.global_batch_size : (i + 1)
-                                * self.global_batch_size,
-                                :,
-                            ],
-                            dtype=np.int32,
-                        )
-                    )
-                    .long()
-                    .to(self._device)
                 )
+                inp_freq_in = torch.from_numpy(
+                    np.array(
+                        inp_freq[
+                            i
+                            * self.global_batch_size : (i + 1)
+                            * self.global_batch_size,
+                            :,
+                        ],
+                        dtype=np.int32,
+                    )
+                ).long()
                 mean_output, full_output = self.decoder.decode(
                     input_ts=input_ts_in,
                     paddings=input_padding_in,

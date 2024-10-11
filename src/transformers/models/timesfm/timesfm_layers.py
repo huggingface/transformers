@@ -56,8 +56,9 @@ def masked_mean_std(
     mask = 1 - pad
 
     # Calculate the number of valid elements
+    num_valid_elements = torch.sum(mask, dim=1)
     num_valid_elements = torch.where(
-        torch.sum(mask, dim=1) == 0,
+        num_valid_elements == 0,
         torch.tensor(
             1, dtype=num_valid_elements.dtype, device=num_valid_elements.device
         ),
