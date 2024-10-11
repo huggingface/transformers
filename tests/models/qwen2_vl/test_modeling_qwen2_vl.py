@@ -223,7 +223,9 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
