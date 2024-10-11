@@ -7497,6 +7497,13 @@ class Qwen2VLForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2VLForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Qwen2VLModel(metaclass=DummyObject):
     _backends = ["torch"]
 
