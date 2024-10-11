@@ -12,33 +12,79 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-from pathlib import Path
-from typing import List, Tuple
+import gc
+import os
+import re
+from typing import List
 
 import torch
 from datasets import load_dataset
 from torch import nn
 
 from transformers import (
-    AutoConfig,
     AutoModelForKeypointDetection,
     SuperGlueConfig,
     SuperGlueForKeypointMatching,
     SuperGlueImageProcessor,
 )
-from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
-def get_superglue_config():
-    config = SuperGlueConfig(
-        descriptor_dim=256,
-        keypoint_encoder_sizes=[32, 64, 128, 256],
-        gnn_layers_types=["self", "cross"] * 9,
-        sinkhorn_iterations=100,
-        matching_threshold=0.2,
-    )
+def prepare_imgs_for_image_processor():
+    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
+    return [[dataset[0]["image"], dataset[1]["image"]], [dataset[2]["image"], dataset[1]["image"]]]
 
-    return config
+
+def verify_model_outputs(model, model_name):
+    from tests.models.superglue.test_modeling_superglue import prepare_imgs
+
+    images = prepare_imgs()
+    preprocessor = SuperGlueImageProcessor()
+    inputs = preprocessor(images=images, return_tensors="pt").to("cuda")
+    model.to("cuda")
+    with torch.no_grad():
+        outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+
+    predicted_matches_values = outputs.matches[0, 0, :10]
+    predicted_matching_scores_values = outputs.matching_scores[0, 0, :10]
+
+    predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
+
+    if "outdoor" in model_name:
+        expected_max_number_keypoints = 866
+        expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+        expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+
+        expected_matches_values = torch.tensor(
+            [125, -1, 137, 138, 19, -1, 135, -1, 160, 153], dtype=torch.int64, device=predicted_matches_values.device
+        )
+        expected_matching_scores_values = torch.tensor(
+            [0.2406, 0, 0.8879, 0.7491, 0.3161, 0, 0.6232, 0, 0.2723, 0.9559],
+            device=predicted_matches_values.device,
+        )
+
+        expected_number_of_matches = 162
+    elif "indoor" in model_name:
+        expected_max_number_keypoints = 866
+        expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+        expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+
+        expected_matches_values = torch.tensor(
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1], dtype=torch.int64, device=predicted_matches_values.device
+        )
+        expected_matching_scores_values = torch.tensor(
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            device=predicted_matches_values.device,
+        )
+
+        expected_number_of_matches = 0
+
+    assert outputs.matches.shape == expected_matches_shape
+    assert outputs.matching_scores.shape == expected_matching_scores_shape
+
+    assert torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-4)
+    assert torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4)
+
+    assert predicted_number_of_matches == expected_number_of_matches
 
 
 def conv1d_to_linear(conv1d_layer):
@@ -52,24 +98,6 @@ def conv1d_to_linear(conv1d_layer):
         linear_layer.bias.data = conv1d_layer.bias.data
 
     return linear_layer
-
-
-def fuse_batchnorm_into_linear(linear_layer, bn_layer):
-    # Convert BatchNorm1d weights and biases
-    bn_weight = bn_layer.weight.data
-    bn_bias = bn_layer.bias.data
-    bn_running_mean = bn_layer.running_mean.data
-    bn_running_var = bn_layer.running_var.data
-
-    # Fuse BatchNorm into Linear layer
-    scale = bn_weight / torch.sqrt(bn_running_var + 1e-8)
-    bias = bn_bias - bn_running_mean * scale
-
-    linear_layer.weight.data = linear_layer.weight.data * scale.unsqueeze(1)
-    if linear_layer.bias is not None:
-        linear_layer.bias.data += bias
-    else:
-        linear_layer.bias = bias
 
 
 class SuperGlueMultiLayerPerceptronConversionModel(nn.Module):
@@ -89,14 +117,8 @@ class SuperGlueMultiLayerPerceptronConversionModel(nn.Module):
         for layer in self.layers:
             if isinstance(layer, nn.Conv1d):
                 layer = conv1d_to_linear(layer)
-                new_layers.append(layer)
-            if isinstance(layer, nn.ReLU):
-                new_layers.append(layer)
-            if isinstance(layer, nn.BatchNorm1d):
-                last_new_layer = new_layers[-1]
-                # Convert BatchNorm1d weights and biases
-                fuse_batchnorm_into_linear(last_new_layer, layer)
-        self.layers = nn.Sequential(*new_layers)
+            new_layers.append(layer)
+        self.layers = nn.ModuleList(new_layers)
 
 
 class SuperGlueKeypointEncoderConversionModel(nn.Module):
@@ -104,7 +126,6 @@ class SuperGlueKeypointEncoderConversionModel(nn.Module):
         super().__init__()
         layer_sizes = config.keypoint_encoder_sizes
         feature_dim = config.descriptor_dim
-        # 3 here consists of 2 for the (x, y) coordinates and 1 for the score of the keypoint
         encoder_channels = [3] + layer_sizes + [feature_dim]
         self.encoder = SuperGlueMultiLayerPerceptronConversionModel(config, channels=encoder_channels)
 
@@ -119,16 +140,16 @@ class SuperGlueMultiHeadAttentionConversionModel(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = feature_dim // self.num_heads
 
-        self.query = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.key = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.value = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.merge = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.q_proj = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.k_proj = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.v_proj = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.out_proj = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
 
     def convert(self):
-        self.query = conv1d_to_linear(self.query)
-        self.key = conv1d_to_linear(self.key)
-        self.value = conv1d_to_linear(self.value)
-        self.merge = conv1d_to_linear(self.merge)
+        self.q_proj = conv1d_to_linear(self.q_proj)
+        self.k_proj = conv1d_to_linear(self.k_proj)
+        self.v_proj = conv1d_to_linear(self.v_proj)
+        self.out_proj = conv1d_to_linear(self.out_proj)
 
 
 class SuperGlueAttentionalPropagationConversionModel(nn.Module):
@@ -181,240 +202,154 @@ class SuperGlueConversionModel(nn.Module):
         self.final_projection.convert()
 
 
-def create_rename_keys(config):
-    rename_keys = []
-
-    # keypoint encoder
-    n = len([3] + config.keypoint_encoder_sizes + [config.descriptor_dim])
-    for i in range(n * 2 + 1):
-        if ((i + 1) % 3) != 0:
-            rename_keys.append(
-                (
-                    f"kenc.encoder.{i}.weight",
-                    f"keypoint_encoder.encoder.layers.{i}.weight",
-                )
-            )
-            rename_keys.append((f"kenc.encoder.{i}.bias", f"keypoint_encoder.encoder.layers.{i}.bias"))
-            if ((i % 3) - 1) == 0:
-                rename_keys.append(
-                    (
-                        f"kenc.encoder.{i}.running_mean",
-                        f"keypoint_encoder.encoder.layers.{i}.running_mean",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"kenc.encoder.{i}.running_var",
-                        f"keypoint_encoder.encoder.layers.{i}.running_var",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"kenc.encoder.{i}.num_batches_tracked",
-                        f"keypoint_encoder.encoder.layers.{i}.num_batches_tracked",
-                    )
-                )
-
-    # gnn
-    for i in range(len(config.gnn_layers_types)):
-        rename_keys.append(
-            (
-                f"gnn.layers.{i}.attn.merge.weight",
-                f"gnn.layers.{i}.attention.merge.weight",
-            )
-        )
-        rename_keys.append((f"gnn.layers.{i}.attn.merge.bias", f"gnn.layers.{i}.attention.merge.bias"))
-        for j in range(3):
-            if j == 0:
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.weight",
-                        f"gnn.layers.{i}.attention.query.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.bias",
-                        f"gnn.layers.{i}.attention.query.bias",
-                    )
-                )
-            elif j == 1:
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.weight",
-                        f"gnn.layers.{i}.attention.key.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.bias",
-                        f"gnn.layers.{i}.attention.key.bias",
-                    )
-                )
-            elif j == 2:
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.weight",
-                        f"gnn.layers.{i}.attention.value.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.attn.proj.{j}.bias",
-                        f"gnn.layers.{i}.attention.value.bias",
-                    )
-                )
-        for j in range(
-            len(
-                [
-                    config.descriptor_dim * 2,
-                    config.descriptor_dim * 2,
-                    config.descriptor_dim,
-                ]
-            )
-            + 1
-        ):
-            if j != 2:
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.mlp.{j}.weight",
-                        f"gnn.layers.{i}.mlp.layers.{j}.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"gnn.layers.{i}.mlp.{j}.bias",
-                        f"gnn.layers.{i}.mlp.layers.{j}.bias",
-                    )
-                )
-                if j == 1:
-                    rename_keys.append(
-                        (
-                            f"gnn.layers.{i}.mlp.{j}.running_mean",
-                            f"gnn.layers.{i}.mlp.layers.{j}.running_mean",
-                        )
-                    )
-                    rename_keys.append(
-                        (
-                            f"gnn.layers.{i}.mlp.{j}.running_var",
-                            f"gnn.layers.{i}.mlp.layers.{j}.running_var",
-                        )
-                    )
-                    rename_keys.append(
-                        (
-                            f"gnn.layers.{i}.mlp.{j}.num_batches_tracked",
-                            f"gnn.layers.{i}.mlp.layers.{j}.num_batches_tracked",
-                        )
-                    )
-
-    # final projection
-    rename_keys.append(("final_proj.weight", "final_projection.final_proj.weight"))
-    rename_keys.append(("final_proj.bias", "final_projection.final_proj.bias"))
-
-    return rename_keys
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"kenc.encoder.(\d+).weight": r"keypoint_encoder.encoder.layers.\1.weight",
+    r"kenc.encoder.(\d+).bias": r"keypoint_encoder.encoder.layers.\1.bias",
+    r"kenc.encoder.(\d+).running_mean": r"keypoint_encoder.encoder.layers.\1.running_mean",
+    r"kenc.encoder.(\d+).running_var": r"keypoint_encoder.encoder.layers.\1.running_var",
+    r"kenc.encoder.(\d+).num_batches_tracked": r"keypoint_encoder.encoder.layers.\1.num_batches_tracked",
+    r"gnn.layers.(\d+).attn.proj.0.weight": r"gnn.layers.\1.attention.q_proj.weight",
+    r"gnn.layers.(\d+).attn.proj.0.bias": r"gnn.layers.\1.attention.q_proj.bias",
+    r"gnn.layers.(\d+).attn.proj.1.weight": r"gnn.layers.\1.attention.k_proj.weight",
+    r"gnn.layers.(\d+).attn.proj.1.bias": r"gnn.layers.\1.attention.k_proj.bias",
+    r"gnn.layers.(\d+).attn.proj.2.weight": r"gnn.layers.\1.attention.v_proj.weight",
+    r"gnn.layers.(\d+).attn.proj.2.bias": r"gnn.layers.\1.attention.v_proj.bias",
+    r"gnn.layers.(\d+).attn.merge.weight": r"gnn.layers.\1.attention.out_proj.weight",
+    r"gnn.layers.(\d+).attn.merge.bias": r"gnn.layers.\1.attention.out_proj.bias",
+    r"gnn.layers.(\d+).mlp.(\d+).weight": r"gnn.layers.\1.mlp.layers.\2.weight",
+    r"gnn.layers.(\d+).mlp.(\d+).bias": r"gnn.layers.\1.mlp.layers.\2.bias",
+    r"gnn.layers.(\d+).mlp.(\d+).running_mean": r"gnn.layers.\1.mlp.layers.\2.running_mean",
+    r"gnn.layers.(\d+).mlp.(\d+).running_var": r"gnn.layers.\1.mlp.layers.\2.running_var",
+    r"gnn.layers.(\d+).mlp.(\d+).num_batches_tracked": r"gnn.layers.\1.mlp.layers.\2.num_batches_tracked",
+    r"final_proj.weight": r"final_projection.final_proj.weight",
+    r"final_proj.bias": r"final_projection.final_proj.bias",
+}
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
+def convert_old_keys_to_new_keys(state_dict_keys: List[str]):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
 
-def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_state_dict):
+def add_keypoint_detector_state_dict(superglue_state_dict):
+    keypoint_detector = AutoModelForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+    keypoint_detector_state_dict = keypoint_detector.state_dict()
     for k, v in keypoint_detector_state_dict.items():
         superglue_state_dict[f"keypoint_detector.{k}"] = v
     return superglue_state_dict
 
 
-def prepare_imgs_for_image_processor():
-    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
-    return [[dataset[0]["image"], dataset[1]["image"]], [dataset[2]["image"], dataset[1]["image"]]]
-
-
-def extract_keypoint_information_from_image_point_description_output(
-    output: SuperPointKeypointDescriptionOutput, i: int
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    indices = torch.nonzero(output.mask[i]).squeeze()
-    keypoints = torch.unsqueeze(output.keypoints[i][indices], dim=0)
-    descriptors = torch.unsqueeze(output.descriptors[i][indices], dim=0)
-    scores = torch.unsqueeze(output.scores[i][indices], dim=0)
-    return keypoints, descriptors, scores
-
-
 @torch.no_grad()
-def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub):
-    """
-    Copy/paste/tweak model's weights to our SuperPoint structure.
-    Also test the model with the image processor and other methods of reading the images.
-    """
+def write_model(
+    model_path,
+    checkpoint_url,
+    safe_serialization=True,
+    push_to_hub=False,
+):
+    os.makedirs(model_path, exist_ok=True)
 
-    keypoint_detector_config = AutoConfig.from_pretrained("magic-leap-community/superpoint")
-    superglue_config = get_superglue_config()
-    superglue_config.keypoint_detector_config = keypoint_detector_config
+    # ------------------------------------------------------------
+    # SuperGlue config
+    # ------------------------------------------------------------
 
-    keypoint_detector = AutoModelForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
-    keypoint_detector.to("cuda")
-    keypoint_detector.eval()
-    keypoint_detector_state_dict = keypoint_detector.state_dict()
-
-    print("Downloading original model from checkpoint...")
-    original_superglue_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-
-    print("Converting model parameters...")
-    rename_keys = create_rename_keys(superglue_config)
-    new_superglue_state_dict = original_superglue_state_dict.copy()
-    for src, dest in rename_keys:
-        rename_key(new_superglue_state_dict, src, dest)
-
-    conversion_model = SuperGlueConversionModel(superglue_config)
-    conversion_model.load_state_dict(new_superglue_state_dict, strict=True, assign=True)
-    conversion_model.convert()
-    converted_superglue_state_dict = conversion_model.state_dict()
-    print("Successfully converted model parameters...")
-
-    converted_superglue_state_dict = add_keypoint_detector_state_dict(
-        converted_superglue_state_dict, keypoint_detector_state_dict
+    config = SuperGlueConfig(
+        descriptor_dim=256,
+        keypoint_encoder_sizes=[32, 64, 128, 256],
+        gnn_layers_types=["self", "cross"] * 9,
+        sinkhorn_iterations=100,
+        matching_threshold=0.2,
     )
-    model = SuperGlueForKeypointMatching(superglue_config)
-    model.load_state_dict(converted_superglue_state_dict)
-    model.to("cuda")
-    model.eval()
+    config.architectures = ["SuperGlueForKeypointMatching"]
+    config.save_pretrained(model_path, push_to_hub=push_to_hub)
+    print("Model config saved successfully...")
 
-    print("Successfully loaded weights in the model")
-    images = prepare_imgs_for_image_processor()
-    preprocessor = SuperGlueImageProcessor()
-    inputs = preprocessor(images=images, return_tensors="pt")
-    inputs.to("cuda")
+    # ------------------------------------------------------------
+    # Convert weights
+    # ------------------------------------------------------------
 
-    output = model(**inputs, return_dict=True)
+    print(f"Fetching all parameters from the checkpoint at {checkpoint_url}...")
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
 
-    print("Number of matching keypoints")
-    print(torch.sum(output.matches[0][0] != -1))
-    if save_model:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
-        preprocessor.save_pretrained(pytorch_dump_folder_path)
+    print("Converting model...")
+    all_keys = list(original_state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys)
 
-        if push_to_hub:
-            print("Pushing model to the hub...")
-            model_name = "superglue"
-            if (
-                checkpoint_url
-                == "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth"
-            ):
-                model_name += "_outdoor"
-            elif (
-                checkpoint_url
-                == "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_indoor.pth"
-            ):
-                model_name += "_indoor"
+    state_dict = {}
+    for key in all_keys:
+        new_key = new_keys[key]
+        state_dict[new_key] = original_state_dict.pop(key).contiguous().clone()
 
-            model.push_to_hub(
-                repo_id=model_name,
-                organization="stevenbucaille",
-                commit_message="Add model",
-            )
-            preprocessor.push_to_hub(model_name)
+    del original_state_dict
+    gc.collect()
+
+    conversion_model = SuperGlueConversionModel(config)
+    conversion_model.load_state_dict(state_dict, strict=True, assign=True)
+    conversion_model.convert()
+    state_dict = conversion_model.state_dict()
+
+    state_dict = add_keypoint_detector_state_dict(state_dict)
+
+    print("Loading the checkpoint in a SuperGlue model...")
+    with torch.device("cuda"):
+        model = SuperGlueForKeypointMatching(config)
+    model.load_state_dict(state_dict, strict=True)
+    print("Checkpoint loaded successfully...")
+    del model.config._name_or_path
+
+    print("Saving the model...")
+    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    del state_dict, model
+
+    # Safety check: reload the converted model
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    model = SuperGlueForKeypointMatching.from_pretrained(model_path)
+    print("Model reloaded successfully.")
+
+    model_name = "superglue"
+    if "superglue_outdoor.pth" in checkpoint_url:
+        model_name += "_outdoor"
+    elif "superglue_indoor.pth" in checkpoint_url:
+        model_name += "_indoor"
+
+    print("Checking the model outputs...")
+    verify_model_outputs(model, model_name)
+    print("Model outputs verified successfully.")
+
+    organization = "stevenbucaille"
+    if push_to_hub:
+        print("Pushing model to the hub...")
+        model.push_to_hub(
+            repo_id=f"{organization}/{model_name}",
+            commit_message="Add model",
+        )
+
+    write_image_processor(model_path, model_name, organization, push_to_hub=push_to_hub)
+
+
+def write_image_processor(save_dir, model_name, organization, push_to_hub=False):
+    image_processor = SuperGlueImageProcessor()
+    image_processor.save_pretrained(save_dir)
+
+    if push_to_hub:
+        print("Pushing image processor to the hub...")
+        image_processor.push_to_hub(
+            repo_id=f"{organization}/{model_name}",
+            commit_message="Add image processor",
+        )
 
 
 if __name__ == "__main__":
@@ -441,9 +376,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_superglue_checkpoint(
-        args.checkpoint_url,
-        args.pytorch_dump_folder_path,
-        args.save_model,
-        args.push_to_hub,
+    write_model(
+        args.pytorch_dump_folder_path, args.checkpoint_url, safe_serialization=True, push_to_hub=args.push_to_hub
     )
+    # convert_superglue_checkpoint(
+    #     args.checkpoint_url,
+    #     args.pytorch_dump_folder_path,
+    #     args.save_model,
+    #     args.push_to_hub,
+    # )

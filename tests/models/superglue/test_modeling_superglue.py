@@ -307,27 +307,30 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
+        predicted_matches_values = outputs.matches[0, 0, :10]
+        predicted_matching_scores_values = outputs.matching_scores[0, 0, :10]
+
+        predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
+
         expected_max_number_keypoints = 866
         expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+
+        expected_matches_values = torch.tensor(
+            [125, -1, 137, 138, 19, -1, 135, -1, 160, 153], dtype=torch.int64, device=predicted_matches_values.device
+        )
+        expected_matching_scores_values = torch.tensor(
+            [0.2406, 0, 0.8879, 0.7491, 0.3161, 0, 0.6232, 0, 0.2723, 0.9559],
+            device=predicted_matches_values.device,
+        )
+
+        expected_number_of_matches = 162
 
         # Check output shapes
         self.assertEqual(outputs.matches.shape, expected_matches_shape)
         self.assertEqual(outputs.matching_scores.shape, expected_matching_scores_shape)
 
-        expected_matches_values = torch.tensor([125, -1, 137, 138, 136, -1, 135, -1, 160, 153], dtype=torch.int32).to(
-            torch_device
-        )
-        expected_matching_scores_values = torch.tensor(
-            [0.7587, 0.0683, 0.8099, 0.9201, 0.5221, 0, 0.7391, 0, 0.7475, 0.7291]
-        ).to(torch_device)
-
-        predicted_matches_values = outputs.matches[0, 0, :10]
-        predicted_matching_scores_values = outputs.matching_scores[0, 0, :10]
-
         self.assertTrue(torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-4))
         self.assertTrue(torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4))
 
-        expected_number_of_matches = 195
-        predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
         self.assertEqual(predicted_number_of_matches, expected_number_of_matches)

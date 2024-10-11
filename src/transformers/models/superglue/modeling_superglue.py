@@ -33,136 +33,18 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
 
-def concat_ragged_pairs(
-    inconsistent_tensor0: Tuple[torch.Tensor], inconsistent_tensor1: Tuple[torch.Tensor]
-) -> Tuple[torch.Tensor]:
+def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
     """
-    Concatenate two tuples of tensors with inconsistent dimensions pairwise. We assume that each tuple has the same
-    number of tensors and and the tensors are at least 3D. These tensors can be anything but this function is mainly
-    used to concatenate hidden states and attention probabilities tensors of a keypoint matching model. The
-    inconsistency comes from the dimension containing the number of keypoints.
-
-    If the pair of tensors are hidden states, they are assumed to be of shape `(batch_size, num_keypoints0,
-    num_channels)` and `(batch_size, num_keypoints1, num_channels)` and the output will then be of the form:
-    `(2 * batch_size, max(num_keypoints0, num_keypoints1), num_channels)`
-    If the pair of tensors are attention probabilities, they are assumed to be of shape `(batch_size, num_heads,
-    num_keypoints0, num_keypoints0)` and `(batch_size, num_heads, num_keypoints1, num_keypoints1)` and the output will
-    then be of the form:
-    `(2 * batch_size, num_heads, max(num_keypoints0, num_keypoints1), max(num_keypoints0, num_keypoints1))`
-
-    For `inconsistent_tensors0 = (tensor0_1, tensor0_1, ..., tensor0_N)` and `inconsistent_tensors1 = (tensor1_0,
-    tensor1_1, ..., tensor1_N)`, the output will be `(concat(tensor0_0, tensor1_0), concat(tensor0_1, tensor1_1), ...,
-    concat(tensor0_N, tensor1_N))`. The concatenation is done by padding the tensors from the tuple with the lower
-    number of keypoints with zeros.
+    Concatenate two tuples of tensors pairwise
 
     Args:
-        inconsistent_tensor0 (`Tuple[torch.Tensor]` of shape `(batch_size, num_keypoints0, num_channels)` or
-        `torch.Tensor` of shape `(batch_size, num_heads, num_keypoints0, num_keypoints0)`): Tuple of tensors with
-        inconsistent dimensions.
-        inconsistent_tensor1 (`Tuple[torch.Tensor]` of shape `(batch_size, num_keypoints1, num_channels)` or
-        `torch.Tensor` of shape `(batch_size, num_heads, num_keypoints1, num_keypoints1)`): Tuple of tensors with
-        inconsistent dimensions.
+        tensor_tuple0 (`Tuple[torch.Tensor]`): Tuple of tensors.
+        tensor_tuple1 (`Tuple[torch.Tensor]`): Tuple of tensors.
 
     Returns:
-        consistent_tensors (`Tuple[torch.Tensor]` of shape `(2 * batch_size, max(num_keypoints0, num_keypoints1),
-        num_channels)` or `Tuple[torch.Tensor]` of shape `(2 * batch_size, num_heads,
-        max(num_keypoints0, num_keypoints1) ,max(num_keypoints0, num_keypoints1))`):
-        Tuple of zero padded tensors with consistent dimensions.
+        (`Tuple[torch.Tensor]`): Tuple of concatenated tensors.
     """
-    if len(inconsistent_tensor0) != len(inconsistent_tensor1):
-        raise ValueError("The two tuples must contain the same number of tensors.")
-    if len(inconsistent_tensor0[0].shape) < 3:
-        raise ValueError("The tensors must be at least 3D.")
-    consistent_tensors = ()
-    for tensor0, tensor1 in zip(inconsistent_tensor0, inconsistent_tensor1):
-        if tensor0.shape != tensor1.shape:
-            squeeze_tensors = len(tensor0.shape) == 3 and len(tensor1.shape) == 3
-            if squeeze_tensors:
-                tensor0 = tensor0[..., None]
-                tensor1 = tensor1[..., None]
-            # max_dim1 = num_heads if tensor is attention probabilities else num_keypoints
-            max_dim1 = max(tensor0.shape[1], tensor1.shape[1])
-            # max_dim2 = max_dim3 = num_keypoints if tensor is attention probabilities else num_channels
-            max_dim2 = max(tensor0.shape[2], tensor1.shape[2])
-            # max_dim3 = num_keypoints if tensor is attention probabilities else 1
-            max_dim3 = max(tensor0.shape[3], tensor1.shape[3])
-            consistent_tensor = torch.zeros(2, max_dim1, max_dim2, max_dim3, device=tensor0.device)
-            consistent_tensor[0, : tensor0.shape[1], : tensor0.shape[2], : tensor0.shape[3]] = tensor0
-            consistent_tensor[1, : tensor1.shape[1], : tensor1.shape[2], : tensor1.shape[3]] = tensor1
-            if squeeze_tensors:
-                consistent_tensor = consistent_tensor.squeeze(-1)
-            consistent_tensors = consistent_tensors + (consistent_tensor,)
-        else:
-            consistent_tensors = consistent_tensors + (torch.cat([tensor0, tensor1]),)
-    return consistent_tensors
-
-
-def stack_ragged_tensor_list(tensor_list: List[torch.Tensor]) -> torch.Tensor:
-    """
-    Stack a list of tensors with inconsistent dimensions. We assume that each tensor is at least 3D. The tensors can be
-    anything but this function is mainly used to stack hidden states tensors of a keypoint matching model. The
-    inconsistency comes from the dimension containing the number of keypoints.
-
-    If the tensors are hidden states, they are assumed to be of shape `(batch_size, num_keypoints0, num_channels),
-    (batch_size, num_keypoints1, num_channels), ..., (batch_size, num_keypointsN, num_channels)` and the output will
-    then be of the form: `(N, batch_size, max(num_keypoints0, num_keypoints1, ..., num_keypointsN), num_channels)`.
-    If the tensors are attention probabilities, they are assumed to be of shape `(batch_size, num_heads, num_keypoints0,
-    num_keypoints0), (batch_size, num_heads, num_keypoints1, num_keypoints1), ..., (batch_size, num_heads,
-    num_keypointsN, num_keypointsN)` and the output will then be of the form: `(N, batch_size, num_heads,
-    max(num_keypoints0, num_keypoints1, ..., num_keypointsN), max(num_keypoints0, num_keypoints1, ..., num_keypointsN))`.
-
-    For `tensor_list = [tensor0, tensor1, ..., tensorN]` and `max_number_of_keypoints = max(num_keypoints0,
-    num_keypoints1, ..., num_keypointsN)`, the output will be a tensor of shape `(N, batch_size,
-    max_number_of_keypoints, num_channels)`  or `(N, batch_size, num_heads,max_number_of_keypoints,
-    max_number_of_keypoints)`. The stacking is done by padding the tensors with the lower number of keypoints with
-    zeros.
-
-
-    Args:
-        tensor_list (`List[torch.Tensor]` of shape `(batch_size, num_keypoints, num_channels)` or `List[torch.Tensor]`
-        of shape `(batch_size, num_heads, num_keypoints, num_keypoints)`): List of tensors with inconsistent dimensions.
-
-    Returns:
-        (`torch.Tensor` of shape `(N, batch_size, max(num_keypoints0, num_keypoints1, ..., num_keypointsN),
-        num_channels)` or `torch.Tensor` of shape `(N, batch_size, num_heads, max(num_keypoints0, num_keypoints1, ...,
-        num_keypointsN), max(num_keypoints0, num_keypoints1, ..., num_keypointsN))`): Stacked tensors with consistent
-        dimensions.
-    """
-    current_shape = tensor_list[0].shape
-    all_same_shape = all(tensor.shape == current_shape for tensor in tensor_list)
-    if all_same_shape:
-        return torch.stack(tensor_list, dim=0)
-
-    squeeze_tensors = len(tensor_list[0].shape) == 3
-    if squeeze_tensors:
-        tensor_list = [tensor[..., None] for tensor in tensor_list]
-
-    max_dim1 = max(tensor.shape[1] for tensor in tensor_list)
-    max_dim2 = max(tensor.shape[2] for tensor in tensor_list)
-    max_dim3 = max(tensor.shape[3] for tensor in tensor_list)
-    stacked_tensors = torch.zeros(len(tensor_list), 2, max_dim1, max_dim2, max_dim3, device=tensor_list[0].device)
-    for i, tensor in enumerate(tensor_list):
-        stacked_tensors[i, :, : tensor.shape[1], : tensor.shape[2], : tensor.shape[3]] = tensor
-    if squeeze_tensors:
-        stacked_tensors = stacked_tensors.squeeze(-1)
-    return stacked_tensors
-
-
-def batch_ragged_tensor_list(tensor_list: List[Tuple[torch.Tensor]]) -> List[torch.Tensor]:
-    """
-    Batch a list of tuples of tensors with inconsistent dimensions.
-    For a list of N tuples of T tensors : `[(tensor0_0, tensor0_1, ..., tensor0_T), (tensor1_0, tensor1_1, ...,
-    tensor1_T), ..., (tensorN_0, tensorN_1, ..., tensorN_T)]`, the output will be a list of T stacked tensors:
-    `[stack(tensor0_0, tensor1_0, ..., tensorN_0), stack(tensor0_1, tensor1_1, ..., tensorN_1), ..., stack(tensor0_T,
-    tensor1_T, ..., tensorN_T)]`.
-
-    Args:
-        tensor_list (`List[Tuple[torch.Tensor]]`): List of tuples of tensors with inconsistent dimensions.
-
-    Returns: (`List[torch.Tensor]`): List of tensors with consistent dimensions.
-    """
-    list_of_tuples = list(zip(*map(list, tensor_list)))
-    return [stack_ragged_tensor_list(element) for element in list_of_tuples]
+    return tuple([torch.cat([tensor0, tensor1]) for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1)])
 
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -170,7 +52,7 @@ def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> tor
     Normalize keypoints locations based on image image_shape
 
     Args:
-        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`): Keypoints locations.
+        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`): Keypoints locations in (x, y) format.
         height (`int`): Image height.
         width (`int`): Image width.
     Returns:
@@ -276,14 +158,13 @@ class KeypointMatchingOutput(ModelOutput):
             Scores of predicted matches.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Absolute (x, y) coordinates of predicted keypoints in a given image.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
-        when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*:
             Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
-            num_keypoints)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when
-        `config.output_attentions=True`):
+            num_keypoints)`, returned when `output_hidden_states=True` is passed or when
+            `config.output_hidden_states=True`)
+        attentions (`tuple(torch.FloatTensor)`, *optional*:
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
-            num_keypoints)`.
+            num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -303,6 +184,7 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         for i in range(1, num_layers):
             layers.append(nn.Linear(channels[i - 1], channels[i]))
             if i < (num_layers - 1):
+                layers.append(nn.BatchNorm1d(channels[i]))
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
 
@@ -311,7 +193,11 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         for layer in self.layers:
+            if isinstance(layer, nn.BatchNorm1d):
+                hidden_state = hidden_state.transpose(-1, -2)
             hidden_state = layer(hidden_state)
+            if isinstance(layer, nn.BatchNorm1d):
+                hidden_state = hidden_state.transpose(-1, -2)
             if output_hidden_states and isinstance(layer, nn.Linear):
                 all_hidden_states = all_hidden_states + (hidden_state,)
         return hidden_state, all_hidden_states
@@ -344,25 +230,34 @@ class SuperGlueMultiHeadAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = feature_dim // self.num_heads
 
-        self.query = nn.Linear(feature_dim, feature_dim)
-        self.key = nn.Linear(feature_dim, feature_dim)
-        self.value = nn.Linear(feature_dim, feature_dim)
-        self.merge = nn.Linear(feature_dim, feature_dim)
+        self.q_proj = nn.Linear(feature_dim, feature_dim)
+        self.k_proj = nn.Linear(feature_dim, feature_dim)
+        self.v_proj = nn.Linear(feature_dim, feature_dim)
+        self.out_proj = nn.Linear(feature_dim, feature_dim)
 
     def forward(
-        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, output_attentions: bool = False
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: torch.Tensor,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         batch_dim, seq_len, _ = query.size()
 
-        query = self.query(query).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        key = self.key(key).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value = self.value(value).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query = self.q_proj(query).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key = self.k_proj(key).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value = self.v_proj(value).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         scores = torch.matmul(query, key.transpose(-2, -1)) / (self.head_dim**0.5)
-        attention_probs = torch.nn.functional.softmax(scores, dim=-1)
+        if mask is not None:
+            mask = mask.unsqueeze(1).unsqueeze(1)
+            scores = scores.masked_fill(mask == 0, -1e9)
+
+        attention_probs = torch.nn.functional.softmax(scores, dim=-1, dtype=torch.float32)
         output = torch.matmul(attention_probs, value)
         output = output.transpose(1, 2).contiguous().view(batch_dim, seq_len, -1)
-        output = self.merge(output)
+        output = self.out_proj(output)
 
         output = (output, attention_probs) if output_attentions else (output,)
 
@@ -379,16 +274,17 @@ class SuperGlueAttentionalPropagation(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        descriptors: torch.Tensor,
         source: torch.Tensor,
+        mask: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
-        attention_outputs = self.attention(x, source, source, output_attentions=output_attentions)
+        attention_outputs = self.attention(descriptors, source, source, mask, output_attentions=output_attentions)
         output = attention_outputs[0]
         attention = attention_outputs[1:]
 
-        output = torch.cat([x, output], dim=2)
+        output = torch.cat([descriptors, output], dim=2)
         layer_outputs = self.mlp(output, output_hidden_states=output_hidden_states)
 
         last_hidden_state = layer_outputs[0]
@@ -406,8 +302,8 @@ class SuperGlueAttentionalGNN(nn.Module):
 
     def forward(
         self,
-        descriptors0: torch.Tensor,
-        descriptors1: torch.Tensor,
+        descriptors: torch.Tensor,
+        mask: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple], Optional[Tuple]]:
@@ -415,35 +311,47 @@ class SuperGlueAttentionalGNN(nn.Module):
         all_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            new_hidden_state = concat_ragged_pairs((descriptors0,), (descriptors1,))
-            all_hidden_states = all_hidden_states + new_hidden_state
+            batch_size, _, num_keypoints, _ = descriptors.shape
+            all_hidden_states = all_hidden_states + (
+                descriptors.reshape(batch_size * 2, num_keypoints, self.descriptor_dim),
+            )
 
         for gnn_layer, layer_type in zip(self.layers, self.layers_types):
             if layer_type == "cross":
-                source0, source1 = descriptors1, descriptors0
+                source0, source1 = descriptors[:, 1], descriptors[:, 0]
+                mask0, mask1 = mask[:, 1], mask[:, 0]
             elif layer_type == "self":
-                source0, source1 = descriptors0, descriptors1
+                source0, source1 = descriptors[:, 0], descriptors[:, 1]
+                mask0, mask1 = mask[:, 0], mask[:, 1]
             else:
                 raise ValueError(f"Unrecognized layer type {layer_type}")
 
             gnn_outputs0 = gnn_layer(
-                descriptors0, source0, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+                descriptors[:, 0],
+                source0,
+                mask0,
+                output_hidden_states=output_hidden_states,
+                output_attentions=output_attentions,
             )
             gnn_outputs1 = gnn_layer(
-                descriptors1, source1, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+                descriptors[:, 1],
+                source1,
+                mask1,
+                output_hidden_states=output_hidden_states,
+                output_attentions=output_attentions,
             )
 
             delta0 = gnn_outputs0[0]
             delta1 = gnn_outputs1[0]
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + concat_ragged_pairs(gnn_outputs0[1], gnn_outputs1[1])
+                all_hidden_states = all_hidden_states + concat_pairs(gnn_outputs0[1], gnn_outputs1[1])
             if output_attentions:
-                all_attentions = all_attentions + concat_ragged_pairs(gnn_outputs0[2], gnn_outputs1[2])
+                all_attentions = all_attentions + concat_pairs(gnn_outputs0[2], gnn_outputs1[2])
 
-            descriptors0 = descriptors0 + delta0
-            descriptors1 = descriptors1 + delta1
-        return descriptors0, descriptors1, all_hidden_states, all_attentions
+            descriptors[:, 0] = descriptors[:, 0] + delta0
+            descriptors[:, 1] = descriptors[:, 1] + delta1
+        return descriptors, all_hidden_states, all_attentions
 
 
 class SuperGlueFinalProjection(nn.Module):
@@ -465,9 +373,8 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config_class = SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = False
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.Conv1d]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -544,34 +451,26 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         self.post_init()
 
-    def match_image_pair(
+    def _match_image_pair(
         self,
-        image0_keypoints: torch.Tensor,
-        image0_descriptors: torch.Tensor,
-        image0_scores: torch.Tensor,
-        image1_keypoints: torch.Tensor,
-        image1_descriptors: torch.Tensor,
-        image1_scores: torch.Tensor,
+        keypoints: torch.Tensor,
+        descriptors: torch.Tensor,
+        scores: torch.Tensor,
         height: int,
         width: int,
+        mask: torch.Tensor = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
         """
         Perform keypoint matching between two images.
         Args:
-            image0_keypoints (`torch.Tensor` of shape `(1, num_keypoints, 2)`):
-                Keypoints detected in the first image.
-            image0_descriptors (`torch.Tensor` of shape `(1, descriptor_dim, num_keypoints)`):
-                Descriptors of the keypoints detected in the first image.
-            image0_scores (`torch.Tensor` of shape `(1, num_keypoints)`):
-                Confidence scores of the keypoints detected in the first image.
-            image1_keypoints (`torch.Tensor` of shape `(1, num_keypoints, 2)`):
-                Keypoints detected in the second image.
-            image1_descriptors (`torch.Tensor` of shape `(1, descriptor_dim, num_keypoints)`):
-                Descriptors of the keypoints detected in the second image.
-            image1_scores (`torch.Tensor` of shape `(1, num_keypoints)`):
-                Confidence scores of the keypoints detected in the second image.
+            keypoints (`torch.Tensor` of shape `(batch_size, 2, num_keypoints, 2)`):
+                Keypoints detected in the pair of image.
+            descriptors (`torch.Tensor` of shape `(batch_size, 2, descriptor_dim, num_keypoints)`):
+                Descriptors of the keypoints detected in the image pair.
+            scores (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
+                Confidence scores of the keypoints detected in the image pair.
             height (`int`): Image height.
             width (`int`): Image width.
             output_attentions (`bool`, *optional*):
@@ -579,14 +478,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. Default to `config.output_hidden_states`.
         Returns:
-            matches0 (`torch.Tensor` of shape `(1, num_keypoints)`):
-                For each keypoint in image0, the index of the keypoint in image1 that was matched with.
-            matches1 (`torch.Tensor` of shape `(1, num_keypoints)`):
-                For each keypoint in image1, the index of the keypoint in image0 that was matched with.
-            matching_scores0 (`torch.Tensor` of shape `(1, num_keypoints)`):
-                Scores of predicted matches from the first image to the second image
-            matching_scores1 (`torch.Tensor` of shape `(1, num_keypoints)`):
-                Scores of predicted matches from the second image to the first image
+            matches (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
+                For each image pair, for each keypoint in image0, the index of the keypoint in image1 that was matched
+                with. And for each keypoint in image1, the index of the keypoint in image0 that was matched with.
+            matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
+                Scores of predicted matches for each image pair
             all_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
                 Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
                 num_channels)`.
@@ -597,83 +493,97 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
-            shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
+        if keypoints.shape[2] == 0:  # no keypoints
+            shape = keypoints.shape[:-1]
             return (
-                image0_keypoints.new_full(shape0, -1, dtype=torch.int),
-                image1_keypoints.new_full(shape1, -1, dtype=torch.int),
-                image0_keypoints.new_zeros(shape0),
-                image1_keypoints.new_zeros(shape1),
+                keypoints.new_full(shape, -1, dtype=torch.int),
+                keypoints.new_zeros(shape),
                 all_hidden_states,
                 all_attentions,
             )
 
+        batch_size, _, num_keypoints, _ = keypoints.shape
+        # (batch_size, 2, num_keypoints, 2) -> (batch_size * 2, num_keypoints, 2)
+        keypoints = keypoints.reshape(batch_size * 2, num_keypoints, 2)
+        scores = scores.reshape(batch_size * 2, num_keypoints)
+
         # Keypoint normalization
-        keypoints0 = normalize_keypoints(image0_keypoints, height, width)
-        keypoints1 = normalize_keypoints(image1_keypoints, height, width)
+        keypoints = normalize_keypoints(keypoints, height, width)
 
-        encoded_keypoints0 = self.keypoint_encoder(
-            keypoints0, image0_scores, output_hidden_states=output_hidden_states
-        )
-        encoded_keypoints1 = self.keypoint_encoder(
-            keypoints1, image1_scores, output_hidden_states=output_hidden_states
-        )
+        encoded_keypoints = self.keypoint_encoder(keypoints, scores, output_hidden_states=output_hidden_states)
 
-        last_hidden_state0 = encoded_keypoints0[0]
-        last_hidden_state1 = encoded_keypoints1[0]
+        last_hidden_state = encoded_keypoints[0]
+
+        # (batch_size * 2, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
+        last_hidden_state = last_hidden_state.reshape(batch_size, 2, num_keypoints, self.config.descriptor_dim)
 
         # Keypoint MLP encoder.
-        descriptors0 = image0_descriptors + last_hidden_state0
-        descriptors1 = image1_descriptors + last_hidden_state1
+        descriptors = descriptors + last_hidden_state
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
-            descriptors0,
-            descriptors1,
+            descriptors,
+            mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
-        descriptors0, descriptors1 = gnn_outputs[:2]
+        descriptors = gnn_outputs[0]
+
+        # (batch_size, 2, num_keypoints, descriptor_dim) -> (batch_size * 2, num_keypoints, descriptor_dim)
+        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.descriptor_dim)
 
         # Final MLP projection.
-        projected_descriptors0 = self.final_projection(descriptors0)
-        projected_descriptors1 = self.final_projection(descriptors1)
+        projected_descriptors = self.final_projection(descriptors)
+
+        # (batch_size * 2, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
+        final_descriptors = projected_descriptors.reshape(batch_size, 2, num_keypoints, self.config.descriptor_dim)
+        final_descriptors0 = final_descriptors[:, 0]
+        final_descriptors1 = final_descriptors[:, 1]
 
         # Compute matching descriptor distance.
-        scores = torch.einsum("bnd,bmd->bnm", projected_descriptors0, projected_descriptors1)
+        scores = torch.einsum("bnd,bmd->bnm", final_descriptors0, final_descriptors1)
         scores = scores / self.config.descriptor_dim**0.5
+
+        if mask is not None:
+            mask0 = mask[:, 0].unsqueeze(-1).expand(-1, -1, num_keypoints)
+            scores = scores.masked_fill(mask0 == 0, -1e9)
 
         # Run the optimal transport.
         scores = log_optimal_transport(scores, self.bin_score, iterations=self.config.sinkhorn_iterations)
 
         # Get the matches with score above "match_threshold".
-        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
-        indices0, indices1 = max0.indices, max1.indices
+        max0 = scores[:, :-1, :-1].max(2)
+        max1 = scores[:, :-1, :-1].max(1)
+        indices0 = max0.indices
+        indices1 = max1.indices
         mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
         zero = scores.new_tensor(0)
         matching_scores0 = torch.where(mutual0, max0.values.exp(), zero)
+        matching_scores0 = torch.where(matching_scores0 > self.config.matching_threshold, matching_scores0, zero)
         matching_scores1 = torch.where(mutual1, matching_scores0.gather(1, indices1), zero)
-        valid0 = mutual0 & (matching_scores0 > self.config.matching_threshold)
+        valid0 = mutual0 & (matching_scores0 > zero)
         valid1 = mutual1 & valid0.gather(1, indices1)
         matches0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
+        matches = torch.cat([matches0, matches1]).reshape(batch_size, 2, -1)
+        matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(batch_size, 2, -1)
+
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + concat_ragged_pairs(encoded_keypoints0[1], encoded_keypoints1[1])
-            all_hidden_states = all_hidden_states + gnn_outputs[2]
-            all_hidden_states = all_hidden_states + concat_ragged_pairs(
-                (projected_descriptors0,), (projected_descriptors1,)
+            all_hidden_states = all_hidden_states + (encoded_keypoints[1])
+            all_hidden_states = all_hidden_states + gnn_outputs[1]
+            all_hidden_states = all_hidden_states + (projected_descriptors,)
+            all_hidden_states = tuple(
+                x.reshape(batch_size, 2, num_keypoints, -1).transpose(-1, -2) for x in all_hidden_states
             )
-            all_hidden_states = tuple(x.transpose(-1, -2) for x in all_hidden_states)
         if output_attentions:
-            all_attentions = all_attentions + gnn_outputs[3]
+            all_attentions = all_attentions + gnn_outputs[2]
+            all_attentions = tuple(x.reshape(batch_size, 2, -1, num_keypoints, num_keypoints) for x in all_attentions)
 
         return (
-            matches0,
-            matches1,
-            matching_scores0,
-            matching_scores1,
+            matches,
+            matching_scores,
             all_hidden_states,
             all_attentions,
         )
@@ -705,8 +615,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
         >>> model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
 
-        >>> inputs = processor(images, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        >>>     inputs = processor(images, return_tensors="pt")
+        >>>     outputs = model(**inputs)
         ```"""
         loss = None
         if labels is not None:
@@ -723,71 +634,44 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         batch_size, _, channels, height, width = pixel_values.shape
 
-        list_hidden_states = []
-        list_attentions = []
-
         list_keypoint_detection = [self.keypoint_detector(image_pair) for image_pair in pixel_values]
 
         max_keypoints = max([keypoint_detection[0].shape[1] for keypoint_detection in list_keypoint_detection])
-
-        matches = torch.full((batch_size, 2, max_keypoints), -1, device=pixel_values.device, dtype=torch.int)
-        matching_scores = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device)
-        matches_mask = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device, dtype=torch.int)
         keypoints = torch.zeros((batch_size, 2, max_keypoints, 2), device=pixel_values.device)
+        scores = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device)
+        descriptors = torch.zeros(
+            (batch_size, 2, max_keypoints, self.config.descriptor_dim), device=pixel_values.device
+        )
+        mask = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device, dtype=torch.int)
 
         for i, keypoint_detection_output in enumerate(list_keypoint_detection):
-            _keypoints, scores, descriptors, mask = keypoint_detection_output[:4]
-            image0_indices, image1_indices = mask != 0
-            image0_keypoints = _keypoints[0][image0_indices][None]
-            image0_descriptors = descriptors[0][image0_indices][None]
-            image0_scores = scores[0][image0_indices][None]
-            image1_keypoints = _keypoints[1][image1_indices][None]
-            image1_descriptors = descriptors[1][image1_indices][None]
-            image1_scores = scores[1][image1_indices][None]
-
-            match_image_output = self.match_image_pair(
-                image0_keypoints,
-                image0_descriptors,
-                image0_scores,
-                image1_keypoints,
-                image1_descriptors,
-                image1_scores,
-                height,
-                width,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-
-            _matches0, _matches1, _matching_scores0, _matching_scores1, _hidden_states, _attentions = (
-                match_image_output
-            )
-            num_matches0, num_matches1 = _matches0.shape[1], _matches1.shape[1]
-            matches[i, 0, :num_matches0] = _matches0
-            matches[i, 1, :num_matches1] = _matches1
-            matching_scores[i, 0, :num_matches0] = _matching_scores0
-            matching_scores[i, 1, :num_matches1] = _matching_scores1
-            matches_mask[i, 0, :num_matches0] = 1
-            matches_mask[i, 1, :num_matches1] = 1
+            _keypoints, _scores, _descriptors, _mask = keypoint_detection_output[:4]
             keypoints[i, :, : _keypoints.shape[1], :] = _keypoints
-            list_hidden_states.append(_hidden_states)
-            list_attentions.append(_attentions)
+            scores[i, :, : _scores.shape[1]] = _scores
+            descriptors[i, :, : _descriptors.shape[1], :] = _descriptors
+            mask[i, :, : _mask.shape[1]] = _mask
 
-        hidden_states = attentions = None
-        if output_hidden_states:
-            hidden_states = batch_ragged_tensor_list(list_hidden_states)
-        if output_attentions:
-            attentions = batch_ragged_tensor_list(list_attentions)
+        matches, matching_scores, hidden_states, attentions = self._match_image_pair(
+            keypoints,
+            descriptors,
+            scores,
+            height,
+            width,
+            mask=mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
 
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, matches_mask, matches, matching_scores, keypoints, hidden_states, attentions]
+                for v in [loss, mask, matches, matching_scores, keypoints, hidden_states, attentions]
                 if v is not None
             )
 
         return KeypointMatchingOutput(
             loss=loss,
-            mask=matches_mask,
+            mask=mask,
             matches=matches,
             matching_scores=matching_scores,
             keypoints=keypoints,
