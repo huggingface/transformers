@@ -464,7 +464,7 @@ class SwitchTransformersAttention(nn.Module):
         if cache_position is None:
             context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
         else:
-            context_position = cache_position[:, None]
+            context_position = cache_position[:, None].to(device)
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
