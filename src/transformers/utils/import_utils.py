@@ -1751,9 +1751,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._modules:
-            value = self._get_module(name)
-        elif name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend.keys():
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -1769,6 +1767,8 @@ class _LazyModule(ModuleType):
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
+        elif name in self._modules:
+            value = self._get_module(name)
         else:
             raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
