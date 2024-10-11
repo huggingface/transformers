@@ -1461,7 +1461,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         assert (
             chunked_output.keys() == non_chunked_output.keys()
         ), "The output structure should be the same for chunked vs non-chunked versions of asr pipelines."
-        
+
         # Make sure that the output structure follows the expected inference type.
         compare_pipeline_output_to_hub_spec(chunked_output, AutomaticSpeechRecognitionOutput)
 
