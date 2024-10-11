@@ -474,6 +474,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
             cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
             cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
+            cost_matrix = torch.nan_to_num(cost_matrix, 0)
             # do the assigmented using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
