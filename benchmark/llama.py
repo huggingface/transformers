@@ -207,10 +207,12 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
+        all_generated_tokens = []
         cache_position = torch.tensor([seq_length], device=device)
         next_token_times_secs = []
         for _ in range(1, num_tokens_to_generate):
             next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+            all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
             start = perf_counter()
             logits = model(
                 next_token,
@@ -220,8 +222,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
                 use_cache=True,
             )[0]
             end = perf_counter()
-            next_token = torch.argmax(logits, dim=-1)
-            next_token_times_secs.append(end[:,-1:] - start)
+            next_token_times_secs.append(end - start)
 
             logger.info(f"completed next compile generation in: {next_token_times_secs[-1]}s")
             cache_position += 1
@@ -229,6 +230,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         time_to_third_token = next_token_times_secs[1]
         mean_time_to_next_token = mean(next_token_times_secs[2:])
 
+        logger.info(f"generated: {tokenizer.batch_decode(all_generated_tokens)}")
         ####################
         # Generate compile #
         ####################
