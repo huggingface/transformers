@@ -101,7 +101,7 @@ def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
     idx_next = multinomial_sample_one_no_sync(probs)
     return idx_next, probs
 
-def decode_one_tokens(model, cur_token, cache_position, past_key_values):
+def decode_one_token(model, cur_token, cache_position, past_key_values):
     logits = model(cur_token, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache = True)[0]
     new_token = sample(logits,temperature=0.6, top_k=5)[0]
     return new_token
@@ -217,9 +217,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         generated_ids = torch.zeros((batch_size, num_tokens_to_generate+seq_length), dtype = torch.int, device=device)
 
         generated_ids[:,:seq_length] = inputs["input_ids"]
-        decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead",fullgraph=True)
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        # TODO use  decode_one_tokens(model, input_id.clone(), cache_position) for verification
+        decode_one_token = torch.compile(decode_one_token, mode="reduce-overhead",fullgraph=True)
+        # model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
         past_key_values = StaticCache(
             model.config,
             batch_size=batch_size,
@@ -229,7 +229,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
-        next_token = decode_one_tokens(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
+        next_token = decode_one_token(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
@@ -239,7 +239,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         for _ in range(1, num_tokens_to_generate):
             all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
             start = perf_counter()
-            next_token = decode_one_tokens(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
+            next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
             end = perf_counter()
             next_token_times_secs.append(end - start)
 
@@ -266,7 +266,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
 
         # 1st call
         start = perf_counter()
-        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values)
         end = perf_counter()
         first_compile_generate_time = end - start
         logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
@@ -281,7 +281,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )
         # 2nd call
         start = perf_counter()
-        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values)
         end = perf_counter()
         second_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
@@ -297,7 +297,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
 
         # 3nd call
         start = perf_counter()
-        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values)
         end = perf_counter()
         third_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
@@ -312,7 +312,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )
         # 4th call
         start = perf_counter()
-        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values)
         end = perf_counter()
         fourth_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
