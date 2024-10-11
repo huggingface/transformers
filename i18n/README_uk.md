@@ -106,11 +106,15 @@ limitations under the License.
 - [Класифікація аудіоданих за допомогою аудіоспектрограмного трансформера](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
 У мультимодальних завданнях:
-- [Відповіді на табличні запитання за допомогою TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
-- [Візуальні відповіді на запитання за допомогою ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
-- [Zero-shot класифікація зображень за допомогою CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
-- [Відповіді на запитання по документах за допомогою LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
-- [Zero-shot класифікація відео за допомогою X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
+- [Запитання-відповіді по таблицях з TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
+- [Візуальні запитання-відповіді з ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+- [Опис зображень з LLaVa](https://huggingface.co/llava-hf/llava-1.5-7b-hf)
+- [Класифікація зображень без навчання з SigLIP](https://huggingface.co/google/siglip-so400m-patch14-384)
+- [Запитання-відповіді по документам з LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
+- [Класифікація відео без навчання з X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
+- [Об'єктне виявлення без навчання з OWLv2](https://huggingface.co/docs/transformers/en/model_doc/owlv2)
+- [Сегментація зображень без навчання з CLIPSeg](https://huggingface.co/docs/transformers/model_doc/clipseg)
+- [Автоматична генерація масок з SAM](https://huggingface.co/docs/transformers/model_doc/sam)
 
 
 ## 100 проєктів, що використовують Transformers
