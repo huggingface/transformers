@@ -2214,7 +2214,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer
-        if (input_ids == self.config.image_token_index).any():
+        if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["aspect_ratio_ids"] = aspect_ratio_ids
             model_inputs["aspect_ratio_mask"] = aspect_ratio_mask
