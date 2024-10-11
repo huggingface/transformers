@@ -222,9 +222,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             self.patterns[given_old_name] = given_new_name
 
         if self.old_name in CONFIG_MAPPING_NAMES:
-            self.default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace(
-                "Config", ""
-            )
+            self.default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace("Config", "")
             if self.default_old_name.isupper():
                 self.default_old_name = self.default_old_name.capitalize()
 
@@ -933,7 +931,6 @@ class ModularConverterTransformer(CSTTransformer):
 
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name, all_bases)
-
 
         # Now, if a class was defined without parents, we look for the name
         match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
