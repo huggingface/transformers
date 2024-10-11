@@ -228,6 +228,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen2_moe", "Qwen2MoeConfig"),
         ("qwen2_vl", "Qwen2VLConfig"),
         ("rag", "RagConfig"),
+        ("aria", "AriaConfig"),
         ("realm", "RealmConfig"),
         ("recurrent_gemma", "RecurrentGemmaConfig"),
         ("reformer", "ReformerConfig"),

@@ -573,6 +573,7 @@ class Idefics2Encoder(nn.Module):
 
 
 class Idefics2VisionTransformer(nn.Module):
+    """The Idefics2 Vision Transformer Model outputting raw image embedding."""
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         embed_dim = config.hidden_size

@@ -3592,6 +3592,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 _from_pipeline=from_pipeline,
                 **kwargs,
             )
+            print("ok2")
         else:
             # In case one passes a config to `from_pretrained` + "attn_implementation"
             # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs

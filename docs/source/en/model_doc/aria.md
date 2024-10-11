@@ -16,18 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Aria
 
-# Aria
-
-# Aria
-
-# Aria
-
-# Aria
-
-# Aria
-
-# Aria
-
 ## Overview
 
 The Aria model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.

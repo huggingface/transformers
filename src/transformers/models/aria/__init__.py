@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_aria": ["AriaConfig"],
+    "configuration_aria": ["AriaConfig", "AriaVisionConfig", "AriaLanguageConfig"],
 }
 
 
@@ -30,6 +30,9 @@ else:
     _import_structure["modeling_aria"] = [
         "AriaForConditionalGeneration",
         "AriaPreTrainedModel",
+        "AriaConfig",
+        "AriaVisionConfig",
+        "AriaLanguageConfig",
     ]
 
 
@@ -45,6 +48,9 @@ if TYPE_CHECKING:
         from .modeling_aria import (
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
+            AriaConfig,
+            AriaVisionConfig,
+            AriaModelConfig,
         )
 
 else:

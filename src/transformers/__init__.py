@@ -530,7 +530,8 @@ _import_structure = {
     ],
     "models.aria": [
         "AriaConfig",
-       
+        "AriaVisionConfig",
+        "AriaModelConfig",
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -5610,6 +5611,11 @@ if TYPE_CHECKING:
     from .models.rt_detr import (
         RTDetrConfig,
         RTDetrResNetConfig,
+    )
+    from .models.aria import (
+        AriaConfig,
+        AriaVisionConfig,
+        AriaModelConfig
     )
     from .models.rwkv import RwkvConfig
     from .models.sam import (

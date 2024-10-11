@@ -567,7 +567,7 @@ def replace_call_to_super(
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
             kwarg_name = getattr(updated_methods[name].params, "star_kwarg", None)
-            if kwarg_name and kwarg_name.name.value == "super_kwargs":
+            if kwarg_name and kwarg_name.name.value == "kwargs":
                 parent_params = {k.name.value: k for k in func.params.params}
                 parent_params.update({k.name.value: k for k in new_params.params[1:]})
                 new_params = new_params.with_changes(
@@ -598,12 +598,17 @@ def replace_call_to_super(
         if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            original_docstring = docstring_node[0].body[0].value.value
-            merged_doc = merge_docstrings(original_docstring, updated_docstring)
-            # Update the docstring in the original function
-            docstring_node = [
-                docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
-            ]
+            if len(docstring_node) == 0: # If the original docstring is empty, just create one from the updated.
+                docstring_node = [
+                    cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+                ]
+            else:
+                original_docstring = docstring_node[0].body[0].value.value
+                merged_doc = merge_docstrings(original_docstring, updated_docstring)
+                # Update the docstring in the original function
+                docstring_node = [
+                    docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
+                ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
@@ -792,13 +797,13 @@ class ModularConverterTransformer(CSTTransformer):
         self.function_call_dependency_mapping = defaultdict(lambda: set())
         self.added_dependencies = set()
 
+
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        """When visiting imports from `transformers.models.xxx` we need to:
-        1. Get the original source code
-        2. Parse it into an AST Tree
-        3. Add this import to `self.transformers_imports` as visited to not parse it twice
-        """
+        if node.module is None:
+            logger.warning(f"Debug: node.module is None.\n Full Node:{node}")
+            raise Exception(f"Trying to import from None module.\nFull Node:{node}")
         import_statement = self.python_module.code_for_node(node.module)
+        logger.info(f"Importing {import_statement}")
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", import_statement)
@@ -971,7 +976,7 @@ class ModularConverterTransformer(CSTTransformer):
                             if not calls and not is_empty_node and dependency not in all_bases:
                                 raise ValueError(
                                     f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
-                                    when you define `{class_name}`, as it is one of it's direct dependencies. Make sure
+                                    when you define `{class_name}`, as it is one of its direct dependencies. Make sure
                                     you use it in the `__init__` function."""
                                 )
                     self.inserted_deps.append(dependency)
@@ -1093,13 +1098,21 @@ class ModularConverterTransformer(CSTTransformer):
                 matching_callers = calling_entities & file_elements
                 added = self._maybe_add_function_to_body(top_level_function, body, function_node, matching_callers)
                 # If the function was added, we need to recursively add all its dependencies
+                builtin_functions = [
+                    'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'bytearray', 'bytes', 'chr',
+                    'dict', 'divmod', 'enumerate', 'filter', 'float', 'format', 'frozenset',
+                    'hash', 'hex', 'int', 'isinstance', 'issubclass', 'iter', 'len', 'list',
+                    'map', 'max', 'min', 'next', 'oct', 'ord', 'pow', 'range', 'repr',
+                    'reversed', 'round', 'set', 'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip'
+                ]
                 if added:
                     for dependency, parent in find_all_dependencies(
                         top_level_function, self.function_call_dependency_mapping
                     ):
-                        self._maybe_add_function_to_body(
-                            dependency, body, self.all_definitions[dependency], parent=parent
-                        )
+                        if dependency not in builtin_functions:
+                            self._maybe_add_function_to_body(
+                                dependency, body, self.all_definitions[dependency], parent=parent
+                            )
 
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
@@ -1138,6 +1151,7 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         wrapper = MetadataWrapper(module)
         if cst_transformers is None:
             cst_transformers = ModularConverterTransformer(module, model_name, old_model_name, new_model_name)
+        print(model_name)
         wrapper.visit(cst_transformers)
         for file, node in cst_transformers.files.items():
             if node != {}:
@@ -1180,7 +1194,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/roberta/modular_roberta.py"],
+        default=["src/transformers/models/aria/modular_aria.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
