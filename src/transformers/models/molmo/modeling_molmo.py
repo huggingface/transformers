@@ -2311,12 +2311,18 @@ class MolmoVisionEmbeddings(nn.Module):
             embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
+MOLMO_VISION_ATTENTION_CLASSES = {
+    "eager": MolmoVisionAttention,
+    "sdpa": MolmoVisionSdpaAttention,
+    "flash_attention_2": MolmoVisionFlashAttention2,
+}
+
 
 class MolmoEncoderLayer(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = MOLMO_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = MolmoMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -2557,12 +2563,12 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
         )
         self.k_proj = nn.Linear(
             2 * self.embed_dim,
-            config.num_key_value_heads * self.head_dim,
+            config.image_num_key_value_heads * self.head_dim,
             bias=True,
         )
         self.v_proj = nn.Linear(
             2 * self.embed_dim,
-            config.num_key_value_heads * self.head_dim,
+            config.image_num_key_value_heads * self.head_dim,
             bias=True,
         )
         self.out_proj = nn.Linear(
@@ -3092,6 +3098,7 @@ __all__ = [
     "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoTextAttention",
+    "MolmoVisionAttention",
     "MolmoImagePooling2d",
     "MolmoForConditionalGeneration",
 ]

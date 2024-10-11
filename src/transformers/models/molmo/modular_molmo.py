@@ -18,9 +18,9 @@ from typing import Optional
 
 import torch
 from torch import nn
-
-from transformers.models.clip.configuration_clip import CLIPVisionConfig
-
+from ...modeling_rope_utils import rope_config_validation
+from ..clip.configuration_clip import CLIPVisionConfig
+from ..qwen2.configuration_qwen2 import Qwen2Config
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -53,9 +53,107 @@ logger = logging.get_logger(__name__)
 
 
 class MolmoVisionConfig(CLIPVisionConfig):
-    pass
+    def __init__(
+        self,
+        hidden_size=1024,
+        num_attention_heads=32,
+        intermediate_size = 4096,
+        image_num_key_value_heads=16,
+        num_hidden_layers = 23,
+        num_image_positions = 577,
+        projection_dim=512,
+        num_channels=3,
+        image_size=336,
+        patch_size=14,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.image_num_key_value_heads = image_num_key_value_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.num_image_positions = num_image_positions
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
 
+class MolmoTextConfig(Qwen2Config):
+    def __init__(
+        self,
+        hidden_size = 3584,
+        num_key_value_heads = 4,
+        num_attention_heads = 28,
+        num_hidden_layers = 28,
+        head_dim = 128,
+        vocab_size = 152064,
+        additional_vocab_size = 128,
+        intermediate_size = 37888,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        use_sliding_window=False,
+        sliding_window=4096,
+        max_window_layers=28,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_key_value_heads = num_key_value_heads
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.head_dim = head_dim
+        self.vocab_size = vocab_size
+        self.additional_vocab_size = additional_vocab_size
+        self.intermediate_size = intermediate_size
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if use_sliding_window else None
+        self.max_window_layers = max_window_layers
 
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.attention_dropout = attention_dropout
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 class MolmoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
@@ -117,46 +215,36 @@ class MolmoConfig(PretrainedConfig):
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
         image_seq_length=576,
+        initializer_range=0.02,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
-
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
-            )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
+        if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. Initializing MolmoVisionConfig with default values.")
-
+            logger.info("vision_config is None. initializing the MolmoVisionConfig with default values.")
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. initializing the MolmoTextConfig with default values.")
         self.vision_config = MolmoVisionConfig(**vision_config)
+        self.text_config = MolmoTextConfig(**text_config)
+        self.initializer_range = initializer_range
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
+    @classmethod
+    def from_text_vision_configs(cls, text_config: MolmoTextConfig, vision_config: MolmoVisionConfig, **kwargs):
+        r"""
+        Instantiate a [`MolmoConfig`] (or a derived class) from molmo text model configuration and molmo vision model
+        configuration.
 
-        self.text_config = text_config
+        Returns:
+            [`MolmoConfig`]: An instance of a configuration object
+        """
 
-        super().__init__(**kwargs)
-
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 # text modules inherited from Qwen2
 
@@ -271,20 +359,18 @@ MOLMO_VISION_ATTENTION_CLASSES = {
 }
 
 
-# This needs to be in caps for some reason in the modular renaming
 class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
 
 
-# this class is not needed, just here while renaming issue persists
 class MolmoEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
+        self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
 
 
-# this class is not needed, just here while renaming issue persists
 class MolmoEncoder(CLIPEncoder):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -329,12 +415,12 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
         )
         self.k_proj = nn.Linear(
             2 * self.embed_dim,
-            config.num_key_value_heads * self.head_dim,
+            config.image_num_key_value_heads * self.head_dim,
             bias=True,
         )
         self.v_proj = nn.Linear(
             2 * self.embed_dim,
-            config.num_key_value_heads * self.head_dim,
+            config.image_num_key_value_heads * self.head_dim,
             bias=True,
         )
         self.out_proj = nn.Linear(
@@ -453,6 +539,7 @@ __all__ = [
     "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoTextAttention",
+    "MolmoVisionAttention",
     "MolmoImagePooling2d",
     "MolmoForConditionalGeneration",
 ]

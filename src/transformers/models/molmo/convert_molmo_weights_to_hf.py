@@ -172,7 +172,7 @@ def write_model(
 
     # save config
     # TODO adapt this depending on model variants
-    config = MolmoConfig(text_config=text_config, vision_config=vision_config)
+    config = MolmoConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
 
     config.initializer_range = 0.02
 
