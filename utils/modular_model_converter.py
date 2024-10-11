@@ -18,7 +18,7 @@ import importlib
 import os
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 import libcst as cst
 from check_copies import run_ruff
@@ -623,7 +623,7 @@ def get_new_part(class_name, base_class):
     return snake_case
 
 
-def find_all_dependencies(function: str, dependency_mapping: dict[str, set]):
+def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
     """Return all the dependencies of the given top-level function. Given the following structure in the `modular_xxx.py` file:
     ```
     def foo1():
@@ -1001,8 +1001,8 @@ class ModularConverterTransformer(CSTTransformer):
         top_level_function: str,
         body: dict,
         function_node: cst.FunctionDef,
-        matching_callers: set | None = None,
-        parent: str | None = None,
+        matching_callers: Optional[set] = None,
+        parent: Optional[str] = None,
     ) -> bool:
         """Check if the `top_level_function` should be added to the body (i.e. it is not already present, and `matching_callers`
         is not empy, or `parent`is provided). If it should be added, do it (in the correct location, just before its caller) and return
@@ -1088,8 +1088,9 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
             if node != {}:
                 # Get relative path starting from src/transformers/
                 relative_path = re.search(
-                    f"{os.sep}(src{os.sep}transformers{os.sep}.*)", os.path.abspath(modular_file)
+                    rf"(src{os.sep}transformers{os.sep}.*|examples{os.sep}.*)", os.path.abspath(modular_file)
                 ).group(1)
+
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
                 )
