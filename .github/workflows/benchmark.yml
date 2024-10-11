@@ -19,7 +19,7 @@ jobs:
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
-      image: huggingface/transformers-all-latest-gpu
+      image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host
     steps:
       - name: Get repo
