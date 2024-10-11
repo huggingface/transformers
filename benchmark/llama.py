@@ -6,13 +6,16 @@ import sys
 from statistics import mean
 from threading import Event, Thread
 from time import perf_counter, sleep
-
+from typing import Optional
 import gpustat
 import psutil
 import psycopg2
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+from psycopg2.extras import Json
+from psycopg2.extensions import register_adapter
+
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
@@ -27,7 +30,7 @@ logger.addHandler(handler)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
-
+register_adapter(dict, Json)
 
 def parse_arguments():
     """
@@ -77,6 +80,31 @@ def collect_metrics(benchmark_id, continue_metric_collection):
         conn.commit()
     conn.close()
 
+
+# Copied from the gpt-fast repo
+def multinomial_sample_one_no_sync(probs_sort): # Does multinomial sampling without a cuda synchronization
+    q = torch.empty_like(probs_sort).exponential_(1)
+    return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
+
+def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+    logits = logits / max(temperature, 1e-5)
+
+    if top_k is not None:
+        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+        pivot = v.select(-1, -1).unsqueeze(-1)
+        logits = torch.where(logits < pivot, -float("Inf"), logits)
+    probs = torch.nn.functional.softmax(logits, dim=-1)
+    return probs
+
+def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+    probs = logits_to_probs(logits[:, -1], temperature, top_k)
+    idx_next = multinomial_sample_one_no_sync(probs)
+    return idx_next, probs
+
+def decode_one_tokens(model, cur_token, cache_position, past_key_values):
+    logits = model(cur_token, cache_position=cache_position, past_key_values=past_key_values, return_dict=False, use_cache = True)[0]
+    new_token = sample(logits,temperature=0.6, top_k=5)[0]
+    return new_token
 
 def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
     continue_metric_collection = Event()
@@ -186,8 +214,12 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # `torch.compile(model, ...)` is not recommended as you compile callbacks
         # and full generate. We recommend compiling only the forward for now.
         # "reduce-overhead" will use cudagraphs.
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = torch.zeros((batch_size, num_tokens_to_generate+seq_length), dtype = torch.int, device=device)
 
+        generated_ids[:,:seq_length] = inputs["input_ids"]
+        decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead",fullgraph=True)
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        # TODO use  decode_one_tokens(model, input_id.clone(), cache_position) for verification
         past_key_values = StaticCache(
             model.config,
             batch_size=batch_size,
@@ -197,13 +229,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
-        logits = model(
-            **inputs,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            return_dict=False,
-            use_cache=True,
-        )[0]
+        next_token = decode_one_tokens(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
@@ -211,16 +237,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         cache_position = torch.tensor([seq_length], device=device)
         next_token_times_secs = []
         for _ in range(1, num_tokens_to_generate):
-            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
             all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
             start = perf_counter()
-            logits = model(
-                next_token,
-                position_ids=cache_position.unsqueeze(-1),
-                cache_position=cache_position,
-                return_dict=False,
-                use_cache=True,
-            )[0]
+            next_token = decode_one_tokens(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
             end = perf_counter()
             next_token_times_secs.append(end - start)
 
@@ -299,6 +318,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
+    
     cur.execute(
         """
         INSERT INTO model_measurements (
@@ -308,7 +328,6 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         """,
         (
             benchmark_id,
-            json.dumps(
                 {
                     "model_load_time": model_load_time,
                     "first_eager_forward_pass_time_secs": first_eager_fwd_pass_time,
@@ -324,7 +343,6 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
                     "third_compile_generate_time_secs": third_compile_generate_time,
                     "fourth_compile_generate_time_secs": fourth_compile_generate_time,
                 }
-            ),
         ),
     )
     conn.commit()
