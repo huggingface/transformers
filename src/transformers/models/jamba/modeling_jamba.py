@@ -418,34 +418,7 @@ class JambaFlashAttention2(JambaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = cache_position[-1]
-
         if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = cache_position[0] > 0
-            if (
-                getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
 
         # repeat k/v heads if n_kv_heads < n_heads
