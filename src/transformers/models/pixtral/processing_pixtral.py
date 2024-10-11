@@ -16,16 +16,28 @@
 Processor class for Pixtral.
 """
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
+
+
+class PixtralProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "images_kwargs": {},
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
@@ -78,10 +90,10 @@ class BatchMixFeature(BatchFeature):
                 new_data[k] = [
                     element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
                 ]
-            elif torch.is_floating_point(v):
+            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
+            elif isinstance(v, torch.Tensor) and device is not None:
                 new_data[k] = v.to(device=device)
             else:
                 new_data[k] = v
@@ -143,12 +155,11 @@ class PixtralProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[PixtralProcessorKwargs],
     ) -> BatchMixFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -158,26 +169,13 @@ class PixtralProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -195,6 +193,15 @@ class PixtralProcessor(ProcessorMixin):
             `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        # check if images and text inputs are reversed for BC
+        images, text = _validate_images_text_input_order(images, text)
+
+        output_kwargs = self._merge_kwargs(
+            PixtralProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
@@ -209,7 +216,7 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image or a list of images or a list of list of images."
                 )
             images = [[load_image(im) for im in sample] for sample in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, return_tensors=return_tensors)
+            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
@@ -246,16 +253,9 @@ class PixtralProcessor(ProcessorMixin):
                 while "<placeholder>" in sample:
                     replace_str = replace_strings.pop(0)
                     sample = sample.replace("<placeholder>", replace_str, 1)
-
                 prompt_strings.append(sample)
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         return BatchMixFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

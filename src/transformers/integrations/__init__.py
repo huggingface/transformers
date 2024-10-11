@@ -21,8 +21,15 @@ _import_structure = {
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
+        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
+    ],
+    "bitnet": [
+        "BitLinear",
+        "pack_weights",
+        "replace_with_bitnet_linear",
+        "unpack_weights",
     ],
     "bitsandbytes": [
         "dequantize_and_replace",
@@ -31,6 +38,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "set_module_8bit_tensor_to_device",
         "set_module_quantized_tensor_to_device",
+        "validate_bnb_backend_availability",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -46,6 +54,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TENSOR_MAPPING",
@@ -114,8 +123,15 @@ if TYPE_CHECKING:
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
+        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
+    )
+    from .bitnet import (
+        BitLinear,
+        pack_weights,
+        replace_with_bitnet_linear,
+        unpack_weights,
     )
     from .bitsandbytes import (
         dequantize_and_replace,
@@ -124,6 +140,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         set_module_8bit_tensor_to_device,
         set_module_quantized_tensor_to_device,
+        validate_bnb_backend_availability,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,
@@ -139,6 +156,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TENSOR_MAPPING,

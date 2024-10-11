@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1856,7 +1857,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
     def __init__(self, config: ProphetNetConfig):
@@ -2073,7 +2074,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     " language modeling.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
+class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
         "prophetnet.decoder.word_embeddings.weight",
@@ -2289,6 +2290,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         use_cache=None,
         **kwargs,
     ):
+        # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
+
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
