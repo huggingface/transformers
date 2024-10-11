@@ -232,6 +232,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             max_cache_len=seq_length + num_tokens_to_generate + 10,
         )
         cache_position = torch.arange(seq_length, device=device)
+        all_generated_tokens = []
         ### First compile, prefill
         start = perf_counter()
         next_token = decode_one_token(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
@@ -239,7 +240,8 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
-
+        cache_position += 1
+        all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
 
         cache_position = torch.tensor([seq_length], device=device)
         ### First compile, decoding
@@ -250,7 +252,8 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         time_to_second_token = end - start
         logger.info(f"completed second compile generation in: {time_to_first_token}s")
         cache_position += 1
-
+        all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
+        
         ### Second compile, decoding
         start = perf_counter()
         next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
@@ -259,9 +262,10 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         time_to_third_token = end - start
         logger.info(f"completed third compile forward in: {time_to_first_token}s")
         cache_position += 1
+        all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
 
         ### Using cuda graphs decoding
-        all_generated_tokens = []
+
         start = perf_counter()
         for _ in range(1, num_tokens_to_generate):
             all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
