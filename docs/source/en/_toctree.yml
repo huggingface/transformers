@@ -802,6 +802,10 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
+      - local: model_doc/aria
+        title: Aria
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
