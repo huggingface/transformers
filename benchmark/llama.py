@@ -242,7 +242,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             batch_size=batch_size,
             device=device,
             dtype=torch.float16,
-            max_cache_len=seq_length + num_tokens_to_generate,
+            max_cache_len=seq_length + 128,
         )
 
         # 1st call
@@ -253,6 +253,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + 128,
+        )
         # 2nd call
         start = perf_counter()
         output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
@@ -260,6 +267,14 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         second_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
+
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + 128,
+        )
 
         # 3nd call
         start = perf_counter()
@@ -269,6 +284,13 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
         logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + 128,
+        )
         # 4th call
         start = perf_counter()
         output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
