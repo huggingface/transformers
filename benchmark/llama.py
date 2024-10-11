@@ -109,6 +109,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
     start = perf_counter()
     model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, generation_config=gen_config).eval()
     model.to(device)
+    torch.cuda.synchronize()
     end = perf_counter()
     model_load_time = end - start
     logger.info(f"loaded model in: {model_load_time}s")
@@ -233,6 +234,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         cache_position = torch.arange(seq_length, device=device)
         start = perf_counter()
         next_token = decode_one_token(model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values)
+        torch.cuda.synchronize()
         end = perf_counter()
         time_to_first_token = end - start
         logger.info(f"completed first compile generation in: {time_to_first_token}s")
@@ -243,6 +245,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             all_generated_tokens.extend(next_token.clone().detach().cpu().tolist())
             start = perf_counter()
             next_token = decode_one_token(model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values)
+            torch.cuda.synchronize()
             end = perf_counter()
             next_token_times_secs.append(end - start)
 
@@ -270,6 +273,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # 1st call
         start = perf_counter()
         output = model.generate(**inputs, past_key_values=past_key_values)
+        torch.cuda.synchronize()
         end = perf_counter()
         first_compile_generate_time = end - start
         logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
@@ -285,6 +289,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # 2nd call
         start = perf_counter()
         output = model.generate(**inputs, past_key_values=past_key_values)
+        torch.cuda.synchronize()
         end = perf_counter()
         second_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
