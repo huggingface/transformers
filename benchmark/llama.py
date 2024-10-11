@@ -228,7 +228,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         # Generate compile #
         ####################
         torch.compiler.reset()
-        model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+        # model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 
         # 1st call
         start = perf_counter()
