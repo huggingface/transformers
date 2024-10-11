@@ -172,8 +172,8 @@ class MolmoAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_heads = config.effective_num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.config.effective_num_key_value_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.config.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
@@ -632,6 +632,12 @@ class MolmoeMlpExpert(nn.Module):
 
 
 class MolmoeDecoderLayer(nn.Module):
+    """Decoder for MolmoE with MoE MLP layers
+
+    Note this layers does not expose the router logits, so it is suitable for inference but no
+    for training.
+    """
+
     def __init__(self, config: MolmoConfig, layer_idx=None):
         super().__init__()
         self.config = config
@@ -750,14 +756,6 @@ class MolmoVisionBlock(nn.Module):
         return x
 
 
-class VisionPreLayerNorm(nn.LayerNorm):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        orig_type = x.dtype
-        x = F.layer_norm(x.to(torch.float32), self.normalized_shape, self.weight.to(torch.float32),
-                         self.bias.to(torch.float32), self.eps)
-        return x.to(orig_type)
-
-
 class VisionTransformer(nn.Module):
 
     def __init__(self, config: MolmoVisionConfig, attention_type, device=None):
@@ -779,7 +777,7 @@ class VisionTransformer(nn.Module):
             device=device
         )
 
-        self.pre_ln = VisionPreLayerNorm(config.image_emb_dim, eps=config.image_norm_eps)
+        self.pre_ln = nn.LayerNorm(config.image_emb_dim, eps=config.image_norm_eps)
         self.layers = nn.ModuleList([
             MolmoVisionBlock(config, attention_type=attention_type, device=device)
             for _ in range(config.image_num_layers)

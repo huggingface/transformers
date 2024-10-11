@@ -146,13 +146,6 @@ class MolmoConfig(PretrainedConfig):
         )
 
     @property
-    def effective_num_key_value_heads(self) -> int:
-        if self.num_key_value_heads is None:
-            return self.num_attention_heads
-        else:
-            return self.num_key_value_heads
-
-    @property
     def image_num_patch(self):
         assert self.vision_config is not None
         return self.vision_config.image_num_patch
