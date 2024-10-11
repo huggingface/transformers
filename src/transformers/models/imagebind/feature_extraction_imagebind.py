@@ -247,7 +247,12 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
                 num_mel_bins=self.num_mel_bins,
             )
         else:
-            waveform = np.squeeze(waveform)
+            if waveform.size > 0:
+                waveform = np.squeeze(waveform)
+            else:
+                # Handle the empty waveform case
+                raise ValueError("Empty waveform input")
+
             fbank = spectrogram(
                 waveform,
                 self.window,
