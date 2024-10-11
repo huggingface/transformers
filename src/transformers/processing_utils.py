@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
-import torch
 import typing_extensions
 
 from .dynamic_module_utils import custom_object_save
@@ -93,6 +92,7 @@ class FlashAttentionKwargs(TypedDict, total=False):
         max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
     """
+    import torch
 
     cu_seq_lens_q: Optional[torch.LongTensor]
     cu_seq_lens_k: Optional[torch.LongTensor]
