@@ -1,5 +1,4 @@
 # coding=utf-8
-# Copyright 2024 FIXME copyright?
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Molmo"""
-
+import pdb
 from typing import List, Optional, Union, Mapping
 
 import numpy as np
-import einops
 import torch
 import torchvision.transforms
 from torchvision.transforms import InterpolationMode
@@ -121,6 +119,37 @@ def select_tiling(h, w, patch_size, max_num_crops):
     return candidate_tilings[ix]
 
 
+def pixels_to_patches(array, patch_size):
+    """Reshape an image of [h, w, 3] -> [n_patches, pixels_per_patch]"""
+    w, h, c = array.shape
+    h_patches = h//patch_size
+    w_patches = w//patch_size
+    array = np.reshape(array, [h_patches, patch_size, w_patches, patch_size, c])
+    array = np.transpose(array, [0, 2, 1, 3, 4])
+    array = np.reshape(array, [h_patches*w_patches, patch_size*patch_size*c])
+    return array
+
+
+def batch_pixels_to_patches(array, patch_size):
+    """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
+    if len(array.shape) == 3:
+        n_crops, w, h = array.shape
+        h_patches = h//patch_size
+        w_patches = w//patch_size
+        array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size])
+        array = np.transpose(array, [0, 1, 3, 2, 4])
+        array = np.reshape(array, [n_crops, h_patches*w_patches, patch_size*patch_size])
+        return array
+    else:
+        n_crops, w, h, c = array.shape
+        h_patches = h//patch_size
+        w_patches = w//patch_size
+        array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size, c])
+        array = np.transpose(array, [0, 1, 3, 2, 4, 5])
+        array = np.reshape(array, [n_crops, h_patches*w_patches, patch_size*patch_size*c])
+        return array
+
+
 class MolmoImagesKwargs(ImagesKwargs, total=False):
     max_crops: Optional[int]
     overlap_margins: Optional[List[int]]
@@ -144,8 +173,6 @@ class MolmoImageProcessor(BaseImageProcessor):
         image_patch_size: int = 14,
         image_padding_mask: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -157,13 +184,11 @@ class MolmoImageProcessor(BaseImageProcessor):
         self.image_patch_size = image_patch_size
         self.image_padding_mask = image_padding_mask
         self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
 
     def _normalize(self, image):
         if self.do_normalize:
-            image -= np.array(self.image_mean, dtype=np.float32)[None, None, :]
-            image /= np.array(self.image_std, dtype=np.float32)[None, None, :]
+            image -= np.array(OPENAI_CLIP_MEAN, dtype=np.float32)[None, None, :]
+            image /= np.array(OPENAI_CLIP_STD, dtype=np.float32)[None, None, :]
         return image
 
     def image_to_patches_and_tokens(
@@ -261,7 +286,8 @@ class MolmoImageProcessor(BaseImageProcessor):
                         np.reshape(
                             np.arange(on, on+pooled_h*pooled_w, dtype=np.int32),
                             (pooled_h, pooled_w)),
-                        [[crop_y0, crop_x0], [image_token_length_h, image_token_length_w]], value=-1
+                        [[crop_y0, after_padding_height], [crop_x0, after_padding_width]],
+                        constant_values=-1, mode='constant'
                     )
                 )
                 patches_arr.append(src[y0:y0+crop_size, x0:x0+crop_size])
@@ -275,21 +301,9 @@ class MolmoImageProcessor(BaseImageProcessor):
 
         # Switch to [n_crops, n_patches, pixels_per_patch] format
         image_layout_impatch_w, image_layout_impatch_h = tiling[0], tiling[1]
-        patches = einops.rearrange(
-            patches, 'p (h dh) (w dw) c -> p (h w) (dh dw c)',
-            dh=base_image_input_d,
-            dw=base_image_input_d,
-            h=image_base_patch_h,
-            w=image_base_patch_w
-        )
-        img_mask = einops.rearrange(
-            img_mask, 'p (h dh) (w dw) -> p (h w) (dh dw)',
-            dh=base_image_input_d,
-            dw=base_image_input_d,
-            h=image_base_patch_h,
-            w=image_base_patch_w
-        )
 
+        patches = batch_pixels_to_patches(patches, image_patch_size)
+        img_mask = batch_pixels_to_patches(img_mask, image_patch_size)
         img_mask = img_mask.astype(np.float32).mean(axis=-1)
         patch_ordering = np.reshape(patch_ordering, [-1])
         valid = patch_ordering >= 0
@@ -326,13 +340,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         # Finally do the same for the global image
         resized, _ = resize_and_pad(image, base_image_input_size)
         resized = self._normalize(resized)
-        resized = einops.rearrange(
-            resized, '(h dh) (w dw) c -> (h w) (dh dw c)',
-            dh=base_image_input_d,
-            dw=base_image_input_d,
-            h=image_base_patch_h,
-            w=image_base_patch_w
-        )
+        resized = pixels_to_patches(resized, image_patch_size)
         patches = np.concatenate([np.expand_dims(resized, 0), patches], 0)
 
         # Global image goes first, so the order of patches in previous crops gets increased
@@ -383,14 +391,16 @@ class MolmoImageProcessor(BaseImageProcessor):
             n_valid_patches = valid.sum()
             assert len(image_input_idx) == n_valid_patches
 
+            # Get the reversed mapping of patch order (so instead of sorted position->patch_idx we
+            # want patch_idx->sorted position)
+            # We have to be careful to preserve the sparse structure of `patch_order` where -1 means
+            # a patch is skipped
             sorted_patch_ixs = np.zeros([n_tokens], np.int32)
             sorted_patch_ixs[patch_order[valid]] = np.arange(n_valid_patches, dtype=np.int32)
-
-            # Project the inverted mapping into same sparse structure
             sorted_patch_ixs_ex = np.full(np.shape(patch_order), -1)
             sorted_patch_ixs_ex[valid] = sorted_patch_ixs
 
-            # Do the gather and then re-masked outputs that were masked in `sorted_patch_ixs`
+            # Now go from patch_idx->sorted position to patch_idx->tokens position
             valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
             image_input_idx = image_input_idx[sorted_patch_ixs_ex*valid]
             image_input_idx = image_input_idx*valid - 100*(1 - valid)
@@ -459,7 +469,6 @@ class MolmoImageProcessor(BaseImageProcessor):
         images: np.ndarray,
         tokens: List[int],
         image_idx: np.ndarray,
-        sequence_length: int,
         image_patch_token_id: int,
         image_col_token_id: int,
         image_start_token_id: int,

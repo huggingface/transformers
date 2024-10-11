@@ -1,10 +1,20 @@
-"""
-Processor class for Molmo.
-"""
+# coding=utf-8
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Multi-model orocessor class for Molmo"""
 
 from typing import Optional
 
-import PIL
 from PIL import ImageOps
 from PIL.Image import Image
 
@@ -49,11 +59,8 @@ def get_special_token_ids(tokenizer):
 
 
 class MolmoTextKwargs(TextKwargs, total=False):
-    style: Optional[str]
-    system_prompt: Optional[str]
     message_format: Optional[str]
     always_start_with_space: Optional[bool]
-    sequence_length: Optional[int]
 
 
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
@@ -70,12 +77,8 @@ class MolmoProcessorKwargs(ProcessingKwargs, total=False):
             "image_padding_mask": True,
         },
         "text_kwargs": {
-            "style": "long_caption",
-            "system_prompt": "none",
             "message_format": "role",
             "always_start_with_space": True,
-            "sequence_length": 1536,
-            "padding": False,
         },
     }
 
@@ -152,8 +155,6 @@ class MolmoProcessor(ProcessorMixin):
         else:
             image_idx = None
 
-        sequence_length = output_kwargs["text_kwargs"]["sequence_length"]
-
         image_patch_token_id = self.special_token_ids[DEFAULT_IMAGE_PATCH_TOKEN]
         image_col_token_id = self.special_token_ids[DEFAULT_IM_COL_TOKEN]
         image_start_token_id = self.special_token_ids[DEFAULT_IM_START_TOKEN]
@@ -162,7 +163,6 @@ class MolmoProcessor(ProcessorMixin):
             images=images,
             image_idx=image_idx,
             tokens=np.asarray(tokens).astype(np.int32),
-            sequence_length=sequence_length,
             image_patch_token_id=image_patch_token_id,
             image_col_token_id=image_col_token_id,
             image_start_token_id=image_start_token_id,
