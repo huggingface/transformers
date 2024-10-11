@@ -1127,9 +1127,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1167,11 +1165,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[:, -seq_length:]
         elif position_ids is None:
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0)
 
         if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
             raise ValueError(
@@ -1404,7 +1400,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1641,7 +1637,9 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:

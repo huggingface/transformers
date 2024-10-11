@@ -35,6 +35,7 @@ from ..cache_utils import (
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
+from ..integrations.fsdp import is_fsdp_managed_module
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -51,6 +52,7 @@ from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
     AssistedCandidateGenerator,
+    AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     PromptLookupCandidateGenerator,
     _crop_past_key_values,
@@ -351,47 +353,69 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        use_cache: bool = True,
-        num_logits_to_keep: Optional[int] = None,
         **kwargs,
     ):
         """
         Prepare the model inputs for generation. In includes operations like computing the 4D attention mask or
         slicing inputs given the existing cache.
 
-        See the documentation in the used model for the arguments (different models might have different requirements
-        for e.g. `past_key_values`). Should work as is for most LLMs.
+        See the forward pass in the model documentation for expected arguments (different models might have different
+        requirements for e.g. `past_key_values`). This function should work as is for most LLMs.
         """
+
+        # 1. Handle BC:
+        model_inputs = {}
+        # - some models don't have `Cache` support (which implies they don't expect `cache_position` in `forward`)
+        if self._supports_cache_class:
+            model_inputs["cache_position"] = cache_position
+        # - `cache_position` was not a mandatory input in `prepare_inputs_for_generation` for those models, and this
+        #   function may be called outside of `generate`. Handle most use cases by creating `cache_position` on the fly
+        #   (this alternative is not as robust as calling `generate` and letting it create `cache_position`)
+        elif cache_position is None:
+            past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
+
+        # 2. Generic cache-dependent input preparation
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
+            model_inputs["past_key_values"] = past_key_values
             if inputs_embeds is not None:  # Exception 1
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s
-                # `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the
-                # decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case,
-                # `position_ids` is already contiguous but with varying stride which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
+        # 3. Prepare base model inputs
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+            model_inputs["input_ids"] = None
+            model_inputs["inputs_embeds"] = inputs_embeds
         else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+            # `clone` calls in this function ensure a consistent stride. See #32227
+            model_inputs["input_ids"] = input_ids.clone(memory_format=torch.contiguous_format)
+            model_inputs["inputs_embeds"] = None
 
+        # 4. Create missing `position_ids` on the fly
+        if (
+            attention_mask is not None
+            and kwargs.get("position_ids") is None
+            and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+        ):
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            kwargs["position_ids"] = position_ids  # placed in kwargs for further processing (see below)
+
+        # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
+        for model_input_name in ["position_ids", "token_type_ids"]:
+            model_input = kwargs.get(model_input_name)
+            if model_input is not None:
+                if past_key_values:
+                    model_input = model_input[:, -input_ids.shape[1] :]
+                    model_input = model_input.clone(memory_format=torch.contiguous_format)
+                model_inputs[model_input_name] = model_input
+
+        # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
@@ -417,25 +441,20 @@ class GenerationMixin:
                 attention_mask = causal_mask_creation_function(
                     attention_mask,
                     sequence_length=sequence_length,
-                    target_length=past_key_values.get_max_length(),
+                    target_length=past_key_values.get_max_cache_shape(),
                     dtype=self.get_output_embeddings().weight.dtype,
                     device=device,
                     cache_position=cache_position,
                     batch_size=batch_size,
                 )
+        if attention_mask is not None:
+            model_inputs["attention_mask"] = attention_mask
 
-        if num_logits_to_keep is not None:
-            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+        # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
 
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
         return model_inputs
 
     def _prepare_model_inputs(
@@ -600,7 +619,7 @@ class GenerationMixin:
         model_input_name = model_input_name if model_input_name is not None else self.main_input_name
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
-        model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
+        model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)  # type: ignore
 
         return model_kwargs
 
@@ -770,17 +789,32 @@ class GenerationMixin:
         inputs_tensor: torch.Tensor,
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
+        different_tokenizers = all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
+
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
                 max_matching_ngram_size=generation_config.max_matching_ngram_size,
                 max_length=generation_config.max_length,
+            )
+        elif different_tokenizers:
+            candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                generation_config=generation_config,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
+                target_tokenizer=target_tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -837,12 +871,19 @@ class GenerationMixin:
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            processors.append(
-                EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=generation_config.encoder_repetition_penalty,
-                    encoder_input_ids=encoder_input_ids,
+            if len(encoder_input_ids.shape) == 2:
+                processors.append(
+                    EncoderRepetitionPenaltyLogitsProcessor(
+                        penalty=generation_config.encoder_repetition_penalty,
+                        encoder_input_ids=encoder_input_ids,
+                    )
                 )
-            )
+            else:
+                warnings.warn(
+                    "Passing `encoder_repetition_penalty` requires some form of `input_ids` to be passed to "
+                    "`generate`, ignoring the argument.",
+                    UserWarning,
+                )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
@@ -851,12 +892,19 @@ class GenerationMixin:
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            processors.append(
-                EncoderNoRepeatNGramLogitsProcessor(
-                    generation_config.encoder_no_repeat_ngram_size,
-                    encoder_input_ids,
+            if len(encoder_input_ids.shape) == 2:
+                processors.append(
+                    EncoderNoRepeatNGramLogitsProcessor(
+                        generation_config.encoder_no_repeat_ngram_size,
+                        encoder_input_ids,
+                    )
                 )
-            )
+            else:
+                warnings.warn(
+                    "Passing `encoder_no_repeat_ngram_size` requires some form of `input_ids` to be passed to "
+                    "`generate`, ignoring the argument.",
+                    UserWarning,
+                )
         if generation_config.bad_words_ids is not None:
             processors.append(
                 NoBadWordsLogitsProcessor(
@@ -1219,7 +1267,7 @@ class GenerationMixin:
                 f"names: {terminations_with_generation_support}."
             )
 
-    def _validate_assistant(self, assistant_model):
+    def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
         if assistant_model is None:
             return
 
@@ -1235,8 +1283,19 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if not self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
-            raise ValueError("Make sure the main and assistant model use the same tokenizer")
+        doc_reference = (
+            "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
+        )
+        if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+            if assistant_tokenizer is not None:
+                raise ValueError(
+                    f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
+                )
+        else:
+            if tokenizer is None or assistant_tokenizer is None:
+                raise ValueError(
+                    f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                )
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
@@ -1581,7 +1640,11 @@ class GenerationMixin:
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
-        return self._supports_cache_class and "jamba" not in self.__class__.__name__.lower()
+        return (
+            self._supports_cache_class
+            and "jamba" not in self.__class__.__name__.lower()
+            and "zamba" not in self.__class__.__name__.lower()
+        )
 
     def _prepare_cache_for_generation(
         self,
@@ -1693,11 +1756,10 @@ class GenerationMixin:
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
-            num_hidden_layers = self.config.get_text_config().num_hidden_layers
             model_kwargs[cache_name] = (
-                DynamicCache(num_hidden_layers)
+                DynamicCache()
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(num_hidden_layers), DynamicCache(num_hidden_layers))
+                else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
 
     def _supports_num_logits_to_keep(self) -> bool:
@@ -1852,9 +1914,9 @@ class GenerationMixin:
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
                 Retrieval](https://arxiv.org/abs/2010.00904).
             synced_gpus (`bool`, *optional*):
-                Whether to continue running the while loop until max_length. Unless overridden this flag will be set to
-                `True` under DeepSpeed ZeRO Stage 3 multiple GPUs environment to avoid hanging if one GPU finished
-                generating before other GPUs. Otherwise it'll be set to `False`.
+                Whether to continue running the while loop until max_length. Unless overridden, this flag will be set
+                to `True` if using `FullyShardedDataParallel` or DeepSpeed ZeRO Stage 3 with multiple GPUs to avoid
+                deadlocking if one GPU finishes generating before other GPUs. Otherwise, defaults to `False`.
             assistant_model (`PreTrainedModel`, *optional*):
                 An assistant model that can be used to accelerate generation. The assistant model must have the exact
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
@@ -1889,19 +1951,19 @@ class GenerationMixin:
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
+
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model)
+        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
-            if is_deepspeed_zero3_enabled() and dist.get_world_size() > 1:
-                synced_gpus = True
-            else:
-                synced_gpus = False
+            synced_gpus = (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
 
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2077,6 +2139,8 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
+                target_tokenizer=tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
                 model_kwargs=model_kwargs,
             )
 
@@ -2434,7 +2498,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -2637,7 +2702,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -3040,7 +3106,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -3242,7 +3309,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3520,7 +3588,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the `forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3809,7 +3878,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -4047,7 +4117,8 @@ class GenerationMixin:
             generation_config ([`~generation.GenerationConfig`]):
                 The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -4105,7 +4176,7 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-            candidate_input_ids = candidate_input_ids.to(self.device)
+
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 

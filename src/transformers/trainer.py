@@ -229,6 +229,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
+    from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
@@ -416,6 +417,7 @@ class Trainer:
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -599,11 +601,11 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if (self.is_deepspeed_enabled or self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
+        if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
-                "Passing `optimizers` is not allowed if Deepspeed or PyTorch FSDP is enabled. "
+                "Passing `optimizers` is not allowed if PyTorch FSDP is enabled. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -741,6 +743,13 @@ class Trainer:
     def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
         logger.warning("Trainer.tokenizer is now deprecated. You should use Trainer.processing_class instead.")
         return self.processing_class
+
+    @tokenizer.setter
+    def tokenizer(self, processing_class) -> None:
+        logger.warning(
+            "Trainer.tokenizer is now deprecated. You should use `Trainer.processing_class = processing_class` instead."
+        )
+        self.processing_class = processing_class
 
     def _activate_neftune(self, model):
         r"""
@@ -1668,6 +1677,10 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
             self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
+
+            # From 1.0 on, we need to fully wipe the DS plugin when doing sweeps.
+            # Simply calling `_reset_state` is enough and doesn't need a version pin.
+            AcceleratorState()._reset_state()
 
         self.create_accelerator_and_postprocess()
 
@@ -4018,7 +4031,7 @@ class Trainer:
             start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled
+                if self.is_deepspeed_enabled or self.is_fsdp_enabled
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
             self.model_preparation_time = round(time.time() - start_time, 4)
@@ -4621,7 +4634,7 @@ class Trainer:
         if len(self.accelerator._models) == 0 and model is self.model:
             model = (
                 self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled
+                if self.is_deepspeed_enabled or self.is_fsdp_enabled
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
 
@@ -4852,6 +4865,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+            if is_accelerate_available("1.1.0"):
+                dataloader_config.data_seed = self.args.data_seed
+
         non_blocking = accelerator_config.pop("non_blocking")
         if not is_accelerate_available("0.30.0"):
             if non_blocking:

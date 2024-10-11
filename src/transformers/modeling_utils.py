@@ -544,6 +544,7 @@ def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
     map_location: Optional[Union[str, torch.device]] = None,
+    weights_only: bool = True,
 ):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
@@ -580,7 +581,7 @@ def load_state_dict(
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        weights_only_kwarg = {"weights_only": weights_only} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
@@ -617,6 +618,9 @@ def set_initialized_submodules(model, state_dict_keys):
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
         loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
+        # When checking if the root module is loaded all state_dict_keys must be used.
+        if module_name == "":
+            loaded_keys = set(state_dict_keys)
         if loaded_keys.issuperset(module.state_dict()):
             module._is_hf_initialized = True
         else:
@@ -1495,7 +1499,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype (`torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype.
         """
-        torch_dtype = kwargs.pop("torch_dtype", None)
+        torch_dtype = kwargs.pop("torch_dtype", torch.get_default_dtype())
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         # override default dtype if needed
@@ -2045,7 +2049,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return list(_no_split_modules)
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
@@ -2065,11 +2072,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            mean_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
+
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities won't be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
@@ -2092,9 +2107,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, mean_resizing=True):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+        new_embeddings = self._get_resized_embeddings(
+            old_embeddings, new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
         if hasattr(old_embeddings, "_hf_hook"):
             hook = old_embeddings._hf_hook
             add_hook_to_module(new_embeddings, hook)
@@ -2117,9 +2134,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
-                new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens)
+                new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
             else:
-                new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+                new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
             if hasattr(old_lm_head, "_hf_hook"):
                 hook = old_lm_head._hf_hook
                 add_hook_to_module(new_lm_head, hook)
@@ -2134,6 +2151,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings: nn.Embedding,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
@@ -2156,6 +2174,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            mean_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
+
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities will not be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
 
         Return:
@@ -2214,8 +2240,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_embeddings.weight.dtype,
         )
 
-        # initialize all new embeddings (in particular added tokens)
-        self._init_weights(new_embeddings)
+        if new_num_tokens > old_num_tokens and not mean_resizing:
+            # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
+            self._init_weights(new_embeddings)
+
+        elif new_num_tokens > old_num_tokens and mean_resizing:
+            # initialize new embeddings  (in particular added tokens). The new embeddings will be initialized
+            # from a multivariate normal distribution that has old embeddings' mean and covariance.
+            # as described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            logger.warning_once(
+                "The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
+                "To disable this, use `mean_resizing=False`"
+            )
+
+            added_num_tokens = new_num_tokens - old_num_tokens
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
+                    self._init_added_embeddings_weights_with_mean(
+                        old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+                    )
+            else:
+                self._init_added_embeddings_weights_with_mean(
+                    old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+                )
 
         # Copy token embeddings from the previous weights
 
@@ -2255,7 +2305,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return old_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+        self,
+        old_lm_head: nn.Linear,
+        new_num_tokens: Optional[int] = None,
+        transposed: Optional[bool] = False,
+        mean_resizing: bool = True,
     ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
@@ -2272,6 +2326,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 `torch.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*, defaults
                 to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
                 vocab_size` else `vocab_size, lm_head_dim`.
+            mean_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
+
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities will not be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
             `torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
@@ -2318,8 +2380,40 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_lm_head.weight.dtype,
         )
 
-        # initialize new lm head (in particular added tokens)
-        self._init_weights(new_lm_head)
+        if new_num_tokens > old_num_tokens and not mean_resizing:
+            # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
+            self._init_weights(new_lm_head)
+
+        elif new_num_tokens > old_num_tokens and mean_resizing:
+            # initialize new lm_head weights (in particular added tokens). The new lm_head weights
+            # will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance.
+            # as described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            logger.warning_once(
+                "The new lm_head weights will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
+                "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
+                "To disable this, use `mean_resizing=False`"
+            )
+
+            added_num_tokens = new_num_tokens - old_num_tokens
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                params = [old_lm_head.weight]
+                if has_new_lm_head_bias:
+                    params += [old_lm_head.bias]
+                with deepspeed.zero.GatheredParameters(params, modifier_rank=None):
+                    self._init_added_lm_head_weights_with_mean(
+                        old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
+                    )
+                    if has_new_lm_head_bias:
+                        self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
+
+            else:
+                self._init_added_lm_head_weights_with_mean(
+                    old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
+                )
+                if has_new_lm_head_bias:
+                    self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
@@ -2337,6 +2431,62 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         return new_lm_head
+
+    def _init_added_embeddings_weights_with_mean(
+        self, old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+    ):
+        old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
+        mean_embeddings = torch.mean(old_embeddings_weight, axis=0)
+        old_centered_embeddings = old_embeddings_weight - mean_embeddings
+        covariance = old_centered_embeddings.T @ old_centered_embeddings / old_num_tokens
+
+        # Check if the covariance is positive definite.
+        eigenvalues = torch.linalg.eigvals(covariance)
+        is_covariance_psd = bool(
+            (covariance == covariance.T).all() and not torch.is_complex(eigenvalues) and (eigenvalues > 0).all()
+        )
+        if is_covariance_psd:
+            # If covariances is positive definite, a distribution can be created. and we can sample new weights from it.
+            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+                mean_embeddings, covariance_matrix=1e-9 * covariance
+            )
+            new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+                sample_shape=(added_num_tokens,)
+            ).to(old_embeddings.weight.dtype)
+        else:
+            # Otherwise, just initialize with the mean. because distribtion will not be created.
+            new_embeddings.weight.data[-1 * added_num_tokens :, :] = (
+                mean_embeddings[None, :].repeat(added_num_tokens, 1).to(old_embeddings.weight.dtype)
+            )
+
+    def _init_added_lm_head_weights_with_mean(
+        self,
+        old_lm_head,
+        new_lm_head,
+        old_lm_head_dim,
+        old_num_tokens,
+        added_num_tokens,
+        transposed=False,
+    ):
+        if transposed:
+            # Transpose to the desired shape for the function.
+            new_lm_head.weight.data = new_lm_head.weight.data.T
+            old_lm_head.weight.data = old_lm_head.weight.data.T
+
+        # The same initilization logic as Embeddings.
+        self._init_added_embeddings_weights_with_mean(
+            old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens
+        )
+
+        if transposed:
+            # Transpose again to the correct shape.
+            new_lm_head.weight.data = new_lm_head.weight.data.T
+            old_lm_head.weight.data = old_lm_head.weight.data.T
+
+    def _init_added_lm_head_bias_with_mean(self, old_lm_head, new_lm_head, added_num_tokens):
+        bias_mean = torch.mean(old_lm_head.bias.data, axis=0, dtype=torch.float32)
+        bias_std = torch.std(old_lm_head.bias.data, axis=0).to(torch.float32)
+        new_lm_head.bias.data[-1 * added_num_tokens :].normal_(mean=bias_mean, std=1e-9 * bias_std)
 
     def _copy_lm_head_original_to_resized(
         self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
@@ -3006,6 +3156,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         use_safetensors: bool = None,
+        weights_only: bool = True,
         **kwargs,
     ) -> "PreTrainedModel":
         r"""
@@ -3192,6 +3343,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_safetensors (`bool`, *optional*, defaults to `None`):
                 Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
                 is not installed, it will be set to `False`.
+
+            weights_only (`bool`, *optional*, defaults to `True`):
+                Indicates whether unpickler should be restricted to loading only tensors, primitive types,
+                dictionaries and any types added via torch.serialization.add_safe_globals().
+                When set to False, we can load wrapper tensor subclass weights.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -3828,7 +3984,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file)
+                state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3849,7 +4005,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0])
+                                one_state_dict = load_state_dict(resolved_archive_file[0], weights_only=weights_only)
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -4049,6 +4205,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
                 gguf_path=gguf_path,
+                weights_only=weights_only,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -4154,6 +4311,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         hf_quantizer=None,
         keep_in_fp32_modules=None,
         gguf_path=None,
+        weights_only=True,
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
@@ -4511,7 +4669,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized, map_location=map_location)
+                state_dict = load_state_dict(
+                    shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
+                )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4664,6 +4824,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         start_prefix="",
         hf_quantizer=None,
         pretrained_model_name_or_path=None,
+        weights_only=True,
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
@@ -4684,7 +4845,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
-        state_dict = load_state_dict(resolved_archive_file)
+        state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
             model,
