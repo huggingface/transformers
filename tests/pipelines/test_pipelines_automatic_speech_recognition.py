@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from huggingface_hub import AutomaticSpeechRecognitionOutput, AutomaticSpeechRecognitionInput, hf_hub_download, snapshot_download
+from huggingface_hub import AutomaticSpeechRecognitionOutput, hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
