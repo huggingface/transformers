@@ -456,6 +456,8 @@ class GenerationMixin:
             if key not in model_inputs:
                 model_inputs[key] = value
 
+        # 8. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
+        model_inputs.pop("labels", None)
         return model_inputs
 
     def _prepare_model_inputs(
