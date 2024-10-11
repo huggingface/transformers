@@ -14,6 +14,7 @@ import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
 
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -219,8 +220,10 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
                 use_cache=True,
             )[0]
             end = perf_counter()
-            next_token_times_secs.append(end - start)
-            logger.info(f"completed next compile generation in: {next_token_times_secs}s")
+            next_token = torch.argmax(logits, dim=-1)
+            next_token_times_secs.append(end[:,-1:] - start)
+
+            logger.info(f"completed next compile generation in: {next_token_times_secs[-1]}s")
             cache_position += 1
         time_to_second_token = next_token_times_secs[0]
         time_to_third_token = next_token_times_secs[1]
@@ -232,9 +235,17 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         torch.compiler.reset()
         # model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 
+        past_key_values = StaticCache(
+            model.config,
+            batch_size=batch_size,
+            device=device,
+            dtype=torch.float16,
+            max_cache_len=seq_length + num_tokens_to_generate,
+        )
+
         # 1st call
         start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
         end = perf_counter()
         first_compile_generate_time = end - start
         logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
@@ -242,7 +253,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
 
         # 2nd call
         start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
         end = perf_counter()
         second_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
@@ -250,7 +261,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
 
         # 3nd call
         start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
         end = perf_counter()
         third_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
@@ -258,7 +269,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
 
         # 4th call
         start = perf_counter()
-        output = model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, past_key_values=past_key_values, do_sample=False)
         end = perf_counter()
         fourth_compile_generate_time = end - start
         logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
