@@ -162,10 +162,15 @@ class ImageBindFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     @require_torch
     def test_integration(self):
         # fmt: off
-        expected_input = torch.tensor(
+        expected_input1 = torch.tensor(
             [[-1.2776, -0.9167, -1.2776],
             [-1.2439, -0.8372, -0.8748],
             [-1.1235, -0.7492, -1.0867]]
+        )
+        expected_input2 = torch.tensor(
+            [[-1.1474, -0.5601, -0.1045],
+            [0.0730, 0.0503, 0.0564],
+            [-0.1738, 0.0505, -0.2641]]
         )
         # fmt: on
 
@@ -180,7 +185,8 @@ class ImageBindFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             feature_extractor.max_length,
         )
         self.assertEqual(input_values.shape, expected_shape)
-        self.assertTrue(torch.allclose(input_values[:, :, 0, 0, 0], expected_input, atol=1e-4))
+        self.assertTrue(torch.allclose(input_values[:, :, 0, 0, 0], expected_input1, atol=1e-4))
+        self.assertTrue(torch.allclose(input_values[:, :, 0, 111, 0], expected_input2, atol=1e-4))
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
