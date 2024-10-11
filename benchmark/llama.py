@@ -331,7 +331,7 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         """
         INSERT INTO model_measurements (
             benchmark_id,
-            measurements,
+            measurements
         ) VALUES (%s, %s)
         """,
         (
