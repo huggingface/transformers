@@ -174,22 +174,7 @@ def write_model(
     # TODO adapt this depending on model variants
     config = MolmoConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
 
-    config.initializer_range = 0.02
 
-    config.vision_config.hidden_size = 1024
-    config.vision_config.num_attention_heads = 32
-    config.vision_config.intermediate_size = 4096
-    config.vision_config.num_hidden_layers = 23
-    config.vision_config.num_image_positions = 577
-
-    config.text_config.hidden_size = 3584
-    config.text_config.num_key_value_heads = 4
-    config.text_config.num_attention_heads = 28
-    config.text_config.num_hidden_layers = 28
-    config.text_config.head_dim = 128
-    config.text_config.vocab_size = 152064
-    config.text_config.additional_vocab_size = 128
-    config.text_config.intermediate_size = 37888
     # config = MolmoConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
     # config.architectures = ["MolmoForConditionalGeneration"]
     # config.save_pretrained(model_path)
