@@ -68,7 +68,6 @@ class TimesFMModelTester:
         use_positional_embedding: bool = True,
         per_core_batch_size: int = 32,
         initializer_factor: float = 1.0,
-        backend: str = "gpu",
     ):
         self.parent = parent
         self.patch_len = patch_len
@@ -87,7 +86,6 @@ class TimesFMModelTester:
         self.use_positional_embedding = use_positional_embedding
         self.per_core_batch_size = per_core_batch_size
         self.initializer_factor = initializer_factor
-        self.backend = backend
 
     def get_large_model_config(self):
         return TimesFMConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
@@ -110,7 +108,6 @@ class TimesFMModelTester:
             use_positional_embedding=self.use_positional_embedding,
             per_core_batch_size=self.per_core_batch_size,
             initializer_factor=self.initializer_factor,
-            backend=self.backend,
         )
 
     def get_pipeline_config(self):
