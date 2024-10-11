@@ -23,14 +23,13 @@
 import os
 from typing import TYPE_CHECKING, Union
 
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 if TYPE_CHECKING:
     pass
-
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -147,11 +146,11 @@ class MolmoVisionConfig(PretrainedConfig):
 
 class MolmoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MolmoForConditionalGeneration`]. It is used to instantiate an
-    Molmo model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Molmo-9B.
+    This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
+    Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Llava-9B.
 
-    e.g. [molmo-hf/molmo-9b](https://huggingface.co/molmo-hf/molmo-9b)
+    e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -178,7 +177,7 @@ class MolmoConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MolmoForConditionalGeneration, MolmoConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig, CLIPVisionConfig, LlamaConfig
 
     >>> # Initializing a CLIP-vision config
     >>> vision_config = CLIPVisionConfig()
@@ -186,17 +185,17 @@ class MolmoConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a Molmo molmo-1.5-7b style configuration
-    >>> configuration = MolmoConfig(vision_config, text_config)
+    >>> # Initializing a Llava llava-1.5-7b style configuration
+    >>> configuration = LlavaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the molmo-1.5-7b style configuration
-    >>> model = MolmoForConditionalGeneration(configuration)
+    >>> # Initializing a model from the llava-1.5-7b style configuration
+    >>> model = LlavaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "molmo"
+    model_type = "llava"
     is_composition = True
 
     def __init__(
@@ -231,24 +230,16 @@ class MolmoConfig(PretrainedConfig):
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
-            )
+            vision_config = {}
+            logger.info("vision_config is None. Initializing MolmoVisionConfig with default values.")
 
-        self.vision_config = vision_config
+        self.vision_config = MolmoVisionConfig(**vision_config)
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"]()
+            text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
 

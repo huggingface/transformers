@@ -14,54 +14,46 @@
 # limitations under the License.
 
 
+from typing import Optional
+
+import torch
 from torch import nn
 
 from transformers.models.clip.configuration_clip import CLIPVisionConfig
-from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
-from transformers.models.llava.configuration_llava import (
-    LlavaConfig,
-)
 
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 from ..clip.modeling_clip import (
+    CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
+    CLIPFlashAttention2,
+    CLIPSdpaAttention,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     CLIPVisionTransformer,
-    CLIPAttention,
-    CLIPSdpaAttention,
-    CLIPFlashAttention2,
 )
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaMultiModalProjector,
 )
 from ..qwen2.modeling_qwen2 import (
+    Qwen2Attention,
     Qwen2DecoderLayer,
+    Qwen2FlashAttention2,
     Qwen2ForCausalLM,
     Qwen2MLP,
     Qwen2Model,
-    Qwen2Attention,
-    Qwen2FlashAttention2,
     Qwen2SdpaAttention,
 )
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
-from typing import Optional
+
 
 logger = logging.get_logger(__name__)
 
 
 class MolmoVisionConfig(CLIPVisionConfig):
-    model_type = "clip_vision_model"
-
-    def __init__(
-        self,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
+    pass
 
 
 class MolmoConfig(PretrainedConfig):
@@ -156,14 +148,15 @@ class MolmoConfig(PretrainedConfig):
         self.vision_config = MolmoVisionConfig(**vision_config)
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"]()
+            text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
 
         super().__init__(**kwargs)
+
 
 # text modules inherited from Qwen2
 
@@ -174,22 +167,24 @@ class MolmoMLP(Qwen2MLP):
         self.down_proj = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
 
 
-
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 class MolmoTextAttention(Qwen2Attention):
     pass
 
-class MolmoTextSdpaAttention(Qwen2SdpaAttention):
+
+class MolmoTextSdpaAttention(MolmoTextAttention, Qwen2SdpaAttention):
     pass
 
-class MolmoTextFlashAttention2(Qwen2FlashAttention2):
+
+class MolmoTextFlashAttention2(MolmoTextAttention, Qwen2FlashAttention2):
     pass
+
 
 MOLMO_TEXT_ATTENTION_CLASSES = {
     "eager": MolmoTextAttention,
     "sdpa": MolmoTextSdpaAttention,
-    "flash_attention_2": MolmoTextFlashAttention2
-    }
+    "flash_attention_2": MolmoTextFlashAttention2,
+}
 
 
 class MolmoDecoderLayer(Qwen2DecoderLayer):
@@ -223,6 +218,7 @@ class MolmoForCausalLM(Qwen2ForCausalLM):
 
 # New Molmo multimodal projection and image pooling
 
+
 class MolmoMultiModalProjector(LlavaMultiModalProjector):
     def __init__(self, config: MolmoConfig):
         super().__init__()
@@ -250,28 +246,29 @@ class MolmoMultiModalProjector(LlavaMultiModalProjector):
         return hidden_states
 
 
-
-
-
 # Molmo image components inherited from CLIPVision
 
 
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 
+
 class MolmoVisionAttention(CLIPAttention):
     pass
 
-class MolmoVisionSdpaAttention(CLIPSdpaAttention):
-    pass 
 
-class MolmoVisionFlashAttention2(CLIPFlashAttention2):
-    pass  
+class MolmoVisionSdpaAttention(MolmoVisionAttention, CLIPSdpaAttention):
+    pass
+
+
+class MolmoVisionFlashAttention2(MolmoVisionAttention, CLIPFlashAttention2):
+    pass
+
 
 MOLMO_VISION_ATTENTION_CLASSES = {
     "eager": MolmoVisionAttention,
     "sdpa": MolmoVisionSdpaAttention,
-    "flash_attention_2": MolmoVisionFlashAttention2
-    }
+    "flash_attention_2": MolmoVisionFlashAttention2,
+}
 
 
 # This needs to be in caps for some reason in the modular renaming
@@ -285,6 +282,7 @@ class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
 class MolmoEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
+
 
 # this class is not needed, just here while renaming issue persists
 class MolmoEncoder(CLIPEncoder):
@@ -308,34 +306,123 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
         self.encoder = MolmoEncoder(config)  # necessary because of renaming issue in modular
 
-class MolmoImagePooling2d(CLIPAttention): # It's an attention layer, so should be doable to take from CLIP?
-    def __init__(self, config, is_vit_layer: Optional[bool] = True):
-        super().__init__()
 
-        self.q_proj = nn.Linear(2 * config.hidden_size,
-            config.num_heads * config.head_dim,
-            bias=True,
-            device=config.init_device,
+class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be doable to take from CLIP?
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+
+        self.q_proj = nn.Linear(
+            2 * self.embed_dim,
+            self.num_heads * self.head_dim,
+            bias=True,
+        )
         self.k_proj = nn.Linear(
-            2 * config.hidden_size,
-            config.num_key_value_heads * config.head_dim,
+            2 * self.embed_dim,
+            config.num_key_value_heads * self.head_dim,
             bias=True,
-            device=config.init_device,
-            )
+        )
         self.v_proj = nn.Linear(
-            2 * config.hidden_size,
-            config.num_key_value_heads * config.head_dim,
+            2 * self.embed_dim,
+            config.num_key_value_heads * self.head_dim,
             bias=True,
-            device=config.init_device,
-            )
+        )
         self.out_proj = nn.Linear(
-            config.num_heads * config.head_dim,
+            self.num_heads * self.head_dim,
             config.hidden_size,
             bias=True,
-            device=config.init_device,
+        )
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
+        # apply the causal_attention_mask first
+        if causal_attention_mask is not None:
+            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {causal_attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if output_attentions:
+            # this operation is a bit akward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights_reshaped
 
 
 class MolmoVisionModel(CLIPVisionModel):
@@ -345,7 +432,7 @@ class MolmoVisionModel(CLIPVisionModel):
         super().__init__()
 
         self.vision_model = MolmoVisionTransformer(config)
-        self.image_pooling_2d = MolmoImagePooling2d(config, is_vit_layer=False)
+        self.image_pooling_2d = MolmoImagePooling2d(config)
 
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
@@ -362,11 +449,10 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
 __all__ = [
     "MolmoConfig",
-    "MolmoTextConfig",
     "MolmoVisionConfig",
     "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoTextAttention",
-    "MolmoModel",
+    "MolmoImagePooling2d",
     "MolmoForConditionalGeneration",
 ]
