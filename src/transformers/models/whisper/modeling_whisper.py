@@ -422,7 +422,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -456,7 +456,7 @@ class WhisperFlashAttention2(WhisperAttention):
             value_states,
             causal_mask,
             tgt_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1399,7 +1399,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1867,7 +1867,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_attention_mask = self.get_decoder()._prepare_4d_causal_attention_mask_with_cache_position(
                 decoder_attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.self_attention_cache.get_max_length(),
+                target_length=past_key_values.self_attention_cache.get_max_cache_shape(),
                 dtype=self.proj_out.weight.dtype,
                 device=decoder_input_ids.device,
                 cache_position=cache_position,
