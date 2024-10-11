@@ -95,8 +95,8 @@ class Pix2StructProcessor(ProcessorMixin):
         if legacy:
             logger.warning(
                 "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
-                "If both images and text are provided and image_processor is not a VQA processor, and `add_special_tokens` is unset, "
-                "it will change the default value of `add_special_tokens` to `False` when calling the tokenizer."
+                "In the new behavior, If both images and text are provided, image_processor is not a VQA processor, and `add_special_tokens` is unset, "
+                "the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer."
             )
 
         if images is None and text is None:
