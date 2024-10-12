@@ -23,6 +23,7 @@ from ...utils import (
 _import_structure = {
     "configuration_encodec": ["EncodecConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
+    "loss_encodec": ["compute_discriminator_loss", "compute_generator_adv_loss", "compute_feature_matching_loss"],
 }
 
 try:
@@ -43,6 +44,11 @@ if TYPE_CHECKING:
         EncodecConfig,
     )
     from .feature_extraction_encodec import EncodecFeatureExtractor
+    from .loss_encodec import (
+        compute_discriminator_loss,
+        compute_generator_adv_loss,
+        compute_feature_matching_loss,
+    )
 
     try:
         if not is_torch_available():
