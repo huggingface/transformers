@@ -74,7 +74,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
-        ("dab-detr", "DABDETRConfig"),
+        ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
         ("data2vec-text", "Data2VecTextConfig"),

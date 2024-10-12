@@ -46,41 +46,41 @@ There are three ways to instantiate a DAB-DETR model (depending on what you pref
 
 Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
 ```py
->>> from transformers import DABDETRForObjectDetection
+>>> from transformers import DabDetrForObjectDetection
 
->>> model = DABDETRForObjectDetection.from_pretrained("IDEA-Research/dab_detr_resnet50")
+>>> model = DabDetrForObjectDetection.from_pretrained("IDEA-Research/dab_detr_resnet50")
 ```
 
 Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
 ```py
->>> from transformers import DABDETRConfig, DABDETRForObjectDetection
+>>> from transformers import DabDetrConfig, DabDetrForObjectDetection
 
->>> config = DABDETRConfig()
->>> model = DABDETRForObjectDetection(config)
+>>> config = DabDetrConfig()
+>>> model = DabDetrForObjectDetection(config)
 ```
 Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + Transformer
 ```py
->>> config = DABDETRConfig(use_pretrained_backbone=False)
->>> model = DABDETRForObjectDetection(config)
+>>> config = DabDetrConfig(use_pretrained_backbone=False)
+>>> model = DabDetrForObjectDetection(config)
 ```
 
 
-## DABDETRConfig
+## DabDetrConfig
 
-[[autodoc]] DABDETRConfig
+[[autodoc]] DabDetrConfig
 
-## DABDETRImageProcessor
+## DabDetrImageProcessor
 
-[[autodoc]] DABDETRImageProcessor
+[[autodoc]] DabDetrImageProcessor
     - preprocess
     - post_process_object_detection
 
-## DABDETRModel
+## DabDetrModel
 
-[[autodoc]] DABDETRModel
+[[autodoc]] DabDetrModel
     - forward
 
-## DABDETRForObjectDetection
+## DabDetrForObjectDetection
 
-[[autodoc]] DABDETRForObjectDetection
+[[autodoc]] DabDetrForObjectDetection
     - forward

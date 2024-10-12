@@ -121,7 +121,7 @@ class ConvNextImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class DABDETRImageProcessor(metaclass=DummyObject):
+class DabDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

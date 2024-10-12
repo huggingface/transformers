@@ -144,7 +144,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "initializer_range",
         "supported_aspect_ratios",
     ],
-    "DABDETRConfig": ["dilation"],
+    "DabDetrConfig": ["dilation"],
 }
 
 
