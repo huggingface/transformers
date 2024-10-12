@@ -195,33 +195,6 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         return hidden_state
 
 
-# class SuperGlueMultiLayerPerceptron(nn.Module):
-#     def __init__(self, config: SuperGlueConfig, channels: List[int]) -> None:
-#         super().__init__()
-#         num_layers = len(channels)
-#         layers = []
-#         for i in range(1, num_layers):
-#             layers.append(nn.Linear(channels[i - 1], channels[i]))
-#             if i < (num_layers - 1):
-#                 layers.append(nn.BatchNorm1d(channels[i]))
-#                 layers.append(nn.ReLU())
-#         self.layers = nn.Sequential(*layers)
-#
-#     def forward(
-#         self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = False
-#     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
-#         all_hidden_states = () if output_hidden_states else None
-#         for layer in self.layers:
-#             if isinstance(layer, nn.BatchNorm1d):
-#                 hidden_state = hidden_state.transpose(-1, -2)
-#             hidden_state = layer(hidden_state)
-#             if isinstance(layer, nn.BatchNorm1d):
-#                 hidden_state = hidden_state.transpose(-1, -2)
-#             if output_hidden_states and isinstance(layer, nn.Linear):
-#                 all_hidden_states = all_hidden_states + (hidden_state,)
-#         return hidden_state, all_hidden_states
-
-
 class SuperGlueKeypointEncoder(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
