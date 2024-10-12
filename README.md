@@ -128,10 +128,10 @@ incredible projects built in the vicinity of transformers.
 
 If you own or use a project that you believe should be part of the list, please open a PR to add it!
 
-## If you are looking for custom support from the Hugging Face team
+## Need help building with Transformers?
 
 <a target="_blank" href="https://huggingface.co/support">
-    <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+    <img alt="HuggingFace Expert Support Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
 </a><br>
 
 ## Quick tour
