@@ -46,7 +46,7 @@ pip install git+https://github.com/huggingface/peft.git
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
 - [AdaLoRA](https://arxiv.org/abs/2303.10512)
 
-If you want to use other PEFT methods, such as prompt learning or prompt tuning, or about the 🤗 PEFT library in general, please refer to the [documentation](https://huggingface.co/docs/peft/index).
+If you want to use other PEFT methods, such as prompt learning or prompt tuning, or learn about the 🤗 PEFT library in general, please refer to the [documentation](https://huggingface.co/docs/peft/index).
 
 
 ## Load a PEFT adapter
@@ -125,7 +125,7 @@ Now you can use [`~peft.PeftModel.set_adapter`] to set which adapter to use:
 ```py
 # use adapter_1
 model.set_adapter("adapter_1")
-output = model.generate(**inputs)
+output_disabled = model.generate(**inputs)
 print(tokenizer.decode(output_disabled[0], skip_special_tokens=True))
 
 # use adapter_2

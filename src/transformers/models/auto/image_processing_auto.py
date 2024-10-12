@@ -89,6 +89,7 @@ else:
             ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
+            ("idefics3", ("Idefics3ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
@@ -99,9 +100,11 @@ else:
             ("llava", ("CLIPImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
+            ("llava_onevision", ("LlavaOnevisionImageProcessor",)),
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
             ("mobilevit", ("MobileViTImageProcessor",)),
@@ -113,9 +116,11 @@ else:
             ("owlvit", ("OwlViTImageProcessor",)),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
+            ("pixtral", ("PixtralImageProcessor",)),
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
+            ("qwen2_vl", ("Qwen2VLImageProcessor",)),
             ("regnet", ("ConvNextImageProcessor",)),
             ("resnet", ("ConvNextImageProcessor",)),
             ("rt_detr", "RTDetrImageProcessor"),
@@ -426,7 +431,9 @@ class AutoImageProcessor:
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_class is None and image_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:

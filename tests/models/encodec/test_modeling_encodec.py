@@ -149,7 +149,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_headmasking = False
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
-    input_name = "input_values"
 
     # Test copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/msstftd.py#L132
     @slow

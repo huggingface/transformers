@@ -436,9 +436,16 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False
@@ -597,3 +604,44 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         expected_probs = torch.tensor([[9.9942e-01, 5.7805e-04]], device=torch_device)
 
         self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model_name = "BAAI/AltCLIP"
+        model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
+
+        image_processor = AltCLIPProcessor.from_pretrained(
+            model_name, size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 145, 1024))
+        print("nilesh ")
+        print(outputs.vision_model_output.last_hidden_state.shape)
+        print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.3589, -0.5939, 0.3534], [0.4346, 0.1647, 0.7071], [1.1404, -0.4716, 0.1664]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )
