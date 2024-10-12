@@ -249,7 +249,7 @@ class SamAttention(nn.Module):
 class SamSdpaAttention(SamAttention):
     """
     SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values. Using SDPA instead of the default attention. 
+    values. Using SDPA instead of the default attention.
     """
 
     def __init__(self, config, downsample_rate=None):
@@ -263,7 +263,7 @@ class SamSdpaAttention(SamAttention):
 
         point_batch_size = query.shape[1]
         # Separate into heads
-        query= self._separate_heads(query, self.num_attention_heads)
+        query = self._separate_heads(query, self.num_attention_heads)
         key = self._separate_heads(key, self.num_attention_heads)
         value = self._separate_heads(value, self.num_attention_heads)
 
@@ -280,10 +280,12 @@ class SamSdpaAttention(SamAttention):
 
         return out
 
+
 SAM_ATTENTION_CLASSES = {
     "eager": SamAttention,
     "sdpa": SamSdpaAttention,
 }
+
 
 class SamTwoWayAttentionBlock(nn.Module):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False):
@@ -308,14 +310,18 @@ class SamTwoWayAttentionBlock(nn.Module):
         self.self_attn = SAM_ATTENTION_CLASSES[config._attn_implementation](config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = SAM_ATTENTION_CLASSES[config._attn_implementation](config, downsample_rate=attention_downsample_rate)
+        self.cross_attn_token_to_image = SAM_ATTENTION_CLASSES[config._attn_implementation](
+            config, downsample_rate=attention_downsample_rate
+        )
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.mlp = SamMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SAM_ATTENTION_CLASSES[config._attn_implementation](config, downsample_rate=attention_downsample_rate)
+        self.cross_attn_image_to_token = SAM_ATTENTION_CLASSES[config._attn_implementation](
+            config, downsample_rate=attention_downsample_rate
+        )
         self.skip_first_layer_pe = skip_first_layer_pe
 
     def forward(
@@ -892,13 +898,14 @@ class SamVisionAttention(nn.Module):
             outputs = (attn_output, None)
 
         return outputs
-    
+
 
 class SamSdpaVisionAttention(SamVisionAttention):
-    """ 
-    Multi-head Attention block with relative position embeddings. 
-    Using SDPA instead of the default attention. 
     """
+    Multi-head Attention block with relative position embeddings.
+    Using SDPA instead of the default attention.
+    """
+
     def __init__(self, config, window_size):
         super().__init__(config, window_size)
 
@@ -942,13 +949,19 @@ class SamSdpaVisionAttention(SamVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
-        qkv = self.qkv(hidden_states).reshape(batch_size, height * width, 3, self.num_attention_heads, -1).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
         # q, k, v with shape (B * nHead, H * W, C)
         query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
         rel_h, rel_w = None, None
         if self.use_rel_pos:
-            rel_h, rel_w = self.add_decomposed_rel_pos(query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width))
+            rel_h, rel_w = self.add_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
 
         query = query.view(batch_size, self.num_attention_heads, height * width, -1)
         key = key.view(batch_size, self.num_attention_heads, height * width, -1)
@@ -957,12 +970,18 @@ class SamSdpaVisionAttention(SamVisionAttention):
         if self.use_rel_pos:
             rel_h = rel_h.view(batch_size, self.num_attention_heads, rel_h.size(1), rel_h.size(2), rel_h.size(3))
             rel_w = rel_w.view(batch_size, self.num_attention_heads, rel_w.size(1), rel_w.size(2), rel_w.size(3))
-            attn_bias = (rel_h + rel_w).view(batch_size, self.num_attention_heads, rel_h.size(2), rel_h.size(3) * rel_w.size(4))
+            attn_bias = (rel_h + rel_w).view(
+                batch_size, self.num_attention_heads, rel_h.size(2), rel_h.size(3) * rel_w.size(4)
+            )
             attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
         else:
             attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value)
 
-        attn_output = attn_output.view(batch_size, self.num_attention_heads, height, width, -1).permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+        attn_output = (
+            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
+            .permute(0, 2, 3, 1, 4)
+            .reshape(batch_size, height, width, -1)
+        )
 
         attn_output = self.proj(attn_output)
 
@@ -977,7 +996,8 @@ class SamSdpaVisionAttention(SamVisionAttention):
             outputs = (attn_output, None)
 
         return outputs
-    
+
+
 SAM_VISION_ATTENTION_CLASSES = {
     "eager": SamVisionAttention,
     "sdpa": SamSdpaVisionAttention,
