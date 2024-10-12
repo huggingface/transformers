@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
     BarkEosPrioritizerLogitsProcessor,
@@ -262,7 +263,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             value,
             attention_mask,
             query_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
@@ -546,7 +547,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 # GPT2-like autoregressive model
-class BarkCausalModel(BarkPreTrainedModel):
+class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
 
     def __init__(self, config):
@@ -1248,6 +1249,17 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
+    def _tie_weights(self):
+        if getattr(self.config, "tie_word_embeddings", True):
+            self._tied_weights_keys = []
+            output_embeddings = self.get_output_embeddings()
+            input_embeddings = self.get_input_embeddings()
+
+            for i in range(self.config.n_codes_total - self.config.n_codes_given):
+                # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
+                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
+                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings list and the output embeddings list.
@@ -1709,6 +1721,8 @@ class BarkModel(BarkPreTrainedModel):
                     kwargs_fine[key] = value
 
         # 1. Generate from the semantic model
+        if "generation_config" in kwargs_semantic:
+            kwargs_semantic.pop("generation_config")
         semantic_output = self.semantic.generate(
             input_ids,
             history_prompt=history_prompt,
@@ -1717,6 +1731,8 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 2. Generate from the coarse model
+        if "generation_config" in kwargs_coarse:
+            kwargs_coarse.pop("generation_config")
         coarse_output = self.coarse_acoustics.generate(
             semantic_output,
             history_prompt=history_prompt,
@@ -1734,6 +1750,8 @@ class BarkModel(BarkPreTrainedModel):
             output_lengths = output_lengths // coarse_generation_config.n_coarse_codebooks
 
         # 3. "generate" from the fine model
+        if "generation_config" in kwargs_fine:
+            kwargs_fine.pop("generation_config")
         output = self.fine_acoustics.generate(
             coarse_output,
             history_prompt=history_prompt,
