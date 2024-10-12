@@ -16,6 +16,7 @@
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
+import math
 
 import torch
 import torch.utils.checkpoint
@@ -263,8 +264,10 @@ class DebertaEncoder(PreTrainedModel):
 
     def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
         if self.relative_attention and relative_pos is None:
-            q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
-            relative_pos = build_relative_position(q, hidden_states.size(-2), hidden_states.device)
+            if query_states is not None:
+                relative_pos = build_relative_position(query_states, hidden_states)
+            else:
+                relative_pos = build_relative_position(hidden_states, hidden_states)
         return relative_pos
 
     def forward(
@@ -329,13 +332,14 @@ class DebertaEncoder(PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions])
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions ]if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
-def build_relative_position(query_size:int, key_size:int, device:torch.device):
+@torch.jit.script
+def build_relative_position(query_layer, key_layer):
     """
     Build relative position according to the query and key
 
@@ -352,8 +356,11 @@ def build_relative_position(query_size:int, key_size:int, device:torch.device):
 
     """
 
-    q_ids = torch.arange(query_size, dtype=torch.long, device=device)
-    k_ids = torch.arange(key_size, dtype=torch.long, device=device)
+    query_size = query_layer.size(-2)
+    key_size = key_layer.size(-2)
+
+    q_ids = torch.arange(query_size, dtype=torch.long, device=query_layer.device)
+    k_ids = torch.arange(key_size, dtype=torch.long, device=key_layer.device)
     rel_pos_ids = q_ids[:, None] - k_ids.view(1, -1).repeat(query_size, 1)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
@@ -381,6 +388,32 @@ def linear(w, b, x):
     else:
         return torch.matmul(x, w.t())  # + b.t()
 
+###### To support a general trace, we have to define these operation as they use python objects (sizes) ##################
+# Full credits to @Szustarol
+@torch.jit.script
+def scaled_size_sqrt(query_layer, scale_factor: int):
+    return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
+@torch.jit.script
+def build_rpos(query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        return build_relative_position(key_layer, key_layer)
+    else:
+        return relative_pos
+
+@torch.jit.script
+def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+    return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
+@torch.jit.script
+def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
+        return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+    else:
+        return p2c_att
+
+########################################################################################################################
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -490,7 +523,7 @@ class DisentangledSelfAttention(nn.Module):
         rel_att:int = 0
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        scale = scaled_size_sqrt(query_layer, scale_factor)
         query_layer = query_layer / scale.to(dtype=query_layer.dtype)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
@@ -520,8 +553,7 @@ class DisentangledSelfAttention(nn.Module):
 
     def disentangled_att_bias(self, query_layer: torch.Tensor, key_layer:torch.Tensor, relative_pos:torch.Tensor, rel_embeddings:torch.Tensor, scale_factor: int):
         if relative_pos is None:
-            q = query_layer.size(-2)
-            relative_pos = build_relative_position(q, key_layer.size(-2), query_layer.device)
+            relative_pos = build_relative_position(query_layer, key_layer, query_layer.device)
         if relative_pos.dim() == 2:
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
         elif relative_pos.dim() == 3:
@@ -530,8 +562,8 @@ class DisentangledSelfAttention(nn.Module):
         elif relative_pos.dim() != 4:
             raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
-        att_span = min(max(query_layer.size(-2), key_layer.size(-2)), self.max_relative_positions)
-        relative_pos = relative_pos.long().to(query_layer.device)
+        att_span = compute_attention_span(query_layer, key_layer, self.max_relative_positions)
+        relative_pos = relative_pos.long()
         rel_embeddings = rel_embeddings[
             self.max_relative_positions - att_span : self.max_relative_positions + att_span, :
         ].unsqueeze(0)
@@ -551,20 +583,15 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if query_layer.size(-2) != key_layer.size(-2):
-                r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
-            else:
-                r_pos = relative_pos
+            pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
+            r_pos = build_rpos(query_layer, key_layer, relative_pos, )
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2).to(dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
 
-            if query_layer.size(-2) != key_layer.size(-2):
-                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
-                p2c_att = torch.gather(p2c_att, dim=-2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+            p2c_att = uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos)
             score += p2c_att
 
         return score
