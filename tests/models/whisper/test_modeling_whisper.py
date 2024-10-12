@@ -2057,7 +2057,19 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor([
+            50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295,
+            264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928,
+            702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326,
+            388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13,
+            50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196,
+            295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450,
+            10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936,
+            293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13,
+            51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354,
+            1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293,
+            51836, 50364, 393, 4411, 13, 50514, 50257
+        ])
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2068,7 +2080,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season"
                     " of the year, with Christmas and roast beef looming before us, similarly drawn from eating and"
                     " its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins'"
-                    " work is really Greek after all, and"
+                    " work is really Greek after all, and can discover."
                 ),
                 "offsets": [
                     {
@@ -2099,6 +2111,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                             " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
                         ),
                         "timestamp": (23.76, 29.44),
+                    },
+                    {
+                        "text": " can discover.",
+                        "timestamp": (29.44, 32.44),
                     },
                 ],
             }
