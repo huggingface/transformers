@@ -1,3 +1,4 @@
+#sudo su 
 ## 🔥 Model cards now live inside each huggingface.co model repo 🔥
 
 
