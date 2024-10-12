@@ -324,7 +324,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DABDETR
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DabDetr
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -332,7 +332,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by DABDETR.
+    Convert the target in COCO format into the format expected by DabDetr.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
@@ -420,7 +420,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DABDETR
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DabDetr
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
     target: Dict,
@@ -429,7 +429,7 @@ def prepare_coco_panoptic_annotation(
     input_data_format: Union[ChannelDimension, str] = None,
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for DABDETR.
+    Prepare a coco panoptic annotation for DabDetr.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -713,7 +713,7 @@ def compute_segments(
     return segmentation, segments
 
 
-class DABDETRImageProcessor(BaseImageProcessor):
+class DabDetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Conditional Detr image processor.
 
@@ -840,11 +840,11 @@ class DABDETRImageProcessor(BaseImageProcessor):
         ]
 
     @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->DABDETR
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->DabDetr
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `DABDETRImageProcessor.from_pretrained(checkpoint, size=600,
+        created using from_dict and kwargs e.g. `DabDetrImageProcessor.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -854,7 +854,7 @@ class DABDETRImageProcessor(BaseImageProcessor):
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DABDETR
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DabDetr
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -865,7 +865,7 @@ class DABDETRImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into DABDETR model.
+        Prepare an annotation for feeding into DabDetr model.
         """
         format = format if format is not None else self.format
 
@@ -1437,12 +1437,12 @@ class DABDETRImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->DABDETR
+    # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->DabDetr
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
     ):
         """
-        Converts the raw output of [`DABDETRForObjectDetection`] into final bounding boxes in (top_left_x,
+        Converts the raw output of [`DabDetrForObjectDetection`] into final bounding boxes in (top_left_x,
         top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
@@ -1496,3 +1496,6 @@ class DABDETRImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+
+__all__ = ["DabDetrImageProcessor"]

@@ -32,10 +32,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DABDETRImageProcessor
+    from transformers import DabDetrImageProcessor
 
 
-class DABDETRImageProcessingTester(unittest.TestCase):
+class DabDetrImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -82,7 +82,7 @@ class DABDETRImageProcessingTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to DABDETRImageProcessor,
+        This function computes the expected height and width when providing images to DabDetrImageProcessor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
@@ -131,12 +131,12 @@ class DABDETRImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = DABDETRImageProcessor if is_vision_available() else None
+class DabDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = DabDetrImageProcessor if is_vision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = DABDETRImageProcessingTester(self)
+        self.image_processor_tester = DabDetrImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -171,7 +171,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        image_processing = DABDETRImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+        image_processing = DabDetrImageProcessor.from_pretrained("davidhajdu/dab-detr-resnet-50")
         encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
@@ -217,7 +217,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        image_processing = DABDETRImageProcessor(format="coco_panoptic")
+        image_processing = DabDetrImageProcessor(format="coco_panoptic")
         encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values
@@ -255,7 +255,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
     @slow
-    # Modified from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr-DABDETR, facebook/detr-resnet-50
+    # Modified from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr-DabDetr, facebook/detr-resnet-50
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
@@ -282,7 +282,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        image_processing = DABDETRImageProcessor()
+        image_processing = DabDetrImageProcessor()
         encoding = image_processing(
             images=images,
             annotations=annotations,
@@ -373,7 +373,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
 
-    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->DABDETR
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->DabDetr
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -403,7 +403,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         annotations = [annotation_0, annotation_1]
 
         # encode them
-        image_processing = DABDETRImageProcessor(format="coco_panoptic")
+        image_processing = DabDetrImageProcessor(format="coco_panoptic")
         encoding = image_processing(
             images=images,
             annotations=annotations,
@@ -496,12 +496,12 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
 
-    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->DABDETR
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->DabDetr
     def test_max_width_max_height_resizing_and_pad_strategy(self):
         image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
         # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"max_height": 100, "max_width": 100},
             do_pad=False,
         )
@@ -509,21 +509,21 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 50]))
 
         # do_pad=False, max_height=300, max_width=100, image=200x100 -> 200x100
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"max_height": 300, "max_width": 100},
             do_pad=False,
         )
         inputs = image_processor(images=[image_1], return_tensors="pt")
 
         # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
         )
         inputs = image_processor(images=[image_1], return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
 
         # do_pad=True, max_height=300, max_width=100, image=200x100 -> 300x100
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"max_height": 300, "max_width": 100},
             do_pad=True,
             pad_size={"height": 301, "width": 101},
@@ -535,7 +535,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         image_2 = torch.ones([100, 150, 3], dtype=torch.uint8)
 
         # do_pad=True, max_height=150, max_width=100, images=[200x100, 100x150] -> 150x100
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"max_height": 150, "max_width": 100},
             do_pad=True,
             pad_size={"height": 150, "width": 100},
@@ -548,7 +548,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
 
         # max size is set; width < height;
         # do_pad=False, longest_edge=640, shortest_edge=640, image=958x653 -> 640x436
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"longest_edge": 640, "shortest_edge": 640},
             do_pad=False,
         )
@@ -558,7 +558,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         image_2 = torch.ones([653, 958, 3], dtype=torch.uint8)
         # max size is set; height < width;
         # do_pad=False, longest_edge=640, shortest_edge=640, image=653x958 -> 436x640
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"longest_edge": 640, "shortest_edge": 640},
             do_pad=False,
         )
@@ -568,7 +568,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         image_3 = torch.ones([100, 120, 3], dtype=torch.uint8)
         # max size is set; width == size; height > max_size;
         # do_pad=False, longest_edge=118, shortest_edge=100, image=120x100 -> 118x98
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"longest_edge": 118, "shortest_edge": 100},
             do_pad=False,
         )
@@ -578,7 +578,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         image_4 = torch.ones([128, 50, 3], dtype=torch.uint8)
         # max size is set; height == size; width < max_size;
         # do_pad=False, longest_edge=256, shortest_edge=50, image=50x128 -> 50x128
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"longest_edge": 256, "shortest_edge": 50},
             do_pad=False,
         )
@@ -588,7 +588,7 @@ class DABDETRImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestM
         image_5 = torch.ones([50, 50, 3], dtype=torch.uint8)
         # max size is set; height == width; width < max_size;
         # do_pad=False, longest_edge=117, shortest_edge=50, image=50x50 -> 50x50
-        image_processor = DABDETRImageProcessor(
+        image_processor = DabDetrImageProcessor(
             size={"longest_edge": 117, "shortest_edge": 50},
             do_pad=False,
         )

@@ -14,13 +14,7 @@
 # limitations under the License.
 """DAB-DETR model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -29,9 +23,9 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class DABDETRConfig(PretrainedConfig):
+class DabDetrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DABDETRModel`]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
     a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DAB-DETR
     [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
@@ -57,7 +51,7 @@ class DABDETRConfig(PretrainedConfig):
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DABDETRModel`] can detect in a single image. For COCO, we recommend 100 queries.
+            [`DabDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
@@ -70,12 +64,6 @@ class DABDETRConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Indicates whether the transformer model architecture is an encoder-decoder or not.
         activation_function (`str` or `function`, *optional*, defaults to `"prelu"`):
@@ -154,13 +142,13 @@ class DABDETRConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import DABDETRConfig, DABDETRModel
+    >>> from transformers import DabDetrConfig, DabDetrModel
 
     >>> # Initializing a DAB-DETR IDEA-Research/dab_detr-base style configuration
-    >>> configuration = DABDETRConfig()
+    >>> configuration = DabDetrConfig()
 
     >>> # Initializing a model (with random weights) from the IDEA-Research/dab_detr-base style configuration
-    >>> model = DABDETRModel(configuration)
+    >>> model = DabDetrModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -187,8 +175,6 @@ class DABDETRConfig(PretrainedConfig):
         decoder_layers=6,
         decoder_ffn_dim=2048,
         decoder_attention_heads=8,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
         is_encoder_decoder=True,
         activation_function="prelu",
         d_model=256,
@@ -227,6 +213,8 @@ class DABDETRConfig(PretrainedConfig):
     ):
         if query_dim != 4:
             raise ValueError("The query dimensions has to be 4.")
+
+        assert query_scale_type in ["cond_elewise", "cond_scalar", "fix_elewise"]
 
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
@@ -273,8 +261,6 @@ class DABDETRConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
@@ -317,22 +303,4 @@ class DABDETRConfig(PretrainedConfig):
         return self.d_model
 
 
-class DABDETROnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("pixel_mask", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-5
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
+__all__ = ["DabDetrConfig"]

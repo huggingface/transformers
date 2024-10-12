@@ -19,7 +19,7 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import DABDETRConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -34,18 +34,18 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import (
-        DABDETRForObjectDetection,
-        DABDETRModel,
+        DabDetrForObjectDetection,
+        DabDetrModel,
     )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DABDETRImageProcessor
+    from transformers import DabDetrImageProcessor
 
 
-class DABDETRModelTester:
+class DabDetrModelTester:
     def __init__(
         self,
         parent,
@@ -120,7 +120,7 @@ class DABDETRModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return DABDETRConfig(
+        return DabDetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -144,7 +144,7 @@ class DABDETRModelTester:
         return config, inputs_dict
 
     def create_and_check_dab_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = DABDETRModel(config=config)
+        model = DabDetrModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -156,7 +156,7 @@ class DABDETRModelTester:
         )
 
     def create_and_check_dab_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = DABDETRForObjectDetection(config=config)
+        model = DabDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -174,19 +174,19 @@ class DABDETRModelTester:
 
 
 @require_torch
-class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            DABDETRModel,
-            DABDETRForObjectDetection,
+            DabDetrModel,
+            DabDetrForObjectDetection,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": DABDETRModel,
-            "object-detection": DABDETRForObjectDetection,
+            "image-feature-extraction": DabDetrModel,
+            "object-detection": DabDetrForObjectDetection,
         }
         if is_torch_available()
         else {}
@@ -203,7 +203,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DABDETRForObjectDetection"]:
+            if model_class.__name__ in ["DabDetrForObjectDetection"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -226,8 +226,8 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = DABDETRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DABDETRConfig, has_text_modality=False)
+        self.model_tester = DabDetrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DabDetrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -645,6 +645,22 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self.assertIsNotNone(outputs.auxiliary_outputs)
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        # We only have loss with ObjectDetection
+        model_class = self.all_model_classes[-1]
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        model = model_class(config)
+        model.to(torch_device)
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -682,7 +698,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "DABDETRForObjectDetection":
+            if model_class.__name__ == "DabDetrForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -745,7 +761,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 TOLERANCE = 1e-4
-CHECKPOINT = "IDEA-Research/dab-detr-resnet-50"
+CHECKPOINT = "davidhajdu/dab-detr-resnet-50"
 
 
 # We will verify our results on an image of cute cats
@@ -757,13 +773,13 @@ def prepare_img():
 @require_timm
 @require_vision
 @slow
-class DABDETRModelIntegrationTests(unittest.TestCase):
+class DabDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DABDETRImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return DabDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_no_head(self):
-        model = DABDETRModel.from_pretrained(CHECKPOINT).to(torch_device)
+        model = DabDetrModel.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -780,7 +796,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4))
 
     def test_inference_object_detection_head(self):
-        model = DABDETRForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        model = DabDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -806,9 +822,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = image_processor.post_process_object_detection(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
-        )[0]
+        results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=[image.size[::-1]])[0]
         expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
         expected_labels = [17, 75, 17, 75, 63]
         expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(torch_device)
