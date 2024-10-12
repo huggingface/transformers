@@ -2555,17 +2555,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # task defaults to transcribe
         sequences = model.generate(input_features, return_timestamps=True)
 
-        transcription = processor.batch_decode(sequences)[0]
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
+        assert transcription == "<|startoftranscript|><|hi|><|transcribe|> मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?<|endoftext|>"
 
         # set task to translate
         sequences = model.generate(input_features, task="translate", return_timestamps=True)
-        transcription = processor.batch_decode(sequences)[0]
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
         assert (
             transcription
-            == " How many different species are there in the chilli? How many different species are there in the chilli?"
+            == "<|startoftranscript|><|hi|><|translate|> How many different species are there in the chilli? How many different species are there in the chilli?<|endoftext|>"
         )
 
     @slow
