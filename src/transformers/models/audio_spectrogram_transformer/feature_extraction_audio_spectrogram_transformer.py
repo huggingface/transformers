@@ -169,9 +169,10 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        timem: Optional[int] = 0,
-        freqm: Optional[int] = 0,
+        time_mask_length: Optional[int] = None,
+        frequency_mask_length: Optional[int] = None,
         add_noise: Optional[bool] = False,
+        add_temporal_shift: Optional[bool] = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -191,12 +192,14 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            timem (`int`, *optional*):
-                The maximum possible length of the mask in the time domain.
-            freqm (`int`, *optional*):
-                The maximum possible length of the mask in the frequency domain.
+            time_mask_length (`int`, *optional*):
+                The maximum possible length of the mask in the time domain. Functions as a data augmentation that could be useful during training. Torchaudio is required to use this parameter.
+            frequency_mask_length (`int`, *optional*):
+                The maximum possible length of the mask in the frequency domain. Functions as a data augmentation that could be useful during training. Torchaudio is required to use this parameter.
             add_noise (`bool`, *optional*):
-                Whether or not to add noise to the input.
+                Whether or not to add noise to the input. Used in the original AST paper in combination with add_temporal_shift when training for certain use-cases.
+            add_temporal_shift (`bool`, *optional*):
+                Whether or not to shift the input. Used in the original AST paper in combination with add_noise when training for certain use-cases.
         """
 
         if sampling_rate is not None:
@@ -233,7 +236,11 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         # extract fbank features and pad/truncate to max_length
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 
-        features = [self.mask(feature, freqm, timem) for feature in features]
+        if time_mask_length or frequency_mask_length:
+            features = [
+                self.apply_time_frequency_masks(feature, frequency_mask_length, time_mask_length)
+                for feature in features
+            ]
 
         # convert into BatchFeature
         padded_inputs = BatchFeature({"input_values": features})
@@ -248,7 +255,10 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
 
         if add_noise:
-            padded_inputs["input_values"] = [self.add_noise(feature) for feature in input_values]
+            padded_inputs["input_values"] = [self.add_noise(feature) for feature in padded_inputs["input_values"]]
+
+        if add_temporal_shift:
+            padded_inputs["input_values"] = [self.add_temporal_shift(feature) for feature in padded_inputs["input_values"]]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
@@ -256,9 +266,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         return padded_inputs
 
     # from https://github.com/YuanGongND/ast with minor changes
-    def mask(self, fbank, freqm, timem):
-        if freqm == 0 and timem == 0:
-            return fbank
+    def apply_time_frequency_masks(self, fbank, frequency_mask_length, time_mask_length):
         if not is_speech_available():
             raise ImportError("Torchaudio is required to use frequency and/or time masking.")
         if not isinstance(fbank, torch.Tensor):
@@ -266,11 +274,11 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         fbank = torch.transpose(fbank, 0, 1)
         # this is just to satisfy new torchaudio version, which only accept [1, freq, time]
         fbank = fbank.unsqueeze(0)
-        if freqm != 0:
-            freqm = FrequencyMasking(freqm)
+        if frequency_mask_length:
+            freqm = FrequencyMasking(frequency_mask_length)
             fbank = freqm(fbank)
-        if timem != 0:
-            timem = TimeMasking(timem)
+        if time_mask_length:
+            timem = TimeMasking(time_mask_length)
             fbank = timem(fbank)
         # squeeze it back, it is just a trick to satisfy new torchaudio version
         fbank = fbank.squeeze(0)
@@ -281,5 +289,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
     # from https://github.com/YuanGongND/ast but converted into numpy
     def add_noise(self, fbank: np.ndarray) -> np.ndarray:
         fbank += np.random.rand(fbank.shape[0], fbank.shape[1]) * (np.random.rand() / 10)
+        return fbank
+
+    def add_temporal_shift(self, fbank: np.ndarray) -> np.ndarray:
         fbank = np.roll(fbank, np.random.randint(-10, 10), axis=0)
         return fbank
