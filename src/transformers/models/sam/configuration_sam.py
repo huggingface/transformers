@@ -285,7 +285,6 @@ class SamConfig(PretrainedConfig):
         prompt_encoder_config=None,
         mask_decoder_config=None,
         initializer_range=0.02,
-        attn_implementation="eager",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -300,8 +299,8 @@ class SamConfig(PretrainedConfig):
         if isinstance(mask_decoder_config, SamMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
-        vision_config['attn_implementation'] = attn_implementation
-        mask_decoder_config['attn_implementation'] = attn_implementation
+        vision_config["attn_implementation"] = self._attn_implementation
+        mask_decoder_config["attn_implementation"] = self._attn_implementation
 
         self.vision_config = SamVisionConfig(**vision_config)
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
