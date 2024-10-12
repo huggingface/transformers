@@ -233,6 +233,14 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
+        # check that all the inputs have at least length 400, else pad them and warn the user
+        for i, waveform in enumerate(raw_speech):
+            if len(waveform) < 400:
+                logger.warning(
+                    f"Input {i} has length {len(waveform)}, which is less than the minimum of 400. This would result in an error when creating the spectrogram. Padding it to have length 400.",
+                )
+                raw_speech[i] = np.pad(waveform, (0, 400 - len(waveform)))
+
         # extract fbank features and pad/truncate to max_length
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 

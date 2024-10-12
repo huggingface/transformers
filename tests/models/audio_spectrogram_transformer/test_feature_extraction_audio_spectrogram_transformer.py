@@ -15,6 +15,7 @@
 
 
 import itertools
+import logging
 import os
 import random
 import tempfile
@@ -233,6 +234,25 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
         feat_extract(speech_inputs[0], return_tensors="np", add_temporal_shit=True).input_values
+
+    def test_warning_raised_audio_too_short(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        short_input = floats_list((1, 399))[0]
+
+        logger = logging.getLogger(
+            "transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer"
+        )
+        with self.assertLogs(logger, level="WARNING") as log:
+            feat_extract(short_input, return_tensors="np").input_values
+
+        # Check that the warning message is in the captured logs
+        self.assertTrue(
+            any(
+                "Input 0 has length 399, which is less than the minimum of 400. This would result in an error when creating the spectrogram. Padding it to have length 400."
+                in message
+                for message in log.output
+            )
+        )
 
     @require_torch
     def test_double_precision_pad(self):
