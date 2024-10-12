@@ -16,7 +16,6 @@
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
-import math
 
 import torch
 import torch.utils.checkpoint
@@ -32,7 +31,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta import DebertaConfig
 
@@ -148,11 +146,11 @@ class DebertaAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_attentions:bool=False,
+        output_attentions: bool = False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-    )-> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_output, att_matrix = self.self(
             hidden_states,
             attention_mask,
@@ -216,8 +214,8 @@ class DebertaLayer(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-        output_attentions:bool=False,
-    )-> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         attention_output, att_matrix = self.attention(
             hidden_states,
             attention_mask,
@@ -274,11 +272,11 @@ class DebertaEncoder(PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_hidden_states:bool=True,
-        output_attentions:bool=False,
+        output_hidden_states: bool = True,
+        output_attentions: bool = False,
         query_states=None,
         relative_pos=None,
-        return_dict:bool=True,
+        return_dict: bool = True,
     ):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
@@ -290,7 +288,6 @@ class DebertaEncoder(PreTrainedModel):
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
@@ -332,7 +329,7 @@ class DebertaEncoder(PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions ]if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -388,11 +385,13 @@ def linear(w, b, x):
     else:
         return torch.matmul(x, w.t())  # + b.t()
 
+
 ###### To support a general trace, we have to define these operation as they use python objects (sizes) ##################
 # Full credits to @Szustarol
 @torch.jit.script
 def scaled_size_sqrt(query_layer, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
 
 @torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos):
@@ -401,9 +400,11 @@ def build_rpos(query_layer, key_layer, relative_pos):
     else:
         return relative_pos
 
+
 @torch.jit.script
 def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
     return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
 
 @torch.jit.script
 def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
@@ -412,6 +413,7 @@ def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
         return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
     else:
         return p2c_att
+
 
 ########################################################################################################################
 class DisentangledSelfAttention(nn.Module):
@@ -472,11 +474,11 @@ class DisentangledSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool=False,
-        query_states: Optional[torch.Tensor]=None,
-        relative_pos: Optional[torch.Tensor]=None,
-        rel_embeddings: Optional[torch.Tensor]=None,
-    )->Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        output_attentions: bool = False,
+        query_states: Optional[torch.Tensor] = None,
+        relative_pos: Optional[torch.Tensor] = None,
+        rel_embeddings: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Call the module
 
@@ -520,7 +522,7 @@ class DisentangledSelfAttention(nn.Module):
         query_layer = query_layer + self.transpose_for_scores(self.q_bias[None, None, :])
         value_layer = value_layer + self.transpose_for_scores(self.v_bias[None, None, :])
 
-        rel_att:int = 0
+        rel_att: int = 0
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
         scale = scaled_size_sqrt(query_layer, scale_factor)
@@ -551,7 +553,14 @@ class DisentangledSelfAttention(nn.Module):
             return (context_layer, None)
         return (context_layer, attention_probs)
 
-    def disentangled_att_bias(self, query_layer: torch.Tensor, key_layer:torch.Tensor, relative_pos:torch.Tensor, rel_embeddings:torch.Tensor, scale_factor: int):
+    def disentangled_att_bias(
+        self,
+        query_layer: torch.Tensor,
+        key_layer: torch.Tensor,
+        relative_pos: torch.Tensor,
+        rel_embeddings: torch.Tensor,
+        scale_factor: int,
+    ):
         if relative_pos is None:
             relative_pos = build_relative_position(query_layer, key_layer, query_layer.device)
         if relative_pos.dim() == 2:
@@ -584,7 +593,11 @@ class DisentangledSelfAttention(nn.Module):
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
-            r_pos = build_rpos(query_layer, key_layer, relative_pos, )
+            r_pos = build_rpos(
+                query_layer,
+                key_layer,
+                relative_pos,
+            )
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2).to(dtype=key_layer.dtype))
             p2c_att = torch.gather(
