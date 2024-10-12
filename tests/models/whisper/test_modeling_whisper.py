@@ -2213,7 +2213,19 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702,  1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264,  1064,  11, 365,  5272,   293, 12904,  9256, 450, 10539, 949, 505, 11, 51245, 51287,  1034, 4680, 10117, 490, 3936, 293, 1080,  3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968,  6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50257])
+        EXPECTED_OUTPUT = torch.tensor([
+            50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295,
+            264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928,
+            702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326,
+            388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13,
+            50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196,
+            295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450,
+            10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490,
+            3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575,
+            13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617,
+            1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439,
+            11, 51799, 50365, 293, 393, 4411, 50430, 50257
+        ])
         # fmt: on
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2224,7 +2236,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive"
                     " season of the year, with Christmas and roast beef looming before us, similes drawn from eating"
                     " and its results occur most readily to the mind. He has grave doubts whether Sir Frederick "
-                    "Leighton's work is really Greek after all,"
+                    "Leighton's work is really Greek after all, and can discover"
                 ),
                 "offsets": [
                     {
@@ -2253,6 +2265,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                         ),
                         "timestamp": (23.16, 28.68),
                     },
+                    {
+                        "text": (
+                            " and can discover"
+                        ),
+                        "timestamp": (28.68, 29.98),
+                    },
+
                 ],
             }
         ]
