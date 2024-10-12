@@ -26,7 +26,13 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
-from transformers.models.encodec.modeling_encodec import Balancer
+from transformers.models.encodec.loss_encodec import (
+    Balancer,
+    compute_discriminator_loss,
+    compute_generator_adv_loss,
+    compute_feature_matching_loss,
+)
+
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -182,9 +188,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         assert torch.allclose(x.grad, torch.tensor(0.)), x.grad
 
 
-    @slow
     def test_training_with_discriminator(self):
-        
         model_id = "facebook/encodec_24khz"
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
@@ -198,7 +202,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         generator_optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
         discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-4)
 
-        # sine wave for input
+        # Generate a sine wave input
         sample_rate = 24000
         duration = 1
         t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
@@ -233,38 +237,37 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         for epoch in range(num_epochs):
             real_audio = input_values
 
-            # update discriminator based on the probability outlined in the paper
+            # Update discriminator based on the probability outlined in the paper
             if sample_rate == 24000:
                 update_discriminator = random.random() < (2/3)
             elif sample_rate == 48000:
                 update_discriminator = random.random() < 0.5
             else:
-                raise ValueError("no")
+                raise ValueError("Unsupported sample rate")
 
             if update_discriminator:
-                #  Train Discriminator
+                # Train Discriminator
                 discriminator_optimizer.zero_grad()
 
                 # Generate fake audio with the generator
                 outputs = model(input_values, return_dict=True, return_loss=True)
                 fake_audio = outputs.audio_values.detach()  # Detach to prevent gradients flowing to the generator
 
-                real_audio = input_values
-
                 # Compute discriminator loss on real and fake audio
                 real_logits, _ = discriminator(real_audio)
                 fake_logits, _ = discriminator(fake_audio)
 
-                discriminator_loss = 0
-                for real_logit, fake_logit in zip(real_logits, fake_logits):
-                    discriminator_loss += torch.mean(torch.relu(1 - real_logit)) + torch.mean(torch.relu(1 + fake_logit))
-                discriminator_loss /= discriminator.num_discriminators
+                discriminator_loss = compute_discriminator_loss(
+                    real_logits=real_logits,
+                    fake_logits=fake_logits,
+                    num_discriminators=discriminator.num_discriminators
+                )
 
                 # Backpropagate and update discriminator
                 discriminator_loss.backward()
                 discriminator_optimizer.step()
 
-            #  Train Generator
+            # Train Generator
             generator_optimizer.zero_grad()
 
             # Generate fake audio again (this time gradients flow back to the generator)
@@ -276,19 +279,17 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             _, real_features = discriminator(real_audio)
 
             # Generator adversarial loss
-            g_adv_loss = 0
-            for fake_logit in fake_logits:
-                g_adv_loss += torch.mean(torch.relu(1 - fake_logit))
-            g_adv_loss /= discriminator.num_discriminators
+            g_adv_loss = compute_generator_adv_loss(
+                fake_logits=fake_logits,
+                num_discriminators=discriminator.num_discriminators
+            )
 
             # Feature matching loss (Equation 2 in paper)
-            fm_loss = 0
-            for k in range(discriminator.num_discriminators):
-                for l in range(len(real_features[k])):
-                    real_feat = real_features[k][l]
-                    fake_feat = fake_features[k][l]
-                    fm_loss += torch.nn.functional.l1_loss(fake_feat, real_feat.detach()) / torch.mean(torch.abs(real_feat.detach()))
-            fm_loss /= (discriminator.num_discriminators * len(real_features[0]))
+            fm_loss = compute_feature_matching_loss(
+                real_features=real_features,
+                fake_features=fake_features,
+                num_discriminators=discriminator.num_discriminators
+            )
 
             # Combine losses using the Balancer
             losses_to_balance = {
@@ -309,13 +310,19 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             generator_optimizer.step()
 
             print(f"Epoch {epoch+1}/{num_epochs}")
+            if update_discriminator:
+                print(f"Discriminator loss: {discriminator_loss.item():.4f}")
+            else:
+                print("Discriminator not updated this epoch")
             print(f"Generator adversarial loss: {g_adv_loss.item():.4f}")
             print(f"Feature matching loss: {fm_loss.item():.4f}")
             print(f"Reconstruction loss (no commit): {outputs.reconstruction_loss.item():.4f}")
             if outputs.commitment_loss is not None:
                 print(f"Commitment loss: {outputs.commitment_loss.item():.4f}")
-            print(f"Total generator loss (before balancing): "
-                  f"{outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item():.4f}\n")
+            total_gen_loss = outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item()
+            if outputs.commitment_loss is not None:
+                total_gen_loss += outputs.commitment_loss.item()
+            print(f"Total generator loss (before balancing): {total_gen_loss:.4f}\n")
 
     @slow
     def test_reconstruction_loss(self):
@@ -341,7 +348,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 outputs = model(input_values, bandwidth=bandwidth, return_dict=True, return_loss=True)
 
             print(f"\nBandwidth: {bandwidth}")
-            print(f"reconstruction_loss: {outputs.reconstruction_loss.item()}")
+            print(f"Reconstruction loss: {outputs.reconstruction_loss.item()}")
             print(f"Audio codes shape: {outputs.audio_codes[0].shape}")
             print(f"Audio values shape: {outputs.audio_values.shape}")
             print(f"Input max: {input_values.max().item()}, min: {input_values.min().item()}")
@@ -349,7 +356,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             reconstructed_audio = outputs.audio_values
             mae = torch.mean(torch.abs(input_values - reconstructed_audio))
-            print(f"MAE: {mae.item()}")
+            print(f"Mean Absolute Error (MAE): {mae.item()}")
 
             # Compare spectrograms
             spec_transform = torchaudio.transforms.Spectrogram().to(torch_device)
