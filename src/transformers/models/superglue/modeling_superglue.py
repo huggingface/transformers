@@ -423,8 +423,8 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        # elif isinstance(module, SuperGlueMultiLayerPerceptron):
-        #     nn.init.constant_(module.layers[-1].bias, 0.0)
+        elif isinstance(module, SuperGlueMultiLayerPerceptron):
+            nn.init.constant_(module.linear.bias, 0.0)
 
 
 SUPERGLUE_START_DOCSTRING = r"""
