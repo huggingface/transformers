@@ -185,11 +185,14 @@ class ZoeDepthFeatureFusionStage(nn.Module):
         hidden_states = hidden_states[::-1]
 
         fused_hidden_states = []
-        # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
-        fused_hidden_states.append(fused_hidden_state)
+        fused_hidden_state = None
         # looping from the last layer to the second
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
+        for idx, (hidden_state, layer) in enumerate(zip(hidden_states, self.layers)):
+            if idx == 0:
+                # first layer only uses the last hidden_state
+                fused_hidden_state = layer(hidden_state)
+                fused_hidden_states.append(fused_hidden_state)
+                continue
             fused_hidden_state = layer(fused_hidden_state, hidden_state)
             fused_hidden_states.append(fused_hidden_state)
 
