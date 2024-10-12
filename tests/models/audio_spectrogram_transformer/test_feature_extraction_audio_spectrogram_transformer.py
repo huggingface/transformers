@@ -19,7 +19,6 @@ import os
 import random
 import tempfile
 import unittest
-from typing import override
 
 import numpy as np
 
@@ -320,7 +319,6 @@ class ASTFeatureExtractionWithoutTorchaudioTest(ASTFeatureExtractionTest):
 
         self.assertFalse(is_speech_available())
 
-    @override
     def test_call_with_time_mask_length_and_frequency_mask_length(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = floats_list((1, 800))[0]
@@ -328,7 +326,6 @@ class ASTFeatureExtractionWithoutTorchaudioTest(ASTFeatureExtractionTest):
         with self.assertRaises(ImportError) as _:
             feat_extract(speech_inputs, return_tensors="np", time_mask_length=400, frequency_mask_length=400)
 
-    @override
     def test_call_with_only_time_mask_length(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = floats_list((1, 800))[0]
