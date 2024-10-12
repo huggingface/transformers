@@ -148,7 +148,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT commit_id as commit_id, commit_message, gpu_name FROM benchmarks WHERE branch = ${branch};",
+          "rawSql": "SELECT commit_id as commit_id, commit_message, gpu_name FROM benchmarks WHERE branch = '${branch}';",
           "refId": "A",
           "sql": {
             "columns": [
@@ -283,7 +283,7 @@
       "id": 7,
       "options": {
         "barRadius": 0.05,
-        "barWidth": 0.3,
+        "barWidth": 0.8,
         "fullHighlight": false,
         "groupWidth": 0.7,
         "legend": {
@@ -312,7 +312,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'first_eager_forward_pass_time_secs' AS double precision) AS first_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'first_eager_forward_pass_time_secs' AS double precision) AS first_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -424,7 +424,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'second_eager_forward_pass_time_secs' AS double precision) AS second_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'second_eager_forward_pass_time_secs' AS double precision) AS second_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -545,7 +545,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_first_token_secs' AS double precision) AS time_to_first_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_first_token_secs' AS double precision) AS time_to_first_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -653,7 +653,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_second_token_secs' AS double precision) AS time_to_second_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_second_token_secs' AS double precision) AS time_to_second_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -761,7 +761,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_third_token_secs' AS double precision) AS time_to_third_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_third_token_secs' AS double precision) AS time_to_third_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -869,7 +869,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_next_token_mean_secs' AS double precision) AS time_to_next_token_mean_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_next_token_mean_secs' AS double precision) AS time_to_next_token_mean_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -990,7 +990,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'first_compile_generate_time_secs' AS double precision) AS first_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'first_compile_generate_time_secs' AS double precision) AS first_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1098,7 +1098,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'second_compile_generate_time_secs' AS double precision) AS second_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'second_compile_generate_time_secs' AS double precision) AS second_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1206,7 +1206,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'third_compile_generate_time_secs' AS double precision) AS third_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'third_compile_generate_time_secs' AS double precision) AS third_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1314,7 +1314,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'fourth_compile_generate_time_secs' AS double precision) AS fourth_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = ${branch} AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'fourth_compile_generate_time_secs' AS double precision) AS fourth_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1442,7 +1442,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  d.cpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = ${branch}",
+          "rawSql": "SELECT\n  d.cpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1627,7 +1627,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  b.commit_id,\n  d.gpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = ${branch}",
+          "rawSql": "SELECT\n  b.commit_id,\n  d.gpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1812,7 +1812,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT d.mem_megabytes, d.time FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = ${branch}",
+          "rawSql": "SELECT d.mem_megabytes, d.time FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1997,7 +1997,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  d.gpu_mem_megabytes,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = ${branch}",
+          "rawSql": "SELECT\n  d.gpu_mem_megabytes,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
           "refId": "A",
           "sql": {
             "columns": [
@@ -2099,13 +2099,9 @@
     "list": [
       {
         "current": {
-          "selected": true,
-          "text": [
-            "refactor/benchmarks"
-          ],
-          "value": [
-            "refactor/benchmarks"
-          ]
+          "selected": false,
+          "text": "main",
+          "value": "main"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
@@ -2129,21 +2125,21 @@
       {
         "current": {
           "selected": false,
-          "text": "1728570853117",
-          "value": "1728570853117"
+          "text": "1728662868776",
+          "value": "1728662868776"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "de0dbhs18ho1sc"
         },
-        "definition": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = ${branch} ORDER BY benchmark_id ASC LIMIT 1;",
+        "definition": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = '${branch}' ORDER BY benchmark_id ASC LIMIT 1;",
         "description": "",
         "hide": 2,
         "includeAll": false,
         "multi": false,
         "name": "StartTime",
         "options": [],
-        "query": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = ${branch} ORDER BY benchmark_id ASC LIMIT 1;",
+        "query": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = '${branch}' ORDER BY benchmark_id ASC LIMIT 1;",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -2153,21 +2149,21 @@
       {
         "current": {
           "selected": false,
-          "text": "1728657828802",
-          "value": "1728657828802"
+          "text": "1728663254125",
+          "value": "1728663254125"
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "de0dbhs18ho1sc"
         },
-        "definition": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = ${branch} ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
+        "definition": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}' ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
         "description": "",
         "hide": 2,
         "includeAll": false,
         "multi": false,
         "name": "EndTime",
         "options": [],
-        "query": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = ${branch} ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
+        "query": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}' ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -2179,6 +2175,10 @@
           "selected": false,
           "text": "NVIDIA A10G",
           "value": "NVIDIA A10G"
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "de0dbhs18ho1sc"
         },
         "definition": "SELECT DISTINCT gpu_name FROM benchmarks;",
         "hide": 0,
@@ -2197,8 +2197,8 @@
     ]
   },
   "time": {
-    "from": "2024-10-11T13:10:01.641Z",
-    "to": "2024-10-11T13:25:21.783Z"
+    "from": "now-1h",
+    "to": "now"
   },
   "timepicker": {
     "hidden": false
@@ -2206,6 +2206,6 @@
   "timezone": "browser",
   "title": "Transformers benchmarks",
   "uid": "fdz33iyzln9c0a",
-  "version": 9,
+  "version": 11,
   "weekStart": ""
 }
