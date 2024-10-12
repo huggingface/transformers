@@ -3133,14 +3133,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         # fmt: off
         EXPECTED_TEXT = [
-            ' Mr. Kfilter is the apostle of the Middle Classes and we are glad to welcome his gospel.',
-            " Nor is Mr. Qilter's manner less interesting than his matter.",
-            ' He tells us that at this festive season of the year, with Christmas and roce beef, looming before us, similarly drawn from eating and its results occur most readily to the mind.',
-            ' He has grabbed those with her surfered trigger late and his work is really a great after all, and can discover it in it but little of Rocky Ithaka.',
-            " L'Neile's pictures are a sort of upguards and add-um paintings, and Maessin's exquisite Itals are a national as a jingo poem. Mr. Birkett Foster's landscapes smiled at one much in the same way that Mr. Carcher used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slapper in the back, before he says,",
-            ' It is obviously unnecessary for us, to point out how luminous these criticisms are, how delicate and expression.',
-            ' On the general principles of art and Mr. Kriltor rights with equal lucidity.',
-            ' Painting, he tells us is of a different quality to mathematics and finish in art is adding more effect.',
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+            " Nor is Mr. Quilters' manner less interesting than his matter.",
+            " He tells us that at this festive season of the year with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind.",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.",
+            " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his visitor a cheerful slap on the back before he says like a shampoo or a turkish bath. Next man!",
+            " It is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression.",
+            " On the general principles of art and Mr. Quilter writes with equal lucidity.",
+            " Painting he tells us is of a different quality to mathematics and finish in art is adding more effect.",
         ]
         # fmt: on
 
