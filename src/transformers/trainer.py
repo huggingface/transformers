@@ -4894,13 +4894,13 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
+
+        if "use_gather_object" in inspect.signature(self.accelerator.gather_for_metrics).parameters.keys():
+            self.accelerator.gather_for_metrics = functools.partial(
+                self.accelerator.gather_for_metrics, use_gather_object=self.args.eval_use_gather_object
+            )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
-
-        if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
-            self.gather_function = functools.partial(
-                self.gather_function, use_gather_object=self.args.eval_use_gather_object
-            )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
