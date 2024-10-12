@@ -132,6 +132,10 @@ class RTDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
+        losses (`List[str]`, *optional*, defaults to `['labels_varifocal', 'boxes']`):
+            Losses to be used in the object detection loss. Possible values for labels are:
+            `labels_varifocal`, `labels_focal`, `labels_cross_entropy`, `labels_binary_cross_entropy`.
+            For boxes, the possible value is `boxes`.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -143,7 +147,7 @@ class RTDetrConfig(PretrainedConfig):
         matcher_giou_cost (`float`, *optional*, defaults to 2.0):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal focal should be used.
+            Parameter informing if focal loss should be used in HungarianMatcher to compute class cost.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
@@ -156,6 +160,12 @@ class RTDetrConfig(PretrainedConfig):
             Relative weight of the L1 bounding box loss in the object detection loss.
         weight_loss_giou (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
+        weight_loss_cross_entropy (`float`, *optional*, defaults to 1.0):
+            Relative weight of the labels cross-entropy loss in the object detection loss.
+        weight_loss_binary_cross_entropy (`float`, *optional*, defaults to 1.0):
+            Relative weight of the labels binary cross-entropy loss in the object detection loss.
+        weight_loss_focal (`float`, *optional*, defaults to 1.0):
+            Relative weight of the labels focal loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
 
@@ -230,6 +240,7 @@ class RTDetrConfig(PretrainedConfig):
         with_box_refine=True,
         is_encoder_decoder=True,
         # Loss
+        losses=["labels_varifocal", "boxes"],
         matcher_alpha=0.25,
         matcher_gamma=2.0,
         matcher_class_cost=2.0,
@@ -242,6 +253,9 @@ class RTDetrConfig(PretrainedConfig):
         weight_loss_vfl=1.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
+        weight_loss_cross_entropy=1.0,
+        weight_loss_binary_cross_entropy=1.0,
+        weight_loss_focal=1.0,
         eos_coefficient=1e-4,
         **kwargs,
     ):
@@ -321,6 +335,7 @@ class RTDetrConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
         # Loss
+        self.losses = losses
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma
         self.matcher_class_cost = matcher_class_cost
@@ -332,12 +347,19 @@ class RTDetrConfig(PretrainedConfig):
         self.weight_loss_vfl = weight_loss_vfl
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
+        self.weight_loss_cross_entropy = weight_loss_cross_entropy
+        self.weight_loss_binary_cross_entropy = weight_loss_binary_cross_entropy
+        self.weight_loss_focal = weight_loss_focal
         self.eos_coefficient = eos_coefficient
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
+
+    @property
+    def is_multiclass(self) -> bool:
+        return "labels_cross_entropy" in self.losses
 
     @property
     def hidden_size(self) -> int:
