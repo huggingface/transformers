@@ -258,7 +258,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = [self.add_noise(feature) for feature in padded_inputs["input_values"]]
 
         if add_temporal_shift:
-            padded_inputs["input_values"] = [self.add_temporal_shift(feature) for feature in padded_inputs["input_values"]]
+            padded_inputs["input_values"] = [
+                self.add_temporal_shift(feature) for feature in padded_inputs["input_values"]
+            ]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
