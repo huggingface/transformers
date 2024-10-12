@@ -27,6 +27,14 @@ from transformers import (
     SuperGlueForKeypointMatching,
     SuperGlueImageProcessor,
 )
+from transformers.models.superglue.modeling_superglue import (
+    SuperGlueAttentionalGNN,
+    SuperGlueAttentionalPropagation,
+    SuperGlueFinalProjection,
+    SuperGlueKeypointEncoder,
+    SuperGlueMultiHeadAttention,
+    SuperGlueMultiLayerPerceptron,
+)
 
 
 def prepare_imgs_for_image_processor():
@@ -100,8 +108,8 @@ def conv1d_to_linear(conv1d_layer):
     return linear_layer
 
 
-class SuperGlueMultiLayerPerceptronConversionModel(nn.Module):
-    def __init__(self, config: SuperGlueConfig, channels: List[int]) -> None:
+class SuperGlueOldMLPConversionModel(nn.Module):
+    def __init__(self, channels: List[int]) -> None:
         super().__init__()
         num_layers = len(channels)
         layers = []
@@ -121,21 +129,36 @@ class SuperGlueMultiLayerPerceptronConversionModel(nn.Module):
         self.layers = nn.ModuleList(new_layers)
 
 
-class SuperGlueKeypointEncoderConversionModel(nn.Module):
+class SuperGlueKeypointEncoderConversionModel(SuperGlueKeypointEncoder):
     def __init__(self, config: SuperGlueConfig) -> None:
-        super().__init__()
+        super().__init__(config)
+        self.config = config
         layer_sizes = config.keypoint_encoder_sizes
         feature_dim = config.descriptor_dim
-        encoder_channels = [3] + layer_sizes + [feature_dim]
-        self.encoder = SuperGlueMultiLayerPerceptronConversionModel(config, channels=encoder_channels)
+        self.encoder_channels = [3] + layer_sizes + [feature_dim]
+        self.encoder = SuperGlueOldMLPConversionModel(self.encoder_channels)
 
     def convert(self):
         self.encoder.convert()
 
+        # Convert from SuperGlueOldMLP to list of SuperGlueNewMLP
+        layers = []
+        for i in range(1, len(self.encoder_channels)):
+            layer = SuperGlueMultiLayerPerceptron(
+                self.config, self.encoder_channels[i - 1], self.encoder_channels[i], i < len(self.encoder_channels) - 1
+            )
+            linear_state_dict = self.encoder.layers[(i - 1) * 3].state_dict()
+            layer.linear.load_state_dict(linear_state_dict, strict=True)
+            if i < len(self.encoder_channels) - 1:
+                batchnorm_state_dict = self.encoder.layers[(i - 1) * 3 + 1].state_dict()
+                layer.batch_norm.load_state_dict(batchnorm_state_dict, strict=True)
+            layers.append(layer)
+        self.encoder = nn.ModuleList(layers)
 
-class SuperGlueMultiHeadAttentionConversionModel(nn.Module):
+
+class SuperGlueMultiHeadAttentionConversionModel(SuperGlueMultiHeadAttention):
     def __init__(self, config: SuperGlueConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         feature_dim = config.descriptor_dim
         self.num_heads = config.num_heads
         self.head_dim = feature_dim // self.num_heads
@@ -152,22 +175,36 @@ class SuperGlueMultiHeadAttentionConversionModel(nn.Module):
         self.out_proj = conv1d_to_linear(self.out_proj)
 
 
-class SuperGlueAttentionalPropagationConversionModel(nn.Module):
+class SuperGlueAttentionalPropagationConversionModel(SuperGlueAttentionalPropagation):
     def __init__(self, config: SuperGlueConfig) -> None:
-        super().__init__()
+        super().__init__(config)
+        self.config = config
         descriptor_dim = config.descriptor_dim
         self.attention = SuperGlueMultiHeadAttentionConversionModel(config)
-        mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
-        self.mlp = SuperGlueMultiLayerPerceptronConversionModel(config, channels=mlp_channels)
+        self.mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
+        self.mlp = SuperGlueOldMLPConversionModel(config, channels=self.mlp_channels)
 
     def convert(self):
         self.attention.convert()
         self.mlp.convert()
 
+        layers = []
+        for i in range(1, len(self.mlp_channels)):
+            layer = SuperGlueMultiLayerPerceptron(
+                self.config, self.mlp_channels[i - 1], self.mlp_channels[i], i < len(self.mlp_channels) - 1
+            )
+            linear_state_dict = self.mlp.layers[(i - 1) * 3].state_dict()
+            layer.linear.load_state_dict(linear_state_dict, strict=True)
+            if i < len(self.mlp_channels) - 1:
+                batchnorm_state_dict = self.mlp.layers[(i - 1) * 3 + 1].state_dict()
+                layer.batch_norm.load_state_dict(batchnorm_state_dict, strict=True)
+            layers.append(layer)
+        self.mlp = nn.ModuleList(layers)
 
-class SuperGlueAttentionalGNNConversionModel(nn.Module):
+
+class SuperGlueAttentionalGNNConversionModel(SuperGlueAttentionalGNN):
     def __init__(self, config: SuperGlueConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.descriptor_dim = config.descriptor_dim
         self.layers_types = config.gnn_layers_types
         self.layers = nn.ModuleList(
@@ -178,9 +215,9 @@ class SuperGlueAttentionalGNNConversionModel(nn.Module):
         [layer.convert() for layer in self.layers]
 
 
-class SuperGlueFinalProjectionConversionModel(nn.Module):
+class SuperGlueFinalProjectionConversionModel(SuperGlueFinalProjection):
     def __init__(self, config: SuperGlueConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         descriptor_dim = config.descriptor_dim
         self.final_proj = nn.Conv1d(descriptor_dim, descriptor_dim, kernel_size=1, bias=True)
 
@@ -188,9 +225,9 @@ class SuperGlueFinalProjectionConversionModel(nn.Module):
         self.final_proj = conv1d_to_linear(self.final_proj)
 
 
-class SuperGlueConversionModel(nn.Module):
+class SuperGlueConversionModel(SuperGlueForKeypointMatching):
     def __init__(self, config: SuperGlueConfig):
-        super().__init__()
+        super().__init__(config)
         self.keypoint_encoder = SuperGlueKeypointEncoderConversionModel(config)
         self.gnn = SuperGlueAttentionalGNNConversionModel(config)
         self.final_projection = SuperGlueFinalProjectionConversionModel(config)
@@ -294,13 +331,12 @@ def write_model(
 
     del original_state_dict
     gc.collect()
+    state_dict = add_keypoint_detector_state_dict(state_dict)
 
     conversion_model = SuperGlueConversionModel(config)
     conversion_model.load_state_dict(state_dict, strict=True, assign=True)
     conversion_model.convert()
     state_dict = conversion_model.state_dict()
-
-    state_dict = add_keypoint_detector_state_dict(state_dict)
 
     print("Loading the checkpoint in a SuperGlue model...")
     with torch.device("cuda"):
@@ -357,7 +393,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_indoor.pth",
+        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth",
         type=str,
         help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )
@@ -379,9 +415,3 @@ if __name__ == "__main__":
     write_model(
         args.pytorch_dump_folder_path, args.checkpoint_url, safe_serialization=True, push_to_hub=args.push_to_hub
     )
-    # convert_superglue_checkpoint(
-    #     args.checkpoint_url,
-    #     args.pytorch_dump_folder_path,
-    #     args.save_model,
-    #     args.push_to_hub,
-    # )

@@ -14,7 +14,7 @@
 """PyTorch SuperGlue model."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -177,30 +177,49 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
-    def __init__(self, config: SuperGlueConfig, channels: List[int]) -> None:
+    def __init__(self, config: SuperGlueConfig, in_channels: int, out_channels: int, activate: bool) -> None:
         super().__init__()
-        num_layers = len(channels)
-        layers = []
-        for i in range(1, num_layers):
-            layers.append(nn.Linear(channels[i - 1], channels[i]))
-            if i < (num_layers - 1):
-                layers.append(nn.BatchNorm1d(channels[i]))
-                layers.append(nn.ReLU())
-        self.layers = nn.Sequential(*layers)
+        self.linear = nn.Linear(in_channels, out_channels)
+        self.activate = activate
+        if self.activate:
+            self.batch_norm = nn.BatchNorm1d(out_channels)
+            self.activation = nn.ReLU()
 
-    def forward(
-        self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
-        all_hidden_states = () if output_hidden_states else None
-        for layer in self.layers:
-            if isinstance(layer, nn.BatchNorm1d):
-                hidden_state = hidden_state.transpose(-1, -2)
-            hidden_state = layer(hidden_state)
-            if isinstance(layer, nn.BatchNorm1d):
-                hidden_state = hidden_state.transpose(-1, -2)
-            if output_hidden_states and isinstance(layer, nn.Linear):
-                all_hidden_states = all_hidden_states + (hidden_state,)
-        return hidden_state, all_hidden_states
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.linear(hidden_state)
+        if self.activate:
+            hidden_state = hidden_state.transpose(-1, -2)
+            hidden_state = self.batch_norm(hidden_state)
+            hidden_state = hidden_state.transpose(-1, -2)
+            hidden_state = self.activation(hidden_state)
+        return hidden_state
+
+
+# class SuperGlueMultiLayerPerceptron(nn.Module):
+#     def __init__(self, config: SuperGlueConfig, channels: List[int]) -> None:
+#         super().__init__()
+#         num_layers = len(channels)
+#         layers = []
+#         for i in range(1, num_layers):
+#             layers.append(nn.Linear(channels[i - 1], channels[i]))
+#             if i < (num_layers - 1):
+#                 layers.append(nn.BatchNorm1d(channels[i]))
+#                 layers.append(nn.ReLU())
+#         self.layers = nn.Sequential(*layers)
+#
+#     def forward(
+#         self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = False
+#     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+#         all_hidden_states = () if output_hidden_states else None
+#         for layer in self.layers:
+#             if isinstance(layer, nn.BatchNorm1d):
+#                 hidden_state = hidden_state.transpose(-1, -2)
+#             hidden_state = layer(hidden_state)
+#             if isinstance(layer, nn.BatchNorm1d):
+#                 hidden_state = hidden_state.transpose(-1, -2)
+#             if output_hidden_states and isinstance(layer, nn.Linear):
+#                 all_hidden_states = all_hidden_states + (hidden_state,)
+#         return hidden_state, all_hidden_states
 
 
 class SuperGlueKeypointEncoder(nn.Module):
@@ -210,7 +229,14 @@ class SuperGlueKeypointEncoder(nn.Module):
         feature_dim = config.descriptor_dim
         # 3 here consists of 2 for the (x, y) coordinates and 1 for the score of the keypoint
         encoder_channels = [3] + layer_sizes + [feature_dim]
-        self.encoder = SuperGlueMultiLayerPerceptron(config, channels=encoder_channels)
+        layers = []
+        for i in range(1, len(encoder_channels)):
+            layers.append(
+                SuperGlueMultiLayerPerceptron(
+                    config, encoder_channels[i - 1], encoder_channels[i], i < len(encoder_channels) - 1
+                )
+            )
+        self.encoder = nn.ModuleList(layers)
 
     def forward(
         self,
@@ -219,8 +245,13 @@ class SuperGlueKeypointEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
         scores = scores.unsqueeze(2)
-        inputs = torch.cat([keypoints, scores], dim=2)
-        return self.encoder(inputs, output_hidden_states=output_hidden_states)
+        hidden_state = torch.cat([keypoints, scores], dim=2)
+        all_hidden_states = () if output_hidden_states else None
+        for layer in self.encoder:
+            hidden_state = layer(hidden_state)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
+        return hidden_state, all_hidden_states
 
 
 class SuperGlueMultiHeadAttention(nn.Module):
@@ -270,7 +301,12 @@ class SuperGlueAttentionalPropagation(nn.Module):
         descriptor_dim = config.descriptor_dim
         self.attention = SuperGlueMultiHeadAttention(config)
         mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
-        self.mlp = SuperGlueMultiLayerPerceptron(config, channels=mlp_channels)
+        layers = []
+        for i in range(1, len(mlp_channels)):
+            layers.append(
+                SuperGlueMultiLayerPerceptron(config, mlp_channels[i - 1], mlp_channels[i], i < len(mlp_channels) - 1)
+            )
+        self.mlp = nn.ModuleList(layers)
 
     def forward(
         self,
@@ -284,13 +320,15 @@ class SuperGlueAttentionalPropagation(nn.Module):
         output = attention_outputs[0]
         attention = attention_outputs[1:]
 
-        output = torch.cat([descriptors, output], dim=2)
-        layer_outputs = self.mlp(output, output_hidden_states=output_hidden_states)
+        hidden_state = torch.cat([descriptors, output], dim=2)
 
-        last_hidden_state = layer_outputs[0]
-        hidden_states = layer_outputs[1]
+        all_hidden_states = () if output_hidden_states else None
+        for layer in self.mlp:
+            hidden_state = layer(hidden_state)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
 
-        return last_hidden_state, hidden_states, attention
+        return hidden_state, all_hidden_states, attention
 
 
 class SuperGlueAttentionalGNN(nn.Module):
@@ -385,8 +423,8 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, SuperGlueMultiLayerPerceptron):
-            nn.init.constant_(module.layers[-1].bias, 0.0)
+        # elif isinstance(module, SuperGlueMultiLayerPerceptron):
+        #     nn.init.constant_(module.layers[-1].bias, 0.0)
 
 
 SUPERGLUE_START_DOCSTRING = r"""
