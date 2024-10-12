@@ -4836,7 +4836,7 @@ class Trainer:
             self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
             self.repo.git_push()
 
-    def create_accelerator_and_postprocess(self):
+    def build_accelerator_args(self):
         grad_acc_kwargs = {}
         if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
@@ -4885,13 +4885,17 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
+            "fsdp_plugin": self.args.fsdp_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
             args.update(accelerator_config)
+        return args
 
+    def create_accelerator_and_postprocess(self):
+        args = self.build_accelerator_args()
         # create accelerator object
         self.accelerator = Accelerator(**args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
