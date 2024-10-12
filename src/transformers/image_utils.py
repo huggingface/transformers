@@ -64,7 +64,6 @@ if is_vision_available():
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
         }
 
 
@@ -378,7 +377,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     elif isinstance(image, PIL.Image.Image):
         image = image
     else:
-        raise ValueError(
+        raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
     image = PIL.ImageOps.exif_transpose(image)
@@ -580,9 +579,15 @@ class ImageFeatureExtractionMixin:
             import torch
 
             if not isinstance(mean, torch.Tensor):
-                mean = torch.tensor(mean)
+                if isinstance(mean, np.ndarray):
+                    mean = torch.from_numpy(mean)
+                else:
+                    mean = torch.tensor(mean)
             if not isinstance(std, torch.Tensor):
-                std = torch.tensor(std)
+                if isinstance(std, np.ndarray):
+                    std = torch.from_numpy(std)
+                else:
+                    std = torch.tensor(std)
 
         if image.ndim == 3 and image.shape[0] in [1, 3]:
             return (image - mean[:, None, None]) / std[:, None, None]

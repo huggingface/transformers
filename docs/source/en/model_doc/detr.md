@@ -153,7 +153,7 @@ In short, one should prepare the data either in COCO detection or COCO panoptic 
 [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional
 `labels`, which can then be used to train (or fine-tune) a model. For evaluation, one should first convert the
 outputs of the model using one of the postprocessing methods of [`~transformers.DetrImageProcessor`]. These can
-be be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like
+be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like
 mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
 ## Resources

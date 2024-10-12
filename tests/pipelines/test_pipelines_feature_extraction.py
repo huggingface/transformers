@@ -171,10 +171,18 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         elif isinstance(input_, float):
             return 0
         else:
-            raise ValueError("We expect lists of floats, nothing else")
+            raise TypeError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if tokenizer is None:
             self.skipTest(reason="No tokenizer")
         elif (
@@ -193,10 +201,15 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
                 For now ignore those.
                 """
             )
-        feature_extractor = FeatureExtractionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype
+        feature_extractor_pipeline = FeatureExtractionPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
-        return feature_extractor, ["This is a test", "This is another test"]
+        return feature_extractor_pipeline, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):
         outputs = feature_extractor("This is a test")

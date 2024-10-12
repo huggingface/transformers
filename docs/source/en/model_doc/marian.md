@@ -105,7 +105,7 @@ from huggingface_hub import list_models
 
 model_list = list_models()
 org = "Helsinki-NLP"
-model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
+model_ids = [x.id for x in model_list if x.id.startswith(org)]
 suffix = [x.split("/")[1] for x in model_ids]
 old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
 ```

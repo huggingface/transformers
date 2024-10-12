@@ -46,24 +46,77 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
 
-- Note that each checkpoint has been trained with a specific prompt format, depending on which large language model (LLM) was used. Below, we list the correct prompt formats to use for the text prompt "What is shown in this image?":
+<Tip warning={true}>
 
+- Llava-Next uses different number of patches for images and thus has to pad the inputs inside modeling code, aside from the padding done when processing the inputs. The default setting is "left-padding" if model is in `eval()` mode, otherwise "right-padding".
+
+</Tip>
+
+
+- Note that each checkpoint has been trained with a specific prompt format, depending on which large language model (LLM) was used. You can use the processor's `apply_chat_template` to format your prompts correctly. For that you have to construct a conversation history, passing a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities. Below is an example of how to do that and the list of formats accepted by each checkpoint.
+
+We will use [llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:
+
+```python
+from transformers import LlavaNextProcessor
+
+processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What’s shown in this image?"},
+        ],
+    },
+    {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "This image shows a red stop sign."},]
+    },
+    {
+
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Describe the image in more details."},
+        ],
+    },
+]
+
+text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+
+# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
+print(text_prompt)
+>>> "[INST] <image>\nWhat's shown in this image? [/INST] This image shows a red stop sign. [INST] Describe the image in more details. [/INST]"
+```
+
+- If you want to construct a chat prompt yourself, below is a list of possible formats
+.
 [llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) requires the following format:
-
 ```bash
 "[INST] <image>\nWhat is shown in this image? [/INST]"
 ```
 
 [llava-v1.6-vicuna-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-vicuna-7b-hf) and [llava-v1.6-vicuna-13b-hf](https://huggingface.co/llava-hf/llava-v1.6-vicuna-13b-hf) require the following format:
-
 ```bash
 "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
 ```
 
 [llava-v1.6-34b-hf](https://huggingface.co/llava-hf/llava-v1.6-34b-hf) requires the following format:
-
 ```bash
 "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+```
+
+[llama3-llava-next-8b-hf](https://huggingface.co/llava-hf/llava-next-8b-hf) requires the following format:
+
+```bash
+"<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\nWhat is shown in this image?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+```
+
+[llava-next-72b-hf](https://huggingface.co/llava-hf/llava-next-72b-hf) and [llava-next-110b-hf](https://huggingface.co/llava-hf/llava-next-110b-hf) require the following format:
+
+```bash
+"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 ```
 
 ## Usage example
@@ -80,15 +133,24 @@ import requests
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True) 
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True)
 model.to("cuda:0")
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
-prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
-inputs = processor(prompt, image, return_tensors="pt").to("cuda:0")
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+inputs = processor(image, prompt, return_tensors="pt").to("cuda:0")
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
@@ -104,10 +166,10 @@ LLaVa-Next can perform inference with multiple images as input, where images eit
 import requests
 from PIL import Image
 import torch
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 # Load the model in half-precision
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
 # Get three different images
@@ -120,15 +182,47 @@ image_cats = Image.open(requests.get(url, stream=True).raw)
 url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
 image_snowman = Image.open(requests.get(url, stream=True).raw)
 
-# Prepare a batched prompt, where the first one is a multi-turn conversation and the second is not
-prompt = [
-    "[INST] <image>\nWhat is shown in this image? [/INST] There is a red stop sign in the image. [INST] <image>\nWhat about this image? How many cats do you see [/INST]",
-    "[INST] <image>\nWhat is shown in this image? [/INST]"
+# Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
+conversation_1 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+            ],
+    },
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "There is a red stop sign in the image."},
+            ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What about this image? How many cats do you see?"},
+            ],
+    },
 ]
+
+conversation_2 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+            ],
+    },
+]
+
+prompt_1 = processor.apply_chat_template(conversation_1, add_generation_prompt=True)
+prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=True)
+prompts = [prompt_1, prompt_2]
 
 # We can simply feed images in the order they have to be used in the text prompt
 # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-inputs = processor(text=prompt, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
@@ -139,10 +233,20 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`, and to have access to a GPU/accelerator that is supported by the library.
+
+<Tip>
+
+bitsandbytes is being refactored to support multiple backends beyond CUDA. Currently, ROCm (AMD GPU) and Intel CPU implementations are mature, with Intel XPU in progress and Apple Silicon support expected by Q4/Q1. For installation instructions and the latest backend updates, visit [this link](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend).
+
+We value your feedback to help identify bugs before the full release! Check out [these docs](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends) for more details and feedback links.
+
+</Tip>
+
+Simply change the snippet above with:
 
 ```python
-from transformers import LlavaNextForConditionalGeneration, BitsAndBytesConfig
+from transformers import AutoModelForImageTextToText, BitsAndBytesConfig
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -151,7 +255,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")
 ```
 
 ### Use Flash-Attention 2 to further speed-up generation
@@ -159,11 +263,11 @@ model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-m
 First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
 
 ```python
-from transformers import LlavaNextForConditionalGeneration
+from transformers import AutoModelForImageTextToText
 
-model = LlavaNextForConditionalGeneration.from_pretrained(
-    model_id, 
-    torch_dtype=torch.float16, 
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id,
+    torch_dtype=torch.float16,
     low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)

@@ -41,13 +41,20 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
-    "Gemma2Config": ["tie_word_embeddings"],
+    "Qwen2Config": ["use_sliding_window"],
+    "Qwen2MoeConfig": ["use_sliding_window"],
+    "Qwen2VLConfig": ["use_sliding_window"],
+    # `cache_implementation` should be in the default generation config, but we don't yet support per-model
+    # generation configs (TODO joao)
+    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
     "MambaConfig": ["expand"],
+    # used as in the config to define `intermediate_size`
+    "FalconMambaConfig": ["expand"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     "FuyuConfig": True,
@@ -124,6 +131,18 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_embed_dim",
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
+    ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
+    "MllamaTextConfig": [
+        "initializer_range",
+    ],
+    "MllamaVisionConfig": [
+        "initializer_range",
+        "supported_aspect_ratios",
     ],
 }
 
@@ -224,6 +243,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_index",  # for VLMs
         "image_size",
         "use_cache",
         "out_features",

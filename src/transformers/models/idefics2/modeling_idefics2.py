@@ -14,22 +14,21 @@
 # limitations under the License.
 """PyTorch Idefics2 model."""
 
-import inspect
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -43,10 +42,7 @@ from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -306,7 +302,7 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
@@ -316,7 +312,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
@@ -348,8 +343,15 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
@@ -359,105 +361,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
             attn_weights = None
 
         return attn_output, attn_weights
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
-
-        return attn_output
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 IDEFICS_VISION_ATTENTION_CLASSES = {
@@ -532,7 +435,7 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
 
 
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -757,19 +660,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Idefics2
 class Idefics2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -786,6 +676,9 @@ class Idefics2RMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Idefics2PerceiverAttention(nn.Module):
@@ -927,7 +820,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
         key_states = self.k_proj(torch.cat([context, latents], dim=-2))
         value_states = self.v_proj(torch.cat([context, latents], dim=-2))
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
@@ -992,18 +885,19 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=False,
+            sliding_window=None,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
@@ -1013,148 +907,6 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-        use_sliding_windows=False,
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
-                Whether to activate sliding window attention.
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            if not use_sliding_windows:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
-
-        return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
-
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
@@ -1345,7 +1097,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = (
-            self.config.text_config.initializer_range
+            self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
@@ -1504,6 +1256,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             make_inputs_require_grads
         )
 
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
+
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
 
@@ -1589,11 +1345,20 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            if not isinstance(past_key_values, Cache):
                 return_legacy_cache = True
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                if past_key_values is None:
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                    logger.warning_once(
+                        "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                        "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                        "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                    )
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1632,7 +1397,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             patch_size = self.config.vision_config.patch_size
             patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
             patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1686,7 +1451,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
-class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1713,6 +1478,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
             make_inputs_require_grads
         )
+
+    def disable_input_require_grads(self):
+        self._text_require_grads_hook.remove()
+        self._vision_require_grads_hook.remove()
 
     def get_input_embeddings(self):
         return self.model.text_model.get_input_embeddings()
@@ -1769,6 +1538,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, Idefics2CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1777,6 +1547,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
                 Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
                 computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
         Returns:
 
         Example:
@@ -1807,7 +1583,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         ...   "In which city is that bridge located?<image>",
         ... ]
         >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, padding=True, return_tensors="pt").to("cuda")
+        >>> inputs = processor(images=images, text=prompts, padding=True, return_tensors="pt").to("cuda")
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=20)
@@ -1840,15 +1616,19 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
@@ -1872,14 +1652,20 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        num_logits_to_keep=None,
+        **kwargs,
     ):
         past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
             # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
             past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_length()
+            max_cache_length = past_key_values.get_max_cache_shape()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1915,6 +1701,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:
             pixel_values = None
@@ -1947,7 +1736,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         return model_kwargs
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
+    # Copied from transformers.models.opt.modeling_opt.OPTForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:

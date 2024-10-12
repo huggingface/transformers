@@ -181,6 +181,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     def __init__(
         self,
@@ -463,7 +464,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
         >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
         >>> # Inference: Translate English speech to German
@@ -577,13 +578,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
             "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_attention_mask": decoder_inputs.get("attention_mask"),
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
+            "past_key_values": decoder_inputs.get("past_key_values"),
             "use_cache": use_cache,
         }
         return input_dict

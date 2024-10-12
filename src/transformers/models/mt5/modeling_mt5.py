@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -67,7 +68,7 @@ PARALLELIZE_DOCSTRING = r"""
     it will evenly distribute blocks across all devices.
 
     Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
+        device_map (`Dict[int, list]`, *optional*):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the mt5 models have the
@@ -1435,7 +1436,7 @@ class MT5Model(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1462,8 +1463,8 @@ class MT5Model(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5Model.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5Model.from_pretrained("google/mt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1550,7 +1551,7 @@ class MT5Model(MT5PreTrainedModel):
 
 
 @add_start_docstrings("""MT5 Model with a `language modeling` head on top.""", MT5_START_DOCSTRING)
-class MT5ForConditionalGeneration(MT5PreTrainedModel):
+class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     r"""
     Examples:
 
@@ -1665,7 +1666,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1698,8 +1699,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5ForConditionalGeneration.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1818,45 +1819,6 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        decoder_attention_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-        }
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.prepare_decoder_input_ids_from_labels
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -1990,7 +1952,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2009,8 +1971,8 @@ class MT5EncoderModel(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
-        >>> model = MT5EncoderModel.from_pretrained("google-mt5/mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

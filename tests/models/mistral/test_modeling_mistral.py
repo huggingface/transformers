@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -111,7 +112,7 @@ class MistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -312,7 +313,14 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -516,7 +524,7 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -538,10 +546,7 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = {
-            7: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
-            8: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
-        }
+        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
 
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
@@ -553,7 +558,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_model_7b_dola_generation(self):
@@ -579,9 +584,10 @@ class MistralIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @require_flash_attn
     @require_bitsandbytes
     @slow
-    @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_model_7b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -641,15 +647,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXT_COMPLETION = {
-            7: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
-            8: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
-            9: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
-        }
+        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
@@ -663,7 +661,7 @@ class MistralIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_read_token
@@ -677,43 +675,37 @@ class MistralIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = {
-            8: [
-                "My favourite condiment is 100% ketchup. I love it on everything. "
-                "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
-            ],
-            7: [
-                "My favourite condiment is 100% ketchup. I love it on everything. "
-                "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
-            ],
-        }
+        EXPECTED_TEXT_COMPLETION = [
+            "My favourite condiment is 100% ketchup. I love it on everything. "
+            "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
+        ]
 
         prompts = ["My favourite condiment is "]
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         tokenizer.pad_token = tokenizer.eos_token
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="sequential", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], dynamic_text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Sliding Window Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
         forward_function = model.forward
@@ -722,7 +714,7 @@ class MistralIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
         # Sliding Window Cache + compile
         torch._dynamo.reset()
@@ -731,18 +723,18 @@ class MistralIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     model_name = "mistralai/Mistral-7B-v0.1"
     _model = None
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @property
     def model(self):

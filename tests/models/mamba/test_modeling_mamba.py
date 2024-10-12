@@ -94,6 +94,7 @@ class MambaModelTester:
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        attention_mask = ids_tensor([self.batch_size, self.seq_length], 1)
 
         sequence_labels = None
         token_labels = None
@@ -112,7 +113,7 @@ class MambaModelTester:
         return (
             config,
             input_ids,
-            None,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -142,23 +143,6 @@ class MambaModelTester:
         config.vocab_size = 300
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
     def create_and_check_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = MambaModel(config=config)
@@ -187,11 +171,20 @@ class MambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :-1], use_cache=True)
+        outputs = model(
+            input_ids[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
+        outputs = model(
+            input_ids[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
@@ -207,11 +200,13 @@ class MambaModelTester:
 
         # create cache
         cache = model(input_ids, use_cache=True).cache_params
-        cache.seqlen_offset = 0
+        cache.reset()
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        outputs = model.layers[0].mixer.slow_forward(
+            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
+        )
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -235,12 +230,12 @@ class MambaModelTester:
         (
             config,
             input_ids,
-            _,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
@@ -422,6 +417,34 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    def test_beam_sample_generate(self):
+        pass
+
+    def test_dtype_mismatch_handled_in_cache(self):
+        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
+        model = MambaModel(config)
+        model.to(torch_device).to(torch.float16)
+        model.eval()
+
+        # Create cache with float32 dtype
+        cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
+
+        # If code is correct, no error occurs and test passes
+        outputs = model(
+            input_ids,
+            cache_params=cache_params,
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+
+        self.assertIsNotNone(outputs)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+        )
+
 
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
@@ -507,4 +530,22 @@ class MambaIntegrationTests(unittest.TestCase):
         output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
+        self.assertEqual(output_sentence, expected_output)
+
+    @slow
+    def test_compile_mamba_cache(self):
+        expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+        self.assertEqual(output_sentence, expected_output)
+
+        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)

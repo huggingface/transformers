@@ -76,6 +76,7 @@ class FlavaImageProcessingTester(unittest.TestCase):
         codebook_image_mean=FLAVA_CODEBOOK_MEAN,
         codebook_image_std=FLAVA_CODEBOOK_STD,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 224, "width": 224}
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         codebook_size = codebook_size if codebook_size is not None else {"height": 112, "width": 112}

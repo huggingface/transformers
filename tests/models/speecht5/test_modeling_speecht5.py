@@ -177,8 +177,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_headmasking = False
     test_resize_embeddings = False
 
-    input_name = "input_values"
-
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
@@ -237,6 +235,12 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @slow
     @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_simple(self):
+        pass
+
+    @unittest.skip(
+        reason="Model returns None for input_embeds, check: https://github.com/huggingface/transformers/issues/33527"
+    )
+    def test_peft_gradient_checkpointing_enable_disable(self):
         pass
 
 
@@ -368,8 +372,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_values"
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -744,9 +746,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -890,8 +890,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_ids"
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -1437,8 +1435,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
 
-    input_name = "input_values"
-
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
@@ -1745,6 +1741,12 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="Model returns None for input_embeds, check: https://github.com/huggingface/transformers/issues/33527"
+    )
+    def test_peft_gradient_checkpointing_enable_disable(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -1771,9 +1773,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -1845,8 +1845,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
-
-    input_name = "spectrogram"
 
     def setUp(self):
         self.model_tester = SpeechT5HifiGanTester(self)

@@ -138,7 +138,14 @@ class HfArgumentParser(ArgumentParser):
 
     @staticmethod
     def _parse_dataclass_field(parser: ArgumentParser, field: dataclasses.Field):
-        field_name = f"--{field.name}"
+        # Long-option strings are conventionlly separated by hyphens rather
+        # than underscores, e.g., "--long-format" rather than "--long_format".
+        # Argparse converts hyphens to underscores so that the destination
+        # string is a valid attribute name. Hf_argparser should do the same.
+        long_options = [f"--{field.name}"]
+        if "_" in field.name:
+            long_options.append(f"--{field.name.replace('_', '-')}")
+
         kwargs = field.metadata.copy()
         # field.metadata is not used at all by Data Classes,
         # it is provided as a third-party extension mechanism.
@@ -164,7 +171,7 @@ class HfArgumentParser(ArgumentParser):
                 )
             if type(None) not in field.type.__args__:
                 # filter `str` in Union
-                field.type = field.type.__args__[0] if field.type.__args__[1] == str else field.type.__args__[1]
+                field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
                 origin_type = getattr(field.type, "__origin__", field.type)
             elif bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
@@ -198,11 +205,11 @@ class HfArgumentParser(ArgumentParser):
             if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
                 # Default value is False if we have no default when of type bool.
                 default = False if field.default is dataclasses.MISSING else field.default
-                # This is the value that will get picked if we don't include --field_name in any way
+                # This is the value that will get picked if we don't include --{field.name} in any way
                 kwargs["default"] = default
-                # This tells argparse we accept 0 or 1 value after --field_name
+                # This tells argparse we accept 0 or 1 value after --{field.name}
                 kwargs["nargs"] = "?"
-                # This is the value that will get picked if we do --field_name (without value)
+                # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
             kwargs["type"] = field.type.__args__[0]
@@ -219,7 +226,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default_factory()
             else:
                 kwargs["required"] = True
-        parser.add_argument(field_name, *aliases, **kwargs)
+        parser.add_argument(*long_options, *aliases, **kwargs)
 
         # Add a complement `no_*` argument for a boolean field AFTER the initial field has already been added.
         # Order is important for arguments with the same destination!
@@ -227,7 +234,13 @@ class HfArgumentParser(ArgumentParser):
         # here and we do not need those changes/additional keys.
         if field.default is True and (field.type is bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
-            parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
+            parser.add_argument(
+                f"--no_{field.name}",
+                f"--no-{field.name.replace('_', '-')}",
+                action="store_false",
+                dest=field.name,
+                **bool_kwargs,
+            )
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         if hasattr(dtype, "_argument_group_name"):

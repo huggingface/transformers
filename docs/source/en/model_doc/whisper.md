@@ -27,6 +27,27 @@ The abstract from the paper is the following:
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://github.com/openai/whisper).
 
+## Quick usage
+
+You can run Whisper in less than 4 lines of code and transcribe in less than a minute!
+
+```python
+# pip install transformers torch
+
+import torch
+from transformers import pipeline
+
+whisper = pipeline("automatic-speech-recognition", "openai/whisper-large-v3", torch_dtype=torch.float16, device="cuda:0")
+
+transcription = whisper("<audio_file.mp3>")
+
+print(transcription["text"])
+```
+
+Voila! You can swap the model with any [Whisper checkpoints](https://huggingface.co/models?other=whisper&sort=downloads) on the Hugging Face Hub with the same pipeline based on your needs.
+
+Bonus: You can replace `"cuda"` with `"mps"` to make it seamlessly work on Macs.
+
 ## Usage tips
 
 - The model usually performs well without requiring any finetuning.
@@ -72,7 +93,7 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
 ```
 
-Whisper is compatible with the following optimisations:
+Whisper is compatible with the following optimisations for both short and long-form generation:
 - [PyTorch Scaled Dot Product Attention (SDPA)](../perf_infer_gpu_one#pytorch-scaled-dot-product-attention): flash attention and memory-efficient attention kernels. Enabled by default for `torch>=2.1.1`.
 - [Flash Attention 2](../perf_infer_gpu_one#flashattention-2): improved implementation of flash attention through better parallelism and work partitioning. 
 - [torch.compile](../llm_optims#static-kv-cache-and-torchcompile): JIT-compile the forward pass to dispatch to efficient fused kernels.
@@ -101,7 +122,8 @@ As an example, the following codesnippet enables SDPA and `torch.compile` for up
 ... ).input_features
 
 >>> # Compile the forward pass
->>> _ = model.generate(input_features)
+>>> for _ in range(2):
+>>>     model.generate(input_features)
 
 >>> # Generate token ids using compiled graph (fast!)
 >>> predicted_ids = model.generate(input_features)

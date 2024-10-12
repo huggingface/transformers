@@ -220,7 +220,7 @@ La plantilla de chat para un modelo se almacena en el atributo `tokenizer.chat_t
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.default_chat_template
+>>> tokenizer.chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
@@ -306,12 +306,6 @@ El método [`~PreTrainedTokenizer.apply_chat_template`], que utiliza tu plantill
 Si estás ajustando finamente un modelo para chat, además de establecer una plantilla de chat, probablemente deberías agregar cualquier nuevo token de control de chat como los tokens especiales en el tokenizador. Los tokens especiales nunca se dividen, asegurando que tus tokens de control siempre se manejen como tokens únicos en lugar de ser tokenizados en piezas. También deberías establecer el atributo `eos_token` del tokenizador con el token que marca el final de las generaciones del asistente en tu plantilla. Esto asegurará que las herramientas de generación de texto puedan determinar correctamente cuándo detener la generación de texto.
 
 </Tip>
-
-### ¿Qué son las plantillas "default"?
-
-Antes de la introducción de las plantillas de chat, el manejo del chat estaba codificado en el nivel de la clase del modelo. Por razones de compatibilidad con versiones anteriores, hemos conservado este manejo específico de la clase como plantillas predeterminadas, también establecidas a nivel de clase. Si un modelo no tiene una plantilla de chat establecida, pero hay una plantilla predeterminada para su clase de modelo, la clase `TextGenerationPipeline` y métodos como `apply_chat_template` usarán la plantilla de clase en su lugar. Puedes averiguar cuál es la plantilla predeterminada para tu tokenizador comprobando el atributo `tokenizer.default_chat_template`.
-
-Esto es algo que hacemos puramente por razones de compatibilidad con versiones anteriores, para evitar romper cualquier flujo de trabajo existente. Incluso cuando la plantilla de clase es apropiada para tu modelo, recomendamos encarecidamente anular la plantilla predeterminada estableciendo explícitamente el atributo `chat_template` para dejar claro a los usuarios que tu modelo ha sido configurado correctamente para el chat, y para estar preparados para el futuro en caso de que las plantillas predeterminadas alguna vez se alteren o se eliminen.
 
 ### ¿Qué plantilla debería usar?
 

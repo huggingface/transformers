@@ -2516,7 +2516,7 @@ def nonzero_tuple(x):
 
 
 # from https://github.com/facebookresearch/detectron2/blob/9921a2caa585d4fa66c4b534b6fab6e74d89b582/detectron2/modeling/matcher.py#L9
-class DetaMatcher(object):
+class DetaMatcher:
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth element. Each predicted element will
     have exactly zero or one matches; each ground-truth element may be matched to zero or more predicted elements.

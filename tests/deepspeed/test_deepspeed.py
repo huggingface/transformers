@@ -545,6 +545,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero3_dict = self.get_config_dict(ZERO3)
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
+            ds_config_zero3_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
             trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict)
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
@@ -707,6 +708,35 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
+
+    # NOTE: Currently a disabled test. In the future we should re-enable it.
+    # Issue resolves around Zero-3 w/ DPO/TRL + DeepSpeed
+    # As well as Zero-3 inference
+    # Related PR: https://github.com/huggingface/transformers/pull/32299
+    # def test_missed_zero3_init(self):
+    #     from transformers import Trainer  # noqa
+
+    #     with mockenv_context(**self.dist_env_1_gpu):
+    #         model = AutoModel.from_pretrained(T5_TINY)
+    #         training_args = TrainingArguments(
+    #             output_dir="./test_missed_zero3_init",
+    #             deepspeed=self.get_config_dict(ZERO3),
+    #         )
+    #         with self.assertRaises(
+    #             ValueError, msg="Model was not initialized with `Zero-3` despite being configured."
+    #         ):
+    #             _ = Trainer(
+    #                 model=model,
+    #                 args=training_args,
+    #             )
+    #         # Now do it properly, triggered from our `TrainingArguments` earlier
+    #         model = AutoModel.from_pretrained(T5_TINY)
+    #         trainer = Trainer(
+    #             model=model,
+    #             args=training_args,
+    #         )
+    #         assert trainer.is_deepspeed_enabled
+    #         assert model._transformers_zero3_init_used
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
@@ -1006,7 +1036,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             trainer = Trainer(
                 model=model,
-                tokenizer=tokenizer,
+                processing_class=tokenizer,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,

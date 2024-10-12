@@ -26,11 +26,18 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .utils import is_protobuf_available, requires_backends
+from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
+logger = logging.get_logger(__name__)
+
+
 def import_protobuf(error_message=""):
+    if is_sentencepiece_available():
+        from sentencepiece import sentencepiece_model_pb2
+
+        return sentencepiece_model_pb2
     if is_protobuf_available():
         import google.protobuf
 
@@ -53,6 +60,25 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
+def generate_merges(vocab, vocab_scores):
+    reverse = vocab_scores is not None
+    vocab_scores = dict(vocab_scores) if reverse else vocab
+
+    merges = []
+    for merge, piece_score in vocab_scores.items():
+        local = []
+        for index in range(1, len(merge)):
+            piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in vocab and piece_r in vocab:
+                local.append((piece_l, piece_r, piece_score))
+        local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+        merges.extend(local)
+
+    merges = sorted(merges, key=lambda val: (val[2], len(val[0]), len(val[1])), reverse=reverse)
+    merges = [(val[0], val[1]) for val in merges]
+    return merges
+
+
 class SentencePieceExtractor:
     """
     Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
@@ -73,24 +99,8 @@ class SentencePieceExtractor:
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        if vocab_scores is not None:
-            vocab_scores, reverse = dict(vocab_scores), True
-        else:
-            vocab_scores, reverse = vocab, False
+        merges = generate_merges(vocab, vocab_scores)
 
-        # Merges
-        merges = []
-        for merge, piece_score in vocab_scores.items():
-            local = []
-            for index in range(1, len(merge)):
-                piece_l, piece_r = merge[:index], merge[index:]
-                if piece_l in vocab and piece_r in vocab:
-                    local.append((piece_l, piece_r, piece_score))
-            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
-            merges.extend(local)
-
-        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
-        merges = [(val[0], val[1]) for val in merges]
         return vocab, merges
 
 
@@ -107,24 +117,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         # "<0x09>" is the bytefallback for `\t`
         vocab["\t"] = vocab.get("<0x09>")
 
-        if vocab_scores is not None:
-            vocab_scores, reverse = dict(vocab_scores), True
-        else:
-            vocab_scores, reverse = vocab, False
-
-        # Merges
-        merges = []
-        for merge, piece_score in vocab_scores.items():
-            local = []
-            for index in range(1, len(merge)):
-                piece_l, piece_r = merge[:index], merge[index:]
-                if piece_l in vocab and piece_r in vocab:
-                    local.append((piece_l, piece_r, piece_score))
-            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
-            merges.extend(local)
-
-        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
-        merges = [(val[0], val[1]) for val in merges]
+        merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
 
@@ -335,9 +328,11 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks)
 
         tokenizer = Tokenizer(
             BPE(
@@ -350,9 +345,10 @@ class GPT2Converter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        if self.original_tokenizer.add_bos_token:
+        if getattr(self.original_tokenizer, "add_bos_token", False):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
@@ -544,6 +540,10 @@ class DebertaConverter(Converter):
 
 
 class SpmConverter(Converter):
+    handle_byte_fallback = False
+    SpmExtractor = SentencePieceExtractor
+    special_tokens = {}
+
     def __init__(self, *args):
         requires_backends(self, "protobuf")
 
@@ -557,14 +557,13 @@ class SpmConverter(Converter):
             m.ParseFromString(f.read())
         self.proto = m
 
-        if self.proto.trainer_spec.byte_fallback:
-            if not getattr(self, "handle_byte_fallback", None):
-                warnings.warn(
-                    "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                    " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
-                    " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
-                    "unknown tokens into a sequence of byte tokens matching the original piece of text."
-                )
+        if self.proto.trainer_spec.byte_fallback and not self.handle_byte_fallback:
+            warnings.warn(
+                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                "unknown tokens into a sequence of byte tokens matching the original piece of text."
+            )
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
@@ -575,12 +574,18 @@ class SpmConverter(Converter):
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
         vocab_scores = self.vocab(proto)
-        unk_id = self.unk_id(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+            tokenizer = Tokenizer(
+                Unigram(
+                    vocab_scores,
+                    unk_id=self.unk_id(proto),
+                    byte_fallback=self.handle_byte_fallback,
+                )
+            )
+
         elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
+            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
@@ -588,12 +593,31 @@ class SpmConverter(Converter):
                     merges,
                     unk_token=proto.trainer_spec.unk_piece,
                     fuse_unk=True,
+                    byte_fallback=self.handle_byte_fallback,
+                    dropout=None,
                 )
             )
+
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
+
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
 
         return tokenizer
 
@@ -621,17 +645,6 @@ class SpmConverter(Converter):
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
-
-        # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-        user_defined_symbols = [
-            AddedToken(token, normalized=False, special=False)
-            for token in [p.piece for p in self.proto.pieces if p.type == 4]
-        ]
-        control_symbols = [
-            AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
-        ]
-
-        tokenizer.add_tokens(user_defined_symbols + control_symbols)
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
@@ -1260,6 +1273,9 @@ class XGLMConverter(SpmConverter):
 
 class GemmaConvert(SpmConverter):
     handle_byte_fallback = True
+    SpmExtractor = GemmaSentencePieceExtractor
+    # start and end of turn tokens must be marked as special
+    special_tokens = {"<start_of_turn>", "<end_of_turn>"}
 
     """"
     split_by_unicode_script: true
@@ -1304,45 +1320,6 @@ class GemmaConvert(SpmConverter):
             ]
         )
 
-    def tokenizer(self, proto):
-        model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
-        if model_type == 1:
-            import tokenizers
-
-            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
-            else:
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
-
-        elif model_type == 2:
-            _, merges = GemmaSentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-
-            tokenizer = Tokenizer(
-                BPE(
-                    bpe_vocab,
-                    merges,
-                    unk_token=proto.trainer_spec.unk_piece,
-                    fuse_unk=True,
-                    byte_fallback=True,
-                    dropout=None,
-                )
-            )
-            tokenizer.add_special_tokens(
-                [
-                    AddedToken("<pad>", normalized=False, special=True),
-                    AddedToken("<eos>", normalized=False, special=True),
-                    AddedToken("<bos>", normalized=False, special=True),
-                    AddedToken("<unk>", normalized=False, special=True),
-                ]
-            )
-        else:
-            raise Exception(
-                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
-            )
-        return tokenizer
-
 
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
@@ -1369,37 +1346,6 @@ class LlamaConverter(SpmConverter):
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
-
-    def tokenizer(self, proto):
-        model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
-        if model_type == 1:
-            import tokenizers
-
-            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
-            else:
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
-
-        elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-            tokenizer = Tokenizer(
-                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
-            )
-            tokenizer.add_special_tokens(
-                [
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(0), normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(1), normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
-                ]
-            )
-        else:
-            raise Exception(
-                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
-            )
-
-        return tokenizer
 
     def normalizer(self, proto):
         if getattr(self.original_tokenizer, "legacy", True):
@@ -1494,12 +1440,15 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
+        additional_special_tokens=None,
         *args,
+        **kwargs,
     ):
         super().__init__(*args)
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = additional_special_tokens
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1548,7 +1497,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.add_special_tokens(self.additional_special_tokens)
+
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
         return tokenizer
 
 
@@ -1609,10 +1561,11 @@ SLOW_TO_FAST_CONVERTERS = {
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConvert,
+    "Phi3Tokenizer": LlamaConverter,
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1620,6 +1573,8 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+       from_tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
+            Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
@@ -1627,14 +1582,20 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
+        converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer).converted()
 
-    if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
-        raise ValueError(
-            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
-            " No converter was found. Currently available slow->fast convertors:"
-            f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
-        )
-
-    converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-
-    return converter_class(transformer_tokenizer).converted()
+    else:
+        try:
+            logger.info("Converting from Tiktoken")
+            return TikTokenConverter(
+                vocab_file=transformer_tokenizer.vocab_file,
+                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
+            ).converted()
+        except Exception:
+            raise ValueError(
+                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"with a SentencePiece tokenizer.model file."
+                f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+            )

@@ -21,7 +21,7 @@ from ....utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MMBTConfig(object):
+class MMBTConfig:
     """
     This is the configuration class to store the configuration of a [`MMBTModel`]. It is used to instantiate a MMBT
     model according to the specified arguments, defining the model architecture.

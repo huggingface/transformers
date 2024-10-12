@@ -97,8 +97,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         super().__init__(
-            vocab_file,
-            merges_file,
+            vocab_file=vocab_file,
+            merges_file=merges_file,
             tokenizer_file=tokenizer_file,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -139,12 +139,3 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
-
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

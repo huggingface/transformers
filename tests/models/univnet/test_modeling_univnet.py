@@ -21,9 +21,10 @@ from datasets import Audio, load_dataset
 
 from transformers import UnivNetConfig, UnivNetFeatureExtractor
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_torch_available,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -117,8 +118,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = UnivNetModelTester(self)
         self.config_tester = ConfigTester(
@@ -207,18 +206,16 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(outputs.shape[0] == 1, msg="Unbatched input should create batched output with bsz = 1")
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class UnivNetModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def _load_datasamples(self, num_samples, sampling_rate=24000):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]

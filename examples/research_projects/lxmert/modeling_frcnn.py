@@ -417,7 +417,7 @@ class ShapeSpec(namedtuple("_ShapeSpec", ["channels", "height", "width", "stride
         return super().__new__(cls, channels, height, width, stride)
 
 
-class Box2BoxTransform(object):
+class Box2BoxTransform:
     """
     This R-CNN transformation scales the box's width and height
     by exp(dw), exp(dh) and shifts a box's center by the offset
@@ -519,7 +519,7 @@ class Box2BoxTransform(object):
         return pred_boxes
 
 
-class Matcher(object):
+class Matcher:
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth
     element. Each predicted element will have exactly zero or one matches; each
@@ -622,7 +622,7 @@ class Matcher(object):
         match_labels[pred_inds_with_highest_quality] = 1
 
 
-class RPNOutputs(object):
+class RPNOutputs:
     def __init__(
         self,
         box2box_transform,
@@ -1132,7 +1132,7 @@ class ROIPooler(nn.Module):
         return output
 
 
-class ROIOutputs(object):
+class ROIOutputs:
     def __init__(self, cfg, training=False):
         self.smooth_l1_beta = cfg.ROI_BOX_HEAD.SMOOTH_L1_BETA
         self.box2box_transform = Box2BoxTransform(weights=cfg.ROI_BOX_HEAD.BBOX_REG_WEIGHTS)

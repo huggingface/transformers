@@ -135,6 +135,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.get_rust_tokenizer()
+        tokenizer.chat_template = "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
             [

@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Jamba model."""
 
-import inspect
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -31,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache  # we need __iter__ and __len__ of pkv
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -43,23 +43,20 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
 )
 from .configuration_jamba import JambaConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 if is_mamba_ssm_available():
@@ -85,11 +82,11 @@ _CONFIG_FOR_DOC = "JambaConfig"
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func with gate->router
 def load_balancing_loss_func(
-    router_logits: torch.Tensor,
-    num_experts: torch.Tensor = None,
+    router_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
     top_k=2,
     attention_mask: Optional[torch.Tensor] = None,
-) -> float:
+) -> Union[torch.Tensor, int]:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -98,14 +95,17 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        router_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        router_logits:
             Logits from the `router`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
-        attention_mask (`torch.Tensor`, None):
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
-        num_experts (`int`, *optional*):
-            Number of experts
 
     Returns:
         The auxiliary loss.
@@ -165,19 +165,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Jamba
 class JambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -194,6 +181,9 @@ class JambaRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -224,6 +214,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     """
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+        super().__init__()
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
@@ -423,23 +414,11 @@ class JambaFlashAttention2(JambaAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = cache_position[-1]
-
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -498,18 +477,19 @@ class JambaFlashAttention2(JambaAttention):
             value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=getattr(self.config, "sliding_window", None),
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -519,149 +499,6 @@ class JambaFlashAttention2(JambaAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-        use_sliding_windows=False,
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`, *optional*):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
-                Whether to activate sliding window attention.
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            if not use_sliding_windows:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
-
-        return attn_output
-
-    # Copied from transformers.models.mixtral.modeling_mixtral.MixtralFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
-
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Jamba
@@ -797,7 +634,7 @@ class JambaMambaMixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
+        A = torch.arange(1, self.ssm_state_size + 1)[None, :]
         A = A.expand(self.intermediate_size, -1).contiguous()
 
         self.A_log = nn.Parameter(torch.log(A))
@@ -815,7 +652,12 @@ class JambaMambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None):
+    def cuda_kernels_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: HybridMambaAttentionDynamicCache = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
         batch_size, seq_len, _ = hidden_states.shape
         use_precomputed_states = (
             cache_params is not None
@@ -831,6 +673,9 @@ class JambaMambaMixer(nn.Module):
         # We can't use `mamba_inner_fn` even if in training and without cache params because we have the
         # inner layernorms which isn't supported by this fused kernel
         hidden_states, gate = projected_states.chunk(2, dim=1)
+
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
@@ -849,6 +694,9 @@ class JambaMambaMixer(nn.Module):
                 cache_params.conv_states[self.layer_idx].copy_(conv_states)
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
@@ -864,11 +712,14 @@ class JambaMambaMixer(nn.Module):
         # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
         # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
         # linear layers, and requires to call the forward pass directly.
-        # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-        time_proj_bias = self.dt_proj.bias
-        self.dt_proj.bias = None
+        # Quantized model can't work with the original code:
+        # ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
+        time_proj_bias = self.dt_proj.bias.data
+        with torch.no_grad():
+            self.dt_proj.bias.data = torch.zeros_like(self.dt_proj.bias.data)
         discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-        self.dt_proj.bias = time_proj_bias
+        with torch.no_grad():
+            self.dt_proj.bias.data = time_proj_bias
 
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
@@ -908,14 +759,17 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: HybridMambaAttentionDynamicCache = None):
+    def slow_forward(self, input_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask: Optional[torch.LongTensor] = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
-        use_cache = isinstance(cache_params,HybridMambaAttentionDynamicCache)
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
+        use_cache = isinstance(cache_params, HybridMambaAttentionDynamicCache)
         # 2. Convolution sequence transformation
         if use_cache and cache_params.ssm_states[self.layer_idx].shape[0] == batch_size:
             if self.training:
@@ -949,6 +803,9 @@ class JambaMambaMixer(nn.Module):
                 device=hidden_states.device, dtype=dtype
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
+
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -987,14 +844,19 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
-    def forward(self, hidden_states, cache_params: HybridMambaAttentionDynamicCache = None):
+    def forward(
+        self,
+        hidden_states,
+        cache_params: HybridMambaAttentionDynamicCache = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
         if self.use_fast_kernels:
             if not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type:
                 raise ValueError(
                     "Fast Mamba kernels are not available. Make sure to they are installed and that the mamba module is on a CUDA device"
                 )
-            return self.cuda_kernels_forward(hidden_states, cache_params)
-        return self.slow_forward(hidden_states, cache_params)
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Jamba
@@ -1206,6 +1068,7 @@ class JambaMambaDecoderLayer(nn.Module):
         hidden_states = self.mamba(
             hidden_states=hidden_states,
             cache_params=past_key_value,
+            attention_mask=attention_mask,
         )
         self_attn_weights = None
 
@@ -1419,9 +1282,7 @@ class JambaModel(JambaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1445,12 +1306,16 @@ class JambaModel(JambaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
 
         for decoder_layer in self.layers:
+            # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
+            layer_mask = mamba_mask if isinstance(decoder_layer, JambaMambaDecoderLayer) else causal_mask
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -1458,7 +1323,7 @@ class JambaModel(JambaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    layer_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1469,7 +1334,7 @@ class JambaModel(JambaPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=layer_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -1550,9 +1415,20 @@ class JambaModel(JambaPreTrainedModel):
 
         return causal_mask
 
+    def _update_mamba_mask(self, attention_mask, cache_position):
+        """
+        No need for zeroing states when
+            1. Cached forward
+            2. Attending to all inputs
+        """
+        mamba_mask = attention_mask
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            mamba_mask = None
+        return mamba_mask
+
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
-class JambaForCausalLM(JambaPreTrainedModel):
+class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: JambaConfig):
@@ -1664,10 +1540,11 @@ class JambaForCausalLM(JambaPreTrainedModel):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1714,39 +1591,27 @@ class JambaForCausalLM(JambaPreTrainedModel):
         inputs_embeds=None,
         output_router_logits=False,
         cache_position=None,
+        position_ids=None,
+        use_cache=True,
         **kwargs,
     ):
+        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+
         empty_past_kv = past_key_values is None
 
-        # Omit tokens covered by past_key_values
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if not empty_past_kv:
-            past_length = cache_position[0] if cache_position is not None else attention_mask.shape[1]
-            max_cache_length = self.config.sliding_window
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and past_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
         else:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
 
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1758,13 +1623,13 @@ class JambaForCausalLM(JambaPreTrainedModel):
         if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
                 "num_logits_to_keep": self.config.num_logits_to_keep,
@@ -1809,7 +1674,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
     @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

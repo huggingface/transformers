@@ -269,6 +269,8 @@ class InstructBlipConfig(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
+        image_token_index (`int`, *optional*):
+            Token index of special image token.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -304,7 +306,15 @@ class InstructBlipConfig(PretrainedConfig):
 
     model_type = "instructblip"
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        text_config=None,
+        num_query_tokens=32,
+        image_token_index=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -328,6 +338,7 @@ class InstructBlipConfig(PretrainedConfig):
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0

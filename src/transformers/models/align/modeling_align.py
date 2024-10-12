@@ -1418,13 +1418,13 @@ class AlignModel(AlignPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, AlignTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type AlignTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, AlignVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type AlignVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1575,7 +1575,7 @@ class AlignModel(AlignPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     images=image, text=["a photo of a cat", "a photo of a dog"], return_tensors="pt", padding=True
         ... )
 
         >>> outputs = model(**inputs)
@@ -1636,3 +1636,6 @@ class AlignModel(AlignPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+__all__ = ["AlignPreTrainedModel", "AlignTextModel", "AlignVisionModel", "AlignModel"]

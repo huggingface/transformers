@@ -141,7 +141,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_headmasking = False
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
-    input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
@@ -461,9 +460,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": [371955],
             "24.0": [6659962],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -517,9 +514,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -581,9 +576,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)

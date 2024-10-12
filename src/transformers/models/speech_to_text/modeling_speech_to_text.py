@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1129,7 +1130,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
          >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(
          ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
          ... )
@@ -1207,7 +1208,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     "The Speech2Text Model with a language modeling head. Can be used for summarization.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
-class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
+class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1270,7 +1271,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(
         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"

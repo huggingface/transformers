@@ -28,7 +28,11 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-TOKENIZER_CLASSES = {name: getattr(transformers, name + "Fast") for name in SLOW_TO_FAST_CONVERTERS}
+TOKENIZER_CLASSES = {
+    # Phi3 uses Llama tokenizer
+    name: getattr(transformers, "LlamaTokenizerFast" if name == "Phi3Tokenizer" else name + "Fast")
+    for name in SLOW_TO_FAST_CONVERTERS
+}
 
 
 def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, force_download):

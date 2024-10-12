@@ -25,11 +25,11 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
-from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
+from .tools import TOOL_CONFIG_FILE, TOOL_MAPPING, Tool
 
 
 def custom_print(*args):
-    return " ".join(map(str, args))
+    return None
 
 
 BASE_PYTHON_TOOLS = {
@@ -133,7 +133,7 @@ def setup_default_tools(logger):
     main_module = importlib.import_module("transformers")
     tools_module = main_module.agents
 
-    for task_name, tool_class_name in TASK_MAPPING.items():
+    for task_name, tool_class_name in TOOL_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
         tool_instance = tool_class()
         default_tools[tool_class.name] = PreTool(
@@ -152,8 +152,7 @@ class PythonInterpreterTool(Tool):
     name = "python_interpreter"
     description = "This is a tool that evaluates python code. It can be used to perform calculations."
 
-    output_type = "text"
-    available_tools = BASE_PYTHON_TOOLS.copy()
+    output_type = "string"
 
     def __init__(self, *args, authorized_imports=None, **kwargs):
         if authorized_imports is None:
@@ -162,7 +161,7 @@ class PythonInterpreterTool(Tool):
             self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(authorized_imports))
         self.inputs = {
             "code": {
-                "type": "text",
+                "type": "string",
                 "description": (
                     "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, "
                     f"else you will get an error. This code can only import the following python libraries: {authorized_imports}."
@@ -173,7 +172,7 @@ class PythonInterpreterTool(Tool):
 
     def forward(self, code):
         output = str(
-            evaluate_python_code(code, tools=self.available_tools, authorized_imports=self.authorized_imports)
+            evaluate_python_code(code, static_tools=BASE_PYTHON_TOOLS, authorized_imports=self.authorized_imports)
         )
         return output
 
@@ -181,7 +180,7 @@ class PythonInterpreterTool(Tool):
 class FinalAnswerTool(Tool):
     name = "final_answer"
     description = "Provides a final answer to the given problem."
-    inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
+    inputs = {"answer": {"type": "any", "description": "The final answer to the problem"}}
     output_type = "any"
 
     def forward(self, answer):

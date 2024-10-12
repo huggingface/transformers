@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING, AutoTokenizer, is_vision_available
-from transformers.pipelines import pipeline
+from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
 from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -61,12 +61,21 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        dqa_pipeline = pipeline(
-            "document-question-answering",
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        dqa_pipeline = DocumentQuestionAnsweringPipeline(
             model=model,
             tokenizer=tokenizer,
-            image_processor=processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
             torch_dtype=torch_dtype,
         )
 

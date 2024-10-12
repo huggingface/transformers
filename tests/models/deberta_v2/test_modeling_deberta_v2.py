@@ -35,7 +35,7 @@ if is_torch_available():
     )
 
 
-class DebertaV2ModelTester(object):
+class DebertaV2ModelTester:
     def __init__(
         self,
         parent,

@@ -56,7 +56,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.43.0.dev0")
+check_min_version("4.46.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -484,7 +484,7 @@ def main():
             label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
                 f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
