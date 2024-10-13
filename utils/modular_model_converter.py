@@ -221,10 +221,6 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
                 "Config", ""
             )  # the best source of truth for class names. Could also just use the ones de
-        if self.old_name in CONFIG_MAPPING_NAMES:
-            self.default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace("Config", "")
-            if self.default_old_name.isupper():
-                self.default_old_name = self.default_old_name.capitalize()
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
@@ -232,6 +228,10 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         }
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
+        if self.old_name in CONFIG_MAPPING_NAMES:
+            self.default_old_name = CONFIG_MAPPING_NAMES[self.old_name].replace("Config", "")
+            if self.default_old_name.isupper():
+                self.default_old_name = self.default_old_name.capitalize()
         if new_class_name is not None and old_class_name is not None and old_class_name not in self.patterns:
             # In last recourse, when the suffix of the new class is not the same as the old class,
             # and if the old and new classes start with the default name, we keep the default class name
