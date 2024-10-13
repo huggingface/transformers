@@ -734,10 +734,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
                 current_segments[prev_i] += segments
 
-                if is_shortform:
-                    seek[prev_i] += max_frames[i]
-                else:
-                    seek[prev_i] += segment_offset
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
