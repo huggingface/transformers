@@ -723,6 +723,15 @@ class WhisperGenerationMixin(GenerationMixin):
                     return_token_timestamps=return_token_timestamps,
                 )
 
+                seek[prev_i] += segment_offset 
+   
+                # we never remove eos token in generate_with_fallback so we do it here
+                if seek[prev_i] < max_frames[prev_i]: 
+                    if seek_sequence[-1] == generation_config.eos_token_id:
+                        seek_sequence = seek_sequence[:-1]
+                        if return_token_timestamps:
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
+
                 current_segments[prev_i] += segments
 
                 if is_shortform:
