@@ -874,7 +874,7 @@ class EncodecModel(EncodecPreTrainedModel):
                 for residual, quantize in quantization_steps:
                     loss = F.mse_loss(quantize.permute(0, 2, 1), residual.permute(0, 2, 1))
                     commitment_loss += loss
-                commitment_loss *= self.config.commitment_weight
+                commitment_loss *= self.commitment_weight
 
         decoded_output = self.decode(audio_codes, audio_scales)
         audio_values = decoded_output.audio_values[:, :, : input_values.shape[-1]]
