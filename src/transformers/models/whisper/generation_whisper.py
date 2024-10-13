@@ -858,12 +858,15 @@ class WhisperGenerationMixin(GenerationMixin):
             model_output_type = type(seek_outputs)
 
             # post-process sequence tokens and outputs to be in list form
+            is_first_segment = (seek == 0.).all()
+
             seek_sequences, seek_outputs = self._postprocess_outputs(
                 seek_outputs=seek_outputs,
                 decoder_input_ids=decoder_input_ids,
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
+                is_first_segment=is_first_segment,
             )
 
             if cur_bsz < batch_size:
@@ -948,10 +951,11 @@ class WhisperGenerationMixin(GenerationMixin):
         return current_segments
 
     def _postprocess_outputs(
-        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
+        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform, is_first_segment
     ):
         # remove all previously passed decoder input ids
-        start_idx = decoder_input_ids.shape[-1] if not is_shortform else torch.tensor(0)
+        # should happen only if it is the first generated segment
+        start_idx = decoder_input_ids.shape[-1] if not is_first_segment else torch.tensor(0)
 
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, start_idx:]
