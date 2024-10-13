@@ -580,7 +580,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         self.quantizer = EncodecResidualVectorQuantizer(config)
 
-        self.commitment_weight = getattr(config, 'commitment_weight', 0.25)
+        self.commitment_weight = config.__dict__.get('commitment_weight', 0.25)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
