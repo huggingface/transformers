@@ -255,22 +255,20 @@ class ColPaliProcessor(PaliGemmaProcessor):
         texts_query: List[str] = []
 
         for query in queries:
-            query = f"Question: {query}"
+            query = self.tokenizer.bos_token + f"Question: {query}"
             query += suffix  # add suffix (pad tokens)
             texts_query.append(query)
 
-        batch_query = super()(
-            images=[self.mock_image] * len(texts_query),
-            text=texts_query,
+        input_strings = [f"{sample}\n" for sample in queries]
+
+        batch_query = self.tokenizer(
+            input_strings,
+            text_pair=None,
+            return_token_type_ids=False,
             return_tensors="pt",
             padding="longest",
-            max_length=max_length + self.image_seq_length,
+            max_length=max_length,
         )
-
-        del batch_query["pixel_values"]
-
-        batch_query["input_ids"] = batch_query["input_ids"][..., self.image_seq_length :]
-        batch_query["attention_mask"] = batch_query["attention_mask"][..., self.image_seq_length :]
 
         return batch_query
 
