@@ -83,8 +83,6 @@ class DabDetrConfig(PretrainedConfig):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 2):
@@ -101,37 +99,20 @@ class DabDetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        do_use_self_attn_decoder (`bool`, *optional*, defaults to `True`):
-            Whether to use self-attention module in decoder layers.
-        decoder_modulate_hw_attn (`bool`, *optional*, defaults to `True`):
-            Whether to modulate the positional attention map using the box width and height information.
         temperature_height (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (HEIGHT)
         temperature_width (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (WIDTH)
-        iter_update (`bool`, *optional*, defaults to `True`):
-            Whether to use dynamic iterative anchor updates.
         query_dim (`int`, *optional*, defaults to 4):
             Query dimension parameter represents the size of the output vector.
-        bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
-            Whether to perform layer-by-layer bounding box embedding refinement.
-        decoder_bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
-            Whether to perform layer-by-layer bounding box embedding refinement.
         random_refpoints_xy (`bool`, *optional*, defaults to `False`):
             Whether to fix the x and y coordinates of the anchor boxes with random initialization.
         keep_query_pos (`bool`, *optional*, defaults to `False`):
             Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
-        query_scale_type (`str`, *optional*, defaults to `"cond_elewise"`):
-            Scale type options:
-                # 'cond_elewise' - Conditional element-wise scaling using content information.
-                # 'cond_scalar' - Conditional scalar scaling using content information.
-                # 'fix_elewise' - Fixed element-wise scaling.
         num_patterns (`int`, *optional*, defaults to 0):
             Number of pattern embeddings.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Whether we use a normalization layer in the Encoder or not.
-        sine_position_embedding_normalize (`bool`, *optional*, defaults to `True`):
-            Whether the positional embeddings are normalized and scaled by sine_position_embedding_scale value.
         sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
             Scaling factor applied to the normalized positional encodings.
         initializer_bias_prior_prob (`float`, *optional*):
@@ -184,7 +165,6 @@ class DabDetrConfig(PretrainedConfig):
         init_std=0.02,
         init_xavier_std=1.0,
         auxiliary_loss=False,
-        position_embedding_type="sine",
         dilation=False,
         class_cost=2,
         bbox_cost=5,
@@ -193,28 +173,19 @@ class DabDetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         focal_alpha=0.25,
-        do_use_self_attn_decoder=True,
-        decoder_modulate_hw_attn=True,
         temperature_height=20,
         temperature_width=20,
-        iter_update=True,
         query_dim=4,
-        bbox_embed_diff_each_layer=False,
-        decoder_bbox_embed_diff_each_layer=False,
         random_refpoints_xy=False,
         keep_query_pos=False,
-        query_scale_type="cond_elewise",
         num_patterns=0,
         normalize_before=False,
-        sine_position_embedding_normalize=True,
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
         **kwargs,
     ):
         if query_dim != 4:
             raise ValueError("The query dimensions has to be 4.")
-
-        assert query_scale_type in ["cond_elewise", "cond_scalar", "fix_elewise"]
 
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
@@ -263,7 +234,6 @@ class DabDetrConfig(PretrainedConfig):
         self.init_xavier_std = init_xavier_std
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
-        self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
@@ -276,20 +246,13 @@ class DabDetrConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
-        self.do_use_self_attn_decoder = do_use_self_attn_decoder
         self.query_dim = query_dim
-        self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.random_refpoints_xy = random_refpoints_xy
-        self.query_scale_type = query_scale_type
         self.keep_query_pos = keep_query_pos
-        self.decoder_modulate_hw_attn = decoder_modulate_hw_attn
-        self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer
         self.num_patterns = num_patterns
         self.normalize_before = normalize_before
-        self.iter_update = iter_update
         self.temperature_width = temperature_width
         self.temperature_height = temperature_height
-        self.sine_position_embedding_normalize = sine_position_embedding_normalize
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

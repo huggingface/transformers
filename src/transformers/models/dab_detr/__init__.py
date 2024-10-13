@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_dab_detr import *
-    from .modeling_dab_detr import *
     from .image_processing_dab_detr import *
+    from .modeling_dab_detr import *
 else:
     import sys
 

@@ -27,7 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
-    add_start_docstrings_to_model_forward, 
+    add_start_docstrings_to_model_forward,
     is_accelerate_available,
     is_scipy_available,
     is_vision_available,
@@ -336,10 +336,7 @@ class DabDetrSinePositionEmbedding(nn.Module):
         self.embedding_dim = config.d_model / 2
         self.temperature_height = config.temperature_height
         self.temperature_width = config.temperature_width
-        self.normalize = config.sine_position_embedding_normalize
         scale = config.sine_position_embedding_scale
-        if scale is not None and self.normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
         if scale is None:
             scale = 2 * math.pi
         self.scale = scale
@@ -362,7 +359,7 @@ class DabDetrSinePositionEmbedding(nn.Module):
         # Modifying dim_tx in place to avoid extra memory allocation -> dim_tx = self.temperature_width ** (2 * (dim_tx // 2) / self.embedding_dim)
         dim_tx //= 2
         dim_tx.mul_(2 / self.embedding_dim)
-        dim_tx.copy_(self.temperature_width ** dim_tx)
+        dim_tx.copy_(self.temperature_width**dim_tx)
         pos_x = x_embed[:, :, :, None] / dim_tx
 
         # We use float32 to ensure reproducibility of the original implementation
@@ -370,7 +367,7 @@ class DabDetrSinePositionEmbedding(nn.Module):
         # Modifying dim_ty in place to avoid extra memory allocation -> dim_ty = self.temperature_height ** (2 * (dim_ty // 2) / self.embedding_dim)
         dim_ty //= 2
         dim_ty.mul_(2 / self.embedding_dim)
-        dim_ty.copy_(self.temperature_height ** dim_ty)
+        dim_ty.copy_(self.temperature_height**dim_ty)
         pos_y = y_embed[:, :, :, None] / dim_ty
 
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
@@ -490,7 +487,9 @@ class DetrAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states_original)
         # get key, value proj
-        query_states = query_states.view(batch_size, target_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        query_states = (
+            query_states.view(batch_size, target_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        )
         key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
         value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -583,12 +582,20 @@ class DabDetrAttention(nn.Module):
 
         # get query proj
         query_states = hidden_states * self.scaling
-        key_states = key_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2).contiguous()
-        value_states = value_states.view(batch_size, -1, self.attention_heads, self.values_head_dim).transpose(1, 2).contiguous()
+        key_states = (
+            key_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2).contiguous()
+        )
+        value_states = (
+            value_states.view(batch_size, -1, self.attention_heads, self.values_head_dim).transpose(1, 2).contiguous()
+        )
 
         projected_shape = (batch_size * self.attention_heads, -1, self.attention_head_dim)
         values_projected_shape = (batch_size * self.attention_heads, -1, self.values_head_dim)
-        query_states = query_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2).contiguous()
+        query_states = (
+            query_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
         query_states = query_states.view(*projected_shape)
         key_states = key_states.view(*projected_shape)
         value_states = value_states.view(*values_projected_shape)
@@ -655,11 +662,9 @@ class DabDetrDecoderLayerSelfAttention(nn.Module):
         self.self_attn = DabDetrAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
 
-    def forward(self,
-                hidden_states,
-                query_position_embeddings,
-                attention_mask,
-                output_attentions: Optional[bool] = None):
+    def forward(
+        self, hidden_states, query_position_embeddings, attention_mask, output_attentions: Optional[bool] = None
+    ):
         residual = hidden_states
         query_content = self.self_attn_query_content_proj(hidden_states)
         query_pos = self.self_attn_query_pos_proj(query_position_embeddings)
@@ -707,16 +712,16 @@ class DabDetrDecoderLayerCrossAttention(nn.Module):
         self.is_first = is_first
         self.dropout = config.dropout
 
-    def forward(self,
-                hidden_states,
-                encoder_hidden_states,
-                query_position_embeddings,
-                object_queries,
-                encoder_attention_mask,
-                query_sine_embed,
-                output_attentions: Optional[bool] = None
-                ):
-
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states,
+        query_position_embeddings,
+        object_queries,
+        encoder_attention_mask,
+        query_sine_embed,
+        output_attentions: Optional[bool] = None,
+    ):
         query_content = self.cross_attn_query_content_proj(hidden_states)
         key_content = self.cross_attn_key_content_proj(encoder_hidden_states)
         value = self.cross_attn_value_proj(encoder_hidden_states)
@@ -852,10 +857,11 @@ class DabDetrEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        # TODO check if owrks
+        # if self.training:
+        #     if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        #         clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        #         hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -869,43 +875,10 @@ class DabDetrEncoderLayer(nn.Module):
 class DabDetrDecoderLayer(nn.Module):
     def __init__(self, config: DabDetrConfig, is_first: bool = False):
         super().__init__()
-        # Decoder Self-Attention projections
-        # self.self_attn_query_content_proj = nn.Linear(d_model, d_model)
-        # self.self_attn_query_pos_proj = nn.Linear(d_model, d_model)
-        # self.self_attn_key_content_proj = nn.Linear(d_model, d_model)
-        # self.self_attn_key_pos_proj = nn.Linear(d_model, d_model)
-        # self.self_attn_value_proj = nn.Linear(d_model, d_model)
-
-        # self.self_attn = DabDetrAttention(config)
-        # self.self_attn_layer_norm = nn.LayerNorm(d_model)
-
-        # # Decoder Cross-Attention projections
-        # self.cross_attn_query_content_proj = nn.Linear(d_model, d_model)
-        # self.cross_attn_query_pos_proj = nn.Linear(d_model, d_model)
-        # self.cross_attn_key_content_proj = nn.Linear(d_model, d_model)
-        # self.cross_attn_key_pos_proj = nn.Linear(d_model, d_model)
-        # self.cross_attn_value_proj = nn.Linear(d_model, d_model)
-        # self.cross_attn_query_pos_sine_proj = nn.Linear(d_model, d_model)
-
-        # self.cross_attn = DabDetrAttention(config, is_cross=True)
-        # self.decoder_attention_heads = config.decoder_attention_heads\
-        # self.cross_attn_layer_norm = nn.LayerNorm(d_model)
-
-        # FFN
-        # self.final_layer_norm = nn.LayerNorm(d_model)
-        # self.fc1 = nn.Linear(d_model, config.decoder_ffn_dim)
-        # self.fc2 = nn.Linear(config.decoder_ffn_dim, d_model)
-        # self.activation_fn = ACT2FN[config.activation_function]
-        # self.activation_dropout = config.activation_dropout
-        # self.keep_query_pos = config.keep_query_pos
-
         self.layer = nn.ModuleList()
         self.layer.append(DabDetrDecoderLayerSelfAttention(config))
         self.layer.append(DabDetrDecoderLayerCrossAttention(config, is_first))
         self.layer.append(DabDetrDecoderLayerFFN(config))
-        # self.self_attn = DabDetrDecoderLayerSelfAttention(config)
-        # self.cross_attn = DabDetrDecoderLayerCrossAttention(config, is_first)
-        # self.ffn = DabDetrDecoderLayerFFN(config)
 
     def forward(
         self,
@@ -940,12 +913,6 @@ class DabDetrDecoderLayer(nn.Module):
                 returned tensors for more detail.
 
         """
-        # hidden_states, self_attn_weights = self.self_attn(
-        #     hidden_states=hidden_states,
-        #     query_position_embeddings=query_position_embeddings,
-        #     attention_masks=attention_mask,
-        #     output_attentions=output_attentions,
-        # )
         hidden_states, self_attn_weights = self.layer[0](
             hidden_states=hidden_states,
             query_position_embeddings=query_position_embeddings,
@@ -953,120 +920,17 @@ class DabDetrDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        # # ========== Begin of Self-Attention =============
-        # # Apply projections here
-        # # shape: batch_size x num_queries x 256
-        # query_content = self.self_attn_query_content_proj(
-        #     hidden_states
-        # )  # target is the input of the first decoder layer. zero by default.
-        # query_pos = self.self_attn_query_pos_proj(query_position_embeddings)
-        # key_content = self.self_attn_key_content_proj(hidden_states)
-        # key_pos = self.self_attn_key_pos_proj(query_position_embeddings)
-        # value = self.self_attn_value_proj(hidden_states)
-
-        # batch_size, num_queries, n_model = query_content.shape
-        # _, height_width, _ = key_content.shape
-
-        # query = query_content + query_pos
-        # key = key_content + key_pos
-        # hidden_states, self_attn_weights = self.self_attn(
-        #     hidden_states=query,
-        #     attention_mask=attention_mask,
-        #     key_states=key,
-        #     value_states=value,
-        #     output_attentions=output_attentions,
-        # )
-        # # ============ End of Self-Attention =============
-
-        # hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        # hidden_states = residual + hidden_states
-        # hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        # hidden_states, cross_attn_weights = self.cross_attn(
-        #         hidden_states=hidden_states,
-        #         encoder_hidden_states=encoder_hidden_states,
-        #         query_position_embeddings=query_position_embeddings,
-        #         object_queries=object_queries,
-        #         encoder_attention_mask=encoder_attention_mask,
-        #         output_attentions=output_attentions,
-        #     )
-
         hidden_states, cross_attn_weights = self.layer[1](
-                hidden_states=hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                query_position_embeddings=query_position_embeddings,
-                object_queries=object_queries,
-                encoder_attention_mask=encoder_attention_mask,
-                query_sine_embed=query_sine_embed,
-                output_attentions=output_attentions,
-            )
-
-        # # ========== Begin of Cross-Attention =============
-        # # Apply projections here
-        # # shape: num_queries x batch_size x 256
-        # query_content = self.cross_attn_query_content_proj(hidden_states)
-        # key_content = self.cross_attn_key_content_proj(encoder_hidden_states)
-        # value = self.cross_attn_value_proj(encoder_hidden_states)
-
-        # batch_size, num_queries, n_model = query_content.shape
-        # _, height_width, _ = key_content.shape
-
-        # key_pos = self.cross_attn_key_pos_proj(object_queries)
-
-        # # For the first decoder layer, we add the positional embedding predicted from
-        # # the object query (the positional embedding) into the original query (key) in DETR.
-        # if self.is_first or self.keep_query_pos:
-        #     query_pos = self.cross_attn_query_pos_proj(query_position_embeddings)
-        #     query = query_content + query_pos
-        #     key = key_content + key_pos
-        # else:
-        #     query = query_content
-        #     key = key_content
-
-        # query = query.view(
-        #     batch_size, num_queries, self.decoder_attention_heads, n_model // self.decoder_attention_heads
-        # )
-        # query_sine_embed = self.cross_attn_query_pos_sine_proj(query_sine_embed)
-        # query_sine_embed = query_sine_embed.view(
-        #     batch_size, num_queries, self.decoder_attention_heads, n_model // self.decoder_attention_heads
-        # )
-        # query = torch.cat([query, query_sine_embed], dim=3).view(batch_size, num_queries, n_model * 2)
-        # key = key.view(batch_size, height_width, self.decoder_attention_heads, n_model // self.decoder_attention_heads)
-        # key_pos = key_pos.view(
-        #     batch_size, height_width, self.decoder_attention_heads, n_model // self.decoder_attention_heads
-        # )
-        # key = torch.cat([key, key_pos], dim=3).view(batch_size, height_width, n_model * 2)
-
-        # # Cross-Attention Block
-        # cross_attn_weights = None
-        # if encoder_hidden_states is not None:
-        #     residual = hidden_states
-
-        #     hidden_states, cross_attn_weights = self.cross_attn(
-        #         hidden_states=query,
-        #         attention_mask=encoder_attention_mask,
-        #         key_states=key,
-        #         value_states=value,
-        #         output_attentions=output_attentions,
-        #     )
-
-        #     hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        #     hidden_states = residual + hidden_states
-        #     hidden_states = self.cross_attn_layer_norm(hidden_states)
-
-        # # ============ End of Cross-Attention =============
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            query_position_embeddings=query_position_embeddings,
+            object_queries=object_queries,
+            encoder_attention_mask=encoder_attention_mask,
+            query_sine_embed=query_sine_embed,
+            output_attentions=output_attentions,
+        )
 
         hidden_states = self.layer[2](hidden_states=hidden_states)
-        # hidden_states = self.ffn(hidden_states=hidden_states)
-
-        # Fully Connected
-        # residual = hidden_states
-        # hidden_states = self.activation_fn(self.fc1(hidden_states))
-        # hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        # hidden_states = self.fc2(hidden_states)
-        # hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        # hidden_states = residual + hidden_states
-        # hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -1125,13 +989,8 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, DabDetrForObjectDetection):
-            if self.config.bbox_embed_diff_each_layer:
-                for bbox_predictor in module.bbox_predictor:
-                    nn.init.constant_(bbox_predictor.layers[-1].weight.data, 0)
-                    nn.init.constant_(bbox_predictor.layers[-1].bias.data, 0)
-            else:
-                nn.init.constant_(module.bbox_predictor.layers[-1].weight.data, 0)
-                nn.init.constant_(module.bbox_predictor.layers[-1].bias.data, 0)
+            nn.init.constant_(module.bbox_predictor.layers[-1].weight.data, 0)
+            nn.init.constant_(module.bbox_predictor.layers[-1].bias.data, 0)
 
             # init prior_prob setting for focal loss
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -1333,24 +1192,15 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
         d_model = config.d_model
 
-        self.query_scale_type = config.query_scale_type
-        if self.query_scale_type == "cond_elewise":
-            self.query_scale = DabDetrMLP(d_model, d_model, d_model, 2)
-        elif self.query_scale_type == "cond_scalar":
-            self.query_scale = DabDetrMLP(d_model, d_model, 1, 2)
-        elif self.query_scale_type == "fix_elewise":
-            self.query_scale = nn.Embedding(config.decoder_layers, d_model)
-        else:
-            raise NotImplementedError("Unknown query_scale_type: {}".format(self.query_scale_type))
+        # Default cond-elewise
+        self.query_scale = DabDetrMLP(d_model, d_model, d_model, 2)
 
         self.ref_point_head = DabDetrMLP(config.query_dim // 2 * d_model, d_model, d_model, 2)
 
         self.bbox_embed = None
         self.d_model = d_model
-        self.decoder_bbox_embed_diff_each_layer = config.decoder_bbox_embed_diff_each_layer
 
-        # if self.decoder_modulate_hw_attn:
-        #     self.ref_anchor_head = DabDetrMLP(d_model, d_model, 2, 2)
+        # Default decoder_modulate_hw_attn is True
         self.ref_anchor_head = DabDetrMLP(d_model, d_model, 2, 2)
 
         # Initialize weights and apply final processing
@@ -1432,7 +1282,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
             # modulated HW attentions
             refHW_cond = self.ref_anchor_head(hidden_states).sigmoid()  # nq, bs, 2
-            query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
+            query_sine_embed[..., self.d_model // 2 :] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
             query_sine_embed[..., : self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
             if self.gradient_checkpointing and self.training:
@@ -1463,13 +1313,10 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if self.bbox_embed is not None:
-                if self.decoder_bbox_embed_diff_each_layer:
-                    tmp = self.bbox_embed[layer_id](hidden_states)
-                else:
-                    tmp = self.bbox_embed(hidden_states)
+                new_reference_points = self.bbox_embed(hidden_states)
 
-                tmp[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
-                new_reference_points = tmp[..., : self.config.query_dim].sigmoid()
+                new_reference_points[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
+                new_reference_points = new_reference_points[..., : self.config.query_dim].sigmoid()
                 if layer_id != self.num_layers - 1:
                     ref_points.append(new_reference_points)
                 reference_points = new_reference_points.detach()
@@ -1553,12 +1400,12 @@ class DabDetrModel(DabDetrPreTrainedModel):
         self.d_model = config.d_model
         self.num_queries = config.num_queries
 
-        self.num_patterns = num_patterns = config.num_patterns
-        if not isinstance(num_patterns, int):
-            Warning("num_patterns should be int but {}".format(type(num_patterns)))
+        self.num_patterns = config.num_patterns
+        if not isinstance(self.num_patterns, int):
+            Warning("num_patterns should be int but {}".format(type(self.num_patterns)))
             self.num_patterns = 0
-        if num_patterns > 0:
-            self.patterns = nn.Embedding(num_patterns, config.d_model)
+        if self.num_patterns > 0:
+            self.patterns = nn.Embedding(self.num_patterns, config.d_model)
 
         self.aux_loss = config.auxiliary_loss
 
@@ -2230,16 +2077,11 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         # Object detection heads
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
 
-        self.bbox_embed_diff_each_layer = config.bbox_embed_diff_each_layer
-        if config.bbox_embed_diff_each_layer:
-            self.bbox_predictor = nn.ModuleList([_bbox_embed for i in range(config.decoder_layers)])
-        else:
-            self.bbox_predictor = _bbox_embed
+        # Default bbox_embed_diff_each_layer is False
+        self.bbox_predictor = _bbox_embed
 
-        if config.iter_update:
-            self.model.decoder.bbox_embed = self.bbox_predictor
-        else:
-            self.model.decoder.bbox_embed = None
+        # Default iter_update is True
+        self.model.decoder.bbox_embed = self.bbox_predictor
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2334,20 +2176,10 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         # class logits + predicted bounding boxes
         logits = self.class_embed(intermediate_hidden_states[-1])
 
-        if not self.bbox_embed_diff_each_layer:
-            reference_before_sigmoid = inverse_sigmoid(reference_points)
-            tmp = self.bbox_predictor(intermediate_hidden_states)
-            tmp[..., : self.query_dim] += reference_before_sigmoid
-            outputs_coord = tmp.sigmoid()
-        else:
-            reference_before_sigmoid = inverse_sigmoid(reference_points)
-            outputs_coords = []
-            for lvl in range(intermediate_hidden_states.shape[0]):
-                tmp = self.bbox_predictor[lvl](intermediate_hidden_states[lvl])
-                tmp[..., : self.query_dim] += reference_before_sigmoid[lvl]
-                outputs_coord = tmp.sigmoid()
-                outputs_coords.append(outputs_coord)
-            outputs_coord = torch.stack(outputs_coords)
+        reference_before_sigmoid = inverse_sigmoid(reference_points)
+        tmp = self.bbox_predictor(intermediate_hidden_states)
+        tmp[..., : self.query_dim] += reference_before_sigmoid
+        outputs_coord = tmp.sigmoid()
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         pred_boxes = outputs_coord[-1]
