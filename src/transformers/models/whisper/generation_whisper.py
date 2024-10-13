@@ -1860,11 +1860,13 @@ class WhisperGenerationMixin(GenerationMixin):
             last_timestamp_pos = seek_num_frames[prev_idx]
             if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
+                # TODO: I think there is an unconsistency with above last_timestamp_pos 
                 last_timestamp_pos = timestamps[-1].item() - timestamp_begin
             segments = [
                 {
                     "start": time_offset[prev_idx],
-                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
+                    # here last_timestamp_pos is the number of frames from the last segment, so time precision is not 0.02 but 0.01
+                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision / 2, 
                     "tokens": seek_sequence,
                     "result": seek_outputs[idx],
                 }
