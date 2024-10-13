@@ -906,6 +906,8 @@ class WhisperGenerationMixin(GenerationMixin):
                     generation_config,
                     self.config.vocab_size,
                     temperature,
+                    is_first_segment,
+                    decoder_input_ids,
                 )
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
@@ -1063,6 +1065,8 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config,
         vocab_size,
         temperature,
+        is_first_segment,
+        decoder_input_ids,
     ):
         needs_fallback = False
         should_skip = False
@@ -1078,7 +1082,7 @@ class WhisperGenerationMixin(GenerationMixin):
             else:
                 scores = seek_outputs[index]["scores"]
                 logprobs = self._retrieve_avg_logprobs(
-                    scores, seek_sequence, generation_config.eos_token_id, temperature
+                    scores, seek_sequence, generation_config.eos_token_id, temperature, is_first_segment, decoder_input_ids
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1754,22 +1758,27 @@ class WhisperGenerationMixin(GenerationMixin):
         return compression_ratio
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
+    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature, is_first_segment, decoder_input_ids):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
+
+        # if we are on the first segment, we need to remove the decoder_input_ids
+        # this way we ensure scores and tokens are aligned (scores starts with the first generated token)
+        if is_first_segment:
+            tokens = tokens[decoder_input_ids.shape[-1]:]
 
         if scores.shape[0] > tokens.shape[0]:
             scores = scores[: tokens.shape[0]]
         else:
-            tokens = tokens[-scores.shape[0] :]
+            tokens = tokens[-scores.shape[0]:]
 
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 
         # retrieve logprob of selected tokens and sum
-        sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-        length = (tokens != eos_token_id).sum(-1) if eos_token_id is not None else tokens.shape[0]
+        # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
+        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / (length + 1)
+        avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
 
     @staticmethod
