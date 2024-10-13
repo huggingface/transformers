@@ -24,6 +24,16 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, is_valid_image
+from ...processing_utils import (
+    ProcessingKwargs,
+    TextKwargs,
+    Unpack,
+)
+from ...tokenization_utils_base import (
+    PreTokenizedInput,
+    TextInput,
+)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -113,6 +123,14 @@ class ColPaliConfig(PaliGemmaConfig):
         self.embedding_dim = embedding_dim
 
 
+class ColPaliTextKwargs(TextKwargs):
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+
+
+class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: ColPaliTextKwargs
+
+
 class ColPaliProcessor(PaliGemmaProcessor):
     r"""
     Constructs a ColPali processor which wraps a PaliGemmaProcessor and special methods to process images and queries, as
@@ -168,6 +186,41 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         return device
 
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[ColPaliProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several queries or images.
+        """
+
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
+
+        if images is not None:
+            if is_valid_image(images):
+                images = [images]
+            elif isinstance(images, list) and is_valid_image(images[0]):
+                pass
+            elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+                raise ValueError("images must be an image, list of images or list of list of images")
+
+            return self.process_images(images, **kwargs)
+
+        elif text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif isinstance(text, list) and isinstance(text[0], str):
+                pass
+
+            return self.process_queries(text, **kwargs)
+
     def process_images(
         self,
         images: List[Image.Image],
@@ -179,7 +232,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         texts_doc = ["Describe the image."] * len(images)
         images = [image.convert("RGB") for image in images]
 
-        batch_doc = self(
+        batch_doc = super()(
             text=texts_doc,
             images=images,
             return_tensors="pt",
@@ -206,7 +259,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             query += suffix  # add suffix (pad tokens)
             texts_query.append(query)
 
-        batch_query = self(
+        batch_query = super()(
             images=[self.mock_image] * len(texts_query),
             text=texts_query,
             return_tensors="pt",
