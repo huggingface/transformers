@@ -227,12 +227,20 @@ if is_peft_available():
 
 
 if is_accelerate_available():
-    from accelerate import Accelerator, skip_first_batches
+    from accelerate import (
+        Accelerator,
+        AutocastKwargs,
+        GradScalerKwargs,
+        InitProcessGroupKwargs,
+        ProfileKwargs,
+        skip_first_batches,
+    )
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
+        FP8RecipeKwargs,
         GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
@@ -4836,6 +4844,32 @@ class Trainer:
             self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
             self.repo.git_push()
 
+    def _get_accelerator_kwargs_handlers(self):
+        kwargs_handlers = []
+        if self.args.accelerator_config.autocast_kwargs is not None:
+            autocast_kwargs = AutocastKwargs(**self.args.accelerator_config.autocast_kwargs)
+            kwargs_handlers.append(autocast_kwargs)
+
+        if self.args.accelerator_config.fp8_recipe_kwargs is not None:
+            fp8_recipe_kwargs = FP8RecipeKwargs(**self.args.accelerator_config.fp8_recipe_kwargs)
+            kwargs_handlers.append(fp8_recipe_kwargs)
+
+        if self.args.accelerator_config.profile_kwargs is not None:
+            profile_kwargs = ProfileKwargs(**self.args.accelerator_config.profile_kwargs)
+            kwargs_handlers.append(profile_kwargs)
+
+        if self.args.accelerator_config.grad_scale_kwargs is not None:
+            grad_scale_kwargs = GradScalerKwargs(**self.args.accelerator_config.grad_scale_kwargs)
+            kwargs_handlers.append(grad_scale_kwargs)
+
+        if self.args.accelerator_config.init_process_group_kwargs is not None:
+            init_process_group_kwargs = InitProcessGroupKwargs(
+                **self.args.accelerator_config.init_process_group_kwargs
+            )
+            kwargs_handlers.append(init_process_group_kwargs)
+
+        return kwargs_handlers if len(kwargs_handlers) > 0 else None
+
     def create_accelerator_and_postprocess(self):
         grad_acc_kwargs = {}
         if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
@@ -4880,12 +4914,21 @@ class Trainer:
                     "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
                 )
             dataloader_config.non_blocking = non_blocking
+
+        kwargs_handlers = self._get_accelerator_kwargs_handlers()
+
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
+        accelerator_config.pop("autocast_kwargs")
+        accelerator_config.pop("fp8_recipe_kwargs")
+        accelerator_config.pop("profile_kwargs")
+        accelerator_config.pop("grad_scale_kwargs")
+        accelerator_config.pop("init_process_group_kwargs")
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,
+            "kwargs_handlers": kwargs_handlers,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
