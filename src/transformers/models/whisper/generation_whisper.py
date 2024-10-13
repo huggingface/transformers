@@ -1688,7 +1688,19 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
-            active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
+            
+            # we need to remove the decoder_input_ids for the first segment and the eos token id for the last
+            active_segments = []
+            for i in batch_idx_map:
+                if do_condition_on_prev_tokens[i]:
+                    start_idx = len(init_tokens[i])
+                    segments_tokens = [current_segments[i][0]["tokens"][start_idx: ]]
+                    segments_tokens.extend(seg["tokens"] for seg in current_segments[i][1: ])
+                    active_segments.append(
+                        [{"tokens": toks} for toks in segments_tokens]
+                    )
+                else:
+                    active_segments.append(None)
 
             if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
                 prev_ids = prompt_ids
