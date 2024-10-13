@@ -40,6 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
@@ -47,6 +48,9 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_gemma import GemmaConfig
+
+
+_CHECKPOINT_FOR_DOC = "google/gemma-7b"
 
 
 class GemmaRMSNorm(nn.Module):
@@ -1263,6 +1267,11 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
