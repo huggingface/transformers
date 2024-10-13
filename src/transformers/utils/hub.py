@@ -802,7 +802,7 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
-        if revision is not None:
+        if revision is not None and not revision.startswith("refs/pr"):
             try:
                 create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
             except HfHubHTTPError as e:
