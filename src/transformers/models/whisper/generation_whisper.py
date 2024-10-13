@@ -884,9 +884,13 @@ class WhisperGenerationMixin(GenerationMixin):
                 # remove all padding tokens, except for the eos token
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
+                    if generation_config.pad_token_id == generation_config.eos_token_id:
+                        # we do not remove the eos token id since it is needed for avg logprob calculation in _need_fallback
+                        num_paddings -= 1
+                    if num_paddings != 0:
+                        seek_sequence = seek_sequence[:-num_paddings]
+                        if return_token_timestamps and not is_shortform:
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
