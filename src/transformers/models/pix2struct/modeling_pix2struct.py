@@ -1600,7 +1600,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1881,84 +1881,3 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        flattened_patches: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        cache_position=None,
-        **kwargs,
-    ):
-        if decoder_attention_mask is None:
-            decoder_attention_mask = torch.ones_like(input_ids).to(input_ids.device)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            else:
-                past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_ids.shape[1] :]
-
-        # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
-        # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-        input_ids = input_ids.clone(memory_format=torch.contiguous_format)
-
-        if (
-            isinstance(past_key_values, EncoderDecoderCache)
-            and (
-                isinstance(past_key_values.self_attention_cache, StaticCache)
-                or isinstance(past_key_values.cross_attention_cache, StaticCache)
-            )
-            and decoder_attention_mask is not None
-            and decoder_attention_mask.ndim == 2
-        ):
-            batch_size, sequence_length = input_ids.shape
-            device = input_ids.device
-
-            dtype = self.proj_out.weight.dtype
-
-            decoder_attention_mask = self.decoder._prepare_4d_causal_attention_mask_with_cache_position(
-                decoder_attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.self_attention_cache.get_max_length(),
-                dtype=dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-            )
-
-        return {
-            "flattened_patches": flattened_patches,
-            "decoder_input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-            "cache_position": cache_position,
-        }
