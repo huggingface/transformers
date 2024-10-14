@@ -20,9 +20,9 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_accelerate,
-    require_torch_multi_gpu,
+    require_fp8,
     require_fsdp,
-    require_fp8
+    require_torch_multi_gpu,
 )
 
 
