@@ -13,6 +13,8 @@
 # limitations under the License.
 from typing import List
 
+from transformers import SuperPointConfig
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -61,10 +63,10 @@ class SuperGlueConfig(PretrainedConfig):
 
     def __init__(
         self,
-        keypoint_detector_config=None,
+        keypoint_detector_config: SuperPointConfig = None,
         descriptor_dim: int = 256,
-        keypoint_encoder_sizes: List[int] = [32, 64, 128, 256],
-        gnn_layers_types: List[str] = ["self", "cross"] * 9,
+        keypoint_encoder_sizes: List[int] = None,
+        gnn_layers_types: List[str] = None,
         num_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
@@ -79,6 +81,10 @@ class SuperGlueConfig(PretrainedConfig):
             raise ValueError("descriptor_dim % num_heads is different from zero")
 
         self.descriptor_dim = descriptor_dim
+        self.keypoint_encoder_sizes = (
+            keypoint_encoder_sizes if keypoint_encoder_sizes is not None else [32, 64, 128, 256]
+        )
+        self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
         self.gnn_layers_types = gnn_layers_types
         self.num_heads = num_heads
