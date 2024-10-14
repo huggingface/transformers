@@ -2779,6 +2779,13 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForCausalLM",
+            "MolmoModel",
+            "MolmoPreTrainedModel",
+        ]
+    )
     _import_structure["models.mpnet"].extend(
         [
             "MPNetForMaskedLM",
