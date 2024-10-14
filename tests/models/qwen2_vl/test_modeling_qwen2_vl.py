@@ -554,7 +554,11 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     def test_sequence_classification_multi_class(self):
         num_labels = 3
         model = Qwen2VLForSequenceClassification.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto", num_labels=num_labels
+            "Qwen/Qwen2-VL-2B-Instruct",
+            torch_dtype="auto",
+            device_map="auto",
+            num_labels=num_labels,
+            pad_token_id=-100,
         )
         model.to(torch_device)
         model.eval()
@@ -563,7 +567,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             text=[text, text], images=[self.image, self.image], padding=True, return_tensors="pt"
         ).to(torch_device)
         batch_size = inputs["input_ids"].shape[0]
-        labels = torch.eye(3, device=torch_device)[torch.randint(low=0, high=3, size=batch_size)]
+        labels = torch.eye(n=num_labels, device=torch_device)[torch.randint(low=0, high=3, size=(batch_size,))]
         result = model(**inputs, labels=labels)
         self.assertEqual(result.logits.shape, (batch_size, num_labels))
 
@@ -571,11 +575,12 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     def test_sequence_classification_single_label(self):
         num_labels = 1
         model = Qwen2VLForSequenceClassification.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct",
+            "Qwen/Qwen2-VL-2B-Instruct",
             torch_dtype="auto",
             device_map="auto",
             num_labels=num_labels,
             problem_type="single_label_classification",
+            pad_token_id=-100,
         )
         model.to(torch_device)
         model.eval()
@@ -592,11 +597,12 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     def test_sequence_classification_multi_label(self):
         num_labels = 3
         model = Qwen2VLForSequenceClassification.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct",
+            "Qwen/Qwen2-VL-2B-Instruct",
             torch_dtype="auto",
             device_map="auto",
             num_labels=num_labels,
             problem_type="multi_label_classification",
+            pad_token_id=-100,
         )
         model.to(torch_device)
         model.eval()
