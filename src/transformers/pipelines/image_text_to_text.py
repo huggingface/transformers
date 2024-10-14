@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 from ..utils import (
     add_end_docstrings,
@@ -49,8 +49,7 @@ class Chat:
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        if count_images_in_chat(messages) != len(images):
-            raise ValueError("The number of images should be the same as the number of images in the chat.")
+        images = retrieve_images_in_chat(messages, images)
 
         self.messages = messages
         self.images = images
@@ -65,11 +64,26 @@ class ImageText:
         self.text = text
 
 
-def count_images_in_chat(chat):
-    num_images = 0
+def retrieve_images_in_chat(chat, images):
+    """
+    Retrieve and combine images from the chat and the images passed as input.
+    """
+    idx_images = 0
+    retrieved_images = []
     for message in chat:
-        num_images += sum(1 for content in message["content"] if content.get("type") == "image")
-    return num_images
+        for content in message["content"]:
+            if content.get("type") == "image":
+                if "image" in content:
+                    retrieved_images.append(content["image"])
+                else:
+                    retrieved_images.append(images[idx_images])
+                    idx_images += 1
+
+    # The number of images passed should be consistent with the number of images in the chat without an image key
+    if idx_images != len(images):
+        raise ValueError("The number of images in the chat should be the same as the number of images passed.")
+
+    return retrieved_images
 
 
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
@@ -107,11 +121,11 @@ class ImageTextToTextPipeline(Pipeline):
         self,
         max_new_tokens=None,
         generate_kwargs=None,
-        text=None,
         truncation=None,
         padding=None,
         max_length=None,
         timeout=None,
+        include_query_in_output=None,
     ):
         forward_kwargs = {}
         preprocess_params = {}
@@ -142,12 +156,17 @@ class ImageTextToTextPipeline(Pipeline):
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
+        if include_query_in_output is not None:
+            post_process_params["include_query_in_output"] = include_query_in_output
+
         return preprocess_params, forward_kwargs, post_process_params
 
     def __call__(
         self,
-        images: Union[str, List[str], List[List[str]], "Image.Image", List["Image.Image"], List[List["Image.Image"]]],
-        text: Union[str, List[str], List[dict]],
+        images: Optional[
+            Union[str, List[str], List[List[str]], "Image.Image", List["Image.Image"], List[List["Image.Image"]]]
+        ] = None,
+        text: Optional[Union[str, List[str], List[dict]]] = None,
         **kwargs,
     ):
         """
@@ -179,6 +198,9 @@ class ImageTextToTextPipeline(Pipeline):
         """
         batch_size = kwargs.get("batch_size", 1)
 
+        if images is None and text is None:
+            raise ValueError("You must at least provide either text or images.")
+
         if not isinstance(images, (list, tuple)):
             images = [images]
 
@@ -192,13 +214,21 @@ class ImageTextToTextPipeline(Pipeline):
                 chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
+        # If we are not in chat mode, we need both images and text
+        if images is None or text is None:
+            raise ValueError("You must provide both images and text when not using chat templates.")
+
         if isinstance(text, str):
             text = [text] * len(images)
         if not isinstance(text[0], str):
             raise ValueError("The pipeline does not support nested lists of prompts.")
 
-        # Check number of IMAGE_TOKEN token in each text
-        num_images_in_text = [text_single.count(IMAGE_TOKEN) for text_single in text]
+        if hasattr(self.processor, "image_token") and self.processor.image_token is not None:
+            image_token = self.processor.image_token
+        else:
+            image_token = IMAGE_TOKEN
+        # Check number of image_token token in each text
+        num_images_in_text = [text_single.count(image_token) for text_single in text]
         if sum(num_images_in_text) > 0:
             if any(num > 1 for num in num_images_in_text) and batch_size > 1:
                 raise ValueError(
@@ -211,11 +241,11 @@ class ImageTextToTextPipeline(Pipeline):
                 num_images_in_images = [len(image) for image in images]
                 if num_images_in_text != num_images_in_images:
                     raise ValueError(
-                        f"The number of images in each nested image group should be the same as the number of {IMAGE_TOKEN} tokens in the corresponding prompt."
+                        f"The number of images in each nested image group should be the same as the number of {image_token} tokens in the corresponding prompt."
                     )
             elif sum(num_images_in_text) != len(images):
                 raise ValueError(
-                    f"The total number of {IMAGE_TOKEN} tokens in the prompts should be the same as the number of images passed."
+                    f"The total number of {image_token} tokens in the prompts should be the same as the number of images passed."
                 )
             else:
                 # Reorganize the images to match the prompts
@@ -240,7 +270,6 @@ class ImageTextToTextPipeline(Pipeline):
         images = inputs.images
 
         if isinstance(inputs, Chat):
-            # kwargs["chats"] = inputs.messages
             text = self.processor.apply_chat_template(
                 inputs.messages,
                 add_generation_prompt=True,
@@ -269,8 +298,7 @@ class ImageTextToTextPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
-        if generate_kwargs is None:
-            generate_kwargs = {}
+        generate_kwargs = {} if generate_kwargs is None else generate_kwargs
         input_text = model_inputs.pop("text")
         input_ids = (
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
@@ -278,7 +306,7 @@ class ImageTextToTextPipeline(Pipeline):
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         return {"outputs": model_outputs, "input_text": input_text, "input_ids": input_ids}
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, include_query_in_output=False):
         input_text = model_outputs["input_text"]
         input_text = [input_text] if isinstance(input_text, str) else input_text
         outputs = model_outputs["outputs"]
@@ -289,13 +317,24 @@ class ImageTextToTextPipeline(Pipeline):
         decoded_inputs = self.processor.post_process_image_text_to_text(inputs_id)
         generated_texts = [text.strip() for text in generated_texts]
         decoded_inputs = [text.strip() for text in decoded_inputs]
-        # Remove the input text from the generated text if the generated text starts with the input text
-        generated_texts = [
-            text_generated[len(decoded_inputs[i]) :].strip()
-            if text_generated.startswith(decoded_inputs[i])
-            else text_generated
-            for i, text_generated in enumerate(generated_texts)
-        ]
+
+        # Force consistent behavior for including the input text in the output
+        if include_query_in_output:
+            # Add the input text to the generated text if the generated text does not start with the input
+            generated_texts = [
+                f"{decoded_inputs[i]} {text_generated}"
+                if not text_generated.startswith(decoded_inputs[i])
+                else text_generated
+                for i, text_generated in enumerate(generated_texts)
+            ]
+        else:
+            # Remove the input text from the generated text if the generated text starts with the input text
+            generated_texts = [
+                text_generated[len(decoded_inputs[i]) :].strip()
+                if text_generated.startswith(decoded_inputs[i])
+                else text_generated
+                for i, text_generated in enumerate(generated_texts)
+            ]
 
         records = [
             {"input_text": input_text[i], "generated_text": generated_text}
