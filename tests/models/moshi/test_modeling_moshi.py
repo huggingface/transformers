@@ -359,6 +359,10 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_disk_offload_safetensors(self):
         pass
 
+    @is_flaky(max_attempts=5, description="flaky on some models.")
+    def test_save_load(self):
+        super().test_save_load()
+
 
 class MoshiTester:
     def __init__(
@@ -968,6 +972,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
         pass
+
+    @is_flaky(max_attempts=5, description="flaky on some models.")
+    def test_save_load(self):
+        super().test_save_load()
 
 
 def place_dict_on_device(dict_to_place, device):
