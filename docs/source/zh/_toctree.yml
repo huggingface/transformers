@@ -50,6 +50,8 @@
     title: 导出为 TFLite
   - local: torchscript
     title: 导出为 TorchScript
+  - local: gguf
+    title: 与GGUF格式共享模型
   title: 开发者指南
 - sections:
   - local: performance
