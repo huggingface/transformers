@@ -17,6 +17,7 @@ import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import sys
 import numpy as np
+from sklearn.metrics import roc_curve
 
 import torch
 
@@ -271,35 +272,28 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
             self.assistant_model.generation_config.assistant_confidence_threshold > 0:
             self.matches.extend(num_matches*[1])
+            #print(f"{len(self.probs)=}, {len(self.matches)=}")
             if len(self.probs)>len(self.matches): 
                 self.matches.append(0)
                 n=len(self.probs)-len(self.matches)
                 if n>0:
                     del self.probs[-n:]
-
             
             if len(self.probs) > 5:
-                thresholds = np.unique(np.floor(self.probs * 10)/10)
-                best_threshold = thresholds[0]
-                best_accuracy = 0
 
-                # Loop over possible thresholds
-                for threshold in thresholds:
-                    # Classify scores based on the current threshold
-                    predictions = self.probs >= threshold  # accepted if >= threshold, rejected otherwise
-                    
-                    # Calculate accuracy
-                    accuracy = np.mean(predictions == self.matches)
-                    
-                    # Update the best threshold if accuracy improves
-                    if accuracy > best_accuracy:
-                        best_accuracy = accuracy
-                        best_threshold = threshold
+                fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
+                fnr = 1 - tpr
 
-                # Display the best threshold and corresponding accuracy
-                #print("Optimal Threshold:", best_threshold)
-                #print("Best Accuracy:", best_accuracy)
+                # Calculate the cost for each threshold
+                costs = fpr + 3 * fnr
+
+                # Find the threshold that minimizes the cost
+                optimal_threshold_index = np.argmin(costs)
+                best_threshold = thresholds[optimal_threshold_index]
+
                 self.assistant_model.generation_config.assistant_confidence_threshold = max(sys.float_info.epsilon,best_threshold)
+                self.probs = self.probs[-200:]
+                self.matches = self.matches[-200:]
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
