@@ -1572,13 +1572,13 @@ class GenerationTesterMixin:
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
             if config.is_encoder_decoder:
-                self.skipTest("This test is for decoder-only models")
+                continue
 
             # Skip models without explicit support
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
-                self.skipTest("This model doesn't accept `inputs_embeds` in generate")
+                continue
 
             input_ids = inputs_dict.pop("input_ids")
 
