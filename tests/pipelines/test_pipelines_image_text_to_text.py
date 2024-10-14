@@ -45,12 +45,13 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         pipe = ImageTextToTextPipeline(
             model=model, tokenizer=tokenizer, image_processor=processor, torch_dtype=torch_dtype
         )
+        image_token = processor.image_token if hasattr(processor, "image_token") else "<image>"
         examples = {
             "images": [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "./tests/fixtures/tests_samples/COCO/000000039769.png",
             ],
-            "text": ["<image> This is a ", "<image> Here I see a "],
+            "text": [f"{image_token} This is a ", f"{image_token} Here I see a "],
         }
         return pipe, examples
 
