@@ -44,7 +44,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"modality_heads\.vision\.2\.weight": "vision_projection.weight",
     r"modality_trunks\.vision\.pre_transformer_layer\.0\.weight": "vision_model.pre_layernorm.weight",
     r"modality_trunks\.vision\.pre_transformer_layer\.0\.bias": "vision_model.pre_layernorm.bias",
-    
     # Text
     r"modality_preprocessors\.text\.pos_embed": "text_model.embeddings.position_embedding.weight",
     r"modality_preprocessors\.text\.token_embedding\.weight": "text_model.embeddings.token_embedding.weight",
@@ -52,7 +51,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"modality_heads\.text\.proj\.0\.bias": "text_model.layernorm.bias",
     r"modality_heads\.text\.proj\.1\.weight": "text_projection.weight",
     r"modality_postprocessors\.text\.1\.log_logit_scale": "text_postprocessor.log_logit_scale",
-    
     # Audio
     r"modality_preprocessors\.audio\.cls_token": "audio_model.embeddings.cls_token",
     r"modality_preprocessors\.audio\.rgbt_stem\.proj\.weight": "audio_model.embeddings.patch_embedding.projection.weight",
@@ -61,7 +59,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"modality_preprocessors\.audio\.pos_embedding_helper\.pos_embed": "audio_model.embeddings.position_embeddings",
     r"modality_heads\.audio\.0\.weight": "audio_model.layernorm.weight",
     r"modality_heads\.audio\.0\.bias": "audio_model.layernorm.bias",
-    r"modality_heads\.audio\.2\.weight": "audio_projection.weight"
+    r"modality_heads\.audio\.2\.weight": "audio_projection.weight",
 }
 
 
