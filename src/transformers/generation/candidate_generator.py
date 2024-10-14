@@ -271,20 +271,20 @@ class AssistedCandidateGenerator(CandidateGenerator):
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
-        # Adjust the assistant confidence thereshold in order to minimize the cost of errors,
+        # Adjust the assistant confidence threshold in order to minimize the cost of errors,
         # using the ROC curve and the cost of false positives (1) and false negatives (3).
         if self.assistant_model.generation_config.assistant_confidence_threshold:
             # update self.matches
             self.matches.extend([1] * num_matches)
             if len(self.probs) > len(self.matches):
                 self.matches.append(0)
-                
+
             # update self.probs
             excess_length = len(self.probs) - len(self.matches)
             if excess_length > 0:
                 del self.probs[-excess_length:]
 
-            if len(self.probs) > 5: # require at least 5 samples to calculate the ROC curve
+            if len(self.probs) > 5:  # require at least 5 samples to calculate the ROC curve
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
