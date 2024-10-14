@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# OLMo
+# Molmo
 
 ## Overview
 
@@ -23,16 +23,16 @@ The Molmo family is open source and are not trained on data derived from other v
 Molmo models support instruction following and visual grounding through generating pointing output.
 
 More details are in the [paper](https://huggingface.co/papers/2409.17146) and the [blog post](https://molmo.allenai.org/blog)
-## OlmoConfig
+## MolmoConfig
 
 [[autodoc]] OlmoConfig
 
-## OlmoModel
+## MolmoModel
 
 [[autodoc]] OlmoModel
     - forward
 
-## OlmoForCausalLM
+## MolmoForCausalLM
 
 [[autodoc]] OlmoForCausalLM
     - forward
