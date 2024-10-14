@@ -1635,7 +1635,9 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
@@ -1661,15 +1663,32 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        attention_mask=None,
         past_key_values=None,
-        cache_position=None,
+        attention_mask=None,
+        position_ids=None,
         pixel_values=None,
         image_hidden_states=None,
         use_cache=None,
+        cache_position=None,
         **kwargs,
     ):
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        if past_key_values is not None:
+            if input_ids.shape[1] != cache_position.shape[0]:
+                input_ids = input_ids[:, cache_position]
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
         model_inputs = {}
+        image_hidden_states = kwargs.pop("image_hidden_states", None)
         if image_hidden_states is not None:
             if self.config.use_resampler:
                 model_inputs["perceiver_embeddings"] = image_hidden_states
@@ -1677,6 +1696,21 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 model_inputs["image_encoder_embeddings"] = image_hidden_states
         else:
             model_inputs["pixel_values"] = pixel_values
+
+        model_inputs.update(
+            {
+                "input_ids": input_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "cache_position": cache_position,
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "image_attention_mask": kwargs.get("image_attention_mask", None),
+                "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
+            }
+        )
+
+        return model_inputs
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         image_attention_mask = kwargs.get("image_attention_mask", None)

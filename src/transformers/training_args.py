@@ -2078,6 +2078,13 @@ class TrainingArguments:
                 "This is not supported and we recommend you to update your version."
             )
 
+        if self.data_seed is not None:
+            if not is_accelerate_available("1.1.0"):
+                raise NotImplementedError(
+                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
+                    "This is not supported and we recommend you to update your version."
+                )
+
         if self.include_inputs_for_metrics:
             logger.warning(
                 "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
