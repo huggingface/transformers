@@ -829,11 +829,13 @@ class InverseChatTemplateTest(unittest.TestCase):
             tmp_dir = Path(tmp_dir)
             tokenizer.save_pretrained(tmp_dir / "tokenizer")
             tokenizer_config = json.load(open(tmp_dir / "tokenizer/tokenizer_config.json"))
-            self.assertIsNone(tokenizer_config.get("inverse_template", None))
+            self.assertNotIn(tokenizer_config, "inverse_template")
+            self.assertFalse(Path(tmp_dir, "tokenizer", "inverse_template.jinja").is_file())
             tokenizer.inverse_template = "aaaa"
             tokenizer.save_pretrained(tmp_dir / "tokenizer_with_inverse_template")
             tokenizer_config = json.load(open(tmp_dir / "tokenizer_with_inverse_template/tokenizer_config.json"))
-            self.assertEqual(tokenizer_config["inverse_template"], "aaaa")
+            self.assertNotIn(tokenizer_config, "inverse_template")  # Make sure it's separate
+            self.assertTrue(Path(tmp_dir, "tokenizer", "inverse_template.jinja").is_file())
             reloaded_tokenizer = AutoTokenizer.from_pretrained(str(tmp_dir / "tokenizer_with_inverse_template"))
             self.assertEqual(reloaded_tokenizer.inverse_template, "aaaa")
 
