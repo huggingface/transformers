@@ -2057,6 +2057,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
+        # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
             50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295,
             264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928,
@@ -2070,6 +2071,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293,
             51836, 50364, 393, 4411, 13, 50514, 50257
         ])
+        # fmt: on
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
