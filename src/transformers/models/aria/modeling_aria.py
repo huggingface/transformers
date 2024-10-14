@@ -9,7 +9,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -31,8 +30,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModel
-from .configuration_aria import AriaModelConfig, AriaVisionConfig, AriaConfig
+from ..auto import AutoModel, AutoModelForCausalLM
+from .configuration_aria import AriaConfig, AriaVisionConfig
 from .processing_utils import experts_gemm
 
 
@@ -54,7 +53,23 @@ from ...utils import (
     ModelOutput,
     is_flash_attn_2_available,
 )
+from .configuration_aria import AriaTextConfig
 
+
+ARIA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AriaConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 class IdentityOp(torch.nn.Module):
     """
@@ -158,12 +173,46 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
         raise ValueError(f"invalid distribution {distribution}")
 
 
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
 
+@add_start_docstrings(
+    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
+    ARIA_START_DOCSTRING,
+)
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
 
-def default_flax_embed_init(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = []
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
+
 
 
 class AriaAttention(nn.Module):
@@ -649,72 +698,6 @@ IDEFICS_VISION_ATTENTION_CLASSES = {
 }
 
 
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "aria"
-    supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "AriaTextEmbeddings",
-        "AriaEncoderLayer",
-        "AriaVisionEmbeddings",
-        "AriaEncoderLayer",
-        "AriaMultiheadAttentionPoolingHead",
-    ]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, AriaVisionEmbeddings):
-            width = (
-                self.config.vision_config.hidden_size
-                if isinstance(self.config, AriaConfig)
-                else self.config.hidden_size
-            )
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-        elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
-        elif isinstance(module, AriaAttention):
-            nn.init.xavier_uniform_(module.q_proj.weight)
-            nn.init.xavier_uniform_(module.k_proj.weight)
-            nn.init.xavier_uniform_(module.v_proj.weight)
-            nn.init.xavier_uniform_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
-        elif isinstance(module, AriaMLP):
-            nn.init.xavier_uniform_(module.fc1.weight)
-            nn.init.xavier_uniform_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, AriaMultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
-        elif isinstance(module, AriaModel):
-            logit_scale_init = torch.log(torch.tensor(1.0))
-            module.logit_scale.data.fill_(logit_scale_init)
-            module.logit_bias.data.zero_()
-        elif isinstance(module, AriaForImageClassification):
-            nn.init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-
 class AriaVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -728,22 +711,6 @@ class AriaVisionMLP(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
-
-
-ARIA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`AriaModelConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 class AriaEncoderLayer(nn.Module):
@@ -818,10 +785,10 @@ class AriaEncoder(nn.Module):
     [`AriaEncoderLayer`].
 
     Args:
-        config: AriaModelConfig
+        config: AriaConfig
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([AriaEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -1215,6 +1182,15 @@ class AriaProjector(nn.Module):
 
         self.apply(self._init_weights)
 
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
     def forward(self, x, attn_mask=None):
         """
         Forward pass of the Projector module.
@@ -1254,10 +1230,10 @@ class TopKRouter(nn.Module):
     It also applies auxiliary losses to encourage load balancing among experts.
 
     Args:
-        config (AriaModelConfig): Configuration object containing MoE-related parameters.
+        config (AriaConfig): Configuration object containing MoE-related parameters.
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
         self.config = config
 
@@ -1333,10 +1309,10 @@ class TokenDispatcher:
     unpermuting them after expert processing.
 
     Args:
-        config (AriaModelConfig): Configuration object containing MoE-related parameters.
+        config (AriaConfig): Configuration object containing MoE-related parameters.
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaTextConfig):
         self.config = config
         self.hidden_states_shape = None
         self.reversed_input_permutation_mapping = None
@@ -1394,10 +1370,10 @@ class AriaMLP(nn.Module):
     This class reconfigures the intermediate size in comparison to the LlamaMLP.
 
     Args:
-        config (AriaModelConfig): Configuration object for the Aria language model.
+        config (AriaConfig): Configuration object for the Aria language model.
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaTextConfig):
         nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1476,10 +1452,10 @@ class AriaGroupedMLP(nn.Module):
     Grouped MLP module for Mixture of Experts.
 
     Args:
-        config (AriaModelConfig): Configuration object for the model.
+        config (AriaConfig): Configuration object for the model.
     """
 
-    def __init__(self, config: AriaModelConfig) -> None:
+    def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
         self.fc1 = AriaGroupedGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
@@ -1517,10 +1493,10 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
     the outputs.
 
     Args:
-        config (AriaModelConfig): Configuration object for the MoE layer.
+        config (AriaConfig): Configuration object for the MoE layer.
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
 
         self.router = TopKRouter(config)
@@ -1567,7 +1543,7 @@ class AriaRotaryEmbedding(nn.Module):
         device=None,
         scaling_factor=1.0,
         rope_type="default",
-        config: Optional[AriaModelConfig] = None,
+        config: Optional[AriaConfig] = None,
     ):
         super().__init__()
         # TODO (joao): remove the `if` below, only used for BC
@@ -1652,6 +1628,48 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+_CONFIG_FOR_DOC = "AriaConfig"
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 class AriaDecoderLayer(nn.Module):
     """
     Custom Decoder Layer for the Aria model which modifies the standard `LlamaDecoderLayer` by
@@ -1662,7 +1680,7 @@ class AriaDecoderLayer(nn.Module):
         layer_idx (int): Index of the current layer in the model.
     """
 
-    def __init__(self, config: AriaModelConfig, layer_idx: int):
+    def __init__(self, config: AriaTextConfig, layer_idx: int):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
@@ -1741,10 +1759,544 @@ class AriaDecoderLayer(nn.Module):
         return outputs
 
 
-_CONFIG_FOR_DOC = "AriaModelConfig"
+class AriaTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        AriaTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.varia_textnce_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        varia_textnce = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(varia_textnce + self.varia_textnce_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.varia_textnce_epsilon}"
 
 
-ARIA_INPUTS_DOCSTRING = r"""
+class AriaTextRotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        rope_type="default",
+        config: Optional[AriaTextConfig] = None,
+    ):
+        super().__init__()
+        # TODO (joao): remove the `if` below, only used for BC
+        self.rope_kwargs = {}
+        if config is None:
+            logger.warning_once(
+                "`AriaTextRotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`config` argument. All other arguments will be removed in v4.46"
+            )
+            self.rope_kwargs = {
+                "rope_type": rope_type,
+                "factor": scaling_factor,
+                "dim": dim,
+                "base": base,
+                "max_position_embeddings": max_position_embeddings,
+            }
+            self.rope_type = rope_type
+            self.max_seq_len_cached = max_position_embeddings
+            self.original_max_seq_len = max_position_embeddings
+        else:
+            # BC: "rope_type" was originally "type"
+            if config.rope_scaling is not None:
+                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            else:
+                self.rope_type = "default"
+            self.max_seq_len_cached = config.max_position_embeddings
+            self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class AriaTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        if self.config.pretraining_tp > 1:
+            slice = self.intermediate_size // self.config.pretraining_tp
+            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
+            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
+            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
+
+            gate_proj = torch.cat(
+                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
+            )
+            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
+
+            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
+            down_proj = [
+                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
+            ]
+            down_proj = sum(down_proj)
+        else:
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+        return down_proj
+
+
+class AriaTextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: AriaTextConfig, layer_idx: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+
+        # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
+        self.rotary_emb = AriaTextRotaryEmbedding(config=self.config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = torch.cat(value_states, dim=-1)
+
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
+
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+
+        if self.config.pretraining_tp > 1:
+            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
+            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
+            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
+        else:
+            attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+class AriaTextFlashAttention2(AriaTextAttention):
+    """
+    AriaText flash attention module. This module inherits from `AriaTextAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
+
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.attention_dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (AriaTextRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            position_ids=position_ids,
+            dropout=dropout_rate,
+            sliding_window=getattr(self, "sliding_window", None),
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+class AriaTextSdpaAttention(AriaTextAttention):
+    """
+    AriaText attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `AriaTextAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from AriaTextAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "AriaTextModel is using AriaTextSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+ARIA_TEXT_ATTENTION_CLASSES = {
+    "eager": AriaTextAttention,
+    "flash_attention_2": AriaTextFlashAttention2,
+    "sdpa": AriaTextSdpaAttention,
+}
+
+
+ARIA_TEXT_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AriaTextConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
+    ARIA_TEXT_START_DOCSTRING,
+)
+class AriaTextPreTrainedModel(PreTrainedModel):
+    config_class = AriaTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["AriaTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+ARIA_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1820,18 +2372,18 @@ ARIA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
-    ARIA_START_DOCSTRING,
+    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
+    ARIA_TEXT_START_DOCSTRING,
 )
-class AriaModel(AriaPreTrainedModel):
+class AriaTextModel(AriaTextPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AriaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AriaTextDecoderLayer`]
 
     Args:
-        config: AriaModelConfig
+        config: AriaTextConfig
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1846,8 +2398,8 @@ class AriaModel(AriaPreTrainedModel):
         self.layers = nn.ModuleList(
             [AriaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = AriaRotaryEmbedding(config=config)
+        self.norm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = AriaTextRotaryEmbedding(config=config)
         # self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         # self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1861,7 +2413,7 @@ class AriaModel(AriaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2105,6 +2657,81 @@ class AriaModel(AriaPreTrainedModel):
         return causal_mask
 
 
+ARIA_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
+
 class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.
@@ -2117,12 +2744,12 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
     """
 
     _tied_weights_keys = ["lm_head.weight"]
-    config_class = AriaConfig
+    config_class = AriaTextConfig
     _no_split_modules = ["MoEDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = AriaModel(config)
+        self.model = AriaTextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -2251,96 +2878,6 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
         )
 
 
-from ...configuration_utils import PretrainedConfig
-
-
-class AriaModelConfig(PretrainedConfig):
-    """
-    Configuration class for Aria model.
-
-    This class handles the configuration for both vision and text components of the Aria model,
-    as well as additional parameters for image token handling and projector mapping.
-
-    Args:
-        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaMoELMConfig or dict): Configuration for the text component.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        **kwargs: Additional keyword arguments passed to the parent class.
-
-    Attributes:
-        model_type (str): Type of the model, set to "aria".
-        is_composition (bool): Whether the model is a composition of multiple components.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        vision_config (AriaVisionConfig): Configuration for the vision component.
-        text_config (AriaMoELMConfig): Configuration for the text component.
-    """
-
-    model_type = "aria"
-    is_composition = True
-
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        projector_patch_to_query_dict={
-            1225: 128,
-            4900: 256,
-        },
-        ignore_index=-100,
-        image_token_index=32000,
-        **kwargs,
-    ):
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-
-        # Convert the keys and values of projector_patch_to_query_dict to integers
-        # This ensures consistency even if they were provided as strings
-        self.projector_patch_to_query_dict = {
-            int(k): int(v) for k, v in projector_patch_to_query_dict.items()
-        }
-        if vision_config is None:
-            vision_config = AriaVisionConfig()
-        if text_config is None:
-            text_config = AriaModelConfig()
-
-        if isinstance(vision_config, dict) and "model_type" in vision_config:
-            vision_config = AriaVisionConfig(**vision_config)
-
-        self.vision_config = vision_config
-
-        if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaModelConfig(**text_config)
-
-        self.text_config = text_config
-        super().__init__(**kwargs)
-
-
-class AriaPretrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaModelConfig
-    base_model_prefix = "model"
-    _no_split_modules = []
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
-
-
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     """
@@ -2385,7 +2922,7 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     """The ARIA model which consists of a vision backbone and a language model.""",
     ARIA_START_DOCSTRING,
 )
-class AriaForConditionalGeneration(AriaPreTrainedModel):
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 
@@ -2393,13 +2930,20 @@ class AriaForConditionalGeneration(AriaPreTrainedModel):
     to perform tasks that involve both image and text inputs.
     """
 
-    def __init__(self, config: AriaModelConfig):
+    def __init__(self, config: AriaConfig):
         super().__init__(config)
 
         self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = AriaProjector(config)
+        self.multi_modal_projector = AriaProjector(
+            patch_to_query_dict=config.projector_patch_to_query_dict,
+            embed_dim=config.vision_config.hidden_size,
+            num_heads=config.vision_config.num_attention_heads,
+            kv_dim=config.vision_config.hidden_size,
+            ff_dim=config.text_config.hidden_size,
+            output_dim=config.text_config.hidden_size,
+        )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModel.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 

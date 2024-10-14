@@ -1,6 +1,5 @@
 import inspect
 import logging
-import os
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -19,7 +18,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TensorType
-from ..auto import AutoModel, AutoTokenizer
+from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -28,6 +27,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
@@ -69,19 +69,6 @@ class IdentityOp(torch.nn.Module):
     def forward(self, x, *args, **kwargs):
         return x
 
-class IdentityOp(torch.nn.Module):
-    """
-    An identity operation that returns the input unchanged.
-
-    This can be used as a placeholder or to maintain architectural consistency
-    when a specific operation is not needed.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-    def forward(self, x, *args, **kwargs):
-        return x
 
 class AriaVisionTransformer(Idefics2VisionTransformer):
     """
@@ -305,6 +292,16 @@ class AriaProjector(nn.Module):
         self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim) # TODO: Aria Projector MMLP
 
         self.apply(self._init_weights)
+
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
 
 
     def forward(self, x, attn_mask=None):
@@ -730,7 +727,7 @@ class AriaProcessor(ProcessorMixin, LlavaNextProcessor):
         )
 
 
-class AriaLanguageConfig(LlamaConfig):
+class AriaTextConfig(LlamaConfig):
     """
     Configuration class for Aria language model.
 
@@ -746,7 +743,7 @@ class AriaLanguageConfig(LlamaConfig):
         **kwargs: Additional keyword arguments to be passed to the parent LlamaConfig.
     """
 
-    model_type = "aria"
+    model_type = "aria_text_model"
 
 
     def __init__(
@@ -820,7 +817,7 @@ class AriaConfig(PretrainedConfig):
         if vision_config is None:
             vision_config = AriaVisionConfig()
         if text_config is None:
-            text_config = AriaLanguageConfig()
+            text_config = AriaTextConfig()
 
         if isinstance(vision_config, dict) and "model_type" in vision_config:
             vision_config = AriaVisionConfig(**vision_config)
@@ -828,7 +825,7 @@ class AriaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaLanguageConfig(**text_config)
+            text_config = AriaTextConfig(**text_config)
 
         self.text_config = text_config
 
@@ -841,10 +838,10 @@ class TopKRouter(nn.Module):
     It also applies auxiliary losses to encourage load balancing among experts.
 
     Args:
-        config (AriaLanguageConfig): Configuration object containing MoE-related parameters.
+        config (AriaConfig): Configuration object containing MoE-related parameters.
     """
 
-    def __init__(self, config: AriaLanguageConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
         self.config = config
 
@@ -926,10 +923,10 @@ class TokenDispatcher:
     unpermuting them after expert processing.
 
     Args:
-        config (AriaLanguageConfig): Configuration object containing MoE-related parameters.
+        config (AriaConfig): Configuration object containing MoE-related parameters.
     """
 
-    def __init__(self, config: AriaLanguageConfig):
+    def __init__(self, config: AriaTextConfig):
         self.config = config
         self.hidden_states_shape = None
         self.reversed_input_permutation_mapping = None
@@ -997,10 +994,10 @@ class AriaMLP(LlamaMLP):
     This class reconfigures the intermediate size in comparison to the LlamaMLP.
 
     Args:
-        config (AriaLanguageConfig): Configuration object for the Aria language model.
+        config (AriaConfig): Configuration object for the Aria language model.
     """
 
-    def __init__(self, config: AriaLanguageConfig):
+    def __init__(self, config: AriaTextConfig):
         nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1065,10 +1062,10 @@ class AriaGroupedMLP(nn.Module):
     Grouped MLP module for Mixture of Experts.
 
     Args:
-        config (AriaLanguageConfig): Configuration object for the model.
+        config (AriaConfig): Configuration object for the model.
     """
 
-    def __init__(self, config: AriaLanguageConfig) -> None:
+    def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
         self.fc1 = AriaGroupedGEMM(
@@ -1110,10 +1107,10 @@ class AriaTextMoELayer(nn.Module): #TODO: check naming convenstion for InstructB
     the outputs.
 
     Args:
-        config (AriaLanguageConfig): Configuration object for the MoE layer.
+        config (AriaConfig): Configuration object for the MoE layer.
     """
 
-    def __init__(self, config: AriaLanguageConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
 
         self.router = TopKRouter(config)
@@ -1165,7 +1162,7 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         layer_idx (int): Index of the current layer in the model.
     """
 
-    def __init__(self, config: AriaLanguageConfig, layer_idx: int):
+    def __init__(self, config: AriaTextConfig, layer_idx: int):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
@@ -1180,9 +1177,9 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         )
 
 
-class AriaModel(LlamaModel):
+class AriaTextModel(LlamaModel):
 
-    def __init__(self, config: AriaLanguageConfig):
+    def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         # self.padding_idx = config.pad_token_id
         # self.vocab_size = config.vocab_size
@@ -1212,16 +1209,16 @@ class AriaForCausalLM(LlamaForCausalLM):
     allowing for more efficient and scalable language modeling.
 
     Args:
-        config (AriaLanguageConfig): Configuration object for the model.
+        config (AriaConfig): Configuration object for the model.
     """
 
     _tied_weights_keys = ["lm_head.weight"]
-    config_class = AriaLanguageConfig
+    config_class = AriaTextConfig
     _no_split_modules = ["MoEDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = AriaModel(config)
+        self.model = AriaTextModel(config)
         # self.vocab_size = config.vocab_size
         # self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1229,8 +1226,7 @@ class AriaForCausalLM(LlamaForCausalLM):
         self.post_init()
 
 
-
-class AriaPretrainedModel(PreTrainedModel):
+class AriaPreTrainedModel(LlamaPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
@@ -1257,7 +1253,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 # adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-class AriaForConditionalGeneration(AriaPretrainedModel, LlavaForConditionalGeneration):
+class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGeneration):
     """
     Aria model for conditional generation tasks.
 
@@ -1269,9 +1265,16 @@ class AriaForConditionalGeneration(AriaPretrainedModel, LlavaForConditionalGener
         super().__init__(config)
 
         self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = AriaProjector(config)
+        self.multi_modal_projector = AriaProjector(
+            patch_to_query_dict=config.projector_patch_to_query_dict,
+            embed_dim=config.vision_config.hidden_size,
+            num_heads=config.vision_config.num_attention_heads,
+            kv_dim=config.vision_config.hidden_size,
+            ff_dim=config.text_config.hidden_size,
+            output_dim=config.text_config.hidden_size,
+        )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModel.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = (
             self.config.pad_token_id if self.config.pad_token_id is not None else -1
         )

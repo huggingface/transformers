@@ -114,7 +114,7 @@ class AriaVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class AriaModelConfig(PretrainedConfig):
+class AriaTextConfig(PretrainedConfig):
     """
     Configuration class for Aria language model.
 
@@ -130,7 +130,7 @@ class AriaModelConfig(PretrainedConfig):
         **kwargs: Additional keyword arguments to be passed to the parent LlamaConfig.
     """
 
-    model_type = "aria"
+    model_type = "aria_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -259,7 +259,7 @@ class AriaConfig(PretrainedConfig):
         if vision_config is None:
             vision_config = AriaVisionConfig()
         if text_config is None:
-            text_config = AriaModelConfig()
+            text_config = AriaTextConfig()
 
         if isinstance(vision_config, dict) and "model_type" in vision_config:
             vision_config = AriaVisionConfig(**vision_config)
@@ -267,6 +267,6 @@ class AriaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaModelConfig(**text_config)
+            text_config = AriaTextConfig(**text_config)
 
         self.text_config = text_config

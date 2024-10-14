@@ -772,7 +772,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.python_module = python_module  # we store the original module to use `code_for_node`
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
         self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
-        self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
+        self.visited_modules = {}            # modules visited like "transformers.models.llama.modeling_llama"
         self.inserted_deps = []             # nodes inserted via super dependency
         self.all_imports = []               # just stores all of the imports
         self.all_safe_imports = []          # stores the import under simple statements
@@ -889,8 +889,8 @@ class ModularConverterTransformer(CSTTransformer):
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
-            visited_module = self.visited_module
-            if super_file_name not in visited_module:  # only extract classes once
+            visited_modules = self.visited_modules
+            if super_file_name not in visited_modules:  # only extract classes once
                 class_finder = find_classes_in_file(
                     self.transformers_imports[super_file_name],
                     model_name,
@@ -898,13 +898,13 @@ class ModularConverterTransformer(CSTTransformer):
                     self.given_old_name,
                     self.given_new_name,
                 )
-                visited_module[super_file_name] = class_finder
+                visited_modules[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
             else:  # we are re-using the previously parsed data
-                class_finder = visited_module[super_file_name]
+                class_finder = visited_modules[super_file_name]
 
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
@@ -914,7 +914,7 @@ class ModularConverterTransformer(CSTTransformer):
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
-                del visited_module[super_file_name]
+                del visited_modules[super_file_name]
                 class_finder = find_classes_in_file(
                     self.transformers_imports[super_file_name],
                     model_name,
@@ -1117,7 +1117,7 @@ class ModularConverterTransformer(CSTTransformer):
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {file_type: imports.copy() for file_type in self.files}
-        for super_file_name, visiter in self.visited_module.items():
+        for super_file_name, visiter in self.visited_modules.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(
                 {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
