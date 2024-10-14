@@ -143,15 +143,18 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     return output_dict
 
 
-def write_image_processor(pytorch_dump_folder_path):
+def write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub):
     logger.info("Converting image processor...")
     format = "coco_detection"
     image_processor = DabDetrImageProcessor(format=format)
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        image_processor.push_to_hub(repo_id=model_name, commit_message="Add new image processor")
+
 
 @torch.no_grad()
-def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path):
+def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub):
     # load modified config. Why? After loading the default config, the backbone kwargs are already set.
     if "dc5" in model_name:
         config = DabDetrConfig(dilation=True)
@@ -225,18 +228,20 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model.push_to_hub(repo_id=model_name, commit_message="Add new model")
+
     return model
 
 
 def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub):
     logger.info("Converting image processor...")
-    write_image_processor(pytorch_dump_folder_path)
+    write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub)
 
     logger.info(f"Converting model {model_name}...")
-    model = write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path)
+    write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub)
 
-    if push_to_hub:
-        model.push_to_hub(repo_id=model_name, commit_message="Add new model")
+    
 
 
 if __name__ == "__main__":
@@ -244,13 +249,13 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_name",
-        default="dab-detr-resnet-50",
+        default="dab-detr-resnet-50-pat3",
         type=str,
         help="Name of the DAB_DETR model you'd like to convert.",
     )
     parser.add_argument(
         "--pretrained_model_weights_path",
-        default="/Users/davidhajdu/Desktop/all_weights/R50/checkpoint.pth",
+        default=None,
         type=str,
         help="The path of the original model weights like: Users/username/Desktop/checkpoint.pth",
     )
@@ -259,9 +264,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--push_to_hub",
-        default=False,
+        default=True,
         type=bool,
-        help="Whether to upload the converted weights to the HuggingFace model profile. Default is set to false.",
+        help="Whether to upload the converted weights and image processor config to the HuggingFace model profile. Default is set to false.",
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(

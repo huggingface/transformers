@@ -580,7 +580,7 @@ class DabDetrAttention(nn.Module):
 
         batch_size, target_len, _ = hidden_states.size()
 
-        # get query proj
+        # scaling query and refactor key-, value states
         query_states = hidden_states * self.scaling
         key_states = (
             key_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2).contiguous()
@@ -589,6 +589,7 @@ class DabDetrAttention(nn.Module):
             value_states.view(batch_size, -1, self.attention_heads, self.values_head_dim).transpose(1, 2).contiguous()
         )
 
+        # projection of query,key, value states
         projected_shape = (batch_size * self.attention_heads, -1, self.attention_head_dim)
         values_projected_shape = (batch_size * self.attention_heads, -1, self.values_head_dim)
         query_states = (
@@ -663,7 +664,11 @@ class DabDetrDecoderLayerSelfAttention(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
 
     def forward(
-        self, hidden_states, query_position_embeddings, attention_mask, output_attentions: Optional[bool] = None
+        self, 
+        hidden_states: torch.Tensor,
+        query_position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None
     ):
         residual = hidden_states
         query_content = self.self_attn_query_content_proj(hidden_states)
@@ -714,12 +719,12 @@ class DabDetrDecoderLayerCrossAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        encoder_hidden_states,
-        query_position_embeddings,
-        object_queries,
-        encoder_attention_mask,
-        query_sine_embed,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        query_position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        query_sine_embed: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
     ):
         query_content = self.cross_attn_query_content_proj(hidden_states)
@@ -787,7 +792,7 @@ class DabDetrDecoderLayerFFN(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.keep_query_pos = config.keep_query_pos
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
@@ -856,12 +861,6 @@ class DabDetrEncoderLayer(nn.Module):
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-
-        # TODO check if owrks
-        # if self.training:
-        #     if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-        #         clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-        #         hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -1556,6 +1555,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
             intermediate_hidden_states = decoder_outputs[-2]
 
             # it has to follow the order of DABDETRModelOutput that is based on ModelOutput
+            # If we only use one of the variables then the indexing will change.
+            # E.g: if we return everything then 'decoder_attentions' is decoder_outputs[2], if we only use output_attentions then its decoder_outputs[1]
             if output_hidden_states and output_attentions:
                 output += (
                     decoder_outputs[1],
