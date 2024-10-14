@@ -42,3 +42,23 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 
 [[autodoc]] Florence2ForConditionalGeneration
     - forward
+
+## Florence2LanguageForConditionalGeneration
+
+[[autodoc]] Florence2LanguageForConditionalGeneration
+    - forward
+
+## Florence2LanguageModel
+
+[[autodoc]] Florence2LanguageModel
+    - forward
+
+## Florence2VisionModel
+
+[[autodoc]] Florence2VisionModel
+    - forward
+
+## Florence2VisionModelWithProjection
+
+[[autodoc]] Florence2VisionModelWithProjection
+    - forward
