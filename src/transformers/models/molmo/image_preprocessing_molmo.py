@@ -374,37 +374,37 @@ class MolmoImageProcessor(BaseImageProcessor):
         image_token_length_w: int,
         image_token_length_h: int,
     ):
-        """Converts `patch_order` into a mapping of token_id -> patch_id"""
+        """Converts `patch_order` into an array mapping patch_id -> token_position"""
 
         tokens_per_image = image_token_length_w * image_token_length_h
 
-        # Indices to insert the patches
         image_input_idx = image_tokens == image_patch_token_id
         image_input_idx = np.nonzero(image_input_idx)[0].astype(np.int32)
 
-        if patch_order is not None:
-            n_tokens = image_input_idx.shape[0]
-            patch_order = np.reshape(patch_order, [-1])
-            n_patches = patch_order.shape[0]
+        n_tokens = image_input_idx.shape[0]
+        patch_order = np.reshape(patch_order, [-1])
+        n_patches = patch_order.shape[0]
 
-            valid = patch_order >= 0
-            n_valid_patches = valid.sum()
-            assert len(image_input_idx) == n_valid_patches
+        valid = patch_order >= 0
+        n_valid_patches = valid.sum()
+        assert len(image_input_idx) == n_valid_patches
 
-            # Get the reversed mapping of patch order (so instead of sorted position->patch_idx we
-            # want patch_idx->sorted position)
-            # We have to be careful to preserve the sparse structure of `patch_order` where -1 means
-            # a patch is skipped
-            sorted_patch_ixs = np.zeros([n_tokens], np.int32)
-            sorted_patch_ixs[patch_order[valid]] = np.arange(n_valid_patches, dtype=np.int32)
-            sorted_patch_ixs_ex = np.full(np.shape(patch_order), -1)
-            sorted_patch_ixs_ex[valid] = sorted_patch_ixs
+        # Get the reversed mapping of patch order (so instead of sorted position->patch_idx we
+        # want patch_idx->sorted position)
+        # We have to be careful to preserve the sparse structure of `patch_order` where -1 means
+        # a patch is skipped
+        sorted_patch_ixs = np.zeros([n_tokens], np.int32)
+        sorted_patch_ixs[patch_order[valid]] = np.arange(n_valid_patches, dtype=np.int32)
+        sorted_patch_ixs_ex = np.full(np.shape(patch_order), -1)
+        sorted_patch_ixs_ex[valid] = sorted_patch_ixs
 
-            # Now go from patch_idx->sorted position to patch_idx->tokens position
-            valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
-            image_input_idx = image_input_idx[sorted_patch_ixs_ex*valid]
-            image_input_idx = image_input_idx*valid - 100*(1 - valid)
-            image_input_idx = np.reshape(image_input_idx, [-1, tokens_per_image])
+        # Now go from patch_idx->sorted position to patch_idx->tokens position, we need to do
+        # this since the `image_tokens`` will contain special tokens interleave with the
+        # tokens that will become image features
+        valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
+        image_input_idx = image_input_idx[sorted_patch_ixs_ex*valid]
+        image_input_idx = image_input_idx*valid - 100*(1 - valid)
+        image_input_idx = np.reshape(image_input_idx, [-1, tokens_per_image])
         return image_input_idx
 
     def preprocess(
@@ -475,7 +475,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         image_end_token_id: int,
         **kwargs,
     ):
-        """Merge images and text tokens into multi-modal features for the model
+        """Interleave images and text tokens into multi-modal features for the model
 
         :param images: images to use as input
         :param tokens: input text tokens
