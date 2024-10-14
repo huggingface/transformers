@@ -1876,6 +1876,8 @@ class ModelTesterMixin:
                 # A distriputed launcher is needed for the forward pass when deepspeed is enabled
                 if "decoder_input_ids" in inputs_dict:
                     inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                if "labels" in inputs_dict:
+                    inputs_dict["labels"].clamp_(max=model_vocab_size - 15 - 1)
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
                 model(**model_inputs)
 

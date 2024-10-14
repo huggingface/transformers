@@ -1774,8 +1774,12 @@ class Blip2Model(Blip2PreTrainedModel):
                 return_dict=return_dict,
                 labels=labels,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            if labels is not None:
+                loss = outputs.loss if return_dict else outputs[0]
+                logits = outputs.logits if return_dict else outputs[1]
+            else:
+                loss = None
+                logits = outputs.logits if return_dict else outputs[0]
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
@@ -1812,6 +1816,12 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(BLIP_2_TEXT_WITH_PROJECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2TextModelOutput, config_class=Blip2Config)
@@ -2243,8 +2253,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 return_dict=return_dict,
                 labels=labels,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            if labels is not None:
+                loss = outputs.loss if return_dict else outputs[0]
+                logits = outputs.logits if return_dict else outputs[1]
+            else:
+                loss = None
+                logits = outputs.logits if return_dict else outputs[0]
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)

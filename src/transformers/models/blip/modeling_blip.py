@@ -795,6 +795,12 @@ class BlipModel(BlipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
+
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
