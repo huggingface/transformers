@@ -54,7 +54,7 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 
-If you want you tokenizer to add a bos automatically you should update the tokenizer._tokenizers.post_processor:
+If you want your tokenizer to add a bos automatically you should update the tokenizer._tokenizers.post_processor:
 
 ```py
 from tokenizers import processors
