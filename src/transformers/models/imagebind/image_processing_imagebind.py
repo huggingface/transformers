@@ -417,7 +417,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-    # Copied from models.clip.image_processing_clip.CLIPImageProcessor.resize
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
