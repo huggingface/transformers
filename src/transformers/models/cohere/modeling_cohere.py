@@ -34,6 +34,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -54,7 +55,7 @@ from .configuration_cohere import CohereConfig
 
 
 if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
