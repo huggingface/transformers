@@ -80,3 +80,8 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inf
 
 [[autodoc]] Qwen2MoeForTokenClassification
     - forward
+
+## Qwen2MoeForQuestionAnswering
+
+[[autodoc]] Qwen2MoeForQuestionAnswering
+    - forward
