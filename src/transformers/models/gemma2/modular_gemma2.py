@@ -718,7 +718,7 @@ class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if isinstance(past_key_values, HybridCache):
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
 
@@ -843,7 +843,8 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         num_logits_to_keep=None,
         **kwargs,
     ):
-        """Different from the base `prepare_inputs_for_generation` because of `HybridCache`."""
+        # Overwritten: has a special cache type, `HybridCache`
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
@@ -887,7 +888,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
+                target_length=past_key_values.get_max_cache_shape(),
                 dtype=self.lm_head.weight.dtype,
                 device=device,
                 cache_position=cache_position,

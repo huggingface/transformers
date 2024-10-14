@@ -757,6 +757,32 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
+    [
+        ("blip", "BlipForConditionalGeneration"),
+        ("blip-2", "Blip2ForConditionalGeneration"),
+        ("chameleon", "ChameleonForConditionalGeneration"),
+        ("fuyu", "FuyuForCausalLM"),
+        ("git", "GitForCausalLM"),
+        ("idefics", "IdeficsForVisionText2Text"),
+        ("idefics2", "Idefics2ForConditionalGeneration"),
+        ("idefics3", "Idefics3ForConditionalGeneration"),
+        ("instructblip", "InstructBlipForConditionalGeneration"),
+        ("kosmos-2", "Kosmos2ForConditionalGeneration"),
+        ("llava", "LlavaForConditionalGeneration"),
+        ("llava_next", "LlavaNextForConditionalGeneration"),
+        ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
+        ("mllama", "MllamaForConditionalGeneration"),
+        ("paligemma", "PaliGemmaForConditionalGeneration"),
+        ("pix2struct", "Pix2StructForConditionalGeneration"),
+        ("pixtral", "LlavaForConditionalGeneration"),
+        ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
+        ("udop", "UdopForConditionalGeneration"),
+        ("vipllava", "VipLlavaForConditionalGeneration"),
+        ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+    ]
+)
+
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
@@ -1020,6 +1046,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForQuestionAnswering"),
         ("mega", "MegaForQuestionAnswering"),
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
+        ("mistral", "MistralForQuestionAnswering"),
+        ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
         ("mpt", "MptForQuestionAnswering"),
@@ -1031,6 +1059,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("nystromformer", "NystromformerForQuestionAnswering"),
         ("opt", "OPTForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
+        ("qwen2", "Qwen2ForQuestionAnswering"),
+        ("qwen2_moe", "Qwen2MoeForQuestionAnswering"),
         ("reformer", "ReformerForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("roberta", "RobertaForQuestionAnswering"),
@@ -1419,6 +1449,9 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
+)
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 )
@@ -1711,6 +1744,13 @@ class AutoModelForVision2Seq(_BaseAutoModelClass):
 
 
 AutoModelForVision2Seq = auto_class_update(AutoModelForVision2Seq, head_doc="vision-to-text modeling")
+
+
+class AutoModelForImageTextToText(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
+
+
+AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")
 
 
 class AutoModelForAudioClassification(_BaseAutoModelClass):
