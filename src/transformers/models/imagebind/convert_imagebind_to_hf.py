@@ -16,8 +16,6 @@ import argparse
 
 import regex as re
 import torch
-import torchaudio
-from datasets import load_dataset
 
 from transformers import (
     CLIPTokenizer,
@@ -141,20 +139,6 @@ def reshape_text_position_embeddings(state_dict):
     state_dict["text_model.embeddings.position_embedding.weight"] = position_embeddings.squeeze(0)
 
     return state_dict
-
-
-def prepare_input():
-    ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
-    images = ds["image"]
-    texts = ds["text"]
-    audios = [
-        torchaudio.functional.resample(
-            torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000
-        ).numpy()
-        for audio in ds["audio"]
-    ]
-
-    return images, texts, audios
 
 
 @torch.no_grad()
