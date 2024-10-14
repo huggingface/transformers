@@ -2042,7 +2042,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 )
 
             if input_ids is not None:
-                inputs_embeds = self.decoder.model.embed_tokens(input_ids).to(self.device)
+                inputs_embeds = self.decoder.model.embed_tokens(input_ids)
 
             if audio_codes is not None:
                 audio_inputs_embeds = sum(
@@ -2204,7 +2204,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 )
 
             if input_ids is not None:
-                inputs_embeds = self.decoder.model.embed_tokens(input_ids).to(self.device)
+                inputs_embeds = self.decoder.model.embed_tokens(input_ids)
 
             if audio_inputs_embeds is not None:
                 inputs_embeds = audio_inputs_embeds if inputs_embeds is None else audio_inputs_embeds + inputs_embeds
@@ -2344,7 +2344,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             device=self.device,
         )
         blank_user_audio_codes = self.audio_encoder.encode(blank_input_values, num_quantizers=self.num_codebooks)[0]
-        blank_user_audio_codes = blank_user_audio_codes.to(self.device)
 
         # set delay pattern mask for the rest of the generation
         kwargs["user_delay_pattern_mask"] = (
@@ -2418,12 +2417,12 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         last_hidden_state = self.last_hidden_state.view(-1, 1, self.last_hidden_state.shape[-1])
 
         last_generated_audio_codes = self.depth_decoder.generate(
-            last_hidden_state=last_hidden_state.to(self.depth_decoder.device),
-            input_ids=output_text_ids[:, -1:].view(-1, 1).to(self.depth_decoder.device),
+            last_hidden_state=last_hidden_state,
+            input_ids=output_text_ids[:, -1:].view(-1, 1),
             **kwargs_depth_decoder,
         )
 
-        last_generated_audio_codes = last_generated_audio_codes[:, 1:].unsqueeze(2).to(self.device)
+        last_generated_audio_codes = last_generated_audio_codes[:, 1:].unsqueeze(2)
 
         self.generated_audio_codes = torch.cat([self.generated_audio_codes, last_generated_audio_codes], dim=2)
 
@@ -2541,13 +2540,13 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             input_ids = model_inputs.pop("input_ids")
 
             generated_audio_codes = self.depth_decoder.generate(
-                last_hidden_state=last_hidden_state.to(self.depth_decoder.device),
-                input_ids=input_ids.view(-1, 1).to(self.depth_decoder.device),
+                last_hidden_state=last_hidden_state,
+                input_ids=input_ids.view(-1, 1),
                 **kwargs_depth_decoder,
             )
 
             # the first tokens are text tokens
-            generated_audio_codes = generated_audio_codes[:, 1:].unsqueeze(2).to(self.device)
+            generated_audio_codes = generated_audio_codes[:, 1:].unsqueeze(2)
 
             user_audio_codes = self.apply_delay_pattern_mask(
                 torch.cat([self.generated_audio_codes, blank_user_audio_codes], dim=2), user_delay_pattern_mask

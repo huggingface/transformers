@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_sdpa,
     slow,
+    tooslow,
     torch_device,
 )
 from transformers.utils import cached_property
@@ -993,7 +994,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         speech_sample = dataset.sort("id")[0]["audio"]["array"]
         return speech_sample
 
-    @slow
+    @tooslow
     def test_moshika_conditional_greedy(self):
         model = MoshiForConditionalGeneration.from_pretrained(
             "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
@@ -1038,7 +1039,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
 
-    @slow
+    @tooslow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
             "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
@@ -1052,7 +1053,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         # eager equivalence is not as strict as sdpa.
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
-    @slow
+    @tooslow
     def test_moshiko_greedy_unconditional_fp32(self):
         model = MoshiForConditionalGeneration.from_pretrained(
             "kmhf/hf-moshiko", torch_dtype=torch.float32, device_map="auto"
@@ -1073,7 +1074,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
-    @slow
+    @tooslow
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
@@ -1095,7 +1096,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
 
-    @slow
+    @tooslow
     @require_torch_fp16
     def test_moshika_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
