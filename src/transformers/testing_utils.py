@@ -145,6 +145,7 @@ from .utils import (
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
+    from accelerate.utils.imports import is_fp8_available
 
 
 if is_pytest_available():
@@ -1004,6 +1005,13 @@ def require_torch_fp16(test_case):
     """Decorator marking a test that requires a device that supports fp16"""
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
+    )(test_case)
+
+def require_fp8(test_case):
+    """Decorator marking a test that requires supports for fp8"""
+    return unittest.skipUnless(
+        is_accelerate_available() and is_fp8_available(),
+        "test requires fp8 support"
     )(test_case)
 
 
