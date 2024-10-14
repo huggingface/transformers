@@ -22,9 +22,7 @@ def sequential_gemm(input, weight, tokens_per_expert):
     """
     num_tokens = input.shape[0]
     out_features = weight.shape[-1]
-    output = torch.zeros(
-        num_tokens, out_features, dtype=input.dtype, device=input.device
-    )
+    output = torch.zeros(num_tokens, out_features, dtype=input.dtype, device=input.device)
 
     cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
     # Insert zero at the begining for offset index's convenience
@@ -40,16 +38,13 @@ def sequential_gemm(input, weight, tokens_per_expert):
         output[start:end] = out
     return output
 
+
 try:
     from grouped_gemm.ops import gmm as experts_gemm
 
     if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
-        logger.warning(
-            "environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead."
-        )
+        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead.")
         experts_gemm = sequential_gemm
 except ImportError:
-    logger.warning(
-        "`grouped_gemm` is not installed, using sequential GEMM, which is slower."
-    )
+    logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
     experts_gemm = sequential_gemm

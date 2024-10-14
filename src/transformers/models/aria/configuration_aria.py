@@ -4,13 +4,13 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import logging
 import os
 from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
 from ...modeling_rope_utils import rope_config_validation
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 

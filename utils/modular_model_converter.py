@@ -598,7 +598,7 @@ def replace_call_to_super(
         if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            if len(docstring_node) == 0: # If the original docstring is empty, just create one from the updated.
+            if len(docstring_node) == 0:  # If the original docstring is empty, just create one from the updated.
                 docstring_node = [
                     cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
                 ]
@@ -796,7 +796,6 @@ class ModularConverterTransformer(CSTTransformer):
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
         self.added_dependencies = set()
-
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         if node.module is None:
@@ -1099,11 +1098,49 @@ class ModularConverterTransformer(CSTTransformer):
                 added = self._maybe_add_function_to_body(top_level_function, body, function_node, matching_callers)
                 # If the function was added, we need to recursively add all its dependencies
                 builtin_functions = [
-                    'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'bytearray', 'bytes', 'chr',
-                    'dict', 'divmod', 'enumerate', 'filter', 'float', 'format', 'frozenset',
-                    'hash', 'hex', 'int', 'isinstance', 'issubclass', 'iter', 'len', 'list',
-                    'map', 'max', 'min', 'next', 'oct', 'ord', 'pow', 'range', 'repr',
-                    'reversed', 'round', 'set', 'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip'
+                    "abs",
+                    "all",
+                    "any",
+                    "ascii",
+                    "bin",
+                    "bool",
+                    "bytearray",
+                    "bytes",
+                    "chr",
+                    "dict",
+                    "divmod",
+                    "enumerate",
+                    "filter",
+                    "float",
+                    "format",
+                    "frozenset",
+                    "hash",
+                    "hex",
+                    "int",
+                    "isinstance",
+                    "issubclass",
+                    "iter",
+                    "len",
+                    "list",
+                    "map",
+                    "max",
+                    "min",
+                    "next",
+                    "oct",
+                    "ord",
+                    "pow",
+                    "range",
+                    "repr",
+                    "reversed",
+                    "round",
+                    "set",
+                    "slice",
+                    "sorted",
+                    "str",
+                    "sum",
+                    "tuple",
+                    "type",
+                    "zip",
                 ]
                 if added:
                     for dependency, parent in find_all_dependencies(

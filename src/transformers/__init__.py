@@ -6295,11 +6295,11 @@ if TYPE_CHECKING:
             AltCLIPVisionModel,
         )
         from .models.aria import (
+            AriaForCausalLM,
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
-            AriaVisionModel,
             AriaTextModel,
-            AriaForCausalLM,
+            AriaVisionModel,
         )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,

@@ -20,11 +20,11 @@ from safetensors import safe_open
 
 from transformers import (
     AddedToken,
+    AriaConfig,
+    AriaForConditionalGeneration,
     AutoConfig,
     AutoImageProcessor,
     AutoTokenizer,
-    AriaConfig,
-    AriaForConditionalGeneration,
     LlavaProcessor,
     SiglipVisionConfig,
 )

@@ -47,6 +47,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
+        ("aria", "AriaProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
@@ -72,7 +73,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llava", "LlavaProcessor"),
-        ("aria", "AriaProcessor"),
         ("llava_next", "LlavaNextProcessor"),
         ("llava_next_video", "LlavaNextVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionProcessor"),

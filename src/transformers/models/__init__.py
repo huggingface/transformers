@@ -133,7 +133,6 @@ from . import (
     lilt,
     llama,
     llava,
-    aria,
     llava_next,
     llava_next_video,
     llava_onevision,

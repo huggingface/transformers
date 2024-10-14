@@ -50,9 +50,7 @@ def _split_image(
     """
     if split_image:
         split_ratio = [(el[1], el[0]) for el in split_ratio]
-        (ratio_height, ratio_width) = select_best_resolution(
-            (image.height,image.width), split_ratio
-        )
+        (ratio_height, ratio_width) = select_best_resolution((image.height, image.width), split_ratio)
         resize_width = patch_size * ratio_width
         resize_height = patch_size * ratio_height
         blocks = ratio_width * ratio_height
@@ -326,7 +324,7 @@ class AriaProcessor(ProcessorMixin):
 
         self.image_token = image_token
 
-    # Copied from transformers.models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
+    # Copied from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -490,8 +488,6 @@ class AriaProcessor(ProcessorMixin):
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        if self.tokenizer is None:
-            raise ValueError("Tokenizer is not initialized. Please provide a valid tokenizer.")
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
@@ -500,8 +496,6 @@ class AriaProcessor(ProcessorMixin):
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
-        if self.tokenizer is None:
-            raise ValueError("Tokenizer is not initialized. Please provide a valid tokenizer.")
         return self.tokenizer.decode(*args, **kwargs)
 
     @property

@@ -850,7 +850,7 @@ class AriaVisionTransformer(nn.Module):
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
+        self.embed_dim = config.hidden_size
 
         self.config = config
         self.embeddings = AriaVisionEmbeddings(config)
