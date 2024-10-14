@@ -4112,6 +4112,13 @@ class Florence2ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Florence2LanguageForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Florence2LanguageModel(metaclass=DummyObject):
     _backends = ["torch"]
 
