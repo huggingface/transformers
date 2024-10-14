@@ -2709,6 +2709,7 @@ else:
     _import_structure["models.mistral"].extend(
         [
             "MistralForCausalLM",
+            "MistralForQuestionAnswering",
             "MistralForSequenceClassification",
             "MistralForTokenClassification",
             "MistralModel",
@@ -2718,6 +2719,7 @@ else:
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
+            "MixtralForQuestionAnswering",
             "MixtralForSequenceClassification",
             "MixtralForTokenClassification",
             "MixtralModel",
@@ -3094,6 +3096,7 @@ else:
     _import_structure["models.qwen2"].extend(
         [
             "Qwen2ForCausalLM",
+            "Qwen2ForQuestionAnswering",
             "Qwen2ForSequenceClassification",
             "Qwen2ForTokenClassification",
             "Qwen2Model",
@@ -3110,6 +3113,7 @@ else:
     _import_structure["models.qwen2_moe"].extend(
         [
             "Qwen2MoeForCausalLM",
+            "Qwen2MoeForQuestionAnswering",
             "Qwen2MoeForSequenceClassification",
             "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
@@ -7323,6 +7327,7 @@ if TYPE_CHECKING:
         )
         from .models.mistral import (
             MistralForCausalLM,
+            MistralForQuestionAnswering,
             MistralForSequenceClassification,
             MistralForTokenClassification,
             MistralModel,
@@ -7330,6 +7335,7 @@ if TYPE_CHECKING:
         )
         from .models.mixtral import (
             MixtralForCausalLM,
+            MixtralForQuestionAnswering,
             MixtralForSequenceClassification,
             MixtralForTokenClassification,
             MixtralModel,
@@ -7625,6 +7631,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2 import (
             Qwen2ForCausalLM,
+            Qwen2ForQuestionAnswering,
             Qwen2ForSequenceClassification,
             Qwen2ForTokenClassification,
             Qwen2Model,
@@ -7637,6 +7644,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
+            Qwen2MoeForQuestionAnswering,
             Qwen2MoeForSequenceClassification,
             Qwen2MoeForTokenClassification,
             Qwen2MoeModel,

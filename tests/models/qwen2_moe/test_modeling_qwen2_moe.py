@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
@@ -327,7 +328,13 @@ class Qwen2MoeModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
 class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        (
+            Qwen2MoeModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
+            Qwen2MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -339,6 +346,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
             "zero-shot": Qwen2MoeForSequenceClassification,
+            "question-answering": Qwen2MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -580,7 +588,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-4.2125, -3.6416, -4.9136, -4.3005, -4.9938, -3.4393, -3.5195, -4.1621]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
