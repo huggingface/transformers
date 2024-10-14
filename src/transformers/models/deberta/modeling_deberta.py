@@ -628,9 +628,6 @@ class DebertaEncoder(PreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (att_m,)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
