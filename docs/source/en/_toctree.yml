@@ -830,6 +830,8 @@
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/florence2
+        title: Florence2
       - local: model_doc/git
         title: GIT
       - local: model_doc/grounding-dino
