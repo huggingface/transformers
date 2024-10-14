@@ -125,9 +125,6 @@ dmypy.json
 .vs
 .vscode
 
-# devcontainer in vscode
-.devcontainer/
-
 # Pycharm
 .idea
 
