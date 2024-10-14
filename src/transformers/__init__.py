@@ -436,6 +436,10 @@ _import_structure = {
         "FlavaMultimodalConfig",
         "FlavaTextConfig",
     ],
+    "models.florence2": [
+        "Florence2Config",
+        "Florence2Processor",
+    ],
     "models.fnet": ["FNetConfig"],
     "models.focalnet": ["FocalNetConfig"],
     "models.fsmt": [
@@ -530,10 +534,6 @@ _import_structure = {
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
-    ],
-    "models.florence2": [
-        "Florence2Config",
-        "Florence2Processor",
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -2240,6 +2240,12 @@ else:
             "FlavaTextModel",
         ]
     )
+    _import_structure["models.florence2"].extend(
+        [
+            "Florence2ForConditionalGeneration",
+            "Florence2PreTrainedModel",
+        ]
+    )
     _import_structure["models.fnet"].extend(
         [
             "FNetForMaskedLM",
@@ -2582,12 +2588,6 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.florence2"].extend(
-        [
-            "Florence2ForConditionalGeneration",
-            "Florence2PreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
