@@ -6986,6 +6986,7 @@ if TYPE_CHECKING:
         )
         from .models.florence2 import (
             Florence2ForConditionalGeneration,
+            Florence2LanguageForConditionalGeneration,
             Florence2LanguageModel,
             Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
