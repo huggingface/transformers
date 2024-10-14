@@ -360,7 +360,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -372,7 +372,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -384,7 +384,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_7b_twin_2t_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-0.3636, -0.3825, -0.4800, -0.3696, -0.8388, -0.9737, -0.9849, -0.8356]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)

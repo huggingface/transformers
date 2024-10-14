@@ -694,10 +694,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.model_tester.seq_length = original_sequence_length
         return test_inputs
 
-    @unittest.skip(reason="Resizing sometimes goes bad")  #  not worth investigating for now (it's not a popular model)
-    def test_resize_tokens_embeddings(self):
-        pass
-
 
 @require_torch
 class ReformerLSHAttnModelTest(
