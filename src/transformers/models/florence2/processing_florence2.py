@@ -404,7 +404,7 @@ class BoxQuantizer(object):
         self.mode = mode
         self.bins = bins
 
-    def quantize(self, boxes: torch.Tensor, size):
+    def quantize(self, boxes, size):
         bins_w, bins_h = self.bins  # Quantization bins.
         size_w, size_h = size  # Original image size.
         size_per_bin_w = size_w / bins_w
@@ -427,7 +427,7 @@ class BoxQuantizer(object):
 
         return quantized_boxes
 
-    def dequantize(self, boxes: torch.Tensor, size):
+    def dequantize(self, boxes, size):
         bins_w, bins_h = self.bins  # Quantization bins.
         size_w, size_h = size  # Original image size.
         size_per_bin_w = size_w / bins_w
@@ -461,7 +461,7 @@ class CoordinatesQuantizer(object):
         self.mode = mode
         self.bins = bins
 
-    def quantize(self, coordinates: torch.Tensor, size):
+    def quantize(self, coordinates, size):
         bins_w, bins_h = self.bins  # Quantization bins.
         size_w, size_h = size  # Original image size.
         size_per_bin_w = size_w / bins_w
@@ -483,7 +483,7 @@ class CoordinatesQuantizer(object):
 
         return quantized_coordinates
 
-    def dequantize(self, coordinates: torch.Tensor, size):
+    def dequantize(self, coordinates, size):
         bins_w, bins_h = self.bins  # Quantization bins.
         size_w, size_h = size  # Original image size.
         size_per_bin_w = size_w / bins_w
