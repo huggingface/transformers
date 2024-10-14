@@ -2115,7 +2115,7 @@ class GenerationMixin:
 
         # Setm model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
-        
+
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
