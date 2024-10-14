@@ -952,7 +952,8 @@ class GenerationMixin:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
         if generation_config.watermarking_config is not None:
             processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device))
+                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+            )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:

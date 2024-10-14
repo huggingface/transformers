@@ -2379,6 +2379,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(detection_out.prediction.tolist(), [False])
 
     """Check the mean bias inserted by the watermarking algorithm."""
+
     @slow
     def test_synthid_text_watermark_generation_mean_expected_bias(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -2399,12 +2400,12 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 device=torch_device,
             )
             model_inputs = {
-                'input_ids': input_ids,
-                'attention_mask': torch.ones_like(input_ids, device=torch_device),
+                "input_ids": input_ids,
+                "attention_mask": torch.ones_like(input_ids, device=torch_device),
             }
             output = model.generate(
-                **model_inputs, watermarking_config=watermark_config,
-                do_sample=True, max_length=500, top_k=1000)
+                **model_inputs, watermarking_config=watermark_config, do_sample=True, max_length=500, top_k=1000
+            )
             g_values = logits_processor.compute_g_values(input_ids=output[:, input_len:])
             context_repetition_mask = logits_processor.compute_context_repetition_mask(
                 input_ids=output[:, input_len:],

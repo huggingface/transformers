@@ -979,17 +979,18 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
 
     """Test SynthID watermarked distribution bias uniformity over iterations."""
+
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):
         torch.manual_seed(0)
         np.random.seed(0)
         watermarking_config = {
-            'ngram_len': ngram_len,
-            'keys': np.random.randint(low=0, high=2**16, size=(num_layers,)),
-            'sampling_table_size': 2**16,
-            'sampling_table_seed': 0,
-            'context_history_size': 512,
-            'device': torch_device,
+            "ngram_len": ngram_len,
+            "keys": np.random.randint(low=0, high=2**16, size=(num_layers,)),
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 512,
+            "device": torch_device,
         }
         batch_size = 100000
         ngrams = torch.randint(
@@ -1005,6 +1006,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(g_values_mean, 0.5, delta=0.01)
 
     """Test SynthID watermarked distribution bias uniformity over voabs of the model."""
+
     @parameterized.expand([(10000, 3), (1000, 20)])
     def test_synthidtext_watermark_processor_bias_uniformity_across_vocab(self, vocab_size, num_layers):
         batch_size = 1000
@@ -1012,26 +1014,24 @@ class LogitsProcessorTest(unittest.TestCase):
         torch.manual_seed(0)
         np.random.seed(0)
         watermarking_config = {
-            'ngram_len': ngram_len,
-            'keys': np.random.randint(low=0, high=2**16, size=(num_layers,)),
-            'sampling_table_size': 2**16,
-            'sampling_table_seed': 0,
-            'context_history_size': 512,
-            'device': torch_device,
+            "ngram_len": ngram_len,
+            "keys": np.random.randint(low=0, high=2**16, size=(num_layers,)),
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 512,
+            "device": torch_device,
         }
         n_minus_1_grams = torch.randint(
             low=0,
             high=vocab_size,
-            size=(batch_size, watermarking_config['ngram_len'] - 1),
+            size=(batch_size, watermarking_config["ngram_len"] - 1),
             device=torch_device,
         )
 
         logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermarking_config)
         ngram_keys, _ = logits_processor._compute_keys(
             n_minus_1_grams,
-            torch.stack(
-                [torch.arange(vocab_size, device=torch_device) for _ in range(batch_size)]
-            ),
+            torch.stack([torch.arange(vocab_size, device=torch_device) for _ in range(batch_size)]),
         )
 
         g_values = logits_processor.sample_g_values(ngram_keys)
@@ -1040,6 +1040,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(g_values_mean, 0.5, delta=0.001)
 
     """Test SynthID watermarked distribution matches unwatermarked distribution over many iterations."""
+
     def test_synthidtext_watermark_processor_distributional_convergence(self):
         """Check if watermarked distribution converges to input distribution."""
         vocab_size = 2
@@ -1051,12 +1052,12 @@ class LogitsProcessorTest(unittest.TestCase):
         torch.manual_seed(0)
         for _ in range(num_keys):
             watermarking_config = {
-                'ngram_len': 5,
-                'keys': np.random.randint(0, 10**9, size=(1,), dtype=np.int64),
-                'sampling_table_size': 2**16,
-                'sampling_table_seed': 0,
-                'context_history_size': 1024,
-                'device': torch_device,
+                "ngram_len": 5,
+                "keys": np.random.randint(0, 10**9, size=(1,), dtype=np.int64),
+                "sampling_table_size": 2**16,
+                "sampling_table_seed": 0,
+                "context_history_size": 1024,
+                "device": torch_device,
             }
 
             logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermarking_config)
@@ -1064,25 +1065,24 @@ class LogitsProcessorTest(unittest.TestCase):
             ngrams = torch.randint(
                 low=0,
                 high=vocab_size,
-                size=(batch_size, watermarking_config['ngram_len']),
+                size=(batch_size, watermarking_config["ngram_len"]),
                 device=torch_device,
             )
 
             # Insert ngram-1 into logit_processor state.
-            for idx in range(watermarking_config['ngram_len'] - 1):
+            for idx in range(watermarking_config["ngram_len"] - 1):
                 _ = logits_processor(ngrams[:, :idx], torch.ones((batch_size, vocab_size), device=torch_device))
 
             scores = torch.ones((batch_size, vocab_size), device=torch_device)
             updated_scores = logits_processor(ngrams, scores)
-            updated_softmaxes += (
-                torch.nn.functional.softmax(updated_scores, dim=1).cpu().numpy()
-            )
+            updated_softmaxes += torch.nn.functional.softmax(updated_scores, dim=1).cpu().numpy()
 
         updated_softmaxes = np.mean(updated_softmaxes, axis=0) / num_keys
         for softmax in updated_softmaxes:
             self.assertAlmostEqual(softmax, 0.5, delta=0.002)
 
     """Test SynthID watermarking bais matches theoretical value."""
+
     @parameterized.expand([(2, 10, 1, 0.01), (100, 5, 1, 0.01), (100, 10, 2, 0.02)])
     def test_synthidtext_watermark_processor_bias_test(self, vocab_size, ngram_len, num_layers, atol):
         batch_size = 20000
@@ -1121,9 +1121,7 @@ class LogitsProcessorTest(unittest.TestCase):
         for idx in range(1, ngram_len - 1):
             _ = logits_processor(context[:, :idx], scores)
 
-        updated_scores = logits_processor(
-            context, scores
-        )
+        updated_scores = logits_processor(context, scores)
 
         probs = torch.nn.functional.softmax(updated_scores, dim=1)
         generator = torch.Generator(device=torch_device).manual_seed(0)
@@ -1143,9 +1141,7 @@ class LogitsProcessorTest(unittest.TestCase):
         is_close = torch.all(
             torch.isclose(
                 mean_g_values,
-                torch.tensor(
-                    expected_mean_g_value, dtype=torch.float64, device=torch_device
-                ),
+                torch.tensor(expected_mean_g_value, dtype=torch.float64, device=torch_device),
                 atol=atol,
                 rtol=0,
             )

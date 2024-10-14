@@ -707,8 +707,10 @@ class GenerationConfig(PushToHubMixin):
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, GreenRedWatermarkingConfig) or
-                    isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)):
+            if not (
+                isinstance(self.watermarking_config, GreenRedWatermarkingConfig)
+                or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
+            ):
                 warnings.warn(
                     "`watermarking_config` as a dict is deprecated. Please construct `watermarking_config` object with "
                     "`GreenRedWatermarkingConfig` or `SynthIDTextWatermarkingConfig` class.",
@@ -1221,7 +1223,7 @@ class GenerationConfig(PushToHubMixin):
 
 @dataclass
 class WatermarkingConfig(ABC):
-    """Generic watermarking config """
+    """Generic watermarking config"""
 
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
@@ -1302,7 +1304,6 @@ class WatermarkingConfig(ABC):
     def construct_processor(self, vocab_size): ...
 
 
-
 @dataclass
 class GreenRedWatermarkingConfig(WatermarkingConfig):
     """
@@ -1379,6 +1380,7 @@ class GreenRedWatermarkingConfig(WatermarkingConfig):
             seeding_scheme=self.seeding_scheme,
             context_width=self.context_width,
         )
+
 
 @dataclass
 class SynthIDTextWatermarkingConfig(WatermarkingConfig):

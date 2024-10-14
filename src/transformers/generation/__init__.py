@@ -18,7 +18,13 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig", "GreenRedWatermarkingConfig", "SynthIDTextWatermarkingConfig"],
+    "configuration_utils": [
+        "GenerationConfig",
+        "GenerationMode",
+        "GreenRedWatermarkingConfig",
+        "SynthIDTextWatermarkingConfig",
+        "WatermarkingConfig",
+    ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -79,7 +85,7 @@ else:
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
         "WatermarkLogitsProcessor",
-        "SynthIDTextWatermarkLogitsProcessor"
+        "SynthIDTextWatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -111,6 +117,8 @@ else:
     _import_structure["watermarking"] = [
         "WatermarkDetector",
         "WatermarkDetectorOutput",
+        "BayesianDetectorModel",
+        "BayesianDetectorConfig",
     ]
 
 try:
@@ -262,6 +270,8 @@ if TYPE_CHECKING:
             SampleEncoderDecoderOutput,
         )
         from .watermarking import (
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             WatermarkDetector,
             WatermarkDetectorOutput,
         )

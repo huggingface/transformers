@@ -2473,6 +2473,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
 
         return scores_processed
 
+
 class SynthIDTextWatermarkState:
     """SynthID watermarking state."""
 
@@ -2581,11 +2582,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             probs = probs * (1 + g_values_at_depth - g_mass_at_depth)
 
         log_probs = torch.log(probs)
-        log_probs = torch.where(
-            torch.isfinite(log_probs), log_probs, torch.finfo(log_probs.dtype).min
-        )
+        log_probs = torch.where(torch.isfinite(log_probs), log_probs, torch.finfo(log_probs.dtype).min)
         return log_probs
-
 
     def __call__(
         self,
@@ -2615,10 +2613,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
         # TODO: Compute top_k and then process the scores.
         # Currently indices is just a arange to compute watermarking on the desnse logits.
-        all_indices = torch.stack([
-            torch.arange(vocab_size, device=self.device)
-            for _ in range(batch_size)
-        ])
+        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.
@@ -2642,9 +2637,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             return scores
 
         # 2. Generate random keys for each ngram key combination.
-        ngram_keys, hash_result_with_just_context = self._compute_keys(
-            self.state.context, all_indices
-        )
+        ngram_keys, hash_result_with_just_context = self._compute_keys(self.state.context, all_indices)
         # ngram_keys shape [batch_size, top_k, depth]
 
         # 3. Sample g values.
@@ -2657,9 +2650,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
         # 5. Check if the current watermarking context was previously used, if yes skip watermarking.
         hash_result_with_just_context = hash_result_with_just_context[:, None]
-        is_repeated_context = (
-            self.state.context_history == hash_result_with_just_context
-        ).any(
+        is_repeated_context = (self.state.context_history == hash_result_with_just_context).any(
             dim=1,
             keepdim=True,
         )
@@ -2721,8 +2712,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         """
         if len(ngrams.shape) != 3:
             raise ValueError(
-                "Ngrams should be of shape (batch_size, num_ngrams, ngram_len), but"
-                f" is {ngrams.shape}"
+                "Ngrams should be of shape (batch_size, num_ngrams, ngram_len), but" f" is {ngrams.shape}"
             )
         if ngrams.shape[2] != self.ngram_len:
             raise ValueError(
@@ -2734,17 +2724,13 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         hash_result = torch.ones(batch_size, device=self.device, dtype=torch.long)
         # hash_result shape [batch_size,]
         # ngrams shape [batch_size, num_ngrams, ngram_len]
-        hash_result = torch.vmap(
-            self.accumulate_hash, in_dims=(None, 1), out_dims=1
-        )(hash_result, ngrams)
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 1), out_dims=1)(hash_result, ngrams)
         # hash_result shape [batch_size, num_ngrams]
 
         keys = self.keys[None, None, :, None]
         # hash_result shape [batch_size, num_ngrams]
         # keys shape [1, 1, depth, 1]
-        hash_result = torch.vmap(
-            self.accumulate_hash, in_dims=(None, 2), out_dims=2
-        )(hash_result, keys)
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 2), out_dims=2)(hash_result, keys)
         # hash_result shape [batch_size, num_ngrams, depth]
 
         return hash_result
@@ -2770,15 +2756,13 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         # n_minus_1 gram context.
         # hash_result shape [batch_size]
         # n_minus_1_gram shape [batch_size, ngram_len - 1]
-        hash_result_with_just_context = self.accumulate_hash(
-            hash_result, n_minus_1_grams
-        )
+        hash_result_with_just_context = self.accumulate_hash(hash_result, n_minus_1_grams)
         # hash_result shape [batch_size,]
         # Indices is of shape [batch_size, num_indices], so we make it
         # [batch_size, num_indices, 1] so we can vmap over num_indices dim.
-        hash_result = torch.vmap(
-            self.accumulate_hash, in_dims=(None, 1), out_dims=1
-        )(hash_result_with_just_context, indices[:, :, None])
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 1), out_dims=1)(
+            hash_result_with_just_context, indices[:, :, None]
+        )
         # hash_result shape [batch_size, num_indices]
         # Basically we have a hash for each batch entry and each indices
         # Now we add watermarking keys to this hash.
@@ -2787,9 +2771,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         # [1, 1, depth, 1].
         # So we can vmap over the depth dimension for compute_hash
         keys = self.keys[None, None, :, None]
-        hash_result = torch.vmap(
-            self.accumulate_hash, in_dims=(None, 2), out_dims=2
-        )(hash_result, keys)
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 2), out_dims=2)(hash_result, keys)
         # hash_result shape should be [batch_size, num_indices, depth]
         return hash_result, hash_result_with_just_context
 
@@ -2814,10 +2796,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     def _check_input_ids_shape(self, input_ids: torch.LongTensor):
         """Checks the shape of input ids."""
         if len(input_ids.shape) != 2:
-            raise ValueError(
-                "Input ids should be of shape (batch_size, input_len), but is"
-                f" {input_ids.shape}"
-            )
+            raise ValueError("Input ids should be of shape (batch_size, input_len), but is" f" {input_ids.shape}")
 
     def compute_g_values(
         self,
@@ -2869,9 +2848,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         for i in range(num_contexts):
             context = contexts[:, i, :]
             hash_result = torch.ones(batch_size, device=self.device, dtype=torch.long)
-            context_hash = self.accumulate_hash(hash_result, context)[
-                :, None
-            ]
+            context_hash = self.accumulate_hash(hash_result, context)[:, None]
             is_repeated_context = (state.context_history == context_hash).any(
                 dim=1,
                 keepdim=True,
@@ -2928,6 +2905,4 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         Returns:
             The expected mean g-value for watermarked text.
         """
-        return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (
-            1 - (1 / vocab_size)
-        )
+        return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))

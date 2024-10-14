@@ -1258,6 +1258,8 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "BayesianDetectorConfig",
+            "BayesianDetectorModel",
             "BeamScorer",
             "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
@@ -6022,6 +6024,8 @@ if TYPE_CHECKING:
         )
         from .generation import (
             AlternatingCodebooksLogitsProcessor,
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             BeamScorer,
             BeamSearchScorer,
             ClassifierFreeGuidanceLogitsProcessor,
