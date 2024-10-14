@@ -1643,11 +1643,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return dtype_orig
 
     @property
-    def base_model(self):
+    def base_model(self) -> nn.Module:
         """
         `torch.nn.Module`: The main body of the model.
         """
-        return getattr(self, "base_model_prefix", self)
+        return getattr(self, self.base_model_prefix, self)
 
     @classmethod
     def can_generate(cls) -> bool:

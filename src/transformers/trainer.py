@@ -3512,8 +3512,8 @@ class Trainer:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
-        # if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
-        #     self.optimizer.train()
+        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+            self.optimizer.train()
 
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():

@@ -930,7 +930,12 @@ class DebertaOnlyMLMHead(nn.Module):
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 class DebertaForMaskedLM(DebertaPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = [
+        "cls.predictions.decoder.weight",
+        "cls.predictions.decoder.bias",
+        "deberta.embeddings.word_embeddings.weight",
+        "lm_predictions.lm_head.weight",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
