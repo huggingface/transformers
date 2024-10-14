@@ -7007,7 +7007,11 @@ if TYPE_CHECKING:
         )
         from .models.florence2 import (
             Florence2ForConditionalGeneration,
+            Florence2LanguageModel,
+            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
+            Florence2VisionModel,
+            Florence2VisionModelWithProjection,
         )
         from .models.fnet import (
             FNetForMaskedLM,
