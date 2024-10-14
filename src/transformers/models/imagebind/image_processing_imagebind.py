@@ -75,7 +75,7 @@ def make_batched_videos(videos) -> List[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-# Copy from models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
+# Copied from transformers.models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
 def uniform_chunk_sampling(
     total_duration: float, chunk_duration: float, num_chunks: int
 ) -> List[Tuple[Fraction, Fraction]]:
