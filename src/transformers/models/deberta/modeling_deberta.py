@@ -379,13 +379,6 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-def linear(w, b, x):
-    if b is not None:
-        return torch.matmul(x, w.t()) + b.t()
-    else:
-        return torch.matmul(x, w.t())  # + b.t()
-
-
 ###### To support a general trace, we have to define these operation as they use python objects (sizes) ##################
 # Full credits to @Szustarol
 @torch.jit.script
