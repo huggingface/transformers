@@ -263,8 +263,12 @@ class DisentangledSelfAttention(nn.Module):
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
 
+        attention_mask = attention_mask.bool()
+        attention_scores = attention_scores.masked_fill(~(attention_mask), torch.finfo(query_layer.dtype).min)
         # bsz x height x length x dimension
-        attention_probs = nn.functional.softmax(attention_scores + attention_mask, -1)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs.masked_fill(attention_mask,0)
+
         attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
             attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
