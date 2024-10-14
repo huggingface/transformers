@@ -58,7 +58,7 @@ if is_torch_available():
     import torch
 
 
-# Copy from models.video_llava.image_processing_video_llava.make_batched_videos
+# Copied from transformers.models.video_llava.image_processing_video_llava.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
