@@ -857,7 +857,7 @@ class GenerationMixin:
                     self,
                     unconditional_ids=negative_prompt_ids,
                     unconditional_attention_mask=negative_prompt_attention_mask,
-                    use_cache=model_kwargs["use_cache"],
+                    use_cache=generation_config.use_cache,
                 )
             )
         if generation_config.sequence_bias is not None:
@@ -2004,10 +2004,7 @@ class GenerationMixin:
         # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
-            model_kwargs["use_cache"] = True
             generation_config.use_cache = True
-        else:
-            model_kwargs["use_cache"] = generation_config.use_cache
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
@@ -2116,6 +2113,9 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
 
+        # Setm model_kwargs `use_cache` so we can use it later in forward runs
+        model_kwargs["use_cache"] = generation_config.use_cache
+        
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
