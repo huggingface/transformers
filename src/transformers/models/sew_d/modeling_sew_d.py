@@ -176,7 +176,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.make_log_bucket_position
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -192,7 +191,6 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
 def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
     """
     Build relative position according to the query and key
@@ -1019,7 +1017,6 @@ class ConvLayer(nn.Module):
         return output_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
 class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
