@@ -1437,6 +1437,7 @@ class Emu3ImageVocabularyMapping:
 
     def __init__(self, vocab_map):
         self.vocab_map = vocab_map
+        self.eol_token_id = vocab_map.get("<|extra_200|>")
         self.image_token_id = vocab_map.get("<|extra_0|>")
 
     @cached_property
@@ -1448,13 +1449,13 @@ class Emu3ImageVocabularyMapping:
         return sorted([name for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
 
     @cached_property
-    def bpe2img(self):
+    def img2bpe(self):
         return {int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str}
         # visual 000000 -> 151854
         # need a map from "00000" to 151854
 
     @cached_property
-    def img2bpe(self):
+    def bpe2img(self):
         return {v: k for k, v in self.bpe2img.items()}
 
     @cached_property
@@ -1470,7 +1471,9 @@ class Emu3ImageVocabularyMapping:
 
     def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
         device = img_batch.device
+        eol_row = torch.ones((img_batch.shape[0], img_batch.shape[1], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
+        img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
         return img_tokens.to(device)
 
 
@@ -1642,6 +1645,7 @@ class Emu3Model(Emu3PreTrainedModel):
         image_toks = self.vqmodel.encode(pixel_values)
         bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
         bpe_toks = bpe_toks.view(batch_size, -1)
+
         return bpe_toks
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
@@ -1686,7 +1690,6 @@ class Emu3Model(Emu3PreTrainedModel):
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-            print(image_tokens.shape, special_image_mask.sum(-1))
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
 
         if inputs_embeds is None:

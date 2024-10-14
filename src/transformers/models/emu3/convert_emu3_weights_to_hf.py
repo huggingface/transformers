@@ -14,6 +14,7 @@
 import argparse
 import json
 import os
+import re
 from typing import Dict, Optional
 
 import requests
@@ -201,9 +202,8 @@ KEYS_TO_MODIFY_MAPPING = {
 
 def convert_state_dict_to_hf(old_state_dict, new_state_dict):
     for key, value in old_state_dict.items():
-        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-            if key_to_modify in key:
-                key = key.replace(key_to_modify, new_key)
+        for old_pattern, new_pattern in KEYS_TO_MODIFY_MAPPING.items():
+            key = re.sub(old_pattern, new_pattern, key)
 
         new_state_dict[key] = value
     return new_state_dict
@@ -224,7 +224,6 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
     # load models
     model_llm = AutoModelForCausalLM.from_pretrained(
         llm_model_id,
-        torch_dtype=torch.bfloat16,
         trust_remote_code=True,
     )
     model_vqgan = AutoModel.from_pretrained(vq_model_id, trust_remote_code=True)
@@ -245,7 +244,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
     state_dict = convert_state_dict_to_hf(model_llm.state_dict(), state_dict)
     state_dict = convert_state_dict_to_hf(model_vqgan.state_dict(), state_dict)
 
-    model.load_state_dict(state_dict, assign=True, strict=False)
+    model.load_state_dict(state_dict, assign=True, strict=True)
     model.save_pretrained(output_dir, safe_serialization=True)
 
     # Short inference on a few examples to check if generation makes sense
@@ -260,7 +259,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
             "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
         ).raw
     )
-    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
     length = inputs.input_ids.shape[1]
 
     out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
@@ -270,20 +269,18 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
     print("*" * 100)
 
     # Multi-image example
-    prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    image = Image.open(
-        requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-    )
-    image_2 = Image.open(
-        requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-    )
-
-    inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
-    length = inputs.input_ids.shape[1]
-    out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
-    generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
-
-    print(f"Generation for multi-image: {generated_text}")
+    # prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
+    # image = Image.open(
+    #     requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+    # )
+    # image_2 = Image.open(
+    #     requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+    # )
+    # inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    # length = inputs.input_ids.shape[1]
+    # out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
+    # generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+    # print(f"Generation for multi-image: {generated_text}")
 
 
 def main():
@@ -291,10 +288,12 @@ def main():
     parser.add_argument(
         "--vq_model_id",
         help="Model ID of Emu3 VQ-VAE on the hub",
+        default="BAAI/Emu3-VisionTokenizer",
     )
     parser.add_argument(
         "--llm_model_id",
         help="Model ID of Emu3 bacbone LLM on the hub",
+        default="BAAI/Emu3-Chat",
     )
     parser.add_argument(
         "--output_dir",
