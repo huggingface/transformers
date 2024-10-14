@@ -839,7 +839,7 @@ class DebertaModel(DebertaPreTrainedModel):
         )
 
 
-class DebertaPredictionHeadTransform(nn.Module):
+class LegacyDebertaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
@@ -861,7 +861,7 @@ class DebertaPredictionHeadTransform(nn.Module):
 class LegacyDebertaLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = DebertaPredictionHeadTransform(config)
+        self.transform = LegacyDebertaPredictionHeadTransform(config)
 
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
         # The output weights are the same as the input embeddings, but there is
