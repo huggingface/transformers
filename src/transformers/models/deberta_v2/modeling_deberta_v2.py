@@ -44,29 +44,6 @@ _QA_TARGET_START_INDEX = 2
 _QA_TARGET_END_INDEX = 9
 
 
-# Copied from transformers.models.deberta.modeling_deberta.ContextPooler
-class ContextPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
-        self.dropout = nn.Dropout(config.pooler_dropout)
-        self.config = config
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-
-        context_token = hidden_states[:, 0]
-        context_token = self.dropout(context_token)
-        pooled_output = self.dense(context_token)
-        pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
-        return pooled_output
-
-    @property
-    def output_dim(self):
-        return self.config.hidden_size
-
-
 # Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaLayerNorm->LayerNorm
 class DebertaV2SelfOutput(nn.Module):
     def __init__(self, config):
@@ -917,6 +894,98 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
         )
 
 
+# Copied from transformers.models.deberta.modeling_deberta.LegacyDebertaPredictionHeadTransform with Deberta->DebertaV2
+class LegacyDebertaV2PredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
+        self.dense = nn.Linear(config.hidden_size, self.embedding_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(self.embedding_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class LegacyDebertaV2LMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = LegacyDebertaV2PredictionHeadTransform(config)
+
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
+class LegacyDebertaV2OnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = LegacyDebertaV2LMPredictionHead(config)
+
+    def forward(self, sequence_output):
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+
+
+class DebertaV2LMPredictionHead(nn.Module):
+    """https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/bert.py#L270"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=True)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+    # note that the input embeddings must be passed as an argument
+    def forward(self, hidden_states, word_embeddings):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(
+            hidden_states
+        )  # original used MaskedLayerNorm, but passed no mask. This is equivalent.
+        hidden_states = torch.matmul(hidden_states, word_embeddings.weight.t()) + self.bias
+        return hidden_states
+
+
+class DebertaV2OnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lm_head = DebertaV2LMPredictionHead(config)
+
+    # note that the input embeddings must be passed as an argument
+    def forward(self, sequence_output, word_embeddings):
+        prediction_scores = self.lm_head(sequence_output, word_embeddings)
+        return prediction_scores
+
+
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
@@ -925,8 +994,10 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         super().__init__(config)
 
         self.deberta = DebertaV2Model(config)
-        self.cls = DebertaV2OnlyMLMHead(config)
-
+        if self.legacy:
+            self.cls = LegacyDebertaV2OnlyMLMHead(config)
+        else:
+            self.lm_predictions = DebertaV2OnlyMLMHead(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -997,60 +1068,27 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaPredictionHeadTransform with Deberta->DebertaV2
-class DebertaV2PredictionHeadTransform(nn.Module):
+# Copied from transformers.models.deberta.modeling_deberta.ContextPooler
+class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
-
-        self.dense = nn.Linear(config.hidden_size, self.embedding_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(self.embedding_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
+        self.dropout = nn.Dropout(config.pooler_dropout)
+        self.config = config
 
     def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
 
+        context_token = hidden_states[:, 0]
+        context_token = self.dropout(context_token)
+        pooled_output = self.dense(context_token)
+        pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
+        return pooled_output
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaLMPredictionHead with Deberta->DebertaV2
-class DebertaV2LMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = DebertaV2PredictionHeadTransform(config)
-
-        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-# copied from transformers.models.bert.BertOnlyMLMHead with bert -> deberta
-class DebertaV2OnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = DebertaV2LMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
+    @property
+    def output_dim(self):
+        return self.config.hidden_size
 
 
 @add_start_docstrings(

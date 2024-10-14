@@ -121,6 +121,7 @@ class DebertaConfig(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
+        legacy=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -151,6 +152,7 @@ class DebertaConfig(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        self.legacy = legacy
 
 
 # Copied from transformers.models.deberta_v2.configuration_deberta_v2.DebertaV2OnnxConfig

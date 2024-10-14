@@ -52,55 +52,6 @@ _QA_TARGET_START_INDEX = 12
 _QA_TARGET_END_INDEX = 14
 
 
-class ContextPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
-        self.dropout = nn.Dropout(config.pooler_dropout)
-        self.config = config
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-
-        context_token = hidden_states[:, 0]
-        context_token = self.dropout(context_token)
-        pooled_output = self.dense(context_token)
-        pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
-        return pooled_output
-
-    @property
-    def output_dim(self):
-        return self.config.hidden_size
-
-
-class DropoutContext:
-    def __init__(self):
-        self.dropout = 0
-        self.mask = None
-        self.scale = 1
-        self.reuse_mask = True
-
-
-def get_mask(input, local_context):
-    if not isinstance(local_context, DropoutContext):
-        dropout = local_context
-        mask = None
-    else:
-        dropout = local_context.dropout
-        dropout *= local_context.scale
-        mask = local_context.mask if local_context.reuse_mask else None
-
-    if dropout > 0 and mask is None:
-        mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).to(torch.bool)
-
-    if isinstance(local_context, DropoutContext):
-        if local_context.mask is None:
-            local_context.mask = mask
-
-    return mask, dropout
-
-
 class DebertaLayerNorm(nn.Module):
     """LayerNorm module in the TF style (epsilon inside the square root)."""
 
@@ -133,206 +84,6 @@ class DebertaSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
-
-
-class DebertaAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.self = DisentangledSelfAttention(config)
-        self.output = DebertaSelfOutput(config)
-        self.config = config
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        output_attentions: bool = False,
-        query_states=None,
-        relative_pos=None,
-        rel_embeddings=None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        self_output, att_matrix = self.self(
-            hidden_states,
-            attention_mask,
-            output_attentions,
-            query_states=query_states,
-            relative_pos=relative_pos,
-            rel_embeddings=rel_embeddings,
-        )
-        if query_states is None:
-            query_states = hidden_states
-        attention_output = self.output(self_output, query_states)
-
-        if output_attentions:
-            return (attention_output, att_matrix)
-        else:
-            return (attention_output, None)
-
-
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Deberta
-class DebertaIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class DebertaOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class DebertaLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = DebertaAttention(config)
-        self.intermediate = DebertaIntermediate(config)
-        self.output = DebertaOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        query_states=None,
-        relative_pos=None,
-        rel_embeddings=None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        attention_output, att_matrix = self.attention(
-            hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
-            query_states=query_states,
-            relative_pos=relative_pos,
-            rel_embeddings=rel_embeddings,
-        )
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-
-        if output_attentions:
-            return (layer_output, att_matrix)
-        else:
-            return (layer_output, None)
-
-
-class DebertaEncoder(PreTrainedModel):
-    """Modified BertEncoder with relative position bias support"""
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.layer = nn.ModuleList([DebertaLayer(config) for _ in range(config.num_hidden_layers)])
-        self.relative_attention = getattr(config, "relative_attention", False)
-        if self.relative_attention:
-            self.max_relative_positions = getattr(config, "max_relative_positions", -1)
-            if self.max_relative_positions < 1:
-                self.max_relative_positions = config.max_position_embeddings
-            self.rel_embeddings = nn.Embedding(self.max_relative_positions * 2, config.hidden_size)
-        self.gradient_checkpointing = False
-
-    def get_rel_embedding(self):
-        rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
-        return rel_embeddings
-
-    def get_attention_mask(self, attention_mask):
-        if attention_mask.dim() <= 2:
-            extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-            attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-        elif attention_mask.dim() == 3:
-            attention_mask = attention_mask.unsqueeze(1)
-
-        return attention_mask
-
-    def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
-        if self.relative_attention and relative_pos is None:
-            if query_states is not None:
-                relative_pos = build_relative_position(query_states, hidden_states)
-            else:
-                relative_pos = build_relative_position(hidden_states, hidden_states)
-        return relative_pos
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_hidden_states: bool = True,
-        output_attentions: bool = False,
-        query_states=None,
-        relative_pos=None,
-        return_dict: bool = True,
-    ):
-        attention_mask = self.get_attention_mask(attention_mask)
-        relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
-
-        all_hidden_states: Optional[Tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        next_kv = hidden_states
-
-        rel_embeddings = self.get_rel_embedding()
-        for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                att_m = layer_outputs[1]
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if query_states is not None:
-                query_states = hidden_states
-                if isinstance(hidden_states, Sequence):
-                    next_kv = hidden_states[i + 1] if i + 1 < len(self.layer) else None
-            else:
-                next_kv = hidden_states
-
-            if output_attentions:
-                all_attentions = all_attentions + (att_m,)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
 
 
 @torch.jit.script
@@ -380,6 +131,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 
 ###### To support a general trace, we have to define these operation as they use python objects (sizes) ##################
+# which are not supported by torch.jit.trace.
 # Full credits to @Szustarol
 @torch.jit.script
 def scaled_size_sqrt(query_layer, scale_factor: int):
@@ -409,6 +161,8 @@ def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
 
 
 ########################################################################################################################
+
+
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -684,6 +438,206 @@ class DebertaEmbeddings(nn.Module):
         return embeddings
 
 
+class DebertaAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.self = DisentangledSelfAttention(config)
+        self.output = DebertaSelfOutput(config)
+        self.config = config
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask,
+        output_attentions: bool = False,
+        query_states=None,
+        relative_pos=None,
+        rel_embeddings=None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        self_output, att_matrix = self.self(
+            hidden_states,
+            attention_mask,
+            output_attentions,
+            query_states=query_states,
+            relative_pos=relative_pos,
+            rel_embeddings=rel_embeddings,
+        )
+        if query_states is None:
+            query_states = hidden_states
+        attention_output = self.output(self_output, query_states)
+
+        if output_attentions:
+            return (attention_output, att_matrix)
+        else:
+            return (attention_output, None)
+
+
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Deberta
+class DebertaIntermediate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+
+class DebertaOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.config = config
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+class DebertaLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.attention = DebertaAttention(config)
+        self.intermediate = DebertaIntermediate(config)
+        self.output = DebertaOutput(config)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask,
+        query_states=None,
+        relative_pos=None,
+        rel_embeddings=None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attention_output, att_matrix = self.attention(
+            hidden_states,
+            attention_mask,
+            output_attentions=output_attentions,
+            query_states=query_states,
+            relative_pos=relative_pos,
+            rel_embeddings=rel_embeddings,
+        )
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+
+        if output_attentions:
+            return (layer_output, att_matrix)
+        else:
+            return (layer_output, None)
+
+
+class DebertaEncoder(PreTrainedModel):
+    """Modified BertEncoder with relative position bias support"""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.layer = nn.ModuleList([DebertaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.relative_attention = getattr(config, "relative_attention", False)
+        if self.relative_attention:
+            self.max_relative_positions = getattr(config, "max_relative_positions", -1)
+            if self.max_relative_positions < 1:
+                self.max_relative_positions = config.max_position_embeddings
+            self.rel_embeddings = nn.Embedding(self.max_relative_positions * 2, config.hidden_size)
+        self.gradient_checkpointing = False
+
+    def get_rel_embedding(self):
+        rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
+        return rel_embeddings
+
+    def get_attention_mask(self, attention_mask):
+        if attention_mask.dim() <= 2:
+            extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+            attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
+        elif attention_mask.dim() == 3:
+            attention_mask = attention_mask.unsqueeze(1)
+
+        return attention_mask
+
+    def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
+        if self.relative_attention and relative_pos is None:
+            if query_states is not None:
+                relative_pos = build_relative_position(query_states, hidden_states)
+            else:
+                relative_pos = build_relative_position(hidden_states, hidden_states)
+        return relative_pos
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_hidden_states: bool = True,
+        output_attentions: bool = False,
+        query_states=None,
+        relative_pos=None,
+        return_dict: bool = True,
+    ):
+        attention_mask = self.get_attention_mask(attention_mask)
+        relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
+
+        all_hidden_states: Optional[Tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        next_kv = hidden_states
+
+        rel_embeddings = self.get_rel_embedding()
+        for i, layer_module in enumerate(self.layer):
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
+                    next_kv,
+                    attention_mask,
+                    query_states,
+                    relative_pos,
+                    rel_embeddings,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(
+                    next_kv,
+                    attention_mask,
+                    query_states=query_states,
+                    relative_pos=relative_pos,
+                    rel_embeddings=rel_embeddings,
+                    output_attentions=output_attentions,
+                )
+
+            hidden_states = layer_outputs[0]
+            if output_attentions:
+                att_m = layer_outputs[1]
+
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if query_states is not None:
+                query_states = hidden_states
+                if isinstance(hidden_states, Sequence):
+                    next_kv = hidden_states[i + 1] if i + 1 < len(self.layer) else None
+            else:
+                next_kv = hidden_states
+
+            if output_attentions:
+                all_attentions = all_attentions + (att_m,)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
 class DebertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -885,26 +839,126 @@ class DebertaModel(DebertaPreTrainedModel):
         )
 
 
+class DebertaPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
+        self.dense = nn.Linear(config.hidden_size, self.embedding_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(self.embedding_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class LegacyDebertaLMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = DebertaPredictionHeadTransform(config)
+
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->LegacyDeberta
+class LegacyDebertaOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = LegacyDebertaLMPredictionHead(config)
+
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+
+
+class DebertaLMPredictionHead(nn.Module):
+    """https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/bert.py#L270"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=True)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+    # note that the input embeddings must be passed as an argument
+    def forward(self, hidden_states, word_embeddings):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(
+            hidden_states
+        )  # original used MaskedLayerNorm, but passed no mask. This is equivalent.
+        hidden_states = torch.matmul(hidden_states, word_embeddings.weight.t()) + self.bias
+        return hidden_states
+
+
+class DebertaOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lm_head = DebertaLMPredictionHead(config)
+
+    # note that the input embeddings must be passed as an argument
+    def forward(self, sequence_output, word_embeddings):
+        prediction_scores = self.lm_head(sequence_output, word_embeddings)
+        return prediction_scores
+
+
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
-
+        self.legacy = config.legacy
         self.deberta = DebertaModel(config)
-        self.lm_predictions = DebertaOnlyMLMHead(config)
-        self.cls = self.lm_predictions
+        if self.legacy:
+            self.cls = LegacyDebertaOnlyMLMHead(config)
+        else:
+            self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.cls.predictions.decoder
+        if self.legacy:
+            return self.cls.predictions.decoder
+        else:
+            return self.lm_predictions.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
+        if self.legacy:
+            self.cls.predictions.decoder = new_embeddings
+            self.cls.predictions.bias = new_embeddings.bias
+        else:
+            self.lm_predictions.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -948,7 +1002,10 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        if self.legacy:
+            prediction_scores = self.cls(sequence_output)
+        else:
+            prediction_scores = self.lm_predictions(sequence_output, self.deberta.embeddings.word_embeddings)
 
         masked_lm_loss = None
         if labels is not None:
@@ -967,58 +1024,26 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         )
 
 
-class DebertaPredictionHeadTransform(nn.Module):
+class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
-
-        self.dense = nn.Linear(config.hidden_size, self.embedding_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(self.embedding_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
+        self.dropout = nn.Dropout(config.pooler_dropout)
+        self.config = config
 
     def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
 
+        context_token = hidden_states[:, 0]
+        context_token = self.dropout(context_token)
+        pooled_output = self.dense(context_token)
+        pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
+        return pooled_output
 
-class DebertaLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = DebertaPredictionHeadTransform(config)
-
-        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-# copied from transformers.models.bert.BertOnlyMLMHead with bert -> deberta
-class DebertaOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = DebertaLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
+    @property
+    def output_dim(self):
+        return self.config.hidden_size
 
 
 @add_start_docstrings(
