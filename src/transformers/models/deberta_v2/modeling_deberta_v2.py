@@ -1049,7 +1049,10 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        if self.legacy:
+            prediction_scores = self.cls(sequence_output)
+        else:
+            prediction_scores = self.lm_predictions(sequence_output, self.deberta.embeddings.word_embeddings)
 
         masked_lm_loss = None
         if labels is not None:
