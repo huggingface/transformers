@@ -137,6 +137,10 @@ IGNORE_NON_TESTED = (
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Florence2LanguageForConditionalGeneration",  # Building part of bigger (tested) model.
+        "Florence2LanguageModel",  # Building part of bigger (tested) model.
+        "Florence2VisionModel",  # Building part of bigger (tested) model.
+        "Florence2VisionModelWithProjection",  # Building part of bigger (tested) model.
     ]
 )
 
@@ -330,6 +334,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
+    "Florence2LanguageForConditionalGeneration",
+    "Florence2LanguageModel",
+    "Florence2VisionModel",
+    "Florence2VisionModelWithProjection",
 ]
 
 # DO NOT edit this list!

@@ -2243,7 +2243,12 @@ else:
     _import_structure["models.florence2"].extend(
         [
             "Florence2ForConditionalGeneration",
+            "Florence2LanguageForConditionalGeneration",
+            "Florence2LanguageModel",
+            "Florence2LanguagePreTrainedModel",
             "Florence2PreTrainedModel",
+            "Florence2VisionModel",
+            "Florence2VisionModelWithProjection",
         ]
     )
     _import_structure["models.fnet"].extend(

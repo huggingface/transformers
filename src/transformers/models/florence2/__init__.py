@@ -31,6 +31,11 @@ else:
     _import_structure["modeling_florence2"] = [
         "Florence2ForConditionalGeneration",
         "Florence2PreTrainedModel",
+        "Florence2LanguageForConditionalGeneration",
+        "Florence2LanguageModel",
+        "Florence2LanguagePreTrainedModel",
+        "Florence2VisionModel",
+        "Florence2VisionModelWithProjection",
     ]
 
 
@@ -46,7 +51,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_florence2 import (
             Florence2ForConditionalGeneration,
+            Florence2LanguageForConditionalGeneration,
+            Florence2LanguageModel,
+            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
+            Florence2VisionModel,
+            Florence2VisionModelWithProjection,
         )
 
 else:
