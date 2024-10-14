@@ -664,11 +664,11 @@ class DabDetrDecoderLayerSelfAttention(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
 
     def forward(
-        self, 
+        self,
         hidden_states: torch.Tensor,
         query_position_embeddings: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None
+        output_attentions: Optional[bool] = None,
     ):
         residual = hidden_states
         query_content = self.self_attn_query_content_proj(hidden_states)

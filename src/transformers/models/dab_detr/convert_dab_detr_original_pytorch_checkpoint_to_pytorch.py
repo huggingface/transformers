@@ -241,8 +241,6 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     logger.info(f"Converting model {model_name}...")
     write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub)
 
-    
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
