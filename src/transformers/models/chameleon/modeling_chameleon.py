@@ -1595,7 +1595,9 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
 
         # Disallow image tokens which does not include special begin-image and end-image tokens
         image_tokens = self.model.vocabulary_mapping.image_tokens
