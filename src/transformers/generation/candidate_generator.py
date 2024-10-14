@@ -291,9 +291,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 optimal_threshold_index = np.argmin(costs)
                 best_threshold = thresholds[optimal_threshold_index]
 
-                self.assistant_model.generation_config.assistant_confidence_threshold = max(sys.float_info.epsilon,best_threshold)
-                self.probs = self.probs[-200:]
-                self.matches = self.matches[-200:]
+                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
