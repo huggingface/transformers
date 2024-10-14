@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import logging
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -20,8 +19,9 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -33,7 +33,7 @@ from ...utils import (
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaVisionConfig
 from .processing_utils import experts_gemm
-from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
+
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -56,7 +56,6 @@ from ...utils import (
 from .configuration_aria import AriaTextConfig
 
 
-
 class AriaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
@@ -77,7 +76,6 @@ class AriaPreTrainedModel(PreTrainedModel):
         SDPA (Scaled Dot Product Attention) or not.
         """
         return self.language_model._supports_sdpa
-
 
 
 class IdentityOp(torch.nn.Module):
@@ -553,13 +551,6 @@ class AriaVisionAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-ARIA_ATTENTION_CLASSES = {
-    "eager": AriaAttention,
-    "flash_attention_2": AriaFlashAttention2,
-    "sdpa": AriaSdpaAttention,
-}
 
 
 class AriaVisionFlashAttention2(AriaVisionAttention):
@@ -1248,6 +1239,7 @@ class MoEAuxLossAutoScaler(torch.autograd.Function):
         """
         MoEAuxLossAutoScaler.main_loss_backward_scale = scale
 
+
 def z_loss_func(logits, z_loss_coeff):
     """Encourages the router's logits to remain small to enhance stability.
     Please refer to the ST-MoE paper (https://arxiv.org/pdf/2202.08906.pdf) for details.
@@ -1283,10 +1275,9 @@ def switch_load_balancing_loss_func(
     num_experts = probs.shape[1]
 
     probs_mean_per_expert = probs.mean(dim=0)
-    aux_loss = torch.sum(probs_mean_per_expert * tokens_per_expert) * (
-        num_experts / num_tokens * moe_aux_loss_coeff
-    )
+    aux_loss = torch.sum(probs_mean_per_expert * tokens_per_expert) * (num_experts / num_tokens * moe_aux_loss_coeff)
     return aux_loss
+
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class TopKRouter(nn.Module):
@@ -1304,9 +1295,7 @@ class TopKRouter(nn.Module):
         super().__init__()
         self.config = config
 
-        self.weight = nn.Parameter(
-            torch.empty((self.config.moe_num_experts, self.config.hidden_size))
-        )
+        self.weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
         # FIXME: initialize the weight
 
     def gating(self, input: torch.Tensor) -> torch.Tensor:
@@ -1322,10 +1311,7 @@ class TopKRouter(nn.Module):
         logits = torch.nn.functional.linear(input, self.weight)
         return logits
 
-
-    def routing(
-        self, logits: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def routing(self, logits: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Perform the routing operation to determine expert assignments.
 
@@ -1367,7 +1353,6 @@ class TopKRouter(nn.Module):
         logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
         return logits
 
-
     def apply_aux_loss(
         self,
         logits: torch.Tensor,
@@ -1394,9 +1379,7 @@ class TopKRouter(nn.Module):
         )
         return MoEAuxLossAutoScaler.apply(activation, aux_loss)
 
-    def forward(
-        self, input: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass of the TopKRouter.
 
@@ -1413,7 +1396,6 @@ class TopKRouter(nn.Module):
         logits = logits.view(-1, self.config.moe_num_experts)
         scores, top_indices, tokens_per_expert = self.routing(logits)
         return scores, top_indices, tokens_per_expert
-
 
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587

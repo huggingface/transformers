@@ -1088,7 +1088,7 @@ class ModularConverterTransformer(CSTTransformer):
         """For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
         the different files, and add them to the file if it is the case (also recursively adding all other functions that
         may be needed in that function body)."""
-        # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modualr_xxx.py`
+        # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modular_xxx.py`
         for top_level_function, function_node in self.all_definitions.items():
             calling_entities = self.function_call_class_mapping[top_level_function]
             # The function may be needed in different files, we need to iterate on them

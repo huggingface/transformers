@@ -20,10 +20,10 @@ import unittest
 import requests
 
 from transformers import (
-    AutoProcessor,
-    AutoTokenizer,
     AriaConfig,
     AriaForConditionalGeneration,
+    AutoProcessor,
+    AutoTokenizer,
     is_torch_available,
     is_vision_available,
 )

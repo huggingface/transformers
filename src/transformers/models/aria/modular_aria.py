@@ -1,9 +1,7 @@
 import inspect
-import logging
 import re
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image, ImageOps
@@ -15,7 +13,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -27,6 +25,7 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
+from ...utils import logging
 from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
@@ -36,17 +35,15 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
-from ..llava_next.processing_llava_next import LlavaNextProcessor
+from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionModel
 from .processing_utils import experts_gemm
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 # TODO: ajouter quelques tests parmi test_modeling_lava.py, test_processing_llava.py, test_mdoelling_pixtral.py
 
@@ -345,41 +342,6 @@ class AriaProjector(nn.Module):
         return out
 
 
-def _select_best_resolution(
-    img_width: int, img_height: int, target_ratios: List[List[int]], patch_size: int
-):
-    """
-    Selects the best resolution from a list of possible resolutions based on the original size.
-
-    Args:
-        img_width: the original widths of images.
-        img_height: the original heights of images.
-        target_ratios (2d numpy array): dimension size (M,2)
-        patch_size (int): image patch size
-
-    Returns:
-        tuple: The best fit resolution in the format (width, height).
-    """
-
-    aspect_ratio = img_width / img_height
-    best_ratio_diff = float("inf")
-    best_ratio_w, best_ratio_h = 1, 1
-    area = np.int32(img_height) * np.int32(img_height)
-    for ratio in target_ratios:
-        target_aspect_ratio = ratio[0] / ratio[1]
-        ratio_diff = abs(aspect_ratio - target_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_ratio_w, best_ratio_h = ratio[0], ratio[1]
-        elif (
-            ratio_diff == best_ratio_diff
-            and area > 0.5 * patch_size * patch_size * ratio[0] * ratio[1]
-        ):
-            best_ratio_w, best_ratio_h = ratio[0], ratio[1]
-
-    return best_ratio_w, best_ratio_h
-
-
 def _split_image(
     image: Image.Image,
     split_image: bool,
@@ -399,8 +361,9 @@ def _split_image(
         List[PIL.Image]: List of splitted images.
     """
     if split_image:
-        ratio_width, ratio_height = _select_best_resolution(
-            image.width, image.height, split_ratio, patch_size
+        split_ratio = [(el[1], el[0]) for el in split_ratio]
+        (ratio_height, ratio_width) = select_best_resolution(
+            (image.height,image.width), split_ratio
         )
         resize_width = patch_size * ratio_width
         resize_height = patch_size * ratio_height
@@ -479,8 +442,8 @@ class AriaVisionProcessor(BaseImageProcessor):
         self,
         max_image_size=980,
         min_image_size=336,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
+        image_mean=None,
+        image_std=None,
         **kwargs,
     ):
         """
@@ -494,6 +457,10 @@ class AriaVisionProcessor(BaseImageProcessor):
         """
         super().__init__(**kwargs)
 
+        if image_mean is None:
+            image_mean = [0.5, 0.5, 0.5]
+        if image_std is None:
+            image_std = [0.5, 0.5, 0.5]
         self.max_image_size = max_image_size
         self.min_image_size = min_image_size
         self.image_mean = image_mean
@@ -529,27 +496,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         min_image_size: Optional[int] = 336,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = [
-            [1, 2],
-            [1, 3],
-            [1, 4],
-            [1, 5],
-            [1, 6],
-            [1, 7],
-            [1, 8],
-            [2, 4],
-            [2, 3],
-            [2, 2],
-            [2, 1],
-            [3, 1],
-            [3, 2],
-            [4, 1],
-            [4, 2],
-            [5, 1],
-            [6, 1],
-            [7, 1],
-            [8, 1],
-        ],
+        split_ratio: Optional[List[List[int]]] = None,
     ):
         """
         Process a list of images.
@@ -569,6 +516,28 @@ class AriaVisionProcessor(BaseImageProcessor):
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
                 - 'num_crops': Tensor of the number of crops for each image.
         """
+        if split_ratio is None:
+            split_ratio = [
+                [1, 2],
+                [1, 3],
+                [1, 4],
+                [1, 5],
+                [1, 6],
+                [1, 7],
+                [1, 8],
+                [2, 4],
+                [2, 3],
+                [2, 2],
+                [2, 1],
+                [3, 1],
+                [3, 2],
+                [4, 1],
+                [4, 2],
+                [5, 1],
+                [6, 1],
+                [7, 1],
+                [8, 1],
+            ]
         max_size = self.max_image_size if max_image_size is None else max_image_size
         min_size = self.min_image_size if min_image_size is None else min_image_size
 
@@ -609,28 +578,30 @@ class AriaVisionProcessor(BaseImageProcessor):
         min_image_size=None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = [
-            [1, 2],
-            [1, 3],
-            [1, 4],
-            [1, 5],
-            [1, 6],
-            [1, 7],
-            [1, 8],
-            [2, 4],
-            [2, 3],
-            [2, 2],
-            [2, 1],
-            [3, 1],
-            [3, 2],
-            [4, 1],
-            [4, 2],
-            [5, 1],
-            [6, 1],
-            [7, 1],
-            [8, 1],
-        ],
+        split_ratio: Optional[List[List[int]]] = None,
     ):
+        if split_ratio is None:
+            split_ratio = [
+                [1, 2],
+                [1, 3],
+                [1, 4],
+                [1, 5],
+                [1, 6],
+                [1, 7],
+                [1, 8],
+                [2, 4],
+                [2, 3],
+                [2, 2],
+                [2, 1],
+                [3, 1],
+                [3, 2],
+                [4, 1],
+                [4, 2],
+                [5, 1],
+                [6, 1],
+                [7, 1],
+                [8, 1],
+            ]
         return self.__call__(
             images,
             max_image_size=max_image_size,
@@ -1437,8 +1408,6 @@ class AriaTextMoELayer(nn.Module): #TODO: check naming convenstion for InstructB
         return output
 
 
-ARIA_ATTENTION_CLASSES = LLAMA_ATTENTION_CLASSES
-
 class AriaDecoderLayer(LlamaDecoderLayer):
     """
     Custom Decoder Layer for the Aria model which modifies the standard `LlamaDecoderLayer` by
@@ -1453,7 +1422,7 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = ARIA_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](
             config=config, layer_idx=layer_idx
         )
 
@@ -1468,23 +1437,13 @@ class AriaTextModel(LlamaModel):
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
-        # self.padding_idx = config.pad_token_id
-        # self.vocab_size = config.vocab_size
-
-        # self.embed_tokens = nn.Embedding(
-        #     config.vocab_size, config.hidden_size, self.padding_idx
-        # )
         self.layers = nn.ModuleList(
             [
                 AriaDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
-        # self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
         self.post_init()
 
 
@@ -1576,7 +1535,12 @@ class AriaForConditionalGeneration(AriaPreTrainedModel):
 
     # copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
     def _merge_input_ids_with_image_features(
-        self, image_features, inputs_embeds, input_ids, attention_mask, labels
+        self,
+        image_features,
+        inputs_embeds,
+        input_ids,
+        attention_mask,
+        labels
     ):
         """
         Merge input IDs with image features to create a combined input representation.

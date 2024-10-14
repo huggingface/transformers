@@ -5,17 +5,15 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import inspect
-import logging
 import re
 from typing import List, Optional, Union
 
-import numpy as np
 import torch
 from PIL import Image, ImageOps
 from torchvision import transforms
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
@@ -25,40 +23,11 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
+from ...utils import logging
 from ..auto import AutoTokenizer
 
 
-logger = logging.getLogger(__name__)
-
-
-def _select_best_resolution(img_width: int, img_height: int, target_ratios: List[List[int]], patch_size: int):
-    """
-    Selects the best resolution from a list of possible resolutions based on the original size.
-
-    Args:
-        img_width: the original widths of images.
-        img_height: the original heights of images.
-        target_ratios (2d numpy array): dimension size (M,2)
-        patch_size (int): image patch size
-
-    Returns:
-        tuple: The best fit resolution in the format (width, height).
-    """
-
-    aspect_ratio = img_width / img_height
-    best_ratio_diff = float("inf")
-    best_ratio_w, best_ratio_h = 1, 1
-    area = np.int32(img_height) * np.int32(img_height)
-    for ratio in target_ratios:
-        target_aspect_ratio = ratio[0] / ratio[1]
-        ratio_diff = abs(aspect_ratio - target_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_ratio_w, best_ratio_h = ratio[0], ratio[1]
-        elif ratio_diff == best_ratio_diff and area > 0.5 * patch_size * patch_size * ratio[0] * ratio[1]:
-            best_ratio_w, best_ratio_h = ratio[0], ratio[1]
-
-    return best_ratio_w, best_ratio_h
+logger = logging.get_logger(__name__)
 
 
 def _split_image(
@@ -80,7 +49,10 @@ def _split_image(
         List[PIL.Image]: List of splitted images.
     """
     if split_image:
-        ratio_width, ratio_height = _select_best_resolution(image.width, image.height, split_ratio, patch_size)
+        split_ratio = [(el[1], el[0]) for el in split_ratio]
+        (ratio_height, ratio_width) = select_best_resolution(
+            (image.height,image.width), split_ratio
+        )
         resize_width = patch_size * ratio_width
         resize_height = patch_size * ratio_height
         blocks = ratio_width * ratio_height
