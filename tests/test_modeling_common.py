@@ -1814,6 +1814,7 @@ class ModelTesterMixin:
             original_config,
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict.pop("labels", None)
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -1993,6 +1994,7 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:

@@ -788,6 +788,7 @@ class BlipVQAModelTester:
             "decoder_input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
+            "labels": input_ids,
         }
         return config, inputs_dict
 

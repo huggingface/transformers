@@ -1126,7 +1126,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         )
 
         if not return_dict:
-            outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (outputs[0], outputs[1]) if labels is not None else (outputs[0],)
+            outputs += (image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
         return BlipForConditionalGenerationModelOutput(
