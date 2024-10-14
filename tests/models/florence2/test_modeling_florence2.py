@@ -50,7 +50,6 @@ class Florence2VisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        ignore_index=-100,
         seq_length=7,
         text_config={
             "vocab_size": 51289,
@@ -110,7 +109,6 @@ class Florence2VisionText2TextModelTester:
         },
     ):
         self.parent = parent
-        self.ignore_index = ignore_index
         self.text_config = text_config
         self.vision_config = vision_config
         self.pad_token_id = text_config["pad_token_id"]
@@ -128,7 +126,6 @@ class Florence2VisionText2TextModelTester:
         return Florence2Config(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
         )
 
     def prepare_config_and_inputs(self):
