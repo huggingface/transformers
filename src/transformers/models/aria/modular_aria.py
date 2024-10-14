@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -11,13 +12,21 @@ from torch.nn.init import trunc_normal_
 from torchvision import transforms
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import TensorType
+from ...tokenization_utils import (
+    PaddingStrategy,
+    PreTokenizedInput,
+    TensorType,
+    TextInput,
+    TruncationStrategy,
+)
 from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
@@ -512,6 +521,7 @@ class AriaVisionProcessor(BaseImageProcessor):
             )
         return self._transform
 
+
     def __call__(
         self,
         images: Union[Image.Image, List[Image.Image]],
@@ -557,6 +567,7 @@ class AriaVisionProcessor(BaseImageProcessor):
                     - True (1) values indicate pixels that belong to the original resized image.
                     - False (0) values indicate pixels that are part of the padding.
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
+                - 'num_crops': Tensor of the number of crops for each image.
         """
         max_size = self.max_image_size if max_image_size is None else max_image_size
         min_size = self.min_image_size if min_image_size is None else min_image_size
@@ -569,9 +580,11 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         pixel_values = []
         pixel_masks = []
+        num_crops = []
 
         for image in images:
             crop_images = _split_image(image, split_image, split_ratio, max_size)
+            num_crops.append(torch.tensor(len(crop_images)))
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(
                     crop_image, max_size, min_size
@@ -584,6 +597,7 @@ class AriaVisionProcessor(BaseImageProcessor):
             data={
                 "pixel_values": torch.stack(pixel_values),
                 "pixel_mask": torch.stack(pixel_masks),
+                "num_crops": torch.stack(num_crops),
             },
             tensor_type=return_tensors,
         )
@@ -627,7 +641,21 @@ class AriaVisionProcessor(BaseImageProcessor):
         )
 
 
-class AriaProcessor(ProcessorMixin, LlavaNextProcessor):
+class AriaProcessor(ProcessorMixin):
+    """
+    AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
+    Args:
+        image_processor(AriaVisionProcessor): The AriaVisionProcessor to use for image preprocessing.
+        tokenizer(AutoTokenizer): The AutoTokenizer to use for tokenizing the text.
+        patch_size(int): The patch size to use for the image processor.
+        chat_template(str): The chat template to use for the tokenizer.
+        image_token(str): The image token to use for the tokenizer.
+    """
+
+    attributes = []
+    valid_kwargs = ["chat_template", "patch_size", "image_token"]
+    image_processor_class = None
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
@@ -656,6 +684,106 @@ class AriaProcessor(ProcessorMixin, LlavaNextProcessor):
 
         self.image_token = image_token
 
+    # Copied from transformers.models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
+    def __call__(
+        self,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
+        images: ImageInput = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
+        max_image_size: Optional[int] = 980,
+        split_image: Optional[bool] = False,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            max_image_size (`int`, *optional*):
+                Maximum size of the image to be processed.
+            split_image (`bool`, *optional*):
+                Whether to split the image into patches before processing.
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_mask** -- Pixel mask to be fed to a model. Returned when `images` is not `None`.
+        """
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
+
+        if images is not None:
+            image_inputs = self.image_processor(
+                images,
+                return_tensors=return_tensors,
+                max_image_size=max_image_size,
+                split_image=split_image,
+            )
+            # expand the image_token according to the num_crops of image
+            prompt_strings = []
+            crop_iter = iter(image_inputs.pop("num_crops"))
+            for prompt in text:
+                prompt_strings.append(
+                    re.sub(
+                        re.escape(self.image_token),
+                        lambda _: next(crop_iter) * self.image_token,
+                        prompt,
+                    )
+                )
+
+        else:
+            image_inputs = {}
+            prompt_strings = text
+
+        text_inputs = self.tokenizer(
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+        )
+
+        return BatchFeature(data={**text_inputs, **image_inputs})
 
     @staticmethod
     def _extract_kwargs(func: callable, **kwargs) -> dict:
@@ -725,6 +853,38 @@ class AriaProcessor(ProcessorMixin, LlavaNextProcessor):
             tokenizer=tokenizer,
             chat_template=chat_template,
         )
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        if self.tokenizer is None:
+            raise ValueError(
+                "Tokenizer is not initialized. Please provide a valid tokenizer."
+            )
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        if self.tokenizer is None:
+            raise ValueError(
+                "Tokenizer is not initialized. Please provide a valid tokenizer."
+            )
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
 
 
 class AriaTextConfig(LlamaConfig):
@@ -829,6 +989,92 @@ class AriaConfig(PretrainedConfig):
 
         self.text_config = text_config
 
+
+
+# copied from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/moe_utils.py#L101-L142
+class MoEAuxLossAutoScaler(torch.autograd.Function):
+    """An AutoScaler that compute and scales the grad for auxiliary loss."""
+
+    main_loss_backward_scale: torch.Tensor = torch.tensor(1.0)
+
+    @staticmethod
+    def forward(ctx, output: torch.Tensor, aux_loss: torch.Tensor):
+        """Preserve the aux_loss by storing it in the context to avoid garbage collection.
+
+        Args:
+            output (torch.Tensor): The output tensor.
+            aux_loss (torch.Tensor): The auxiliary loss tensor.
+
+        Returns:
+            torch.Tensor: The output tensor.
+        """
+        ctx.save_for_backward(aux_loss)
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        """Compute and scale the gradient for auxiliary loss..
+
+        Args:
+            grad_output (torch.Tensor): The gradient of the output.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: The gradient of the output, scaled auxiliary loss gradient.
+        """
+        (aux_loss,) = ctx.saved_tensors
+        aux_loss_backward_scale = MoEAuxLossAutoScaler.main_loss_backward_scale
+        scaled_aux_loss_grad = torch.ones_like(aux_loss) * aux_loss_backward_scale
+        return grad_output, scaled_aux_loss_grad
+
+    @staticmethod
+    def set_loss_scale(scale: torch.Tensor):
+        """set the scale of the aux loss.
+
+        Args:
+            scale (torch.Tensor): The scale value to set. Please ensure that the scale passed in matches the scale of the main_loss.
+        """
+        MoEAuxLossAutoScaler.main_loss_backward_scale = scale
+
+def z_loss_func(logits, z_loss_coeff):
+    """Encourages the router's logits to remain small to enhance stability.
+    Please refer to the ST-MoE paper (https://arxiv.org/pdf/2202.08906.pdf) for details.
+
+    Args:
+        logits (torch.Tensor): The logits of the router.
+
+    Returns:
+        torch.Tensor: The logits after applying the z-loss.
+    """
+
+    z_loss = torch.mean(torch.square(torch.logsumexp(logits, dim=-1))) * z_loss_coeff
+    return z_loss
+
+
+def switch_load_balancing_loss_func(
+    probs: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+    topk: int,
+    moe_aux_loss_coeff: float,
+):
+    """Calculate the auxiliary loss for better load balacing.
+    Please refer to the Switch Transformer paper (https://arxiv.org/abs/2101.03961) for details.
+
+    Args:
+        probs (torch.Tensor): The softmax probs output by the router for each token. [num_tokens, num_experts]
+        tokens_per_expert (torch.Tensor): The number of assigned tokens for each expert. [num_experts]
+
+    Returns:
+        torch.Tensor: The auxiliary loss for load balancing.
+    """
+    num_tokens = probs.shape[0] * topk
+    num_experts = probs.shape[1]
+
+    probs_mean_per_expert = probs.mean(dim=0)
+    aux_loss = torch.sum(probs_mean_per_expert * tokens_per_expert) * (
+        num_experts / num_tokens * moe_aux_loss_coeff
+    )
+    return aux_loss
+
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class TopKRouter(nn.Module):
     """
@@ -863,6 +1109,7 @@ class TopKRouter(nn.Module):
         logits = torch.nn.functional.linear(input, self.weight)
         return logits
 
+
     def routing(
         self, logits: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -893,6 +1140,47 @@ class TopKRouter(nn.Module):
         scores = self.apply_aux_loss(logits, tokens_per_expert, scores)
         return scores, top_indices, tokens_per_expert
 
+    def apply_z_loss(self, logits: torch.Tensor) -> torch.Tensor:
+        """
+        Apply z-loss to encourage router logits to remain small for enhanced stability.
+
+        Args:
+            logits (torch.Tensor): Router logits.
+
+        Returns:
+            torch.Tensor: Logits with z-loss applied.
+        """
+        z_loss = z_loss_func(logits, self.config.moe_z_loss_coeff)
+        logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
+        return logits
+
+
+    def apply_aux_loss(
+        self,
+        logits: torch.Tensor,
+        tokens_per_expert: torch.Tensor,
+        activation: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Apply auxiliary loss for load balancing among experts.
+
+        Args:
+            logits (torch.Tensor): Router logits.
+            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+            activation (torch.Tensor): Activation values.
+
+        Returns:
+            torch.Tensor: Activation with auxiliary loss applied.
+        """
+        probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
+        aux_loss = switch_load_balancing_loss_func(
+            probs,
+            tokens_per_expert,
+            self.config.moe_topk,
+            self.config.moe_aux_loss_coeff,
+        )
+        return MoEAuxLossAutoScaler.apply(activation, aux_loss)
+
     def forward(
         self, input: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -912,7 +1200,6 @@ class TopKRouter(nn.Module):
         logits = logits.view(-1, self.config.moe_num_experts)
         scores, top_indices, tokens_per_expert = self.routing(logits)
         return scores, top_indices, tokens_per_expert
-
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class TokenDispatcher:
@@ -1209,24 +1496,24 @@ class AriaForCausalLM(LlamaForCausalLM):
     allowing for more efficient and scalable language modeling.
 
     Args:
-        config (AriaConfig): Configuration object for the model.
+        config (AriaTextConfig): Configuration object for the model.
     """
 
     _tied_weights_keys = ["lm_head.weight"]
     config_class = AriaTextConfig
-    _no_split_modules = ["MoEDecoderLayer"]
+    _no_split_modules = ["AriaDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = AriaTextModel(config)
-        # self.vocab_size = config.vocab_size
-        # self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
 
-class AriaPreTrainedModel(LlamaPreTrainedModel):
+class AriaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
@@ -1253,7 +1540,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 # adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGeneration):
+class AriaForConditionalGeneration(AriaPreTrainedModel):
     """
     Aria model for conditional generation tasks.
 
@@ -1275,11 +1562,149 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGener
         )
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.pad_token_id = (
-            self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        )
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+
+    def get_input_embeddings(self) -> nn.Module:
+        """Retrieve the input embeddings from the language model."""
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        """Set the input embeddings for the language model."""
+        self.language_model.set_input_embeddings(value)
+
+    # copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
+    def _merge_input_ids_with_image_features(
+        self, image_features, inputs_embeds, input_ids, attention_mask, labels
+    ):
+        """
+        Merge input IDs with image features to create a combined input representation.
+
+        This method handles the complex logic of interleaving text and image tokens,
+        adjusting attention masks and labels accordingly.
+
+        Args:
+            image_features (torch.Tensor): Processed image features.
+            inputs_embeds (torch.Tensor): Text input embeddings.
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for input tokens.
+            labels (torch.Tensor, optional): Labels for language modeling.
+
+        Returns:
+            tuple: Contains the merged embeddings, updated attention mask,
+                   updated labels, and position IDs.
+        """
+        num_images, num_image_patches, embed_dim = image_features.shape
+        batch_size, sequence_length = input_ids.shape
+        left_padding = not torch.sum(
+            input_ids[:, -1] == torch.tensor(self.pad_token_id)
+        )
+        # 1. Create a mask to know where special image tokens are
+        special_image_token_mask = input_ids == self.config.image_token_index
+        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+        # Compute the maximum embed dimension
+        max_embed_dim = (
+            num_special_image_tokens.max() * (num_image_patches - 1)
+        ) + sequence_length
+        batch_indices, non_image_indices = torch.where(
+            input_ids != self.config.image_token_index
+        )
+
+        # 2. Compute the positions where text should be written
+        # Calculate new positions for text tokens in merged image-text sequence.
+        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
+        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
+        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
+        new_token_positions = (
+            torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1)
+            - 1
+        )
+        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
+        if left_padding:
+            new_token_positions += nb_image_pad[:, None]  # offset for left padding
+        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
+
+        # 3. Create the full embedding, already padded to the maximum position
+        final_embedding = torch.zeros(
+            batch_size,
+            max_embed_dim,
+            embed_dim,
+            dtype=inputs_embeds.dtype,
+            device=inputs_embeds.device,
+        )
+        final_attention_mask = torch.zeros(
+            batch_size,
+            max_embed_dim,
+            dtype=attention_mask.dtype,
+            device=inputs_embeds.device,
+        )
+        if labels is not None:
+            final_labels = torch.full(
+                (batch_size, max_embed_dim),
+                self.config.ignore_index,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
+            )
+        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
+        # set the corresponding tensors into their correct target device.
+        target_device = inputs_embeds.device
+        batch_indices, non_image_indices, text_to_overwrite = (
+            batch_indices.to(target_device),
+            non_image_indices.to(target_device),
+            text_to_overwrite.to(target_device),
+        )
+        attention_mask = attention_mask.to(target_device)
+
+        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
+        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
+        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[
+            batch_indices, non_image_indices
+        ]
+        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[
+            batch_indices, non_image_indices
+        ]
+        if labels is not None:
+            final_labels[batch_indices, text_to_overwrite] = labels[
+                batch_indices, non_image_indices
+            ]
+
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        image_to_overwrite = torch.full(
+            (batch_size, max_embed_dim),
+            True,
+            dtype=torch.bool,
+            device=inputs_embeds.device,
+        )
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
+        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[
+            :, None
+        ].to(target_device)
+
+        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+            raise ValueError(
+                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
+                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
+            )
+
+        final_embedding[image_to_overwrite] = (
+            image_features.contiguous().reshape(-1, embed_dim).to(target_device)
+        )
+        final_attention_mask |= image_to_overwrite
+        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(
+            (final_attention_mask == 0), 1
+        )
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
+
+        if labels is None:
+            final_labels = None
+
+        return final_embedding, final_attention_mask, final_labels, position_ids
 
     def forward(
         self,
@@ -1296,6 +1721,29 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGener
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
+        """
+        Forward pass of the AriaForConditionalGeneration model.
+
+        This method processes both text and image inputs, merges them if necessary,
+        and generates output using the language model.
+
+        Args:
+            input_ids (torch.LongTensor, optional): Input token ids.
+            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
+            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            position_ids (torch.LongTensor, optional): Position ids.
+            past_key_values (List[torch.FloatTensor], optional): Past key values for efficient processing.
+            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+            labels (torch.LongTensor, optional): Labels for computing the language modeling loss.
+            use_cache (bool, optional): Whether to use the model's cache mechanism.
+            output_attentions (bool, optional): Whether to output attention weights.
+            output_hidden_states (bool, optional): Whether to output hidden states.
+            return_dict (bool, optional): Whether to return a ModelOutput object.
+
+        Returns:
+            Union[Tuple, AriaCausalLMOutputWithPast]: Model outputs.
+        """
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -1325,7 +1773,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGener
                 image_features = self.multi_modal_projector(
                     selected_image_feature, attn_mask=image_attn_mask
                 )
-                # TODO: use non-legacy path
+
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
                 (
                     inputs_embeds,
@@ -1423,3 +1871,87 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, LlavaForConditionalGener
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_mask=None,
+        attention_mask=None,
+        **kwargs,
+    ):
+        """
+        Prepare inputs for generation step.
+
+        This method prepares the inputs for the generation step, handling both
+        text and image inputs, and managing the model's cache mechanism.
+
+        Args:
+            input_ids (torch.LongTensor): Input token ids.
+            past_key_values (Cache or List[torch.FloatTensor], optional): Past key values for efficient processing.
+            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
+            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict: A dictionary containing the prepared inputs for the generation step.
+        """
+        if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+            else:
+                cache_length = past_length = past_key_values[0][0].shape[2]
+
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if (
+                attention_mask is not None
+                and attention_mask.shape[1] > input_ids.shape[1]
+            ):
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            elif self.config.image_token_index in input_ids:
+                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
+            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
+            # older attention values, as their corresponding values are not part of the input.
+            if cache_length < past_length and attention_mask is not None:
+                attention_mask = attention_mask[
+                    :, -(cache_length + input_ids.shape[1]) :
+                ]
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "pixel_mask": pixel_mask,
+            }
+        )
+        return model_inputs

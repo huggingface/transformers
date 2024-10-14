@@ -33,7 +33,7 @@ from ...utils import (
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaVisionConfig
 from .processing_utils import experts_gemm
-
+from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -56,20 +56,29 @@ from ...utils import (
 from .configuration_aria import AriaTextConfig
 
 
-ARIA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
 
-    Parameters:
-        config ([`AriaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
+
+
 
 class IdentityOp(torch.nn.Module):
     """
@@ -171,48 +180,6 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
             tensor.uniform_(-bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
-
-
-
-@add_start_docstrings(
-    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
-    ARIA_START_DOCSTRING,
-)
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
-
 
 
 class AriaAttention(nn.Module):
@@ -711,6 +678,22 @@ class AriaVisionMLP(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
+
+ARIA_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AriaConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 class AriaEncoderLayer(nn.Module):
@@ -1221,6 +1204,90 @@ class AriaProjector(nn.Module):
         return out
 
 
+# copied from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/moe_utils.py#L101-L142
+class MoEAuxLossAutoScaler(torch.autograd.Function):
+    """An AutoScaler that compute and scales the grad for auxiliary loss."""
+
+    main_loss_backward_scale: torch.Tensor = torch.tensor(1.0)
+
+    @staticmethod
+    def forward(ctx, output: torch.Tensor, aux_loss: torch.Tensor):
+        """Preserve the aux_loss by storing it in the context to avoid garbage collection.
+
+        Args:
+            output (torch.Tensor): The output tensor.
+            aux_loss (torch.Tensor): The auxiliary loss tensor.
+
+        Returns:
+            torch.Tensor: The output tensor.
+        """
+        ctx.save_for_backward(aux_loss)
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        """Compute and scale the gradient for auxiliary loss..
+
+        Args:
+            grad_output (torch.Tensor): The gradient of the output.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: The gradient of the output, scaled auxiliary loss gradient.
+        """
+        (aux_loss,) = ctx.saved_tensors
+        aux_loss_backward_scale = MoEAuxLossAutoScaler.main_loss_backward_scale
+        scaled_aux_loss_grad = torch.ones_like(aux_loss) * aux_loss_backward_scale
+        return grad_output, scaled_aux_loss_grad
+
+    @staticmethod
+    def set_loss_scale(scale: torch.Tensor):
+        """set the scale of the aux loss.
+
+        Args:
+            scale (torch.Tensor): The scale value to set. Please ensure that the scale passed in matches the scale of the main_loss.
+        """
+        MoEAuxLossAutoScaler.main_loss_backward_scale = scale
+
+def z_loss_func(logits, z_loss_coeff):
+    """Encourages the router's logits to remain small to enhance stability.
+    Please refer to the ST-MoE paper (https://arxiv.org/pdf/2202.08906.pdf) for details.
+
+    Args:
+        logits (torch.Tensor): The logits of the router.
+
+    Returns:
+        torch.Tensor: The logits after applying the z-loss.
+    """
+
+    z_loss = torch.mean(torch.square(torch.logsumexp(logits, dim=-1))) * z_loss_coeff
+    return z_loss
+
+
+def switch_load_balancing_loss_func(
+    probs: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+    topk: int,
+    moe_aux_loss_coeff: float,
+):
+    """Calculate the auxiliary loss for better load balacing.
+    Please refer to the Switch Transformer paper (https://arxiv.org/abs/2101.03961) for details.
+
+    Args:
+        probs (torch.Tensor): The softmax probs output by the router for each token. [num_tokens, num_experts]
+        tokens_per_expert (torch.Tensor): The number of assigned tokens for each expert. [num_experts]
+
+    Returns:
+        torch.Tensor: The auxiliary loss for load balancing.
+    """
+    num_tokens = probs.shape[0] * topk
+    num_experts = probs.shape[1]
+
+    probs_mean_per_expert = probs.mean(dim=0)
+    aux_loss = torch.sum(probs_mean_per_expert * tokens_per_expert) * (
+        num_experts / num_tokens * moe_aux_loss_coeff
+    )
+    return aux_loss
+
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class TopKRouter(nn.Module):
     """
@@ -1237,7 +1304,9 @@ class TopKRouter(nn.Module):
         super().__init__()
         self.config = config
 
-        self.weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
+        self.weight = nn.Parameter(
+            torch.empty((self.config.moe_num_experts, self.config.hidden_size))
+        )
         # FIXME: initialize the weight
 
     def gating(self, input: torch.Tensor) -> torch.Tensor:
@@ -1253,7 +1322,10 @@ class TopKRouter(nn.Module):
         logits = torch.nn.functional.linear(input, self.weight)
         return logits
 
-    def routing(self, logits: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+    def routing(
+        self, logits: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Perform the routing operation to determine expert assignments.
 
@@ -1281,7 +1353,50 @@ class TopKRouter(nn.Module):
         scores = self.apply_aux_loss(logits, tokens_per_expert, scores)
         return scores, top_indices, tokens_per_expert
 
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def apply_z_loss(self, logits: torch.Tensor) -> torch.Tensor:
+        """
+        Apply z-loss to encourage router logits to remain small for enhanced stability.
+
+        Args:
+            logits (torch.Tensor): Router logits.
+
+        Returns:
+            torch.Tensor: Logits with z-loss applied.
+        """
+        z_loss = z_loss_func(logits, self.config.moe_z_loss_coeff)
+        logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
+        return logits
+
+
+    def apply_aux_loss(
+        self,
+        logits: torch.Tensor,
+        tokens_per_expert: torch.Tensor,
+        activation: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Apply auxiliary loss for load balancing among experts.
+
+        Args:
+            logits (torch.Tensor): Router logits.
+            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+            activation (torch.Tensor): Activation values.
+
+        Returns:
+            torch.Tensor: Activation with auxiliary loss applied.
+        """
+        probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
+        aux_loss = switch_load_balancing_loss_func(
+            probs,
+            tokens_per_expert,
+            self.config.moe_topk,
+            self.config.moe_aux_loss_coeff,
+        )
+        return MoEAuxLossAutoScaler.apply(activation, aux_loss)
+
+    def forward(
+        self, input: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass of the TopKRouter.
 
@@ -1298,6 +1413,7 @@ class TopKRouter(nn.Module):
         logits = logits.view(-1, self.config.moe_num_experts)
         scores, top_indices, tokens_per_expert = self.routing(logits)
         return scores, top_indices, tokens_per_expert
+
 
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
@@ -1684,7 +1800,7 @@ class AriaDecoderLayer(nn.Module):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = ARIA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -2740,12 +2856,12 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
     allowing for more efficient and scalable language modeling.
 
     Args:
-        config (AriaConfig): Configuration object for the model.
+        config (AriaTextConfig): Configuration object for the model.
     """
 
     _tied_weights_keys = ["lm_head.weight"]
     config_class = AriaTextConfig
-    _no_split_modules = ["MoEDecoderLayer"]
+    _no_split_modules = ["AriaDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2918,11 +3034,8 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-@add_start_docstrings(
-    """The ARIA model which consists of a vision backbone and a language model.""",
-    ARIA_START_DOCSTRING,
-)
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
+# adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
+class AriaForConditionalGeneration(AriaPreTrainedModel):
     """
     Aria model for conditional generation tasks.
 
@@ -2947,50 +3060,33 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Module:
+        """Retrieve the input embeddings from the language model."""
         return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
+        """Set the input embeddings for the language model."""
         self.language_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
-
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
-    ):
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
-        else:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
-        image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
-
+    # copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        """
+        Merge input IDs with image features to create a combined input representation.
+
+        This method handles the complex logic of interleaving text and image tokens,
+        adjusting attention masks and labels accordingly.
+
+        Args:
+            image_features (torch.Tensor): Processed image features.
+            inputs_embeds (torch.Tensor): Text input embeddings.
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for input tokens.
+            labels (torch.Tensor, optional): Labels for language modeling.
+
+        Returns:
+            tuple: Contains the merged embeddings, updated attention mask,
+                   updated labels, and position IDs.
+        """
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -3014,14 +3110,24 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         # 3. Create the full embedding, already padded to the maximum position
         final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+            batch_size,
+            max_embed_dim,
+            embed_dim,
+            dtype=inputs_embeds.dtype,
+            device=inputs_embeds.device,
         )
         final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
+            batch_size,
+            max_embed_dim,
+            dtype=attention_mask.dtype,
+            device=inputs_embeds.device,
         )
         if labels is not None:
             final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+                (batch_size, max_embed_dim),
+                self.config.ignore_index,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
             )
         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
         # set the corresponding tensors into their correct target device.
@@ -3042,7 +3148,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
         image_to_overwrite = torch.full(
-            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+            (batch_size, max_embed_dim),
+            True,
+            dtype=torch.bool,
+            device=inputs_embeds.device,
         )
         image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
@@ -3068,8 +3177,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3085,42 +3192,29 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
-        r"""
+        """
+        Forward pass of the AriaForConditionalGeneration model.
+
+        This method processes both text and image inputs, merges them if necessary,
+        and generates output using the language model.
+
         Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
+            input_ids (torch.LongTensor, optional): Input token ids.
+            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
+            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            position_ids (torch.LongTensor, optional): Position ids.
+            past_key_values (List[torch.FloatTensor], optional): Past key values for efficient processing.
+            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+            labels (torch.LongTensor, optional): Labels for computing the language modeling loss.
+            use_cache (bool, optional): Whether to use the model's cache mechanism.
+            output_attentions (bool, optional): Whether to output attention weights.
+            output_hidden_states (bool, optional): Whether to output hidden states.
+            return_dict (bool, optional): Whether to return a ModelOutput object.
 
         Returns:
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, AriaForConditionalGeneration
-
-        >>> model = AriaForConditionalGeneration.from_pretrained("aria-hf/aria-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("aria-hf/aria-1.5-7b-hf")
-
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
-        ```"""
+            Union[Tuple, AriaCausalLMOutputWithPast]: Model outputs.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -3140,7 +3234,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 selected_image_feature = image_outputs.last_hidden_state
 
                 image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-                # TODO: use non-legacy path
+
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
                 (
                     inputs_embeds,
@@ -3233,30 +3327,75 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
+        pixel_mask=None,
         attention_mask=None,
-        cache_position=None,
-        num_logits_to_keep=None,
         **kwargs,
     ):
-        # Trigger the new behavior if we have more than image embeddings seq length tokens for images
-        legacy_processing = (
-            input_ids is not None
-            and (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
+        """
+        Prepare inputs for generation step.
+
+        This method prepares the inputs for the generation step, handling both
+        text and image inputs, and managing the model's cache mechanism.
+
+        Args:
+            input_ids (torch.LongTensor): Input token ids.
+            past_key_values (Cache or List[torch.FloatTensor], optional): Past key values for efficient processing.
+            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
+            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict: A dictionary containing the prepared inputs for the generation step.
+        """
+        if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+            else:
+                cache_length = past_length = past_key_values[0][0].shape[2]
+
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            elif self.config.image_token_index in input_ids:
+                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
+            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
+            # older attention values, as their corresponding values are not part of the input.
+            if cache_length < past_length and attention_mask is not None:
+                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "pixel_mask": pixel_mask,
+            }
         )
-
-        model_inputs = self.language_model.prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
-            **kwargs,
-        )
-
-        if legacy_processing or cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-
         return model_inputs
