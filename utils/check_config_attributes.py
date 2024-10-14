@@ -132,6 +132,11 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
     "MllamaTextConfig": [
         "initializer_range",
     ],
@@ -238,6 +243,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_index",  # for VLMs
         "image_size",
         "use_cache",
         "out_features",

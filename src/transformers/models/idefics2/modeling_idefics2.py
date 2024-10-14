@@ -34,7 +34,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1584,7 +1583,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         ...   "In which city is that bridge located?<image>",
         ... ]
         >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to("cuda")
+        >>> inputs = processor(images=images, text=prompts, padding=True, return_tensors="pt").to("cuda")
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=20)
@@ -1617,13 +1616,8 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         )
 
         hidden_states = outputs[0]
-        if labels is None and not is_torchdynamo_compiling():
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        # TODO: remove the float() operation in v4.46
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
         if labels is not None:
@@ -1632,7 +1626,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
@@ -1669,7 +1665,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         if past_key_values is not None:
             # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
             past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_length()
+            max_cache_length = past_key_values.get_max_cache_shape()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where

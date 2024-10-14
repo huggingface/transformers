@@ -345,7 +345,6 @@ class GPT2Converter(Converter):
             )
         )
 
-        add_prefix_space = False
         add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()

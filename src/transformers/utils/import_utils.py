@@ -143,7 +143,14 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quanto_available = _is_package_available("quanto")
-_compressed_tensors_available = _is_package_available("compressed_tensors")
+_is_optimum_quanto_available = False
+try:
+    importlib.metadata.version("optimum_quanto")
+    _is_optimum_quanto_available = True
+except importlib.metadata.PackageNotFoundError:
+    _is_optimum_quanto_available = False
+# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
+_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -962,7 +969,15 @@ def is_auto_awq_available():
 
 
 def is_quanto_available():
+    logger.warning_once(
+        "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
+    )
     return _quanto_available
+
+
+def is_optimum_quanto_available():
+    # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
+    return _is_optimum_quanto_available
 
 
 def is_compressed_tensors_available():
@@ -1736,9 +1751,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._modules:
-            value = self._get_module(name)
-        elif name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend.keys():
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -1754,6 +1767,8 @@ class _LazyModule(ModuleType):
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
+        elif name in self._modules:
+            value = self._get_module(name)
         else:
             raise AttributeError(f"module {self.__name__} has no attribute {name}")
 

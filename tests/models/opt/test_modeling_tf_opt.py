@@ -66,6 +66,7 @@ class TFOPTModelTester:
         bos_token_id=0,
         embed_dim=16,
         word_embed_proj_dim=16,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,6 +88,7 @@ class TFOPTModelTester:
         self.embed_dim = embed_dim
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -108,6 +110,7 @@ class TFOPTModelTester:
             embed_dim=self.embed_dim,
             word_embed_proj_dim=self.word_embed_proj_dim,
             is_encoder_decoder=False,
+            attn_implementation=self.attn_implementation,
             **self.config_updates,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)

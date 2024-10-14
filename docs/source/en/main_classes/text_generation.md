@@ -45,17 +45,17 @@ like token streaming.
 
 ## GenerationMixin
 
-[[autodoc]] generation.GenerationMixin
+[[autodoc]] GenerationMixin
 	- generate
 	- compute_transition_scores
 
 ## TFGenerationMixin
 
-[[autodoc]] generation.TFGenerationMixin
+[[autodoc]] TFGenerationMixin
 	- generate
 	- compute_transition_scores
 
 ## FlaxGenerationMixin
 
-[[autodoc]] generation.FlaxGenerationMixin
+[[autodoc]] FlaxGenerationMixin
 	- generate
