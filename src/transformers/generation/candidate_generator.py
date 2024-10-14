@@ -271,8 +271,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
-        # Adjust the assistant confidence threshold in order to minimize the cost of errors,
-        # using the ROC curve and the cost of false positives (1) and false negatives (3).
+        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
         if self.assistant_model.generation_config.assistant_confidence_threshold:
             # update self.matches
             self.matches.extend([1] * num_matches)
