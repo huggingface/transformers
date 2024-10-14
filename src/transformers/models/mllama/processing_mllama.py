@@ -302,7 +302,7 @@ class MllamaProcessor(ProcessorMixin):
                     raise ValueError("No image were provided, but there are image tokens in the prompt")
                 else:
                     raise ValueError(
-                        f"The number of image token ({sum(n_images_in_images)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
+                        f"The number of image token ({sum(n_images_in_text)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
                     )
 
         if images is not None:
