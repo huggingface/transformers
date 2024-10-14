@@ -321,6 +321,12 @@ class IdeficsModelTester:
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_generate(self):
+        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
@@ -764,6 +770,10 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):
+        pass
+
+    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
+    def test_generate_compile_fullgraph(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")

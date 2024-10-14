@@ -363,6 +363,10 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
+    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_decoder_only(self):
         # overwrite because IDEFICS needs ids and embeds at the input to be not None
