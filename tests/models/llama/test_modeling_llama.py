@@ -24,10 +24,12 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -110,7 +112,7 @@ class LlamaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -316,6 +318,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     # used in `test_torch_compile`
     _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
+
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
@@ -768,7 +773,14 @@ class LlamaIntegrationTest(unittest.TestCase):
             8: torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
         }
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(
+            torch.allclose(
+                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
+                out.logits.float().mean(-1),
+                atol=1e-2,
+                rtol=1e-2
+            )
+        )
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = {
@@ -780,7 +792,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
+                out.logits[0, 0, :15].float(),
                 atol=1e-2,
                 rtol=1e-2,
             )
@@ -805,7 +817,14 @@ class LlamaIntegrationTest(unittest.TestCase):
             8: torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]])
         }
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(
+            torch.allclose(
+                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
+                out.logits.float().mean(-1),
+                atol=1e-2,
+                rtol=1e-2
+            )
+        )
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = {
@@ -817,7 +836,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
+                out.logits[0, 0, :15].float(),
                 atol=1e-2,
                 rtol=1e-2,
             )
@@ -872,7 +891,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -899,11 +918,11 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def setUp(self):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"

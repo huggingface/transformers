@@ -175,15 +175,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
-
-        # Set the splitting mode for special tokens for the tokenizer to be used throughout the class.
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
-        # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
-        # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
-        # uses the information stored in `added_tokens_decoder`.
-        # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
-        # Use hash to speed up the very slow operation `token not in added_tokens_decoder`.
         added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
         tokens_to_add = [
             token
@@ -197,10 +190,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         ]
 
         if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
             tokens = []
             special_tokens = self.all_special_tokens
             for token in tokens_to_add:
@@ -209,14 +198,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if isinstance(token, AddedToken)
                     else str(token) in special_tokens
                 )
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
+                if isinstance(token, str):
+                    token = AddedToken(token, special=is_special)
                 else:
-                    self._add_tokens(tokens, special_tokens=is_last_special)
-                    tokens = [token]
-                is_last_special = is_special
+                    token.special = is_special
+                tokens.append(token)
             if tokens:
-                self._add_tokens(tokens, special_tokens=is_last_special)
+                self.add_tokens(tokens)
 
     @property
     def is_fast(self) -> bool:
@@ -429,6 +417,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         max_length: int,
         stride: int,
         pad_to_multiple_of: Optional[int],
+        padding_side: Optional[bool],
     ):
         """
         Define the truncation and the padding strategies for fast tokenizers (provided by HuggingFace tokenizers
@@ -450,6 +439,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
+            padding_side (`str`, *optional*):
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
         """
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
@@ -484,7 +476,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
             target = {
                 "length": length,
-                "direction": self.padding_side,
+                "direction": padding_side if padding_side is not None else self.padding_side,
                 "pad_id": self.pad_token_id,
                 "pad_token": self.pad_token,
                 "pad_type_id": self.pad_token_type_id,
@@ -505,6 +497,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -527,6 +520,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
         )
 
         if self._tokenizer.encode_special_tokens != split_special_tokens:
@@ -593,6 +587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -614,6 +609,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -816,7 +812,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
-        if tokenizer_json["pre_tokenizer"] is not None and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
+        if (
+            tokenizer_json["pre_tokenizer"] is not None
+            and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
+            or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
+            and "pretokenizers" in tokenizer_json["pre_tokenizer"]
+            and any(
+                pretokenizer["type"] == "ByteLevel"
+                for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
+            )
+        ):
             kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
@@ -832,6 +837,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None:
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
                     post_processor["special_tokens"][key]["tokens"] = tokens
+                    for token in tokens:
+                        token_id = tokenizer.token_to_id(token)
+                        if token_id is None:
+                            raise ValueError(
+                                "Attempted to set a token in the post processor that does not exist in the mapping"
+                            )
+
                     post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
             for special_token in ["cls", "sep"]:
@@ -840,6 +852,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None and token in special_tokens_map:
                         token = special_tokens_map[token]
                     token_id = tokenizer.token_to_id(token)
+                    if token_id is None:
+                        raise ValueError(
+                            "Attempted to set a token in the post processor that does not exist in the mapping"
+                        )
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor

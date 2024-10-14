@@ -69,6 +69,7 @@ deps = {
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.4.1",
     "sagemaker": "sagemaker>=2.31.0",
+    "schedulefree": "schedulefree>=1.2.6",
     "scikit-learn": "scikit-learn",
     "scipy": "scipy<1.13.0",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
@@ -85,7 +86,7 @@ deps = {
     "timeout-decorator": "timeout-decorator",
     "tiktoken": "tiktoken",
     "timm": "timm<=0.9.16",
-    "tokenizers": "tokenizers>=0.19,<0.20",
+    "tokenizers": "tokenizers>=0.20,<0.21",
     "torch": "torch",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
@@ -96,4 +97,6 @@ deps = {
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
     "pytest-rich": "pytest-rich",
+    "libcst": "libcst",
+    "rich": "rich",
 }

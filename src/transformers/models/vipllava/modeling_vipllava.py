@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -40,7 +41,7 @@ _CONFIG_FOR_DOC = "VipLlavaConfig"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VipLlava
+# Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->VipLlava
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for VipLlava causal language model (or autoregressive) outputs.
@@ -67,11 +68,9 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -79,7 +78,7 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class VipLlavaMultiModalProjector(nn.Module):
@@ -242,7 +241,7 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
-class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
+class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -282,6 +281,17 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
+
+    # Ignore copy
+    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: List[int]):
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+
+        # For VIP-llava, the image features are computed this way
+        # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
+        image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+        image_features = torch.cat(image_features, dim=-1)
+        image_features = self.multi_modal_projector(image_features)
+        return image_features
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
@@ -431,9 +441,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -452,13 +460,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-
-            # For VIP-llava, the image features are computed this way
-            # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
-            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
-            image_features = torch.cat(image_features, dim=-1)
-            image_features = self.multi_modal_projector(image_features)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
+            )
 
             if legacy_processing:
                 logger.warning_once(
@@ -471,6 +475,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                         image_features, inputs_embeds, input_ids, attention_mask, labels
                     )
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
@@ -500,11 +505,17 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[
+                        -target_length:
+                    ]
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -528,7 +539,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -550,6 +561,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def prepare_inputs_for_generation(
@@ -579,9 +591,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             **kwargs,
         )
 
-        if legacy_processing:
-            model_inputs["pixel_values"] = pixel_values
-        elif cache_position[0] == 0:
+        if legacy_processing or cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values
