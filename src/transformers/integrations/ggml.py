@@ -176,6 +176,20 @@ GGUF_TENSOR_MAPPING = {
         "ffn_up": "mlp.c_fc",
         "ffn_down": "mlp.c_proj",
     },
+    "starcoder2": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
 }
 
 
@@ -291,6 +305,15 @@ GGUF_CONFIG_MAPPING = {
         "feed_forward_length": "feed_forward_length",
         "attention.head_count": "n_head",
         "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "starcoder2": {
+        "block_count": "num_hidden_layers",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "feed_forward_length": "intermediate_size",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "norm_epsilon",
     },
 }
 
@@ -622,6 +645,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "falcon": GGUFGPTConverter,
     "stablelm": GGUFGPTConverter,
     "gpt2": GGUFGPTConverter,
+    "starcoder2": GGUFGPTConverter,
 }
 
 
