@@ -22,7 +22,8 @@ from transformers.cache_utils import Cache, DynamicCache, StaticCache
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.modeling_outputs import (
-    CausalLMOutputWithPast, ModelOutput, BaseModelOutputWithPast)
+    CausalLMOutputWithPast, ModelOutput, BaseModelOutputWithPast, MoeModelOutputWithPast,
+    MoeCausalLMOutputWithPast)
 from transformers.models.auto import AutoModelForCausalLM
 from torch import nn
 from transformers.utils import logging, is_flash_attn_greater_or_equal_2_10, \
@@ -52,6 +53,89 @@ MOLMO_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
+# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Olmo
@@ -156,7 +240,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class MolmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    # copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Molmo
     def __init__(self, config: MolmoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -526,6 +610,7 @@ class MolmoDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        output_router_logits: bool = False,
         cache_position=None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         if not self.config.norm_after:
@@ -567,6 +652,9 @@ class MolmoDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+
+        if output_router_logits:
+            outputs += (None,)
 
         return outputs
 
@@ -632,11 +720,7 @@ class MolmoeMlpExpert(nn.Module):
 
 
 class MolmoeDecoderLayer(nn.Module):
-    """Decoder for MolmoE with MoE MLP layers
-
-    Note this layers does not expose the router logits, so it is suitable for inference but no
-    for training.
-    """
+    """Decoder for MolmoE with MoE MLP layers"""
 
     def __init__(self, config: MolmoConfig, layer_idx=None):
         super().__init__()
@@ -657,6 +741,7 @@ class MolmoeDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        output_router_logits: bool = None,
         cache_position=None
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         if not self.config.norm_after:
@@ -664,13 +749,13 @@ class MolmoeDecoderLayer(nn.Module):
         else:
             atten_in = x
 
-        att, cache = self.attn(
+        att, self_attn_weights, cache = self.attn(
             atten_in,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_value,
+            past_key_value=past_key_value,
             use_cache=use_cache,
-            cache_position=cache_position
+            cache_position=cache_position,
         )
 
         if self.config.norm_after:
@@ -682,14 +767,26 @@ class MolmoeDecoderLayer(nn.Module):
         if not self.config.norm_after:
             x = self.ff_norm(x)
 
-        x, _ = self.mlp(x)
+        x, router_logits = self.mlp(x)
 
         if self.config.norm_after:
             x = self.ff_norm(x)
 
         x = self.dropout(x)
         x = og_x + x
-        return x, cache
+
+        outputs = (x,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (cache,)
+
+        if output_router_logits:
+            outputs += (router_logits,)
+
+        return outputs
 
 
 class MolmoEmbedding(nn.Module):
@@ -969,12 +1066,13 @@ class MolmoVisionBackbone(nn.Module):
 
         self.image_projector = MolmoImageProjector(
             config.vision_config.image_emb_dim,
-            config.intermediate_size//2,  # //2 since `mlp_hidden_size` includes the gate and parts
+            # //2 since `mlp_hidden_size` includes the gate and proj, but this does not have
+            # gated activations
+            config.intermediate_size//2,
             config.hidden_size,
             act_fn=config.activation_type
         )
         self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
-        self.num_prefix_tokens = 1
 
         self.pad_embed = None
         if config.image_padding_embed:
@@ -1004,10 +1102,8 @@ class MolmoVisionBackbone(nn.Module):
         else:
             image_features = image_features[-1]
 
-        cls_embed: torch.Tensor = None
-        if self.num_prefix_tokens > 0:
-            cls_embed = image_features[:, 0]
-            image_features = image_features[:, 1:]
+        cls_embed = image_features[:, 0]
+        image_features = image_features[:, 1:]
 
         image_features = image_features * mask
         image_features = image_features.view(B, T, N, -1)
@@ -1121,14 +1217,15 @@ MOLMO_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
             
             [What are input IDs?](../glossary#input-ids)
-        images (`torch.FloatTensor` of shape `(batch_size, n_crops, n_patches, n_features)`, *optional*):
+        images (`torch.FloatTensor` of shape `(batch_size, n_crops, 24*24, 3*3*13)`, *optional*):
             The input crops in with pixel values between 0 and 1 and normalized with CLIP mean/std
             
             Each crop contains 24x24 patches with 14*14*3 pixel values
         image_masks  (`torch.FloatTensor` of shape `(batch_size, n_crops, n_patches, n_features)`, *optional*):
             Image masks showing what percent of each patch is paddding
         image_input_idx  (`torch.LongTensor` of shape `(batch_size, n_crops)`):
-            For each patch, the token index to add its features to, -1 to ignore the patch            
+            For each patch, the index in `input_ids` to add its features to, values <= 0 
+            means ignore the patch            
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1185,6 +1282,9 @@ MOLMO_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+            and should not be returned during inference.            
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
@@ -1284,6 +1384,7 @@ class MolmoModel(MolmoPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -1338,6 +1439,7 @@ class MolmoModel(MolmoPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
@@ -1352,6 +1454,7 @@ class MolmoModel(MolmoPreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
+                    output_router_logits,
                     use_cache,
                     cache_position,
                 )
@@ -1362,6 +1465,7 @@ class MolmoModel(MolmoPreTrainedModel):
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
                     use_cache=use_cache,
                     cache_position=cache_position,
                 )
@@ -1374,6 +1478,9 @@ class MolmoModel(MolmoPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+            if output_router_logits and layer_outputs[-1] is not None:
+                all_router_logits += (layer_outputs[-1],)
+
         hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -1385,13 +1492,22 @@ class MolmoModel(MolmoPreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits] if v is not None)
+        if self.config.moe_num_experts == 0:
+            return BaseModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+            )
+        else:
+            return MoeModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+                router_logits=all_router_logits,
+            )
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
@@ -1452,7 +1568,7 @@ class MolmoModel(MolmoPreTrainedModel):
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # using left padding. This is required by F.scaled_dot_product_attention memory-eff icient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
@@ -1563,6 +1679,7 @@ class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1618,6 +1735,7 @@ class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
         )
@@ -1646,17 +1764,41 @@ class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits if return_dict else outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        if output_router_logits:
+            return MoeCausalLMOutputWithPast(
+                loss=loss,
+                aux_loss=aux_loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states,
+                attentions=outputs.attentions,
+                router_logits=outputs.router_logits,
+            )
+        else:
+            return CausalLMOutputWithPast(
+                loss=loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states,
+                attentions=outputs.attentions,
+            )
 
     def _update_model_kwargs_for_generation(
         self,
