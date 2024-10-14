@@ -115,7 +115,6 @@ _import_structure = {
     "data.metrics": [],
     "data.processors": [],
     "debug_utils": [],
-    "deepspeed": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
@@ -608,6 +607,7 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.myt5": ["MyT5Tokenizer"],
     "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
@@ -969,6 +969,7 @@ _import_structure = {
     "utils.quantization_config": [
         "AqlmConfig",
         "AwqConfig",
+        "BitNetConfig",
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -1409,6 +1410,7 @@ else:
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING",
             "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
             "MODEL_FOR_KEYPOINT_DETECTION_MAPPING",
@@ -1450,6 +1452,7 @@ else:
             "AutoModelForDocumentQuestionAnswering",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForImageTextToText",
             "AutoModelForImageToImage",
             "AutoModelForInstanceSegmentation",
             "AutoModelForKeypointDetection",
@@ -2715,6 +2718,7 @@ else:
     _import_structure["models.mistral"].extend(
         [
             "MistralForCausalLM",
+            "MistralForQuestionAnswering",
             "MistralForSequenceClassification",
             "MistralForTokenClassification",
             "MistralModel",
@@ -2724,6 +2728,7 @@ else:
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
+            "MixtralForQuestionAnswering",
             "MixtralForSequenceClassification",
             "MixtralForTokenClassification",
             "MixtralModel",
@@ -3100,6 +3105,7 @@ else:
     _import_structure["models.qwen2"].extend(
         [
             "Qwen2ForCausalLM",
+            "Qwen2ForQuestionAnswering",
             "Qwen2ForSequenceClassification",
             "Qwen2ForTokenClassification",
             "Qwen2Model",
@@ -3116,6 +3122,7 @@ else:
     _import_structure["models.qwen2_moe"].extend(
         [
             "Qwen2MoeForCausalLM",
+            "Qwen2MoeForQuestionAnswering",
             "Qwen2MoeForSequenceClassification",
             "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
@@ -5469,6 +5476,7 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.myt5 import MyT5Tokenizer
     from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
@@ -5878,6 +5886,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import (
         AqlmConfig,
         AwqConfig,
+        BitNetConfig,
         BitsAndBytesConfig,
         CompressedTensorsConfig,
         EetqConfig,
@@ -6284,6 +6293,7 @@ if TYPE_CHECKING:
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
@@ -6325,6 +6335,7 @@ if TYPE_CHECKING:
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForImageTextToText,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
             AutoModelForKeypointDetection,
@@ -7334,6 +7345,7 @@ if TYPE_CHECKING:
         )
         from .models.mistral import (
             MistralForCausalLM,
+            MistralForQuestionAnswering,
             MistralForSequenceClassification,
             MistralForTokenClassification,
             MistralModel,
@@ -7341,6 +7353,7 @@ if TYPE_CHECKING:
         )
         from .models.mixtral import (
             MixtralForCausalLM,
+            MixtralForQuestionAnswering,
             MixtralForSequenceClassification,
             MixtralForTokenClassification,
             MixtralModel,
@@ -7636,6 +7649,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2 import (
             Qwen2ForCausalLM,
+            Qwen2ForQuestionAnswering,
             Qwen2ForSequenceClassification,
             Qwen2ForTokenClassification,
             Qwen2Model,
@@ -7648,6 +7662,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
+            Qwen2MoeForQuestionAnswering,
             Qwen2MoeForSequenceClassification,
             Qwen2MoeForTokenClassification,
             Qwen2MoeModel,

@@ -82,10 +82,15 @@ GGUF_TENSOR_MAPPING = {
     "qwen2moe": {
         "token_embd": "model.embed_tokens",
         "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_proj",
+        "ffn_up_exps": "mlp.experts",
+        "ffn_up_shexp": "mlp.shared_expert.up_proj",
+        "ffn_down_exps": "mlp.experts",
+        "ffn_down_shexp": "mlp.shared_expert.down_proj",
         "ffn_norm": "post_attention_layernorm",
+        "ffn_gate_inp.weight": "mlp.gate.weight",
+        "ffn_gate_exps": "mlp.experts",
+        "ffn_gate_shexp": "mlp.shared_expert.gate_proj",
+        "ffn_gate_inp_shexp": "mlp.shared_expert_gate",
         "attn_norm": "input_layernorm",
         "attn_q": "self_attn.q_proj",
         "attn_v": "self_attn.v_proj",
@@ -142,6 +147,48 @@ GGUF_TENSOR_MAPPING = {
         "attn_output": "self_attention.dense",
         ".output.": ".lm_head.",
         "output_norm": "ln_f",
+    },
+    "stablelm": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
+    "gpt2": {
+        "token_embd": "transformer.wte",
+        "blk": "transformer.h",
+        "position_embd": "transformer.wpe",
+        "output_norm": "transformer.ln_f",
+        "attn_norm": "ln_1",
+        "attn_qkv": "attn.c_attn",
+        "attn_output.weight": "attn.c_proj.weight",
+        "attn_output.bias": "attn.c_proj.bias",
+        "ffn_norm": "ln_2",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+    },
+    "starcoder2": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
     },
 }
 
@@ -200,6 +247,8 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
+        "expert_count": "num_experts",
+        "expert_used_count": "num_experts_per_tok",
     },
     "falcon": {
         "context_length": "max_position_embeddings",
@@ -237,6 +286,34 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "n_head",
         "vocab_size": "vocab_size",
         "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "stablelm": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "gpt2": {
+        "block_count": "n_layer",
+        "context_length": "n_ctx",
+        "embedding_length": "n_embd",
+        "feed_forward_length": "feed_forward_length",
+        "attention.head_count": "n_head",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "starcoder2": {
+        "block_count": "num_hidden_layers",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "feed_forward_length": "intermediate_size",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "norm_epsilon",
     },
 }
 
@@ -547,7 +624,7 @@ class GGUFPhi3Converter(LlamaConverter):
         return tokenizer
 
 
-class GGUFBloomConverter(GPT2Converter):
+class GGUFGPTConverter(GPT2Converter):
     def __init__(self, tokenizer_dict):
         self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
         self.additional_kwargs = {}
@@ -564,8 +641,11 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
-    "bloom": GGUFBloomConverter,
-    "falcon": GGUFBloomConverter,
+    "bloom": GGUFGPTConverter,
+    "falcon": GGUFGPTConverter,
+    "stablelm": GGUFGPTConverter,
+    "gpt2": GGUFGPTConverter,
+    "starcoder2": GGUFGPTConverter,
 }
 
 

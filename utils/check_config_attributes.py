@@ -244,6 +244,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_index",  # for VLMs
         "image_size",
         "use_cache",
         "out_features",
