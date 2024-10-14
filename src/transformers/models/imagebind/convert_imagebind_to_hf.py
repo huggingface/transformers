@@ -14,6 +14,7 @@
 
 import argparse
 
+import regex as re
 import torch
 import torchaudio
 from datasets import load_dataset
@@ -33,33 +34,64 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Vision
+    r"modality_preprocessors\.vision\.cls_token": "vision_model.embeddings.cls_token",
+    r"modality_preprocessors\.vision\.rgbt_stem\.proj\.1\.weight": "vision_model.embeddings.patch_embedding.projection.weight",
+    r"modality_preprocessors\.vision\.pos_embedding_helper\.pos_embed": "vision_model.embeddings.position_embeddings",
+    r"modality_heads\.vision\.0\.weight": "vision_model.layernorm.weight",
+    r"modality_heads\.vision\.0\.bias": "vision_model.layernorm.bias",
+    r"modality_heads\.vision\.2\.weight": "vision_projection.weight",
+    r"modality_trunks\.vision\.pre_transformer_layer\.0\.weight": "vision_model.pre_layernorm.weight",
+    r"modality_trunks\.vision\.pre_transformer_layer\.0\.bias": "vision_model.pre_layernorm.bias",
+    
+    # Text
+    r"modality_preprocessors\.text\.pos_embed": "text_model.embeddings.position_embedding.weight",
+    r"modality_preprocessors\.text\.token_embedding\.weight": "text_model.embeddings.token_embedding.weight",
+    r"modality_heads\.text\.proj\.0\.weight": "text_model.layernorm.weight",
+    r"modality_heads\.text\.proj\.0\.bias": "text_model.layernorm.bias",
+    r"modality_heads\.text\.proj\.1\.weight": "text_projection.weight",
+    r"modality_postprocessors\.text\.1\.log_logit_scale": "text_postprocessor.log_logit_scale",
+    
+    # Audio
+    r"modality_preprocessors\.audio\.cls_token": "audio_model.embeddings.cls_token",
+    r"modality_preprocessors\.audio\.rgbt_stem\.proj\.weight": "audio_model.embeddings.patch_embedding.projection.weight",
+    r"modality_preprocessors\.audio\.rgbt_stem\.norm_layer\.weight": "audio_model.embeddings.patch_embedding.layernorm.weight",
+    r"modality_preprocessors\.audio\.rgbt_stem\.norm_layer\.bias": "audio_model.embeddings.patch_embedding.layernorm.bias",
+    r"modality_preprocessors\.audio\.pos_embedding_helper\.pos_embed": "audio_model.embeddings.position_embeddings",
+    r"modality_heads\.audio\.0\.weight": "audio_model.layernorm.weight",
+    r"modality_heads\.audio\.0\.bias": "audio_model.layernorm.bias",
+    r"modality_heads\.audio\.2\.weight": "audio_projection.weight"
+}
+
+
 def rename_encoder_layers(config, modality):
-    rename_keys = []
+    rename_keys = {}
     # fmt: off
+    # Patterns for the keys
+    key_patterns = [
+        (r"attn\.in_proj_weight", f"{modality}_model.encoder.layers.{{layer_idx}}.self_attn.qkv_proj.weight"),
+        (r"attn\.in_proj_bias", f"{modality}_model.encoder.layers.{{layer_idx}}.self_attn.qkv_proj.bias"),
+        (r"attn\.out_proj\.weight", f"{modality}_model.encoder.layers.{{layer_idx}}.self_attn.out_proj.weight"),
+        (r"attn\.out_proj\.bias", f"{modality}_model.encoder.layers.{{layer_idx}}.self_attn.out_proj.bias"),
+        (r"norm_1\.weight", f"{modality}_model.encoder.layers.{{layer_idx}}.layernorm_before.weight"),
+        (r"norm_1\.bias", f"{modality}_model.encoder.layers.{{layer_idx}}.layernorm_before.bias"),
+        (r"mlp\.fc1\.weight", f"{modality}_model.encoder.layers.{{layer_idx}}.mlp.fc1.weight"),
+        (r"mlp\.fc1\.bias", f"{modality}_model.encoder.layers.{{layer_idx}}.mlp.fc1.bias"),
+        (r"mlp\.fc2\.weight", f"{modality}_model.encoder.layers.{{layer_idx}}.mlp.fc2.weight"),
+        (r"mlp\.fc2\.bias", f"{modality}_model.encoder.layers.{{layer_idx}}.mlp.fc2.bias"),
+        (r"norm_2\.weight", f"{modality}_model.encoder.layers.{{layer_idx}}.layernorm_after.weight"),
+        (r"norm_2\.bias", f"{modality}_model.encoder.layers.{{layer_idx}}.layernorm_after.bias"),
+    ]
+
     for layer_idx in range(config.num_hidden_layers):
-        rename_keys.extend(
-            [
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_weight",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_bias",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.bias"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.weight",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.bias",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.bias"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.weight",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.bias",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.bias"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.weight",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.bias",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.bias"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.weight",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.bias",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.bias"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.weight",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.weight"),
-                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.bias",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.bias"),
-            ]
-        )
+        for old_pattern, new_pattern in key_patterns:
+            rename_keys[f"modality_trunks.{modality}.blocks.{layer_idx}.{old_pattern}"] = new_pattern.format(layer_idx=layer_idx)
+
         if config.add_kv_bias:
-            rename_keys.extend(
-                [
-                    (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_k",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.k_bias",),
-                    (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_v",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.v_bias",),
-                ]
-            )
+            rename_keys[f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_k"] = f"{modality}_model.encoder.layers.{layer_idx}.self_attn.k_bias"
+            rename_keys[f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_v"] = f"{modality}_model.encoder.layers.{layer_idx}.self_attn.v_bias"
+
     # fmt: on
 
     return rename_keys
@@ -71,53 +103,21 @@ def create_rename_keys(config):
     text_config = config.text_config
     audio_config = config.audio_config
 
-    rename_keys = []
+    rename_keys = {}
 
     # fmt: off
 
-    # Convert Vision
-    rename_keys.extend([
-        ("modality_preprocessors.vision.cls_token", "vision_model.embeddings.cls_token"),
-        ("modality_preprocessors.vision.rgbt_stem.proj.1.weight", "vision_model.embeddings.patch_embedding.projection.weight"),
-        ("modality_preprocessors.vision.pos_embedding_helper.pos_embed", "vision_model.embeddings.position_embeddings"),
-        ("modality_heads.vision.0.weight", "vision_model.layernorm.weight"),
-        ("modality_heads.vision.0.bias", "vision_model.layernorm.bias"),
-        ("modality_heads.vision.2.weight", "vision_projection.weight"),
-        ("modality_trunks.vision.pre_transformer_layer.0.weight", "vision_model.pre_layernorm.weight"),
-        ("modality_trunks.vision.pre_transformer_layer.0.bias", "vision_model.pre_layernorm.bias"),
-    ])
+    rename_keys.update(ORIGINAL_TO_CONVERTED_KEY_MAPPING)
 
-    rename_keys.extend(
+    rename_keys.update(
         rename_encoder_layers(vision_config, "vision")
     )
 
-    # Convert Text
-    rename_keys.extend([
-        ("modality_preprocessors.text.pos_embed", "text_model.embeddings.position_embedding.weight"),
-        ("modality_preprocessors.text.token_embedding.weight", "text_model.embeddings.token_embedding.weight"),
-        ("modality_heads.text.proj.0.weight", "text_model.layernorm.weight"),
-        ("modality_heads.text.proj.0.bias", "text_model.layernorm.bias"),
-        ("modality_heads.text.proj.1.weight", "text_projection.weight"),
-        ("modality_postprocessors.text.1.log_logit_scale", "text_postprocessor.log_logit_scale"),
-    ])
-
-    rename_keys.extend(
+    rename_keys.update(
         rename_encoder_layers(text_config, "text")
     )
 
-    # Convert Audio
-    rename_keys.extend([
-        ("modality_preprocessors.audio.cls_token", "audio_model.embeddings.cls_token"),
-        ("modality_preprocessors.audio.rgbt_stem.proj.weight", "audio_model.embeddings.patch_embedding.projection.weight"),
-        ("modality_preprocessors.audio.rgbt_stem.norm_layer.weight", "audio_model.embeddings.patch_embedding.layernorm.weight"),
-        ("modality_preprocessors.audio.rgbt_stem.norm_layer.bias", "audio_model.embeddings.patch_embedding.layernorm.bias"),
-        ("modality_preprocessors.audio.pos_embedding_helper.pos_embed", "audio_model.embeddings.position_embeddings"),
-        ("modality_heads.audio.0.weight", "audio_model.layernorm.weight"),
-        ("modality_heads.audio.0.bias", "audio_model.layernorm.bias"),
-        ("modality_heads.audio.2.weight", "audio_projection.weight"),
-    ])
-
-    rename_keys.extend(
+    rename_keys.update(
         rename_encoder_layers(audio_config, "audio")
     )
     # fmt: on
@@ -125,9 +125,16 @@ def create_rename_keys(config):
     return rename_keys
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
+def rename_model_keys(dct, rename_keys):
+    renamed_dict = {}
+
+    for key, value in dct.items():
+        new_key = key
+        for pattern, new_pattern in rename_keys.items():
+            new_key = re.sub(pattern, new_pattern, new_key)
+        renamed_dict[new_key] = value
+
+    return renamed_dict
 
 
 def reshape_text_position_embeddings(state_dict):
@@ -165,12 +172,12 @@ def convert_imagebind_checkpoint(args):
     checkpoint_url = "https://dl.fbaipublicfiles.com/imagebind/imagebind_huge.pth"
     original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
-    # # Rename keys
+    # Rename keys
     new_state_dict = original_state_dict.copy()
     rename_keys = create_rename_keys(config)
 
-    for src, dest in rename_keys:
-        rename_key(new_state_dict, src, dest)
+    new_state_dict = rename_model_keys(new_state_dict, rename_keys)
+
     reshape_text_position_embeddings(new_state_dict)
 
     # Load HF model
