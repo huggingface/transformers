@@ -15,12 +15,10 @@
 
 import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
-import sys
-import numpy as np
-from sklearn.metrics import roc_curve
 
 import numpy as np
 import torch
+from sklearn.metrics import roc_curve
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -182,8 +180,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
-        self.probs = []
-        self.matches = []
+
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
+            self.probs = []
+            self.matches = []
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -235,12 +235,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
-        if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
-            self.assistant_model.generation_config.assistant_confidence_threshold > 0:
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
             for i, score in enumerate(assistant_output.scores):
-                id = assistant_output.sequences[-1,i-len(assistant_output.scores)]
-                probs = score.softmax(-1)
-                p = probs[0,id].item()
+                id = assistant_output.sequences[-1, i - len(assistant_output.scores)]
+                p = score.softmax(-1)[0, id].item()
                 self.probs.append(p)
 
         # 4. Prepare variables for output
@@ -272,18 +270,21 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
-        if self.assistant_model.generation_config.assistant_confidence_threshold is not None and \
-            self.assistant_model.generation_config.assistant_confidence_threshold > 0:
-            self.matches.extend(num_matches*[1])
-            #print(f"{len(self.probs)=}, {len(self.matches)=}")
-            if len(self.probs)>len(self.matches): 
-                self.matches.append(0)
-                n=len(self.probs)-len(self.matches)
-                if n>0:
-                    del self.probs[-n:]
-            
-            if len(self.probs) > 5:
 
+        # Adjust the assistant confidence thereshold in order to minimize the cost of errors,
+        # using the ROC curve and the cost of false positives (1) and false negatives (3).
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
+            # update self.matches
+            self.matches.extend([1] * num_matches)
+            if len(self.probs) > len(self.matches):
+                self.matches.append(0)
+                
+            # update self.probs
+            excess_length = len(self.probs) - len(self.matches)
+            if excess_length > 0:
+                del self.probs[-excess_length:]
+
+            if len(self.probs) > 5: # require at least 5 samples to calculate the ROC curve
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
