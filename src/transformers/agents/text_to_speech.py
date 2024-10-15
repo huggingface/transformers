@@ -36,7 +36,7 @@ class TextToSpeechTool(PipelineTool):
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    inputs = {"text": {"type": "text", "description": "The text to read out loud (in English)"}}
+    inputs = {"text": {"type": "string", "description": "The text to read out loud (in English)"}}
     output_type = "audio"
 
     def setup(self):
