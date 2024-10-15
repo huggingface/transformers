@@ -2317,7 +2317,6 @@ MOLMO_VISION_ATTENTION_CLASSES = {
     "flash_attention_2": MolmoVisionFlashAttention2,
 }
 
-
 class MolmoEncoderLayer(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
