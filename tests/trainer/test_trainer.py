@@ -4912,6 +4912,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
 
+
 @require_torch
 @require_accelerate
 class TestFSDPInitialization(unittest.TestCase):
@@ -4921,10 +4922,10 @@ class TestFSDPInitialization(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(
-                output_dir = tmp_dir,
-                fsdp = True,
-                fsdp_config = {"min_num_params": 1},
-                no_cuda = True,
+                output_dir=tmp_dir,
+                fsdp=True,
+                fsdp_config={"min_num_params": 1},
+                no_cuda=True,
             )
             trainer = Trainer(model=model, args=training_args)
 
@@ -4933,9 +4934,10 @@ class TestFSDPInitialization(unittest.TestCase):
 
             # Check if model is wrapped with FSDP
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
             self.assertTrue(trainer.model, FSDP)
 
             # Running a forward pass to ensure FSDP is initialized
-            dummy_input = torch.ones((1,1), dtype=torch.float)
+            dummy_input = torch.ones((1, 1), dtype=torch.float)
             output = trainer.model(dummy_input)
             self.assertTrue(output)
