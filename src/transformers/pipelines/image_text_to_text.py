@@ -85,6 +85,10 @@ def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "
             if isinstance(content, dict) and content.get("type") == "image":
                 if "image" in content:
                     retrieved_images.append(content["image"])
+                elif "url" in content:
+                    retrieved_images.append(content["url"])
+                elif "path" in content:
+                    retrieved_images.append(content["path"])
                 elif idx_images < len(images):
                     retrieved_images.append(images[idx_images])
                     idx_images += 1
@@ -128,7 +132,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>>         "content": [
     >>>             {
     >>>                 "type": "image",
-    >>>                 "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>                 "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
     >>>             },
     >>>             {"type": "text", "text": "Describe this image."},
     >>>         ],
@@ -143,7 +147,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
     [{'input_text': [{'role': 'user',
         'content': [{'type': 'image',
-        'image': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        'url': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
         {'type': 'text', 'text': 'Describe this image.'}]},
     {'role': 'assistant',
         'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
@@ -298,7 +302,7 @@ class ImageTextToTextPipeline(Pipeline):
         if not isinstance(images, (list, tuple)):
             images = [images]
         if isinstance(text, str):
-            text = [text] * len(images)
+            text = [text]
         if not isinstance(text[0], str):
             raise ValueError("The pipeline does not support nested lists of prompts.")
 
@@ -335,10 +339,18 @@ class ImageTextToTextPipeline(Pipeline):
                     images_reorganized.append(images[:num_images])
                     images = images[num_images:]
                 images = images_reorganized
-        # After reorganizing, these should be the same
-        if len(images) != len(text):
-            raise ValueError("The number of images and text should be the same.")
+        elif len(text) == 1 and len(images) > 1:
+            logger.warning(
+                "The pipeline detected multiple images for one prompt, but no image tokens in the prompt. "
+                "The prompt will be repeated for each image."
+            )
+            text = [text[0]] * len(images)
 
+        # After reorganizing, these should be the same
+        if len(text) > 1 and len(images) != len(text):
+            raise ValueError(
+                "Undefined behavior, please check the number of images and prompts, and nest the images to match the prompts."
+            )
         return super().__call__([ImageText(image, text_single) for image, text_single in zip(images, text)], **kwargs)
 
     def preprocess(
