@@ -2211,7 +2211,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 inputs_embeds = self.decoder.model.embed_tokens(input_ids)
 
             if audio_inputs_embeds is not None:
-                inputs_embeds = audio_inputs_embeds if inputs_embeds is None else audio_inputs_embeds + inputs_embeds
+                inputs_embeds = (
+                    audio_inputs_embeds
+                    if inputs_embeds is None
+                    else audio_inputs_embeds + inputs_embeds.to(audio_inputs_embeds.device)
+                )
 
         return (
             inputs_embeds,
@@ -2569,7 +2573,10 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             generated_audio_codes = generated_audio_codes[:, 1:].unsqueeze(2)
 
             user_audio_codes = self.apply_delay_pattern_mask(
-                torch.cat([self.generated_audio_codes, blank_user_audio_codes], dim=2), user_delay_pattern_mask
+                torch.cat(
+                    [self.generated_audio_codes, blank_user_audio_codes.to(self.generated_audio_codes.device)], dim=2
+                ),
+                user_delay_pattern_mask,
             )[:, :, -1:]
             self.generated_audio_codes = self.apply_delay_pattern_mask(
                 torch.cat([self.generated_audio_codes, generated_audio_codes], dim=2), moshi_delay_pattern_mask
