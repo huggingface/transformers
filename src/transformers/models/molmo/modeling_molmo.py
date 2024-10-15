@@ -33,7 +33,9 @@ from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -54,7 +56,7 @@ if is_flash_attn_2_available():
 
 from dataclasses import dataclass
 
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import ModelOutput
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
     ModelOutput,
@@ -174,15 +176,16 @@ class MolmoRotaryEmbedding(nn.Module):
 class MolmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
+        self.fc2 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 logger = logging.get_logger(__name__)
@@ -2238,12 +2241,9 @@ class MolmoVisionEmbeddings(nn.Module):
         self.patch_size = config.patch_size
 
         self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
+        self.patch_embedding = nn.Linear(
+            self.patch_size**2 * 3,
+            self.embed_dim,
             bias=False,
         )
 
@@ -2311,6 +2311,21 @@ class MolmoVisionEmbeddings(nn.Module):
             embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
+
+class MolmoVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
 MOLMO_VISION_ATTENTION_CLASSES = {
     "eager": MolmoVisionAttention,
     "sdpa": MolmoVisionSdpaAttention,
@@ -2323,7 +2338,7 @@ class MolmoEncoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
         self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MolmoMLP(config)
+        self.mlp = MolmoVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -2490,7 +2505,6 @@ class MolmoVisionTransformer(nn.Module):
         self.embeddings = MolmoVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MolmoEncoder(config)  # necessary because of renaming issue in modular
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=True)
 
     @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
@@ -2526,15 +2540,13 @@ class MolmoVisionTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
+        # TODO add pooling operations here!
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -2570,7 +2582,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
             config.image_num_key_value_heads * self.head_dim,
             bias=True,
         )
-        self.out_proj = nn.Linear(
+        self.o_proj = nn.Linear(
             self.num_heads * self.head_dim,
             config.hidden_size,
             bias=True,
@@ -2653,7 +2665,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights_reshaped
 
@@ -2671,7 +2683,9 @@ class MolmoVisionModel(MolmoPreTrainedModel):
         super().__init__(config)
 
         self.vision_model = MolmoVisionTransformer(config)
+        self.image_hidden_size = 2 * config.hidden_size
         self.image_pooling_2d = MolmoImagePooling2d(config)
+        self.pad_embed = nn.Parameter(torch.zeros((2, self.image_hidden_size)))
         # Initialize weights and apply final processing
         self.post_init()
 

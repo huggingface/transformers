@@ -95,7 +95,7 @@ class MolmoVisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=1024,
-        num_attention_heads=32,
+        num_attention_heads=16,
         intermediate_size=4096,
         image_num_key_value_heads=16,
         num_hidden_layers=23,
