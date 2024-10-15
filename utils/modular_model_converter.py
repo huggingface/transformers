@@ -798,6 +798,11 @@ class ModularConverterTransformer(CSTTransformer):
         self.added_dependencies = set()
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+        """When visiting imports from `transformers.models.xxx` we need to:
+        1. Get the original source code
+        2. Parse it into an AST Tree
+        3. Add this import to `self.transformers_imports` as visited to not parse it twice
+        """
         if node.module is None:
             logger.warning(f"Debug: node.module is None.\n Full Node:{node}")
             raise Exception(f"Trying to import from None module.\nFull Node:{node}")
@@ -1188,7 +1193,6 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         wrapper = MetadataWrapper(module)
         if cst_transformers is None:
             cst_transformers = ModularConverterTransformer(module, model_name, old_model_name, new_model_name)
-        print(model_name)
         wrapper.visit(cst_transformers)
         for file, node in cst_transformers.files.items():
             if node != {}:
@@ -1231,7 +1235,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/aria/modular_aria.py"],
+        default=["src/transformers/models/roberta/modular_roberta.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )

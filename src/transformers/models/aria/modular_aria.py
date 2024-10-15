@@ -13,6 +13,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...generation.utils import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -1418,7 +1419,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 # adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-class AriaForConditionalGeneration(AriaPreTrainedModel):
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 

@@ -23,7 +23,11 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
+from ...utils import logging
 from ..auto import AutoTokenizer
+
+
+logger = logging.get_logger(__name__)
 
 
 def _split_image(

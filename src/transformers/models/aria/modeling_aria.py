@@ -17,10 +17,11 @@ from torch.nn.init import trunc_normal_
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
+from ...generation.utils import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -49,10 +50,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils import (
-    ModelOutput,
-    is_flash_attn_2_available,
-)
+from ...utils import is_flash_attn_2_available
 from .configuration_aria import AriaTextConfig
 
 
@@ -156,6 +154,28 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
             tensor.uniform_(-bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
+
+
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
 
 
 class AriaAttention(nn.Module):
@@ -531,6 +551,13 @@ class AriaVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+ARIA_ATTENTION_CLASSES = {
+    "eager": AriaAttention,
+    "flash_attention_2": AriaFlashAttention2,
+    "sdpa": AriaSdpaAttention,
+}
+
+
 class AriaVisionFlashAttention2(AriaVisionAttention):
     """
     AriaVision flash attention module. This module inherits from `AriaVisionAttention` as the weights of the module stays
@@ -828,7 +855,7 @@ class AriaVisionTransformer(nn.Module):
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
+        self.embed_dim = config.hidden_size
 
         self.config = config
         self.embeddings = AriaVisionEmbeddings(config)
@@ -1760,7 +1787,7 @@ class AriaDecoderLayer(nn.Module):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = ARIA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -2946,28 +2973,6 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
         )
 
 
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = []
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
-
-
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     """
@@ -3009,7 +3014,7 @@ class AriaCausalLMOutputWithPast(ModelOutput):
 
 
 # adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-class AriaForConditionalGeneration(AriaPreTrainedModel):
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 
