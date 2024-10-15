@@ -36,6 +36,7 @@ from transformers import (
 
 # TODO why is this import not solved at modular parsing?
 from transformers.models.molmo import MolmoForConditionalGeneration
+from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
 
 
 # from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
@@ -163,13 +164,12 @@ def write_model(
     #
     # Text model params and config
     # TODO
-    text_config = Qwen2Config()
+    text_config = MolmoTextConfig()
     # ------------------------------------------------------------
     # Vision model params and config
     # ------------------------------------------------------------
     # TODO
-    vision_config = CLIPVisionConfig()
-
+    vision_config = MolmoVisionConfig()
     # save config
     # TODO adapt this depending on model variants
     config = MolmoConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
