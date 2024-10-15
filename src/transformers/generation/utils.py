@@ -2005,6 +2005,7 @@ class GenerationMixin:
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
             model_kwargs["use_cache"] = True
+            generation_config.use_cache = True
         else:
             model_kwargs["use_cache"] = generation_config.use_cache
 
@@ -4299,7 +4300,8 @@ class GenerationMixin:
                             newly_added_length,
                             is_decoder_attention=True,
                         )
-                    else:
+                    # some (V)LLMs have hard requirement on SDPA and thus never return attn
+                    elif outputs.attentions[0] is not None:
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
