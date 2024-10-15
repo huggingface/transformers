@@ -346,7 +346,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format).astype(np.float32)
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format).astype(
+                    np.float32
+                )
                 for image in images
             ]
 
