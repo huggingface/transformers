@@ -350,6 +350,10 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
+        for image in images:
+            if image.dtype == np.uint8:
+                raise ValueError("Aaaaa!")
+
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
