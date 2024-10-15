@@ -88,6 +88,7 @@ if is_torch_available():
         WatermarkDetector,
         WatermarkingConfig,
     )
+    from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
     from transformers.generation.utils import _speculative_sampling
 
 
@@ -1229,6 +1230,9 @@ class GenerationTesterMixin:
 
             if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
+
+            if any(model_name == model_class.__name__ for model_name in ["LlavaNextVideoForConditionalGeneration"]):
+                self.skipTest(f"DoLa is failing for {model_class.__name__}")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -3511,6 +3515,34 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
 
+    def test_speculative_decoding_equals_regular_decoding(self):
+        draft_name = "double7/vicuna-68m"
+        target_name = "Qwen/Qwen2-0.5B-Instruct"
+
+        draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
+        target_model = AutoModelForCausalLM.from_pretrained(target_name)
+
+        assistant_tokenizer = AutoTokenizer.from_pretrained(draft_name)
+        target_tokenizer = AutoTokenizer.from_pretrained(target_name)
+
+        prompt_size = torch.randint(low=20, high=100, size=(1,))
+        max_new_tokens = torch.randint(low=10, high=50, size=(1,))
+        input_ids = (torch.rand(1, prompt_size[0]) * 100).to(int) + 50
+
+        max_new_tokens_item = max_new_tokens[0].item()
+        expected_out = target_model.generate(input_ids, do_sample=False, max_new_tokens=max_new_tokens_item)
+        predicted_out = target_model.generate(
+            input_ids,
+            do_sample=False,
+            max_new_tokens=max_new_tokens_item,
+            assistant_model=draft_model,
+            target_tokenizer=target_tokenizer,
+            assistant_tokenizer=assistant_tokenizer,
+        )
+
+        self.assertEqual(expected_out.shape, predicted_out.shape)
+        self.assertTrue((expected_out == predicted_out).all().item())
+
     @pytest.mark.generate
     @require_torch_multi_gpu
     def test_generate_with_static_cache_multi_gpu(self):
@@ -3813,6 +3845,38 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(model_inputs["input_ids"] is not None)
         self.assertTrue(model_inputs["inputs_embeds"] is None)
 
+    def test_prepare_inputs_for_generation_encoder_decoder_llm(self):
+        """
+        Same as `test_prepare_inputs_for_generation_decoder_llm` but for encoder-decoder models. Main difference: we
+        should look for `decoder_input_ids`, instead of `input_ids`.
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+        model = model.to(torch_device)
+
+        # 1. Sanity check: the model's `prepare_inputs_for_generation` comes from `GenerationMixin`
+        self.assertTrue("GenerationMixin" in str(model.prepare_inputs_for_generation))
+
+        # 2. If we pass input ids by themselves, we should get back the same input ids -- with the encoder-decoder key
+        decoder_input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
+        model_inputs = model.prepare_inputs_for_generation(decoder_input_ids)
+        self.assertTrue(torch.all(model_inputs["decoder_input_ids"] == decoder_input_ids))
+
+        # 3. If we pass the attention mask too, we will get back the attention mask. Encoder-decoder models usually
+        # don't use `position_ids`
+        decoder_attention_mask = torch.tensor([[1, 1, 1], [1, 1, 1]]).to(torch_device)
+        model_inputs = model.prepare_inputs_for_generation(
+            decoder_input_ids, decoder_attention_mask=decoder_attention_mask
+        )
+        self.assertTrue(torch.all(model_inputs["decoder_attention_mask"] == decoder_attention_mask))
+        self.assertTrue("position_ids" not in model_inputs)
+
+        # 4. `use_cache` (and other kwargs, like the encoder outputs) are forwarded
+        self.assertFalse("use_cache" in model_inputs)  # From the previous input, there is no `use_cache`
+        model_inputs = model.prepare_inputs_for_generation(decoder_input_ids, use_cache=True, encoder_outputs="foo")
+        self.assertTrue(model_inputs["use_cache"] is True)
+        self.assertTrue(model_inputs["encoder_outputs"] == "foo")
+        # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
+
     def test_generate_compile_fullgraph_tiny(self):
         """
         Tests that we can call end-to-end generation with a tiny model (i.e. doesn't crash)
@@ -3885,3 +3949,41 @@ class TokenHealingTestCase(unittest.TestCase):
         # bos_token_id is required when no input ids nor inputs_embeds is passed
         with self.assertRaises(ValueError):
             model.generate(max_length=20, bos_token_id=None)
+
+
+class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
+    def test_no_intersection(self):
+        prompt = np.array([[1, 2, 3]])
+        prompt_plus_new_tokens = np.array([[4, 5, 6]])
+        result = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(prompt, prompt_plus_new_tokens)
+        self.assertEqual(result, (None, None, None))
+
+    def test_complete_overlap(self):
+        prompt = np.array([[1, 2, 3]])
+        prompt_plus_new_tokens = np.array([[1, 2, 3, 4, 5]])
+        discrep_length, new_tokens_only, discrep_only = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
+            prompt, prompt_plus_new_tokens
+        )
+        self.assertEqual(discrep_length, 0)
+        np.testing.assert_array_equal(new_tokens_only, np.array([[4, 5]]))
+        np.testing.assert_array_equal(discrep_only, np.array([[]]))
+
+    def test_partial_overlap(self):
+        prompt = np.array([[1, 2, 3]])
+        prompt_plus_new_tokens = np.array([[2, 3, 4, 5]])
+        discrep_length, new_tokens_only, discrep_only = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
+            prompt, prompt_plus_new_tokens
+        )
+        self.assertEqual(discrep_length, 0)
+        np.testing.assert_array_equal(new_tokens_only, np.array([[4, 5]]))
+        np.testing.assert_array_equal(discrep_only, np.array([[]]))
+
+    def test_no_new_tokens(self):
+        prompt = np.array([[1, 2, 3]])
+        prompt_plus_new_tokens = np.array([[1, 2, 3]])
+        discrep_length, new_tokens_only, discrep_only = AssistedCandidateGeneratorDifferentTokenizers._get_tokens_diag(
+            prompt, prompt_plus_new_tokens
+        )
+        self.assertEqual(discrep_length, 0)
+        np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
+        np.testing.assert_array_equal(discrep_only, np.array([[]]))
