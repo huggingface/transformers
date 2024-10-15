@@ -197,9 +197,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             frequency_mask_length (`int`, *optional*):
                 The maximum possible length of the mask in the frequency domain. Functions as a data augmentation that could be useful during training. Torchaudio is required to use this parameter.
             add_noise (`bool`, *optional*):
-                Whether or not to add noise to the input. Used in the original AST paper in combination with add_temporal_shift when training for certain use-cases.
+                Whether or not to add noise to the input. Used in the original AST paper in combination with `add_temporal_shift` when training for certain use-cases.
             add_temporal_shift (`bool`, *optional*):
-                Whether or not to shift the input. Used in the original AST paper in combination with add_noise when training for certain use-cases.
+                Whether or not to shift the input. Used in the original AST paper in combination with `add_noise` when training for certain use-cases.
         """
 
         if sampling_rate is not None:
@@ -236,8 +236,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         # check that all the inputs have at least length 400, else pad them and warn the user
         for i, waveform in enumerate(raw_speech):
             if len(waveform) < 400:
-                logger.warning(
-                    f"Input {i} has length {len(waveform)}, which is less than the minimum of 400. This would result in an error when creating the spectrogram. Padding it to have length 400.",
+                logger.warning_once(
+                    f"One of the input waveforms has length {len(waveform)}, which is less than the minimum of 400. This would result in an error when creating the spectrogram. Padding it to have length 400.",
                 )
                 raw_speech[i] = np.pad(waveform, (0, 400 - len(waveform)))
 
@@ -298,7 +298,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
     # from https://github.com/YuanGongND/ast but converted into numpy
     def add_noise(self, fbank: np.ndarray) -> np.ndarray:
-        fbank += np.random.rand(fbank.shape[0], fbank.shape[1]) * (np.random.rand() / 10)
+        noise = np.random.rand(fbank.shape[0], fbank.shape[1]) 
+        noise = noise * (np.random.rand() / 10)
+        fbank += noise
         return fbank
 
     def add_temporal_shift(self, fbank: np.ndarray) -> np.ndarray:
