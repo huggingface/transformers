@@ -200,8 +200,8 @@ def _flash_attention_forward(
     deterministic: bool = None,
     cu_seq_lens_q: Optional[torch.LongTensor] = None,
     cu_seq_lens_k: Optional[torch.LongTensor] = None,
-    max_length_q: int = 0,
-    max_length_k: int = 0,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
