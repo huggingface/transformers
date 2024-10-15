@@ -1594,8 +1594,10 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
-                if execution_device_map is None or len(execution_device_map) <= 1:
+                if execution_device_map is None:
                     return None
+                elif len(execution_device_map) == 1 and "" in execution_device_map:
+                    return {idx: execution_device_map[""] for idx in range(self.config.num_hidden_layers)}
                 layer_device_map = {}
                 for layer in execution_device_map:
                     for idx in range(self.config.num_hidden_layers):

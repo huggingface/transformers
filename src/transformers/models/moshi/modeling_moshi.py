@@ -2048,7 +2048,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 audio_inputs_embeds = sum(
                     [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
                 )
-                inputs_embeds = audio_inputs_embeds if inputs_embeds is None else audio_inputs_embeds + inputs_embeds
+                inputs_embeds = (
+                    audio_inputs_embeds
+                    if inputs_embeds is None
+                    else audio_inputs_embeds + inputs_embeds.to(audio_inputs_embeds.device)
+                )
 
         # Decode
         decoder_outputs = self.decoder(
@@ -2266,6 +2270,22 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         Return:
             [`MoshiConditionalGenerationGenerateOutput`]
         """
+        # multiple generate -> need to create/update device map
+        if hasattr(self, "hf_device_map") and not hasattr(self.depth_decoder, "hf_device_map"):
+            self.depth_decoder.hf_device_map = {}
+            if "" in self.hf_device_map:
+                self.depth_decoder.hf_device_map = self.hf_device_map
+            else:
+                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                self.depth_decoder.hf_device_map = {
+                    key[len("depth_decoder") :]: main_device if value in ["cpu", "disk"] else value
+                    for key, value in self.hf_device_map.items()
+                    if key.startswith("depth_decoder")
+                }
+            # need to remove depth_decoder from the top device_map so that we assign correctly the device for each layer idx in the cache
+            self.hf_device_map = {
+                key: value for key, value in self.hf_device_map.items() if not key.startswith("depth_decoder")
+            }
         # retrieve depth decoder kwargs
         depth_decoder_kwargs_keys = {argument for argument in kwargs if argument.startswith("depth_decoder_")}
         kwargs_depth_decoder = {
