@@ -4912,6 +4912,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
 
+
 @require_torch_gpu
 @require_torch
 @require_accelerate
