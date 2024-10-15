@@ -600,6 +600,7 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
     test_resize_embeddings = True
     test_headmasking = False
     test_torchscript = False
+    input_name = "input_features"
 
     all_model_classes = (
         (

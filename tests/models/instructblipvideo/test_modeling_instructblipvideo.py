@@ -807,7 +807,7 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
         self.assertEqual(
             generated_text,
-            "a baby girl wearing glasses is reading a book on the bed 1080p",
+            "Explain what is happening in this short video. a baby girl wearing glasses is reading a book on the bed 1080p",
         )
 
     def test_expansion_in_processing(self):

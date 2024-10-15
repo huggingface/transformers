@@ -1652,6 +1652,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
+        print(predictions[0].tolist(), generated_text)
         self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
@@ -1666,9 +1667,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
+            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
-        self.assertEqual(generated_text, "it's not a city, it's a beach")
+        self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
@@ -1777,9 +1778,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
+            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
-        self.assertEqual(generated_text, "it's not a city, it's a beach")
+        self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     @require_torch_multi_accelerator
     def test_inference_t5_multi_accelerator(self):

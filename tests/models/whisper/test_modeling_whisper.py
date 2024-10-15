@@ -394,6 +394,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
     # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
     model_split_percents = [0.5, 0.8, 0.9]
+    input_name = "input_features"
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -3930,6 +3931,7 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     test_pruning = False
     is_encoder_decoder = False
     test_missing_keys = False
+    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
