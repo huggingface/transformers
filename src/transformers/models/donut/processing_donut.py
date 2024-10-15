@@ -93,6 +93,7 @@ class DonutProcessor(ProcessorMixin):
         # For backward compatibility
         legacy = kwargs.pop("legacy", True)
         if legacy:
+            # With `add_special_tokens=True`, the performance of donut are degraded when working with both images and text.
             logger.warning_once(
                 "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
                 "In the new behavior, if both images and text are provided, the default value of `add_special_tokens` "
