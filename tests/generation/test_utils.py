@@ -436,7 +436,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -473,7 +473,7 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -489,7 +489,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -513,7 +513,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -537,7 +537,7 @@ class GenerationTesterMixin:
             beam_kwargs = self._get_beam_kwargs()
             output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -561,7 +561,7 @@ class GenerationTesterMixin:
                 return_dict_in_generate=True,
                 use_cache=False,
             )
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -604,7 +604,7 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -655,7 +655,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -704,7 +704,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -754,7 +754,7 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 beam_kwargs=beam_kwargs,
             )
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -767,7 +767,7 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 beam_kwargs=beam_kwargs,
             )
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -791,7 +791,7 @@ class GenerationTesterMixin:
                 return_dict_in_generate=True,
                 use_cache=False,
             )
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -833,7 +833,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -857,7 +857,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -895,7 +895,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -935,7 +935,7 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 use_cache=True,  # Enable cache
             )
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + main_input.shape[-1])
@@ -970,7 +970,7 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
 
-            if model.config.get_text_config().is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + main_input.shape[-1])

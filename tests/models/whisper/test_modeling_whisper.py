@@ -3931,7 +3931,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     test_pruning = False
     is_encoder_decoder = False
     test_missing_keys = False
-    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
