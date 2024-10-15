@@ -88,7 +88,7 @@ git bisect run python3 target_script.py
 
     result = subprocess.run(
         ["bash", "run_git_bisect.sh"],
-        capture_output = True,
+        capture_output=True,
         text=True,
     )
     print(result.stdout)
