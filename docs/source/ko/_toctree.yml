@@ -322,8 +322,8 @@
         title: BART
       - local: in_translation
         title: (번역중) BARThez
-      - local: in_translation
-        title: (번역중) BARTpho
+      - local: model_doc/bartpho.md
+        title: BARTpho
       - local: in_translation
         title: (번역중) BERT
       - local: in_translation
