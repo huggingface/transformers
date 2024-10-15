@@ -202,7 +202,6 @@ def _flash_attention_forward(
     cu_seq_lens_k: Optional[torch.LongTensor] = None,
     max_length_q: int = 0,
     max_length_k: int = 0,
-    batch_size: int = 2,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -277,6 +276,21 @@ def _flash_attention_forward(
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
     elif position_ids is not None and max_length_q is not None:
+        batch_size = query_states.size(0)
+
+        if cu_seq_lens_q is None or cu_seq_lens_k is None:
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
+                query_states, key_states, value_states, position_ids
+            )
+
+            cu_seq_lens_q, cu_seq_lens_q = cu_seq_lens
+            max_length_q, max_length_k = max_seq_lens
+
+        else:
+            query_states = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+            key_states = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+            value_states = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
+
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,

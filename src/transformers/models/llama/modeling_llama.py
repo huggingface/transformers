@@ -496,11 +496,6 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        batch_size = query_states.size(0)
-        query_states = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
-        key_states = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
-        value_states = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
-
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
@@ -512,7 +507,6 @@ class LlamaFlashAttention2(LlamaAttention):
             sliding_window=getattr(self, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
-            batch_size=batch_size,
             **kwargs,
         )
 
