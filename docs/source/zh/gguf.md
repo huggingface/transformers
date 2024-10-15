@@ -20,9 +20,9 @@ GGUF文件格式用于存储模型，以便通过[GGML](https://github.com/ggerg
 
 该文件格式[由抱抱脸支持](https://huggingface.co/docs/hub/en/gguf)，可用于快速检查文件中张量和元数据。
 
-该文件格式是一种“单文件格式”，通常单个文件就包含了配置属性、分词器词汇表和其他属性，同时还有模型中要加载的所有张量。这些文件根据文件的量化类型有不同的格式。我们在[这里](https://huggingface.co/docs/hub/en/gguf#quantization-types)简要介绍了一些。
+该文件格式是一种“单文件格式”，通常单个文件就包含了配置属性、分词器词汇表和其他属性，同时还有模型中要加载的所有张量。这些文件根据文件的量化类型有不同的格式。我们在[这里](https://huggingface.co/docs/hub/en/gguf#quantization-types)进行了简要介绍。
 
-## 在Transformers中的支持
+## 在 Transformers 中的支持
 
 我们在 transformers 中添加了加载 gguf 文件的功能，这样可以对 GGUF 模型进行进一步的训练或微调，然后再将模型转换回 GGUF 格式，以便在 ggml 生态系统中使用。加载模型时，我们首先将其反量化为 FP32，然后再加载权重以在 PyTorch 中使用。
 
@@ -33,7 +33,7 @@ GGUF文件格式用于存储模型，以便通过[GGML](https://github.com/ggerg
 
 ### 支持的量化类型
 
-初始支持的量化类型是根据在 Hub 上分享的较为流行的量化文件决定的。
+根据分享在 Hub 上的较为热门的量化文件，初步支持以下量化类型：
 
 - F32
 - F16
@@ -63,7 +63,7 @@ GGUF文件格式用于存储模型，以便通过[GGML](https://github.com/ggerg
 
 ### 支持的模型架构
 
-目前支持一些在Hub上非常流行的架构，即：
+目前支持以下在 Hub 上非常热门的模型架构：
 
 - LLaMa
 - Mistral
@@ -78,7 +78,7 @@ GGUF文件格式用于存储模型，以便通过[GGML](https://github.com/ggerg
 
 ## 使用示例
 
-为了在`transformers`中加载`gguf`文件，你需要在 `from_pretrained`方法中为分词器和模型指定 `gguf_file`参数。下面是加载分词器和模型的示例，它们可以从同一个文件中加载：
+为了在`transformers`中加载`gguf`文件，你需要在 `from_pretrained`方法中为分词器和模型指定 `gguf_file`参数。下面是从同一个文件中加载分词器和模型的示例：
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -90,7 +90,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 ```
 
-现在，你就已经可以结合许多其他工具,在 PyTorch 生态系统中访问完整的、未量化的模型了。
+现在，你就已经可以结合 PyTorch 生态系统中的一系列其他工具，来使用完整的、未量化的模型了。
 
 为了将模型转换回`gguf`文件，我们建议使用`llama.cpp`中的[`convert-hf-to-gguf.py`文件](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py)文件。
 
