@@ -434,27 +434,26 @@ class Llama3Converter(TikTokenConverter):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
 
+        # References for chat templates in instruct models
+        templates_for_version = {
+            "2": ("meta-llama/Llama-2-7b-chat-hf", "f5db02db724555f92da89c216ac04704f23d4590"),
+            "3": ("meta-llama/Meta-Llama-3-8B-Instruct", "5f0b02c75b57c5855da9ae460ce51323ea669d8a"),
+            "3.1": ("meta-llama/Llama-3.1-8B-Instruct", "0e9e39f249a16976918f6564b8830bc894c89659"),
+            "3.2": ("meta-llama/Llama-3.2-1B-Instruct", "e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"),
+            "Guard-3": ("meta-llama/Llama-Guard-3-1B", "acf7aafa60f0410f8f42b1fa35e077d705892029"),
+        }
+
         # Add chat_template only if instruct is True.
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
-        if instruct:
-            # Guidance from Meta: apply 3.2 changes to 3.1 as well
-            # TODO: 3 should be different (no tool calling)
-            from transformers import AutoTokenizer
+        if instruct or llama_version in ["Guard-3"]:
+            model_id, revision = templates_for_version.get(llama_version, (None, None))
+            if model_id is not None:
+                from transformers import AutoTokenizer
 
-            t = AutoTokenizer.from_pretrained(
-                "meta-llama/Llama-3.2-1B-Instruct", revision="e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"
-            )
-            additional_kwargs["chat_template"] = t.chat_template
-
-        if llama_version in ["Guard-3"]:
-            from transformers import AutoTokenizer
-
-            t = AutoTokenizer.from_pretrained(
-                "meta-llama/Llama-Guard-3-1B", revision="acf7aafa60f0410f8f42b1fa35e077d705892029"
-            )
-            additional_kwargs["chat_template"] = t.chat_template
+                t = AutoTokenizer.from_pretrained(model_id, revision=revision)
+                additional_kwargs["chat_template"] = t.chat_template
 
         self.converted_tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
