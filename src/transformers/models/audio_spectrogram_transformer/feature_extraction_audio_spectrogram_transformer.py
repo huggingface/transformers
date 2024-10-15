@@ -298,7 +298,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
     # from https://github.com/YuanGongND/ast but converted into numpy
     def add_noise(self, fbank: np.ndarray) -> np.ndarray:
-        noise = np.random.rand(fbank.shape[0], fbank.shape[1]) 
+        noise = np.random.rand(fbank.shape[0], fbank.shape[1])
         noise = noise * (np.random.rand() / 10)
         fbank += noise
         return fbank
