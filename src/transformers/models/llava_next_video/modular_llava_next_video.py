@@ -225,7 +225,19 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
-    def _get_image_features(self, pixel_values, image_sizes):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+               The tensors corresponding to the input images.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+        Returns:
+            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
+            and are of shape `(num_patches, image_length, embed_dim)`).
+        """
         # ! infer image_num_patches from image_sizes
         image_num_patches = [
             image_size_to_num_patches(
@@ -253,7 +265,17 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_features = torch.split(image_features, image_num_patches, dim=0)
         return image_features
 
-    def _get_video_features(self, pixel_values):
+    def get_video_features(self, pixel_values: torch.FloatTensor):
+        """
+        Obtains video last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+               The tensors corresponding to the input video.
+        Returns:
+            image_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
+            and are of shape `(num_videos, video_length, embed_dim)`).
+        """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)

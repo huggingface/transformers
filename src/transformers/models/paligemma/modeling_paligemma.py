@@ -397,6 +397,22 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
                 )
         return causal_mask
 
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
+        image_outputs = self.vision_tower(pixel_values)
+        selected_image_feature = image_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = image_features / (self.config.hidden_size**0.5)
+        return image_features
+
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -482,10 +498,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         # Merge text and images
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
-            selected_image_feature = image_outputs.last_hidden_state
-            image_features = self.multi_modal_projector(selected_image_feature)
-            image_features = image_features / (self.config.hidden_size**0.5)
+            image_features = self.get_image_features(pixel_values)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)

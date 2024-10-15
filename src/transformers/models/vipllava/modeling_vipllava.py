@@ -284,6 +284,17 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
 
     # Ignore copy
     def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: List[int]):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+            vision_feature_layers (`List[int]`):
+                The list og indexes of the layers to select the vision feature.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
         # For VIP-llava, the image features are computed this way
