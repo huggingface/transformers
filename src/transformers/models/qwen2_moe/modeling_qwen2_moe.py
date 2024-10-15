@@ -57,7 +57,7 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen2-57B-A14B"
 _CONFIG_FOR_DOC = "Qwen2MoeConfig"
 
 
