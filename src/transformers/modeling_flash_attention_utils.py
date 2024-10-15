@@ -279,8 +279,8 @@ def _flash_attention_forward(
         batch_size = query_states.size(0)
 
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
-                query_states, key_states, value_states, position_ids
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
+                prepare_fa2_from_position_ids(query_states, key_states, value_states, position_ids)
             )
 
             cu_seq_lens_q, cu_seq_lens_q = cu_seq_lens
