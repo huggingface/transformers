@@ -129,6 +129,7 @@ class UdopProcessor(ProcessorMixin):
             raise ValueError(
                 "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
             )
+        test_val = 7  # Just doing this so UDOP gets tested
 
         if self.image_processor.apply_ocr and (word_labels is not None):
             raise ValueError(
