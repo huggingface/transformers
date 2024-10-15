@@ -790,8 +790,8 @@
       title: 파이프라인을 위한 유틸리티
     - local: internal/tokenization_utils
       title: 토크나이저를 위한 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Trainer
+    - local: internal/trainer_utils
+      title: Trainer를 위한 유틸리티
     - local: internal/generation_utils
       title: 생성을 위한 유틸리티
     - local: internal/image_processing_utils
