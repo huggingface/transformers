@@ -4979,6 +4979,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return self.hf_quantizer.is_trainable
 
+    def tensor_parallel(self, device_mesh):
+        """
+        Tensor parallelize the model across the given device mesh.
+
+        Args:
+            device_mesh (`torch.distributed.DeviceMesh`):
+                The device mesh to use for tensor parallelism.
+        """
+        # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
+        # No op if `_tp_plan` attribute does not exist under the module.
+        # This is a helper function to be used with `model.apply` to recursively
+        # parallelize a model.
+        def tplize(mod: torch.nn.Module) -> None:
+            tp_plan = getattr(mod, "_tp_plan", None)
+            if tp_plan:
+                torch.distributed.tensor.parallel.parallelize_module(
+                    mod,
+                    device_mesh=device_mesh,
+                    parallelize_plan=tp_plan,
+                )
+
+        # `apply` is a native method of `nn.Module` that recursively applies a
+        # function to every submodule.
+        self.apply(tplize)
+
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
