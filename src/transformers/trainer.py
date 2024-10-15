@@ -2406,7 +2406,10 @@ class Trainer:
             rng_to_sync = False
             steps_skipped = 0
             if steps_trained_in_current_epoch > 0:
-                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                if self.args.accelerate_config.use_stateful_dataloader:
+                    epoch_iterator.load_state_dict(self.state.train_dataloader_state_dict)
+                else:
+                    epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
@@ -2532,6 +2535,11 @@ class Trainer:
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+
+                    # Maybe we should only update the state dict right before checkpointing?
+                    if self.args.accelerate_config.use_stateful_dataloader:
+                        self.state.train_dataloader_state_dict = epoch_iterator.state_dict()
+
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
@@ -4919,6 +4927,13 @@ class Trainer:
             dataloader_config.non_blocking = non_blocking
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
+
+        use_stateful_dataloader = accelerator_config.pop("use_stateful_dataloader")
+        if not is_accelerate_available("1.0.0"):
+            if use_stateful_dataloader:
+                raise ImportError(
+                    "`use_stateful_dataloader` is only supported in accelerate v1.0.0 and above. Please upgrade accelerate to use this feature."
+                )
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
