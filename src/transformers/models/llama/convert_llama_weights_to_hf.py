@@ -498,7 +498,12 @@ def write_tokenizer(
             llama_version,
         ).converted_tokenizer
     else:
-        tokenizer = tokenizer_class(input_tokenizer_path)
+        try:
+            tokenizer = tokenizer_class(input_tokenizer_path)
+        except Exception:
+            raise ValueError(
+                "Failed to instantiate tokenizer. Please, make sure you have sentencepiece and protobuf installed."
+            )
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
