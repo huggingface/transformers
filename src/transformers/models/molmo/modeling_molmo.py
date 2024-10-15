@@ -24,12 +24,11 @@ from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.modeling_outputs import (
     CausalLMOutputWithPast, ModelOutput, BaseModelOutputWithPast, MoeModelOutputWithPast,
     MoeCausalLMOutputWithPast)
-from transformers.models.auto import AutoModelForCausalLM
 from torch import nn
 from transformers.utils import logging, is_flash_attn_greater_or_equal_2_10, \
     add_start_docstrings_to_model_forward, replace_return_docstrings
 
-from .config_molmo import MolmoConfig, MolmoVisionConfig
+from .configuration_molmo import MolmoConfig, MolmoVisionConfig
 from torch.nn import functional as F, CrossEntropyLoss
 
 logger = logging.get_logger(__name__)

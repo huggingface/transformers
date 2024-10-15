@@ -37,7 +37,7 @@ from transformers.tokenization_utils_base import TextInput
 from transformers.utils import logging
 
 from transformers import AutoTokenizer
-from .image_preprocessing_molmo import MolmoImagesKwargs, MolmoImageProcessor
+from .image_processing_molmo import MolmoImagesKwargs, MolmoImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -85,7 +85,7 @@ class MolmoProcessorKwargs(ProcessingKwargs, total=False):
 
 class MolmoProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
+    image_processor_class = "MolmoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor: MolmoImageProcessor = None, tokenizer : AutoTokenizer = None, **kwargs):
@@ -184,6 +184,3 @@ class MolmoProcessor(ProcessorMixin):
             out[k] = torch.from_numpy(v)
 
         return out
-
-
-MolmoProcessor.register_for_auto_class()
