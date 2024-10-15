@@ -137,7 +137,6 @@ def get_commit_info(commit):
 
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url).json()
-        pr_title = pr_for_commit["title"]
         author = pr_for_commit["user"]["login"]
         merged_author = pr_for_commit["merged_by"]["login"]
 
