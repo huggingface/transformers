@@ -16,6 +16,7 @@ import json
 import os
 from collections import Counter
 from copy import deepcopy
+
 from huggingface_hub import HfApi
 
 
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     with open("new_model_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:
         json.dump(new_data_full, fp, ensure_ascii=False, indent=4)
     commit_info = api.upload_file(
-        path_or_fileobj=f"new_model_failures_with_bad_commit_grouped_by_authors.json",
+        path_or_fileobj="new_model_failures_with_bad_commit_grouped_by_authors.json",
         path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json",
         repo_id="hf-internal-testing/transformers_daily_ci",
         repo_type="dataset",

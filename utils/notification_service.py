@@ -543,7 +543,7 @@ class Message:
             new_failed_tests = {}
             for line in failure_text.split():
                 if "https://github.com/huggingface/transformers/actions/runs" in line:
-                    pattern = "<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
+                    pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                     items = re.findall(pattern, line)
                 elif "tests/models/" in line:
                     model = line.split("/")[2]
