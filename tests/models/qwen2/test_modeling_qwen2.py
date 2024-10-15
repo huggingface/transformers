@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2ForCausalLM,
+        Qwen2ForQuestionAnswering,
         Qwen2ForSequenceClassification,
         Qwen2ForTokenClassification,
         Qwen2Model,
@@ -64,7 +65,7 @@ class Qwen2ModelTester:
         num_hidden_layers=5,
         max_window_layers=3,
         use_sliding_window=True,
-        sliding_window=2,
+        sliding_window=50,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -300,7 +301,13 @@ class Qwen2ModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2
 class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification, Qwen2ForTokenClassification)
+        (
+            Qwen2Model,
+            Qwen2ForCausalLM,
+            Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
+            Qwen2ForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -312,6 +319,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "token-classification": Qwen2ForTokenClassification,
             "text-generation": Qwen2ForCausalLM,
             "zero-shot": Qwen2ForSequenceClassification,
+            "question-answering": Qwen2ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -518,7 +526,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)

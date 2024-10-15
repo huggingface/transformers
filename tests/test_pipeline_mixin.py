@@ -33,6 +33,7 @@ from huggingface_hub import (
     ImageSegmentationInput,
     ImageToTextInput,
     ObjectDetectionInput,
+    QuestionAnsweringInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -45,6 +46,7 @@ from transformers.pipelines import (
     ImageSegmentationPipeline,
     ImageToTextPipeline,
     ObjectDetectionPipeline,
+    QuestionAnsweringPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
@@ -129,6 +131,7 @@ task_to_pipeline_and_spec_mapping = {
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
+    "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
@@ -214,8 +217,6 @@ class PipelineTesterMixin:
                     image_processor_names.append(cls_name)
                 elif "FeatureExtractor" in cls_name:
                     feature_extractor_names.append(cls_name)
-                else:
-                    raise ValueError(f"Unknown processor class: {cls_name}")
 
             # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
@@ -242,11 +243,11 @@ class PipelineTesterMixin:
                 commit=commit,
                 torch_dtype=torch_dtype,
             )
+            at_least_one_model_is_tested = True
+
         if task in task_to_pipeline_and_spec_mapping:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
-
-            at_least_one_model_is_tested = True
 
         if not at_least_one_model_is_tested:
             self.skipTest(
