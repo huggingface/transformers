@@ -26,7 +26,7 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .utils import is_protobuf_available, logging, requires_backends
+from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -34,6 +34,10 @@ logger = logging.get_logger(__name__)
 
 
 def import_protobuf(error_message=""):
+    if is_sentencepiece_available():
+        from sentencepiece import sentencepiece_model_pb2
+
+        return sentencepiece_model_pb2
     if is_protobuf_available():
         import google.protobuf
 
@@ -324,9 +328,11 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks)
 
         tokenizer = Tokenizer(
             BPE(
@@ -339,9 +345,10 @@ class GPT2Converter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        if self.original_tokenizer.add_bos_token:
+        if getattr(self.original_tokenizer, "add_bos_token", False):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
@@ -605,33 +612,12 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokens_to_add = [
-            AddedToken(token, normalized=False, special=special)
-            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-        ]
-
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            for token in tokens_to_add:
-                is_special = token.special
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    if is_last_special:
-                        tokenizer.add_special_tokens(tokens)
-                    else:
-                        tokenizer.add_tokens(tokens)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                if is_last_special:
-                    tokenizer.add_special_tokens(tokens)
-                else:
-                    tokenizer.add_tokens(tokens)
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
 
         return tokenizer
 
@@ -1575,6 +1561,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConvert,
+    "Phi3Tokenizer": LlamaConverter,
 }
 
 

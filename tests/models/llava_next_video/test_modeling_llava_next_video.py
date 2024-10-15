@@ -87,12 +87,12 @@ class LlavaNextVideoVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 2,
         },
         is_training=True,
         vision_config={
             "image_size": 16,
-            "patch_size": 2,
+            "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -114,7 +114,7 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -125,8 +125,11 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 469
+        self.encoder_seq_length = 127
         self.image_grid_pinpoints = [[32, 32]]
+        self.num_image_tokens = 88
+        self.num_video_tokens = 32
+        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):
         return LlavaNextVideoConfig(
@@ -139,6 +142,8 @@ class LlavaNextVideoVisionText2TextModelTester:
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
             image_grid_pinpoints=self.image_grid_pinpoints,
+            video_seq_length=self.num_video_tokens,
+            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -168,13 +173,12 @@ class LlavaNextVideoVisionText2TextModelTester:
         config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        # we are giving 3 images and videos let's make sure we pass in 3 special tokens
-        input_ids[:, 1] = config.image_token_index
-        input_ids[:, 2] = config.video_token_index
-        labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
-        # maskout where the image/video token is
-        labels[:, 1] == self.ignore_index
-        labels[:, 2] == self.ignore_index
+
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[input_ids == config.video_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_index
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "pixel_values_videos": pixel_values_videos,
@@ -183,7 +187,6 @@ class LlavaNextVideoVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -230,6 +233,7 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 

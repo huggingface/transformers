@@ -237,10 +237,10 @@ class BatchFeature(UserDict):
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
-            if torch.is_floating_point(v):
+            if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
+            elif isinstance(v, torch.Tensor) and device is not None:
                 new_data[k] = v.to(device=device)
             else:
                 new_data[k] = v
@@ -321,7 +321,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 

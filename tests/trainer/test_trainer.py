@@ -15,6 +15,7 @@
 
 import dataclasses
 import gc
+import importlib
 import json
 import math
 import os
@@ -31,11 +32,15 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import HfFolder, ModelCard, create_branch, delete_repo, list_repo_commits, list_repo_files
+from packaging import version
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
 from transformers import (
+    AutoFeatureExtractor,
+    AutoImageProcessor,
+    AutoProcessor,
     AutoTokenizer,
     IntervalStrategy,
     PretrainedConfig,
@@ -66,6 +71,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
@@ -86,6 +92,7 @@ from transformers.testing_utils import (
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
     require_torchdynamo,
+    require_vision,
     require_wandb,
     slow,
     torch_device,
@@ -884,6 +891,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # will add more specific tests once there are some bugs to fix
 
+    @require_non_xpu
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
@@ -1055,14 +1063,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 max_steps=10,
                 use_cpu=True,
             )
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             trainer.train()
             parameters = dict(tiny_model.named_parameters())
             state = dataclasses.asdict(trainer.state)
 
             # Reinitialize trainer
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
@@ -1083,6 +1091,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Trainer without inf/nan filter
             args = TrainingArguments(
                 tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_ademamix_bnb(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="ademamix"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_ademamix_bnb_8bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="ademamix_8bit"
             )
             trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1344,22 +1386,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
-        # Test that the model code actually gets patched with Liger kernel
-        from liger_kernel.transformers.rms_norm import LigerRMSNorm
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
 
-        from transformers.models.llama import modeling_llama
+            from transformers.models.llama import modeling_llama
 
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_llama = LlamaForCausalLM(config)
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
 
-        args = TrainingArguments(
-            "./test",
-            use_liger_kernel=True,
-        )
-        Trainer(tiny_llama, args)
+            # Spot check that modeling code and model instance variables are not yet patched
+            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
-        # Check that one of the Llama model layers has been correctly patched with Liger kernel
-        self.assertEqual(modeling_llama.LlamaRMSNorm, LigerRMSNorm)
+            args = TrainingArguments(
+                "./test",
+                use_liger_kernel=True,
+            )
+            Trainer(tiny_llama, args)
+
+            # Spot check that modeling code and model instance variables are patched
+            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
     @require_torch_gpu
@@ -3190,6 +3238,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
+    @require_non_xpu
     @require_torch_non_multi_gpu
     @require_torchdynamo
     @require_torch_tensorrt_fx
@@ -3741,6 +3790,100 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
+    def test_trainer_saves_tokenizer(self):
+        MODEL_ID = "google-bert/bert-base-uncased"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=False)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=tokenizer,
+            )
+            trainer.save_model()
+
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+        # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
+        # saved tokens change overtime, so we check that two tokenizers are equal by comparing their encoded outputs
+        test_sentence = "This is a test sentence"
+        self.assertListEqual(
+            tokenizer(test_sentence, padding="max_length").input_ids,
+            reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
+        )
+
+    @require_vision
+    def test_trainer_saves_image_processor(self):
+        MODEL_ID = "openai/clip-vit-base-patch32"
+        image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=image_processor,
+            )
+            trainer.save_model()
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(image_processor.to_dict(), reloaded_image_processor.to_dict())
+
+    def test_trainer_saves_feature_extractor(self):
+        MODEL_ID = "facebook/wav2vec2-base-960h"
+        feature_extractor = AutoFeatureExtractor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=feature_extractor,
+            )
+            trainer.save_model()
+
+            reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
+
+    @require_vision
+    def test_trainer_saves_processor(self):
+        MODEL_ID = "openai/clip-vit-base-patch32"
+        image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=False)
+        processor = AutoProcessor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=processor,
+            )
+            trainer.save_model()
+
+            reloaded_processor = AutoProcessor.from_pretrained(tmp_dir)
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(reloaded_processor.to_dict(), processor.to_dict())
+
+        image_processor_dict = image_processor.to_dict()
+        reloaded_image_processor_dict = reloaded_image_processor.to_dict()
+        # When the processor is saved in the trainer, the _processor_class gets set in the reload_image_processor dict
+        image_processor_dict.pop("_processor_class")
+        reloaded_image_processor_dict.pop("_processor_class")
+        self.assertDictEqual(image_processor_dict, reloaded_image_processor_dict)
+
+        # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
+        # saved tokens change overtime, so we check that two tokenizers are equal by comparing their encoded outputs
+        test_sentence = "This is a test sentence"
+        self.assertListEqual(
+            tokenizer(test_sentence, padding="max_length").input_ids,
+            reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
+        )
+
 
 @require_torch
 @is_staging_test
@@ -3926,6 +4069,25 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
             model_card = ModelCard.load(repo_name)
             self.assertTrue("test-trainer-tags" in model_card.data.tags)
+
+    def test_push_to_hub_with_revision(self):
+        # Checks if `trainer.push_to_hub()` works correctly by adding revision
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-revision"),
+                push_to_hub=True,
+                hub_token=self._token,
+            )
+            branch = "v1.0"
+            create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
+            url = trainer.push_to_hub(revision=branch)
+
+            # Extract branch from the url
+            re_search = re.search(r"tree/([^/]+)/", url)
+            self.assertIsNotNone(re_search)
+
+            branch_name = re_search.groups()[0]
+            self.assertEqual(branch_name, branch)
 
 
 @require_torch
@@ -4159,6 +4321,13 @@ if is_torch_available():
         "lr": TrainingArguments.learning_rate,
     }
 
+    default_ademamix_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2, 0.9999),
+        "alpha": 5.0,
+        "eps": TrainingArguments.adam_epsilon,
+        "lr": TrainingArguments.learning_rate,
+    }
+
     default_anyprecision_kwargs = {
         "use_kahan_summation": False,
         "momentum_dtype": torch.float32,
@@ -4262,6 +4431,36 @@ if is_torch_available():
                 default_lion_kwargs,
             )
         )
+
+        if version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.44.0"):
+            optim_test_params.append(
+                (
+                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
+                    bnb.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
+            )
+            optim_test_params.append(
+                (
+                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
+                    bnb.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
+            )
+            optim_test_params.append(
+                (
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
+                    bnb.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
+            )
+            optim_test_params.append(
+                (
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
+                    bnb.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
+            )
 
     if is_torchdistx_available():
         import torchdistx
@@ -4392,6 +4591,62 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                 default_adam_kwargs,
             )
 
+    def test_bnb_ademamix(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
+                mock.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            )
+
+    def test_bnb_ademamix8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
+                mock.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            )
+
+    def test_bnb_paged_ademamix(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
+                mock.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            )
+
+    def test_bnb_paged_ademamix8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
+                mock.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            )
+
     def test_bnb_lion(self):
         mock = Mock()
         modules = {
@@ -4468,6 +4723,42 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
 
     def test_bnb_paged_adam8bit_no_bnb(self):
         args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if `bitsandbytes` is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_ademamix_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if `bitsandbytes` is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_ademamix8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if `bitsandbytes` is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_ademamix_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if `bitsandbytes` is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_ademamix8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if `bitsandbytes` is installed.

@@ -75,14 +75,14 @@ class VideoLlavaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 3,
         },
         is_training=True,
         vision_config={
             "model_type": "clip_vision_model",
             "batch_size": 12,
             "image_size": 30,
-            "patch_size": 2,
+            "patch_size": 6,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -104,8 +104,8 @@ class VideoLlavaVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
         self.num_frames = num_frames
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -116,7 +116,10 @@ class VideoLlavaVisionText2TextModelTester:
         self.batch_size = 5
         self.num_channels = 3
         self.image_size = 224
-        self.encoder_seq_length = 2044
+        self.encoder_seq_length = 64
+        self.num_image_tokens = 25
+        self.num_video_tokens = 26
+        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -128,6 +131,8 @@ class VideoLlavaVisionText2TextModelTester:
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
+            image_seq_length=self.num_image_tokens,
+            video_seq_length=self.num_video_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -159,11 +164,11 @@ class VideoLlavaVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
 
-        # we are giving 3 videos and 3 images. Need to pass in image and video tokens, both
-        # also need to make sure no other special tokens are set
-        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
-        input_ids[:, 0] = config.video_token_index
-        input_ids[:, 1:2] = config.image_token_index
+        input_ids[(input_ids == config.image_token_index) | (input_ids == config.video_token_index)] = (
+            self.pad_token_id
+        )
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_index
         inputs_dict = {
             "pixel_values_videos": pixel_values_videos,
             "pixel_values_images": pixel_values_images,
@@ -196,6 +201,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
 
     all_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -231,6 +237,9 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(
+        reason="After #33533, this still passes, but many subsequential tests fail with `device-side assert triggered`"
+    )
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -242,16 +251,16 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
             inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(**inputs)
 
     def test_video_only_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
-            # replace video_token with dummy id which is not video token id
-            # error that video-tokens and num-of-video-inputs mismatch will be raised
-            inputs["input_ids"][:, 1:2] = 2
+            # replace image token id with dummy id
+            # Error will be raised as num-image-tokens and num-of-image-embeds mismatch
+            inputs["input_ids"][:, : self.model_tester.num_image_tokens] = 2
             with self.assertRaises(ValueError):
                 _ = model(**inputs)
 
@@ -262,8 +271,13 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
-            # set dummy id, which is not image token id, same as above
-            inputs["input_ids"][:, :1] = 2
+            # set dummy id, which is not video token id
+            # Error will be raised as num-video-tokens and num-of-video-embeds mismatch
+            inputs["input_ids"][
+                :,
+                self.model_tester.num_image_tokens : self.model_tester.num_image_tokens
+                + self.model_tester.num_video_tokens,
+            ] = 2
             with self.assertRaises(ValueError):
                 _ = model(**inputs)
 
@@ -320,6 +334,10 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 model_row_output = model(**single_row_input)
 
             for key in model_batched_output:
+                # we can't test videos as their output shapes are linked to number of frames
+                # and we don't have to as it is a CLIP model and can be tested from `ClipModelTester` class
+                if key == "video_hidden_states":
+                    continue
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs

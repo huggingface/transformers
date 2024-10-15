@@ -802,7 +802,7 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
-        if revision is not None:
+        if revision is not None and not revision.startswith("refs/pr"):
             try:
                 create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
             except HfHubHTTPError as e:
@@ -1198,6 +1198,9 @@ def create_and_tag_model_card(
         model_card = ModelCard.from_template(card_data, model_description=model_description)
 
     if tags is not None:
+        # Ensure model_card.data.tags is a list and not None
+        if model_card.data.tags is None:
+            model_card.data.tags = []
         for model_tag in tags:
             if model_tag not in model_card.data.tags:
                 model_card.data.tags.append(model_tag)

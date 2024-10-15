@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask_for_sdpa,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -986,7 +987,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     """XLM-RoBERTa-XL Model with a `language modeling` head on top for CLM fine-tuning.""",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
-class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
+class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -1111,6 +1112,8 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+        # Overwritten -- model logic breaks when `inputs_embeds` are passed from this function
+
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:

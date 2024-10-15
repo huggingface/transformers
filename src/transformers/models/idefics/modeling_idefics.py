@@ -51,60 +51,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "IdeficsConfig"
 
 
-# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
-def _prepare_4d_causal_attention_mask_with_cache_position(
-    attention_mask: torch.Tensor,
-    sequence_length: int,
-    target_length: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    min_dtype: float,
-    cache_position: torch.Tensor,
-    batch_size: int,
-):
-    """
-    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-    `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-    Args:
-        attention_mask (`torch.Tensor`):
-            A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-        sequence_length (`int`):
-            The sequence length being processed.
-        target_length (`int`):
-            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-        dtype (`torch.dtype`):
-            The dtype to use for the 4D attention mask.
-        device (`torch.device`):
-            The device to plcae the 4D attention mask on.
-        min_dtype (`float`):
-            The minimum value representable with the dtype `dtype`.
-        cache_position (`torch.Tensor`):
-            Indices depicting the position of the input sequence tokens in the sequence.
-        batch_size (`torch.Tensor`):
-            Batch size.
-    """
-    if attention_mask is not None and attention_mask.dim() == 4:
-        # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-        causal_mask = attention_mask
-    else:
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-            padding_mask = padding_mask == 0
-            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                padding_mask, min_dtype
-            )
-
-    return causal_mask
-
-
 @dataclass
 class IdeficsBaseModelOutputWithPast(ModelOutput):
     """
@@ -235,51 +181,6 @@ def expand_inputs_for_generation(
         )
 
     return input_ids, model_kwargs
-
-
-def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
-    token_type_ids = kwargs.get("token_type_ids", None)
-    cache_position = kwargs.get("cache_position", None)
-    # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-    if past_key_values is not None:
-        if input_ids.shape[1] != cache_position.shape[0]:
-            input_ids = input_ids[:, cache_position]
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
-
-    attention_mask = kwargs.get("attention_mask", None)
-    position_ids = kwargs.get("position_ids", None)
-
-    if attention_mask is not None and position_ids is None:
-        # create position_ids on the fly for batch generation
-        position_ids = attention_mask.long().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        if past_key_values:
-            position_ids = position_ids[:, -1].unsqueeze(-1)
-
-            # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
-            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-    pixel_values = kwargs.get("pixel_values", None)
-    image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
-    perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
-    image_attention_mask = kwargs.get("image_attention_mask", None)
-    interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
-
-    return {
-        "input_ids": input_ids,
-        "past_key_values": past_key_values,
-        "use_cache": kwargs.get("use_cache"),
-        "cache_position": cache_position,
-        "position_ids": position_ids,
-        "attention_mask": attention_mask,
-        "token_type_ids": token_type_ids,
-        "pixel_values": pixel_values,
-        "image_encoder_embeddings": image_encoder_embeddings,
-        "perceiver_embeddings": perceiver_embeddings,
-        "image_attention_mask": image_attention_mask,
-        "interpolate_pos_encoding": interpolate_pos_encoding,
-    }
 
 
 def freeze_model(model, module_exceptions=[]):
@@ -1226,9 +1127,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1239,15 +1138,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):
-            if not self.training:
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.45. "
-                    "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
-                )
             return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+            else:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                logger.warning_once(
+                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
+                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
+                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                )
 
         batch_size, seq_length, _ = inputs_embeds.shape
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1262,11 +1165,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[:, -seq_length:]
         elif position_ids is None:
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0)
 
         if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
             raise ValueError(
@@ -1497,10 +1398,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1509,13 +1409,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
             device=device,
-            min_dtype=min_dtype,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -1529,7 +1428,64 @@ class IdeficsModel(IdeficsPreTrainedModel):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
+            min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
+    @staticmethod
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
 
         return causal_mask
 
@@ -1681,7 +1637,9 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
@@ -1704,19 +1662,57 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        position_ids=None,
+        pixel_values=None,
+        image_hidden_states=None,
+        use_cache=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        if past_key_values is not None:
+            if input_ids.shape[1] != cache_position.shape[0]:
+                input_ids = input_ids[:, cache_position]
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+        model_inputs = {}
         image_hidden_states = kwargs.pop("image_hidden_states", None)
         if image_hidden_states is not None:
             if self.config.use_resampler:
-                kwargs["perceiver_embeddings"] = image_hidden_states
+                model_inputs["perceiver_embeddings"] = image_hidden_states
             else:
-                kwargs["image_encoder_embeddings"] = image_hidden_states
-            kwargs["pixel_values"] = None
-        inputs = prepare_inputs_for_generation(input_ids, past=past, **kwargs)
-        unwanted_kwargs = ["token_type_ids"]
-        for kwarg in unwanted_kwargs:
-            inputs.pop(kwarg, None)
-        return inputs
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+            pixel_values = None
+
+        model_inputs.update(
+            {
+                "input_ids": input_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "cache_position": cache_position,
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "image_attention_mask": kwargs.get("image_attention_mask", None),
+                "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
+            }
+        )
+
+        return model_inputs
 
     @staticmethod
     def _expand_inputs_for_generation(

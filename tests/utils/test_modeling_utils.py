@@ -90,6 +90,7 @@ if is_torch_available():
         BertConfig,
         BertModel,
         CLIPTextModel,
+        GenerationMixin,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -1715,6 +1716,86 @@ class ModelUtilsTest(TestCasePlus):
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
 
+    def test_can_generate(self):
+        """Tests the behavior of `PreTrainedModel.can_generate` method."""
+        logger = logging.get_logger("transformers.modeling_utils")
+        logger.warning_once.cache_clear()
+
+        # 1 - By default, a model CAN'T generate
+        can_generate = BertModel.can_generate()
+        self.assertFalse(can_generate)
+
+        # 2 - The most common case for a model to be able to generate is to inherit from `GenerationMixin` directly
+        class DummyBertWithMixin(BertModel, GenerationMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithMixin.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 3 - Alternatively, a model can implement a `generate` method
+        class DummyBertWithGenerate(BertModel):
+            def generate(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithGenerate.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 4 - Finally, it can inherit from a model that can generate
+        class DummyBertWithParent(DummyBertWithMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithParent.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # `GenerationMixin`)
+        class DummyBertWithPrepareInputs(BertModel):
+            def prepare_inputs_for_generation(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithPrepareInputs.can_generate()
+        self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
+        self.assertTrue(can_generate)
+
+    def test_save_and_load_config_with_custom_generation(self):
+        """
+        Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
+        that gets moved to the generation config and reset on the model config)
+        """
+        model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
+
+        # The default for `num_beams` is 1 and `early_stopping` is False
+        self.assertTrue(model.config.num_beams == 1)
+        self.assertTrue(model.config.early_stopping is False)
+
+        # When we save the model, this custom parameter should be moved to the generation config AND the model
+        # config should contain `None`
+        model.config.num_beams = 2
+        model.config.early_stopping = True
+        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            new_model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
+            # moved to generation config
+            self.assertTrue(new_model.generation_config.num_beams == 2)
+            self.assertTrue(new_model.generation_config.early_stopping is True)
+            # reset in the model config
+            self.assertTrue(new_model.config.num_beams is None)
+            self.assertTrue(new_model.config.early_stopping is None)
+
+            # Sanity check: We can run `generate` with the new model without any warnings
+            random_ids = torch.randint(0, 100, (1, 5))
+            with warnings.catch_warnings(record=True) as w:
+                new_model.generate(random_ids, max_new_tokens=3)
+            self.assertTrue(len(w) == 0)
+
 
 @slow
 @require_torch
@@ -1928,19 +2009,18 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             if thread.name == "Thread-autoconversion":
                 thread.join(timeout=10)
 
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
+        discussions = self.api.get_repo_discussions(self.repo_name)
 
-            bot_opened_pr = None
-            bot_opened_pr_title = None
+        bot_opened_pr = None
+        bot_opened_pr_title = None
 
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
+        for discussion in discussions:
+            if discussion.author == "SFconvertbot":
+                bot_opened_pr = True
+                bot_opened_pr_title = discussion.title
 
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+        self.assertTrue(bot_opened_pr)
+        self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):

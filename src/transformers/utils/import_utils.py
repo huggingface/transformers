@@ -92,6 +92,7 @@ ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
+HQQ_MIN_VERSION = "0.2.1"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -142,6 +143,14 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quanto_available = _is_package_available("quanto")
+_is_optimum_quanto_available = False
+try:
+    importlib.metadata.version("optimum_quanto")
+    _is_optimum_quanto_available = True
+except importlib.metadata.PackageNotFoundError:
+    _is_optimum_quanto_available = False
+# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
+_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -180,7 +189,7 @@ _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
-_hqq_available = _is_package_available("hqq")
+_hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
@@ -322,8 +331,8 @@ def is_torch_deterministic():
         return True
 
 
-def is_hqq_available():
-    return _hqq_available
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
+    return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
 def is_pygments_available():
@@ -849,15 +858,29 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+@lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available():
+    if not is_torch_available() or not _bitsandbytes_available:
         return False
 
-    # bitsandbytes throws an error if cuda is not available
-    # let's avoid that by adding a simple check
     import torch
 
-    return _bitsandbytes_available and torch.cuda.is_available()
+    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+    # so those versions of the library are practically only available when CUDA is too.
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        return torch.cuda.is_available()
+
+    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
+    return True
+
+
+def is_bitsandbytes_multi_backend_available() -> bool:
+    if not is_bitsandbytes_available():
+        return False
+
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
 
 
 def is_flash_attn_2_available():
@@ -946,7 +969,19 @@ def is_auto_awq_available():
 
 
 def is_quanto_available():
+    logger.warning_once(
+        "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
+    )
     return _quanto_available
+
+
+def is_optimum_quanto_available():
+    # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
+    return _is_optimum_quanto_available
+
+
+def is_compressed_tensors_available():
+    return _compressed_tensors_available
 
 
 def is_auto_gptq_available():
@@ -1187,7 +1222,7 @@ def is_liger_kernel_available():
     if not _liger_kernel_available:
         return False
 
-    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
 # docstyle-ignore
@@ -1716,9 +1751,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._modules:
-            value = self._get_module(name)
-        elif name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend.keys():
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -1734,6 +1767,8 @@ class _LazyModule(ModuleType):
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
+        elif name in self._modules:
+            value = self._get_module(name)
         else:
             raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
@@ -1924,7 +1959,7 @@ def create_import_structure_from_path(module_path):
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name)) as f:
+        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix
