@@ -6212,6 +6212,13 @@ class MobileViTV2Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MobileViTV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MolmoForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6227,13 +6234,6 @@ class MolmoModel(metaclass=DummyObject):
 
 
 class MolmoPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MobileViTV2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -18,6 +18,7 @@ from typing import Optional
 from PIL import ImageOps
 from PIL.Image import Image
 
+
 try:
     from typing import Unpack
 except ImportError:
@@ -26,36 +27,41 @@ except ImportError:
 import numpy as np
 import torch
 
+from transformers import AutoTokenizer
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import (
-    TextKwargs,
     ProcessingKwargs,
     ProcessorMixin,
+    TextKwargs,
 )
-
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import logging
 
-from transformers import AutoTokenizer
-from .image_processing_molmo import MolmoImagesKwargs, MolmoImageProcessor
+from .image_processing_molmo import MolmoImageProcessor, MolmoImagesKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
-DEFAULT_IMAGE_PATCH_TOKEN = f"<im_patch>"
-DEFAULT_IM_START_TOKEN = f"<im_start>"
-DEFAULT_IM_END_TOKEN = f"<im_end>"
-DEFAULT_IM_COL_TOKEN = f"<im_col>"
+DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
+DEFAULT_IM_START_TOKEN = "<im_start>"
+DEFAULT_IM_END_TOKEN = "<im_end>"
+DEFAULT_IM_COL_TOKEN = "<im_col>"
 IMAGE_PROMPT = "<|image|>"
 
-EXTRA_TOKENS = (DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_COL_TOKEN, IMAGE_PROMPT)
+EXTRA_TOKENS = (
+    DEFAULT_IM_START_TOKEN,
+    DEFAULT_IM_END_TOKEN,
+    DEFAULT_IMAGE_PATCH_TOKEN,
+    DEFAULT_IM_COL_TOKEN,
+    IMAGE_PROMPT,
+)
 
 
 def get_special_token_ids(tokenizer):
     ids = tokenizer.encode("".join(EXTRA_TOKENS), add_special_tokens=False)
     assert len(ids) == len(EXTRA_TOKENS)
-    return {k: i for k, i in zip(EXTRA_TOKENS, ids)}
+    return dict(zip(EXTRA_TOKENS, ids))
 
 
 class MolmoTextKwargs(TextKwargs, total=False):
@@ -88,7 +94,7 @@ class MolmoProcessor(ProcessorMixin):
     image_processor_class = "MolmoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(self, image_processor: MolmoImageProcessor = None, tokenizer : AutoTokenizer = None, **kwargs):
+    def __init__(self, image_processor: MolmoImageProcessor = None, tokenizer: AutoTokenizer = None, **kwargs):
         # self.image_processor = image_processor
         # self.tokenizer = tokenizer
         super().__init__(image_processor, tokenizer)
@@ -133,8 +139,6 @@ class MolmoProcessor(ProcessorMixin):
             output_kwargs["text_kwargs"]["always_start_with_space"],
         )
 
-        image_token_id = self.special_token_ids[IMAGE_PROMPT]
-
         if images is not None:
             if not isinstance(images, (list, tuple)):
                 images = [images]
@@ -144,14 +148,14 @@ class MolmoProcessor(ProcessorMixin):
                     image = image.convert("RGB")
                     # Handle images with EXIF orientation tags, which PIL will ignore by default
                     # https://github.com/python-pillow/Pillow/issues/4703
-                    img = ImageOps.exif_transpose(image)
+                    image = ImageOps.exif_transpose(image)
                     image_arrays.append(np.array(image))
                 else:
                     assert len(image.shape) == 3 and image.shape[-1] == 3
                     image_arrays.append(image.astype(np.uint8))
             images = image_arrays
             # For now only support inserting images at the start
-            image_idx = [-1]*len(images)
+            image_idx = [-1] * len(images)
         else:
             image_idx = None
 
@@ -167,7 +171,7 @@ class MolmoProcessor(ProcessorMixin):
             image_col_token_id=image_col_token_id,
             image_start_token_id=image_start_token_id,
             image_end_token_id=image_end_token_id,
-            **output_kwargs["images_kwargs"]
+            **output_kwargs["images_kwargs"],
         )
 
         # Prepend BOS

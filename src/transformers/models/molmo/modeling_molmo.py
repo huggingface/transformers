@@ -12,24 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from dataclasses import replace
-from typing import List, Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
-from transformers import PreTrainedModel, add_start_docstrings, GenerationMixin
+from torch import nn
+from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
+
+from transformers import GenerationMixin, PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache, StaticCache
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.modeling_outputs import (
-    CausalLMOutputWithPast, ModelOutput, BaseModelOutputWithPast, MoeModelOutputWithPast,
-    MoeCausalLMOutputWithPast)
-from torch import nn
-from transformers.utils import logging, is_flash_attn_greater_or_equal_2_10, \
-    add_start_docstrings_to_model_forward, replace_return_docstrings
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    ModelOutput,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
+from transformers.utils import (
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
+)
 
 from .configuration_molmo import MolmoConfig, MolmoVisionConfig
-from torch.nn import functional as F, CrossEntropyLoss
+
 
 logger = logging.get_logger(__name__)
 
@@ -137,7 +147,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Olmo
 class MolmoPreTrainedModel(PreTrainedModel):
     config_class = MolmoConfig
     base_model_prefix = "model"
@@ -276,16 +285,8 @@ class MolmoAttention(nn.Module):
         if config.qk_layer_norm:
             if config.num_key_value_heads is None:
                 config.num_key_value_heads = config.num_attention_heads
-            self.q_norm = MolmoRmsLayerNorm(
-                config,
-                size=config.hidden_size,
-                eps=config.layer_norm_eps
-            )
-            self.k_norm = MolmoRmsLayerNorm(
-                config,
-                size=config.hidden_size,
-                eps=config.layer_norm_eps
-            )
+            self.q_norm = MolmoRmsLayerNorm(config, size=config.hidden_size, eps=config.layer_norm_eps)
+            self.k_norm = MolmoRmsLayerNorm(config, size=config.hidden_size, eps=config.layer_norm_eps)
 
         # Attention output projection.
         input_dim = config.hidden_size
@@ -296,11 +297,13 @@ class MolmoAttention(nn.Module):
             config.num_key_value_heads * head_dim,
         )
         self.att_proj = nn.Linear(
-            config.hidden_size, sum(self.fused_dims),
+            config.hidden_size,
+            sum(self.fused_dims),
             bias=config.qkv_bias,
         )
         self.attn_out = nn.Linear(
-            input_dim, config.hidden_size,
+            input_dim,
+            config.hidden_size,
             bias=False,
         )
 
@@ -579,7 +582,7 @@ class MolmoMlp(nn.Module):
     def __init__(self, input_dim, hidden_size, activation_fn, include_bias=False):
         super().__init__()
         self.ff_proj = nn.Linear(input_dim, hidden_size, bias=include_bias)
-        self.ff_out = nn.Linear(hidden_size//2, input_dim, bias=include_bias)
+        self.ff_out = nn.Linear(hidden_size // 2, input_dim, bias=include_bias)
         self.act = ACT2FN[activation_fn]
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
@@ -676,8 +679,12 @@ class MolmoeMlpExpert(nn.Module):
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_top_k
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = nn.ModuleList([MolmoeMlp(config.hidden_size, config.intermediate_size // 2, config.activation_type)
-                                      for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList(
+            [
+                MolmoeMlp(config.hidden_size, config.intermediate_size // 2, config.activation_type)
+                for _ in range(self.num_experts)
+            ]
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # hidden_states = self.ff_norm(hidden_states)
@@ -741,7 +748,7 @@ class MolmoeDecoderLayer(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
         output_router_logits: bool = None,
-        cache_position=None
+        cache_position=None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         if not self.config.norm_after:
             atten_in = self.attn_norm(x)
@@ -789,7 +796,6 @@ class MolmoeDecoderLayer(nn.Module):
 
 
 class MolmoEmbedding(nn.Module):
-
     def __init__(
         self,
         num_embeddings: int,
@@ -829,12 +835,10 @@ class VisionMlp(nn.Module):
 
 
 class MolmoVisionBlock(nn.Module):
-
     def __init__(self, config: MolmoVisionConfig, attention_type, device=None):
         super().__init__()
         self.attention = VisionAttention(config, device=device, attention_type=attention_type)
-        self.feed_forward = VisionMlp(
-            config.image_emb_dim, config.image_mlp_dim, config.image_mlp_activations, device)
+        self.feed_forward = VisionMlp(config.image_emb_dim, config.image_mlp_dim, config.image_mlp_activations, device)
         self.attention_norm = nn.LayerNorm(
             config.image_emb_dim,
             eps=config.image_norm_eps,
@@ -853,31 +857,29 @@ class MolmoVisionBlock(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-
     def __init__(self, config: MolmoVisionConfig, attention_type, device=None):
         super().__init__()
         self.config = config
 
         # class embeddings and positional embeddings
-        self.scale = config.image_emb_dim ** -0.5
-        self.class_embedding = nn.Parameter(
-            torch.zeros(config.image_emb_dim, device=device))
+        self.scale = config.image_emb_dim**-0.5
+        self.class_embedding = nn.Parameter(torch.zeros(config.image_emb_dim, device=device))
         self.positional_embedding = nn.Parameter(
-            torch.zeros(config.image_num_pos, config.image_emb_dim, device=device))
+            torch.zeros(config.image_num_pos, config.image_emb_dim, device=device)
+        )
 
         image_patch_size = config.image_patch_size
         self.patch_embedding = nn.Linear(
-            image_patch_size * image_patch_size * 3,
-            config.image_emb_dim,
-            bias=False,
-            device=device
+            image_patch_size * image_patch_size * 3, config.image_emb_dim, bias=False, device=device
         )
 
         self.pre_ln = nn.LayerNorm(config.image_emb_dim, eps=config.image_norm_eps)
-        self.layers = nn.ModuleList([
-            MolmoVisionBlock(config, attention_type=attention_type, device=device)
-            for _ in range(config.image_num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                MolmoVisionBlock(config, attention_type=attention_type, device=device)
+                for _ in range(config.image_num_layers)
+            ]
+        )
 
     def add_pos_emb(self, x: torch.Tensor, patch_num: int) -> torch.Tensor:
         cls_emb = self.positional_embedding[0:1]
@@ -894,7 +896,11 @@ class VisionTransformer(nn.Module):
             # antialias: default True in jax.image.resize
             pos_emb = pos_emb.unsqueeze(0).permute(0, 3, 1, 2)
             pos_emb = F.interpolate(
-                pos_emb, size=(patch_num_0, patch_num_1), mode="bicubic", align_corners=False, antialias=True,
+                pos_emb,
+                size=(patch_num_0, patch_num_1),
+                mode="bicubic",
+                align_corners=False,
+                antialias=True,
             )
             pos_emb = pos_emb.permute(0, 2, 3, 1).squeeze(0)
 
@@ -910,10 +916,7 @@ class VisionTransformer(nn.Module):
         x = self.patch_embedding(x)
 
         # class embeddings and positional embeddings
-        x = torch.cat([
-            self.class_embedding.view(1,  1, -1).expand(x.shape[0], -1, -1).to(x.dtype),
-            x
-        ], dim=1)
+        x = torch.cat([self.class_embedding.view(1, 1, -1).expand(x.shape[0], -1, -1).to(x.dtype), x], dim=1)
         x = self.add_pos_emb(x, patch_num)
 
         x = self.pre_ln(x)
@@ -926,8 +929,14 @@ class VisionTransformer(nn.Module):
 
 
 class VisionAttention(nn.Module):
-    def __init__(self, config: MolmoVisionConfig, use_bias: bool =True,
-                 embed_dim: int=None, device=None, attention_type: str="sdpa"):
+    def __init__(
+        self,
+        config: MolmoVisionConfig,
+        use_bias: bool = True,
+        embed_dim: int = None,
+        device=None,
+        attention_type: str = "sdpa",
+    ):
         super().__init__()
         self.config = config
         self.embed_dim = config.image_emb_dim
@@ -1032,7 +1041,7 @@ class VisionAttention(nn.Module):
 
 
 class MolmoImageProjector(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim, output_dim,  act_fn="silu", device=None):
+    def __init__(self, input_dim: int, hidden_dim, output_dim, act_fn="silu", device=None):
         super().__init__()
         self.w1 = nn.Linear(input_dim, hidden_dim, bias=False, device=device)
         self.w2 = nn.Linear(hidden_dim, output_dim, bias=False, device=device)
@@ -1040,7 +1049,7 @@ class MolmoImageProjector(nn.Module):
         self.act_fn = ACT2FN[act_fn]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w2(self.act_fn(self.w1(x))*self.w3(x))
+        return self.w2(self.act_fn(self.w1(x)) * self.w3(x))
 
 
 class MolmoVisionBackbone(nn.Module):
@@ -1051,31 +1060,23 @@ class MolmoVisionBackbone(nn.Module):
 
         self.image_pooling_2d = VisionAttention(
             config.vision_config,
-            embed_dim=len(config.vit_layers)*config.vision_config.image_emb_dim,
-            attention_type=config.attention_type
+            embed_dim=len(config.vit_layers) * config.vision_config.image_emb_dim,
+            attention_type=config.attention_type,
         )
-
-        # `MLP` assume the activation takes two inputs, so it must be a 'llama' version
-        if config.activation_type == "swiglu":
-            mlp_config = replace(config, activation_type="llama_swiglu")
-        elif config.activation_type == "gelu":
-            raise NotImplementedError()
-        else:
-            mlp_config = config
 
         self.image_projector = MolmoImageProjector(
             config.vision_config.image_emb_dim,
             # //2 since `mlp_hidden_size` includes the gate and proj, but this does not have
             # gated activations
-            config.intermediate_size//2,
+            config.intermediate_size // 2,
             config.hidden_size,
-            act_fn=config.activation_type
+            act_fn=config.activation_type,
         )
         self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
 
         self.pad_embed = None
         if config.image_padding_embed:
-            image_dim = config.vision_config.image_emb_dim*len(self.config.vit_layers)
+            image_dim = config.vision_config.image_emb_dim * len(self.config.vit_layers)
             if config.image_padding_embed == "pad_and_partial_pad":
                 self.pad_embed = nn.Parameter(torch.zeros((2, image_dim)))
             else:
@@ -1083,7 +1084,6 @@ class MolmoVisionBackbone(nn.Module):
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         cfg = self.config
-        v_cfg = self.config.vision_config
         B, T, N, D = images.shape
 
         mask = ~torch.all(images.view(B * T, N, D) == -1, dim=(1, 2), keepdim=True)
@@ -1126,11 +1126,15 @@ class MolmoVisionBackbone(nn.Module):
                 image_features = image_features + pad_embed * torch.unsqueeze(all_pad, -1)
             elif cfg.image_padding_embed == "regress":
                 pad_embed = self.pad_embed[None, None, None, :]
-                image_features = image_features + pad_embed * torch.unsqueeze(torch.maximum(image_masks, torch.zeros_like(image_masks)), -1)
+                image_features = image_features + pad_embed * torch.unsqueeze(
+                    torch.maximum(image_masks, torch.zeros_like(image_masks)), -1
+                )
             elif cfg.image_padding_embed == "pad_and_partial_pad":
                 pad_embed = self.pad_embed[:, None, None, None, :]
                 all_pad = image_masks == 0
-                partial_pad = torch.logical_and(image_masks < 1, torch.logical_not(all_pad)).to(dtype=image_features.dtype)
+                partial_pad = torch.logical_and(image_masks < 1, torch.logical_not(all_pad)).to(
+                    dtype=image_features.dtype
+                )
                 all_pad = all_pad.to(dtype=image_features.dtype)
                 image_features = image_features + pad_embed[0] * torch.unsqueeze(all_pad, -1)
                 image_features = image_features + pad_embed[1] * torch.unsqueeze(partial_pad, -1)
@@ -1141,20 +1145,19 @@ class MolmoVisionBackbone(nn.Module):
         if cls_embed is not None:
             cls_embed = self.image_feature_dropout(cls_embed)
 
-        image_features = image_features.reshape(
-            (batch_size, num_image) + cfg.image_num_patch + (-1,))
+        image_features = image_features.reshape((batch_size, num_image) + cfg.image_num_patch + (-1,))
 
         # transpose to get 2x2 feature squares [n_patches, 4, n_features]
         batch, n_crops, h, w, c = image_features.shape
-        image_features = torch.reshape(image_features, [batch*n_crops, h//2, 2, w//2, 2, c])
+        image_features = torch.reshape(image_features, [batch * n_crops, h // 2, 2, w // 2, 2, c])
         image_features = torch.permute(image_features, [0, 1, 3, 2, 4, 5])
-        image_features = torch.reshape(image_features, [batch*n_crops*h//2*w//2, 2*2, c])
+        image_features = torch.reshape(image_features, [batch * n_crops * h // 2 * w // 2, 2 * 2, c])
 
         query = image_features.mean(-2, keepdim=True)
         image_features = self.image_pooling_2d(query, image_features)
 
-        h = self.config.vision_config.image_num_patch[0]//2
-        w = self.config.vision_config.image_num_patch[1]//2
+        h = self.config.vision_config.image_num_patch[0] // 2
+        w = self.config.vision_config.image_num_patch[1] // 2
         image_features = image_features.reshape(batch_size, num_image, h * w, -1)
 
         # MLP layer to map the feature.
@@ -1166,7 +1169,6 @@ class MolmoVisionBackbone(nn.Module):
 
 
 class MolmoRmsLayerNorm(nn.Module):
-
     def __init__(
         self,
         config: MolmoConfig,
@@ -1214,17 +1216,17 @@ MOLMO_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-            
+
             [What are input IDs?](../glossary#input-ids)
         images (`torch.FloatTensor` of shape `(batch_size, n_crops, 24*24, 3*3*13)`, *optional*):
             The input crops in with pixel values between 0 and 1 and normalized with CLIP mean/std
-            
+
             Each crop contains 24x24 patches with 14*14*3 pixel values
         image_masks  (`torch.FloatTensor` of shape `(batch_size, n_crops, n_patches, n_features)`, *optional*):
             Image masks showing what percent of each patch is paddding
         image_input_idx  (`torch.LongTensor` of shape `(batch_size, n_crops)`):
-            For each patch, the index in `input_ids` to add its features to, values <= 0 
-            means ignore the patch            
+            For each patch, the index in `input_ids` to add its features to, values <= 0
+            means ignore the patch.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1283,7 +1285,7 @@ MOLMO_INPUTS_DOCSTRING = r"""
             more detail.
         output_router_logits (`bool`, *optional*):
             Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-            and should not be returned during inference.            
+            and should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
@@ -1367,7 +1369,7 @@ class MolmoModel(MolmoPreTrainedModel):
 
         # normalized
         if self.config.normalize_input_embeds:
-            x = x * (self.config.hidden_size ** 0.5)
+            x = x * (self.config.hidden_size**0.5)
         return x
 
     def forward(
@@ -1491,7 +1493,11 @@ class MolmoModel(MolmoPreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                if v is not None
+            )
         if self.config.moe_num_experts == 0:
             return BaseModelOutputWithPast(
                 last_hidden_state=hidden_states,
@@ -1508,7 +1514,6 @@ class MolmoModel(MolmoPreTrainedModel):
                 router_logits=all_router_logits,
             )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1631,7 +1636,6 @@ class MolmoModel(MolmoPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->Olmo
 class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1811,4 +1815,4 @@ class MolmoForCausalLM(MolmoPreTrainedModel, GenerationMixin):
             # are already cached
             for k in ["images", "image_masks", "image_input_idx"]:
                 del model_kwargs[k]
-        return super()._update_model_kwargs_for_generation(outputs, model_kwargs,is_encoder_decoder, num_new_tokens)
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)

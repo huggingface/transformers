@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Tuple
+from typing import Tuple
 
-from transformers import PretrainedConfig, AutoTokenizer
+from transformers import PretrainedConfig
 
 
 class MolmoVisionConfig(PretrainedConfig):
@@ -35,7 +35,7 @@ class MolmoVisionConfig(PretrainedConfig):
         image_norm_eps: float = 1e-5,
         float32_attention: bool = True,
         attention_type: str = "spda",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.image_default_input_size = image_default_input_size
@@ -80,24 +80,24 @@ class MolmoConfig(PretrainedConfig):
         rope_theta=10000.0,
         activation_type="silu",
         qkv_bias: bool = False,
-        tie_word_embeddings: bool=True,
-        bias_for_layer_norm: bool=False,
-        qk_layer_norm: bool=False,
+        tie_word_embeddings: bool = True,
+        bias_for_layer_norm: bool = False,
+        qk_layer_norm: bool = False,
         norm_after: bool = False,
-        layer_norm_type: str="rms",
-        vision_config: MolmoVisionConfig=None,
+        layer_norm_type: str = "rms",
+        vision_config: MolmoVisionConfig = None,
         vit_layers=(-2, -9),
-        residual_dropout: float=0.0,
-        embedding_dropout: float=0.0,
-        attention_dropout: float=0.0,
-        image_feature_dropout: float=0.0,
+        residual_dropout: float = 0.0,
+        embedding_dropout: float = 0.0,
+        attention_dropout: float = 0.0,
+        image_feature_dropout: float = 0.0,
         additional_vocab_size=128,
         attention_type: str = "sdpa",
         image_padding_embed="pad_and_partial_pad",
         moe_num_experts=None,
         moe_top_k=None,
-        normalize_input_embeds: bool=False,
-        scale_logits: bool=False,
+        normalize_input_embeds: bool = False,
+        scale_logits: bool = False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -117,7 +117,7 @@ class MolmoConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qk_layer_norm = qk_layer_norm
         self.num_key_value_heads = num_key_value_heads
-        self.float32_attention= float32_attention
+        self.float32_attention = float32_attention
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_theta = rope_theta
@@ -149,7 +149,3 @@ class MolmoConfig(PretrainedConfig):
     def image_num_patch(self):
         assert self.vision_config is not None
         return self.vision_config.image_num_patch
-
-
-MolmoVisionConfig.register_for_auto_class()
-MolmoConfig.register_for_auto_class()
