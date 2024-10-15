@@ -2113,7 +2113,7 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
 
-        # Setm model_kwargs `use_cache` so we can use it later in forward runs
+        # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 10. go into different generation modes
@@ -4300,7 +4300,8 @@ class GenerationMixin:
                             newly_added_length,
                             is_decoder_attention=True,
                         )
-                    else:
+                    # some (V)LLMs have hard requirement on SDPA and thus never return attn
+                    elif outputs.attentions[0] is not None:
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
