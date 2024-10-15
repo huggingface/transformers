@@ -618,6 +618,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             # TODO: @raushan retain only the new behavior after v4.47
             else:
                 if image_outputs is not None:
+                    n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                    n_image_features = image_features.shape[1]
+                    if n_image_tokens != n_image_features:
+                        raise ValueError(
+                            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                        )
                     special_image_mask = (
                         (input_ids == self.config.image_token_index)
                         .unsqueeze(-1)
@@ -626,8 +632,13 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
                     )
                     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
                 if video_outputs is not None:
+                    n_video_tokens = (input_ids == self.config.video_token_index).sum(dim=-1)[0].item()
+                    n_video_features = video_features.shape[1]
+                    if n_video_tokens != n_video_features:
+                        raise ValueError(
+                            f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                        )
                     special_image_mask = (
                         (input_ids == self.config.video_token_index)
                         .unsqueeze(-1)
