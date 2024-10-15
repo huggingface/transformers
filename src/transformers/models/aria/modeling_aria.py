@@ -19,9 +19,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -39,6 +38,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 import warnings
 
+import torch
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ...cache_utils import StaticCache
@@ -54,28 +54,6 @@ from ...utils import (
     is_flash_attn_2_available,
 )
 from .configuration_aria import AriaTextConfig
-
-
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = []
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 class IdentityOp(torch.nn.Module):
@@ -842,7 +820,7 @@ class AriaEncoder(nn.Module):
 
 
 class AriaVisionTransformer(nn.Module):
-    """The Aria Vision Transformer Model outputting raw image embedding.
+    """
     Aria Vision Transformer model based on Idefics2VisionTransformer.
 
     This class extends the original Idefics2VisionTransformer by removing the post-layernorm operation.
@@ -850,7 +828,7 @@ class AriaVisionTransformer(nn.Module):
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        embed_dim = config.hidden_size
 
         self.config = config
         self.embeddings = AriaVisionEmbeddings(config)
@@ -1782,7 +1760,7 @@ class AriaDecoderLayer(nn.Module):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = ARIA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -2487,19 +2465,11 @@ class AriaTextModel(AriaTextPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        # self.padding_idx = config.pad_token_id
-        # self.vocab_size = config.vocab_size
-
-        # self.embed_tokens = nn.Embedding(
-        #     config.vocab_size, config.hidden_size, self.padding_idx
-        # )
         self.layers = nn.ModuleList(
             [AriaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = AriaTextRotaryEmbedding(config=config)
-        # self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -2974,6 +2944,28 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
 
 
 @dataclass

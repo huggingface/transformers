@@ -1146,7 +1146,7 @@ class ModularConverterTransformer(CSTTransformer):
                     for dependency, parent in find_all_dependencies(
                         top_level_function, self.function_call_dependency_mapping
                     ):
-                        if dependency not in builtin_functions:
+                        if dependency not in builtin_functions and dependency in self.all_definitions:
                             self._maybe_add_function_to_body(
                                 dependency, body, self.all_definitions[dependency], parent=parent
                             )

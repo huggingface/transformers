@@ -23,11 +23,7 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import logging
 from ..auto import AutoTokenizer
-
-
-logger = logging.get_logger(__name__)
 
 
 def _split_image(
@@ -124,8 +120,8 @@ class AriaVisionProcessor(BaseImageProcessor):
         self,
         max_image_size=980,
         min_image_size=336,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
+        image_mean=None,
+        image_std=None,
         **kwargs,
     ):
         """
@@ -139,6 +135,10 @@ class AriaVisionProcessor(BaseImageProcessor):
         """
         super().__init__(**kwargs)
 
+        if image_mean is None:
+            image_mean = [0.5, 0.5, 0.5]
+        if image_std is None:
+            image_std = [0.5, 0.5, 0.5]
         self.max_image_size = max_image_size
         self.min_image_size = min_image_size
         self.image_mean = image_mean
@@ -173,27 +173,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         min_image_size: Optional[int] = 336,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = [
-            [1, 2],
-            [1, 3],
-            [1, 4],
-            [1, 5],
-            [1, 6],
-            [1, 7],
-            [1, 8],
-            [2, 4],
-            [2, 3],
-            [2, 2],
-            [2, 1],
-            [3, 1],
-            [3, 2],
-            [4, 1],
-            [4, 2],
-            [5, 1],
-            [6, 1],
-            [7, 1],
-            [8, 1],
-        ],
+        split_ratio: Optional[List[List[int]]] = None,
     ):
         """
         Process a list of images.
@@ -213,6 +193,28 @@ class AriaVisionProcessor(BaseImageProcessor):
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
                 - 'num_crops': Tensor of the number of crops for each image.
         """
+        if split_ratio is None:
+            split_ratio = [
+                [1, 2],
+                [1, 3],
+                [1, 4],
+                [1, 5],
+                [1, 6],
+                [1, 7],
+                [1, 8],
+                [2, 4],
+                [2, 3],
+                [2, 2],
+                [2, 1],
+                [3, 1],
+                [3, 2],
+                [4, 1],
+                [4, 2],
+                [5, 1],
+                [6, 1],
+                [7, 1],
+                [8, 1],
+            ]
         max_size = self.max_image_size if max_image_size is None else max_image_size
         min_size = self.min_image_size if min_image_size is None else min_image_size
 
@@ -251,28 +253,30 @@ class AriaVisionProcessor(BaseImageProcessor):
         min_image_size=None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = [
-            [1, 2],
-            [1, 3],
-            [1, 4],
-            [1, 5],
-            [1, 6],
-            [1, 7],
-            [1, 8],
-            [2, 4],
-            [2, 3],
-            [2, 2],
-            [2, 1],
-            [3, 1],
-            [3, 2],
-            [4, 1],
-            [4, 2],
-            [5, 1],
-            [6, 1],
-            [7, 1],
-            [8, 1],
-        ],
+        split_ratio: Optional[List[List[int]]] = None,
     ):
+        if split_ratio is None:
+            split_ratio = [
+                [1, 2],
+                [1, 3],
+                [1, 4],
+                [1, 5],
+                [1, 6],
+                [1, 7],
+                [1, 8],
+                [2, 4],
+                [2, 3],
+                [2, 2],
+                [2, 1],
+                [3, 1],
+                [3, 2],
+                [4, 1],
+                [4, 2],
+                [5, 1],
+                [6, 1],
+                [7, 1],
+                [8, 1],
+            ]
         return self.__call__(
             images,
             max_image_size=max_image_size,
