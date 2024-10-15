@@ -75,12 +75,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                [
-                    {
-                        "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
-                    }
-                ]
+                {
+                    "input_text": "<image> What this is? Assistant: This is",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                }
             ],
         )
 
@@ -88,18 +86,16 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                [
-                    {
-                        "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
-                    }
-                ],
-                [
-                    {
-                        "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
-                    }
-                ],
+                {
+                    "input_text": "<image> What this is? Assistant: This is",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                }
+            ],
+            [
+                {
+                    "input_text": "<image> What this is? Assistant: This is",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                }
             ],
         )
 
