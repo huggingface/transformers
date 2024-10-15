@@ -322,7 +322,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         )
 
         # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [to_numpy_array(image).astype(np.float32) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
