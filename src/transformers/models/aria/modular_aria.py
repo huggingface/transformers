@@ -1126,68 +1126,6 @@ class TopKRouter(nn.Module):
         return scores, top_indices, tokens_per_expert
 
 
-# adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
-class TokenDispatcher:
-    """
-    Handles the dispatching and gathering of tokens to and from experts.
-
-    This class is responsible for permuting tokens based on expert assignments and
-    unpermuting them after expert processing.
-
-    Args:
-        config (AriaConfig): Configuration object containing MoE-related parameters.
-    """
-
-    def __init__(self, config: AriaTextConfig):
-        self.config = config
-        self.hidden_states_shape = None
-        self.reversed_input_permutation_mapping = None
-
-    def token_permutation(self, hidden_states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-        """
-        Permute tokens based on expert assignments.
-
-        Args:
-            hidden_states (torch.Tensor): Input hidden states.
-            indices (torch.Tensor): Expert assignment indices.
-
-        Returns:
-            torch.Tensor: Permuted tokens.
-        """
-        self.hidden_states_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        flatten_indices = indices.flatten()
-        sorted_indices = torch.argsort(flatten_indices, stable=True)
-        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
-        self.reversed_input_permutation_mapping = sorted_indices
-        return permuted_tokens
-
-    def token_unpermutation(self, permuted_tokens: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
-        """
-        Unpermute tokens and combine expert outputs.
-
-        Args:
-            permuted_tokens (torch.Tensor): Tokens after expert processing.
-            scores (torch.Tensor): Expert assignment scores.
-
-        Returns:
-            torch.Tensor: Unpermuted and combined output.
-        """
-        num_unpermuted_tokens = scores.numel()
-        unpermuted_tokens = torch.zeros(
-            (num_unpermuted_tokens, permuted_tokens.size(1)),
-            dtype=permuted_tokens.dtype,
-            device=permuted_tokens.device,
-        )
-        unpermuted_tokens.index_copy_(0, self.reversed_input_permutation_mapping, permuted_tokens)
-        unpermuted_tokens = unpermuted_tokens.reshape(-1, self.config.moe_topk, permuted_tokens.size(1))
-
-        unpermuted_tokens = unpermuted_tokens * scores.unsqueeze(-1)
-        unpermuted_tokens = unpermuted_tokens.sum(dim=1).type_as(permuted_tokens)
-        output = unpermuted_tokens.view(self.hidden_states_shape)
-        return output
-
-
 class AriaMLP(LlamaMLP):
     """
     Shared Expert MLP for shared experts.
@@ -1288,6 +1226,7 @@ class AriaGroupedMLP(nn.Module):
         return fc2_output
 
 
+# Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for InstructBLIP, CLIP, etc
     """
     Mixture of Experts (MoE) Layer for the Aria model.
@@ -1304,9 +1243,11 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         super().__init__()
 
         self.router = TopKRouter(config)
-        self.token_dispatcher = TokenDispatcher(config)
         self.experts = AriaGroupedMLP(config)
         self.shared_experts = AriaMLP(config)
+        self.config = config
+        self.hidden_states_shape = None
+        self.reversed_input_permutation_mapping = None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -1327,14 +1268,58 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         """
         scores, indices, tokens_per_expert = self.router(hidden_states)
 
-        permuted_tokens = self.token_dispatcher.token_permutation(hidden_states, indices)
+        permuted_tokens = self.token_permutation(hidden_states, indices)
 
         expert_output = self.experts(permuted_tokens, tokens_per_expert)
 
-        output = self.token_dispatcher.token_unpermutation(expert_output, scores)
+        output = self.token_unpermutation(expert_output, scores)
 
         shared_expert_output = self.shared_experts(hidden_states)
         output += shared_expert_output
+        return output
+
+    def token_permutation(self, hidden_states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
+        """
+        Permute tokens based on expert assignments.
+
+        Args:
+            hidden_states (torch.Tensor): Input hidden states.
+            indices (torch.Tensor): Expert assignment indices.
+
+        Returns:
+            torch.Tensor: Permuted tokens.
+        """
+        self.hidden_states_shape = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
+        flatten_indices = indices.flatten()
+        sorted_indices = torch.argsort(flatten_indices, stable=True)
+        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
+        self.reversed_input_permutation_mapping = sorted_indices
+        return permuted_tokens
+
+    def token_unpermutation(self, permuted_tokens: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+        """
+        Unpermute tokens and combine expert outputs.
+
+        Args:
+            permuted_tokens (torch.Tensor): Tokens after expert processing.
+            scores (torch.Tensor): Expert assignment scores.
+
+        Returns:
+            torch.Tensor: Unpermuted and combined output.
+        """
+        num_unpermuted_tokens = scores.numel()
+        unpermuted_tokens = torch.zeros(
+            (num_unpermuted_tokens, permuted_tokens.size(1)),
+            dtype=permuted_tokens.dtype,
+            device=permuted_tokens.device,
+        )
+        unpermuted_tokens.index_copy_(0, self.reversed_input_permutation_mapping, permuted_tokens)
+        unpermuted_tokens = unpermuted_tokens.reshape(-1, self.config.moe_topk, permuted_tokens.size(1))
+
+        unpermuted_tokens = unpermuted_tokens * scores.unsqueeze(-1)
+        unpermuted_tokens = unpermuted_tokens.sum(dim=1).type_as(permuted_tokens)
+        output = unpermuted_tokens.view(self.hidden_states_shape)
         return output
 
 
