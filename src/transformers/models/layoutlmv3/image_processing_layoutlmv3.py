@@ -322,7 +322,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         )
 
         # All transformations expect numpy arrays.
-        images = [to_numpy_array(image).astype(np.float32) for image in images]
+        images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
@@ -344,23 +344,15 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
-        for image in images:
-            if image.dtype == np.uint8:
-                raise ValueError("Aaaaa!")
-
         if do_resize:
             images = [
                 self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
 
-        for image in images:
-            if image.dtype == np.uint8:
-                raise ValueError("Bbbbbb!")
-
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(image=image.astype(np.float32), scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
 
