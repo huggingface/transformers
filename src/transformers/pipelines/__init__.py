@@ -614,6 +614,7 @@ def pipeline(
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-feature-extraction"`: will return an [`ImageFeatureExtractionPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-text-to-text"`: will return a [`ImageTextToTextPipeline`].
             - `"image-to-image"`: will return a [`ImageToImagePipeline`].
             - `"image-to-text"`: will return a [`ImageToTextPipeline`].
             - `"mask-generation"`: will return a [`MaskGenerationPipeline`].
