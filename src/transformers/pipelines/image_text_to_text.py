@@ -118,6 +118,38 @@ class ImageTextToTextPipeline(Pipeline):
     [{'generated_text': 'a photo of two birds'}]
     ```
 
+    ```python
+    >>> from transformers import pipeline
+
+    >>> pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+    >>> messages = [
+    >>>     {
+    >>>         "role": "user",
+    >>>         "content": [
+    >>>             {
+    >>>                 "type": "image",
+    >>>                 "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>             },
+    >>>             {"type": "text", "text": "Describe this image."},
+    >>>         ],
+    >>>     },
+    >>>     {
+    >>>         "role": "assistant",
+    >>>         "content": [
+    >>>             {"type": "text", "text": "There is a dog and"},
+    >>>         ],
+    >>>     },
+    >>> ]
+    >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
+    [{'input_text': [{'role': 'user',
+        'content': [{'type': 'image',
+        'image': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        {'type': 'text', 'text': 'Describe this image.'}]},
+    {'role': 'assistant',
+        'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
+    'generated_text': ' a person in the image. The dog is sitting on the sand, and the person is sitting on'}]
+    ```
+
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This image-text to text pipeline can currently be loaded from pipeline() using the following task identifier:
@@ -212,7 +244,6 @@ class ImageTextToTextPipeline(Pipeline):
                 - An image loaded in PIL directly
 
                 The pipeline accepts either a single image or a batch of images.
-
             text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be the
                 same as the number of images. Text can also follow the chat format: a list of dictionaries where each
@@ -220,11 +251,26 @@ class ImageTextToTextPipeline(Pipeline):
                 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a dictionary
                 containing the text of the message and the type of the message. The type of the message can be either
                 'text' or 'image'. If the type is 'image', no text is needed.
+            return_tensors (`bool`, *optional*, defaults to `False`):
+                Returns the tensors of predictions (as token indices) in the outputs. If set to
+                `True`, the decoded text is not returned.
+            return_text (`bool`, *optional*):
+                Returns the decoded texts in the outputs.
+            return_full_text (`bool`, *optional*, defaults to `True`):
+                If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
+                specified at the same time as `return_text`.
+            continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
+                last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
+                By default this is `True` when the final message in the input chat has the `assistant` role and
+                `False` otherwise, but you can manually override that behaviour by setting this flag.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
+            A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot return a combination
+            of both `generated_text` and `generated_token_ids`):
 
-            - **generated_text** (`str`) -- The generated text.
+            - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
+                ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
         batch_size = kwargs.get("batch_size", 1)
@@ -373,12 +419,14 @@ class ImageTextToTextPipeline(Pipeline):
         # Force consistent behavior for including the input text in the output
         if return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
             # Remove the input text from the generated text if the generated text starts with the input text
-            generated_texts = [
-                text_generated[len(decoded_inputs[i]) :]
-                if text_generated.startswith(decoded_inputs[i])
-                else text_generated
-                for i, text_generated in enumerate(generated_texts)
+            # (accounting for the possibility of a space between the input and generated text)
+            indices = [
+                text_generated.find(decoded_input) + len(decoded_input)
+                if text_generated.find(decoded_input) != -1
+                else 0
+                for text_generated, decoded_input in zip(generated_texts, decoded_inputs)
             ]
+            generated_texts = [text_generated[index:] for index, text_generated in zip(indices, generated_texts)]
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
             for prompt_text, generated_text in zip(input_texts, generated_texts):

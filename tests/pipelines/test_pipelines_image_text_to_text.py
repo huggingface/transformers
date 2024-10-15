@@ -78,7 +78,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 [
                     {
                         "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
                     }
                 ]
             ],
@@ -91,13 +91,13 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 [
                     {
                         "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
                     }
                 ],
                 [
                     {
                         "input_text": "<image> What this is? Assistant: This is",
-                        "generated_text": "a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                        "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
                     }
                 ],
             ],
@@ -129,13 +129,138 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], max_new_tokens=20, text=messages)
+        outputs = pipe([image_ny, image_chicago], text=messages, max_new_tokens=20)
         self.assertEqual(
             outputs,
             [
                 {
-                    "input_text": "<|im_start|>user\n<image><image>\nWhat’s the difference between these two images?<|im_end|>\n<|im_start|>assistant\n",
-                    "generated_text": "The first image shows a statue of the Statue of Liberty in the foreground, while the second image shows",
+                    "input_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {"type": "image"},
+                                {"type": "image"},
+                            ],
+                        }
+                    ],
+                    "generated_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {"type": "image"},
+                                {"type": "image"},
+                            ],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "The first image shows a statue of the Statue of Liberty in the foreground, while the second image shows",
+                        },
+                    ],
+                }
+            ],
+        )
+
+    @slow
+    @require_torch
+    def test_model_pt_chat_template_continue_final_message(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                    },
+                    {"type": "text", "text": "Describe this image."},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "There is a dog and"},
+                ],
+            },
+        ]
+        outputs = pipe(text=messages, max_new_tokens=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "input_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                },
+                                {"type": "text", "text": "Describe this image."},
+                            ],
+                        },
+                        {"role": "assistant", "content": [{"type": "text", "text": "There is a dog and"}]},
+                    ],
+                    "generated_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                },
+                                {"type": "text", "text": "Describe this image."},
+                            ],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "There is a dog and a person in the image. The dog is sitting on the sand, and the person is sitting on",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        )
+
+    @slow
+    @require_torch
+    def test_model_pt_chat_template_new_text(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                    },
+                    {"type": "text", "text": "Describe this image."},
+                ],
+            }
+        ]
+        outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "input_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                },
+                                {"type": "text", "text": "Describe this image."},
+                            ],
+                        }
+                    ],
+                    "generated_text": "In the image, a woman is sitting on the sandy beach, her legs crossed in a relaxed manner",
                 }
             ],
         )
