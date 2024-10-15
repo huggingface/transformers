@@ -209,6 +209,8 @@ class ImageBindVisionConfig(PretrainedConfig):
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `False`):
             Whether the `logit_scale` is learnable or fixed.
+        feature_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image or feature (equal to image_size), for abstraction of image_size in modeling file.
 
     Example:
 
@@ -269,6 +271,7 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.logit_scale_init_value = logit_scale_init_value
         self.learnable_logit_scale = learnable_logit_scale
+        self.feature_size = image_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -341,6 +344,8 @@ class ImageBindAudioConfig(PretrainedConfig):
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `False`):
             Whether the `logit_scale` is learnable or fixed.
+        feature_size (`Tuple[int, int]`, *optional*, defaults to (128, 204)):
+            The size (resolution) of audio feature (equal to (num_mel_bins, target_len)), for abstraction of image_size in modeling file.
 
     Example:
     ```python
@@ -400,6 +405,7 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.logit_scale_init_value = logit_scale_init_value
         self.learnable_logit_scale = learnable_logit_scale
+        self.feature_size = (num_mel_bins, target_len)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

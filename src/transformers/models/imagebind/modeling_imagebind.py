@@ -252,12 +252,7 @@ class ImageBindGenericPatchEmbedding(nn.Module):
     ):
         super().__init__()
 
-        if hasattr(config, "image_size"):
-            image_size = config.image_size
-        elif hasattr(config, "num_mel_bins") and hasattr(config, "target_len"):
-            image_size = (config.num_mel_bins, config.target_len)
-        else:
-            raise ValueError("Either `image_size` or `num_mel_bins` and `target_len` must be provided in the config.")
+        image_size = config.feature_size
 
         self.image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         self.num_channels = config.num_channels
