@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -319,7 +320,7 @@ class InstructBlipTextModelDecoderOnlyTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=100,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -383,7 +384,14 @@ class InstructBlipTextModelDecoderOnlyTester:
 # this model tester uses a decoder-only language model (OPT)
 class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
     def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
+        self,
+        parent,
+        vision_kwargs=None,
+        qformer_kwargs=None,
+        text_kwargs=None,
+        is_training=True,
+        num_query_tokens=10,
+        image_token_index=4,
     ):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -400,6 +408,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -407,6 +416,14 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
+        vision_tokens = (
+            torch.ones((input_ids.shape[0], self.num_query_tokens), device=torch_device, dtype=input_ids.dtype)
+            * self.image_token_index
+        )
+        input_ids[input_ids == self.image_token_index] = self.text_model_tester.pad_token_id
+        input_ids = torch.cat([vision_tokens, input_ids], dim=-1)
+        vision_attention_mask = torch.ones_like(vision_tokens)
+        attention_mask = torch.cat([vision_attention_mask, attention_mask], dim=-1)
 
         return config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
 
@@ -416,6 +433,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
+            image_token_index=self.image_token_index,
         )
 
     def create_and_check_for_conditional_generation(
@@ -454,6 +472,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -528,6 +547,210 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         model_name = "Salesforce/instructblip-flan-t5-xl"
         model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    # overwrite because InstructBLIP internally calls LM.generate() with embeds thus it cannot operate in no cache format
+    def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
+        use_cache = True  # force this to be True in case False is passed
+
+        batch_size = main_input.shape[0]
+        seq_length = main_input.shape[-1]
+        config = config.text_config if hasattr(config, "text_config") else config
+        num_sequences_in_output = batch_size * num_return_sequences
+
+        gen_len = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+        )
+
+        # in some models we subsample the sequence length in inner layers
+        if hasattr(self.model_tester, "get_subsampled_output_lengths"):
+            seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
+
+        # scores
+        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+
+        # unprocessed logits
+        self._check_logits(num_sequences_in_output, output.logits, config=config)
+
+        # Attentions
+        if self.has_attentions:
+            if config.is_encoder_decoder:
+                # encoder
+                self._check_encoder_attention_for_generate(output.encoder_attentions, batch_size, config, seq_length)
+                # decoder
+                self._check_attentions_for_generate(
+                    num_sequences_in_output,
+                    output.decoder_attentions,
+                    min_length=1,
+                    max_length=output.sequences.shape[-1],
+                    config=config,
+                    use_cache=use_cache,
+                )
+            else:
+                # if use_cache first input is equal to no use_cache, so skip here
+                attentions = output.attentions if not use_cache else output.attentions[1:]
+                min_length = seq_length if not use_cache else seq_length + 1
+                self._check_attentions_for_generate(
+                    num_sequences_in_output,
+                    attentions=attentions,
+                    min_length=min_length,
+                    max_length=output.sequences.shape[-1],
+                    config=config,
+                    use_cache=use_cache,
+                )
+
+        # Hidden States
+        if config.is_encoder_decoder:
+            # encoder
+            self._check_encoder_hidden_states_for_generate(
+                output.encoder_hidden_states, batch_size, config, seq_length
+            )
+
+            # decoder
+            self._check_hidden_states_for_generate(
+                num_sequences_in_output,
+                output.decoder_hidden_states,
+                min_length=1,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
+        else:
+            # if use_cache first input is equal to no use_cache, so skip here
+            hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
+            min_length = seq_length if not use_cache else seq_length + 1
+            self._check_hidden_states_for_generate(
+                num_sequences_in_output,
+                hidden_states,
+                min_length=min_length,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
+
+        # Past Key Value States -- a few notes here:
+        # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
+        # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
+        #    standard cache format (e.g.gptbigcode )
+        models_without_standard_cache = (
+            "ctrl",
+            "fsmt",
+            "gptbigcode",
+            "mega",
+            "reformer",
+            "jamba",
+            "mamba",
+            "xlnet",
+            "zamba",
+        )
+        has_standard_cache = not any(
+            model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
+        )
+        if has_standard_cache:
+            if use_cache:
+                past_key_values = output.past_key_values
+                past_sequence_length = output.sequences.shape[-1] - 1
+                self._check_past_key_values_for_generate(
+                    num_sequences_in_output,
+                    past_key_values,
+                    seq_length=past_sequence_length,
+                    config=config,
+                )
+            elif use_cache is False:
+                self.assertTrue(output.past_key_values is None)
+
+    # overwrite because InstructBLIP cannot generate only from input ids, and requires `pixel` values and `qformer_input_ids` in all cases to be present
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # NOTE: left-padding results in small numerical differences. This is expected.
+        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+
+        # First, filter out models that don't support left padding
+        # - The model must have generative capabilities
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(reason="No generative architecture available for this model.")
+
+        # - The model must support padding
+        if not self.has_attentions:
+            self.skipTest(reason="This model doesn't support padding.")
+
+        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
+        decoder_only_classes = []
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                continue
+            else:
+                decoder_only_classes.append(model_class)
+        if len(decoder_only_classes) == 0:
+            self.skipTest(reason="No decoder-only architecture available for this model.")
+
+        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        #   added support for it yet. We skip these models for now.
+        has_encoder_attributes = any(
+            attr_name
+            for attr_name in config.to_dict().keys()
+            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+        )
+        if has_encoder_attributes:
+            self.skipTest(
+                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
+            )
+
+        # Then, test left-padding
+        def _prepare_model_kwargs(input_ids, attention_mask, signature):
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            if "cache_position" in signature:
+                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                model_kwargs["cache_position"] = cache_position
+            return model_kwargs
+
+        for model_class in decoder_only_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            input_ids = inputs_dict["input_ids"]
+            attention_mask = inputs_dict.get("attention_mask")
+            pixel_values = inputs_dict["pixel_values"]
+            qformer_input_ids = inputs_dict["qformer_input_ids"]
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
+
+            model = model_class(config).to(torch_device).eval()
+            signature = inspect.signature(model.forward).parameters.keys()
+
+            # no cache as some models require special cache classes to be init outside forward
+            model.generation_config.use_cache = False
+
+            # Without padding
+            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
+            next_logits_wo_padding = model(
+                **model_kwargs, pixel_values=pixel_values, qformer_input_ids=qformer_input_ids
+            ).logits[:, -1, :]
+
+            # With left-padding (length 32)
+            # can hardcode pad_token to be 0 as we'll do attn masking anyway
+            pad_token_id = (
+                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+            )
+            pad_size = (input_ids.shape[0], 32)
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
+            padded_input_ids = torch.cat((padding, input_ids), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            next_logits_with_padding = model(
+                **model_kwargs, pixel_values=pixel_values, qformer_input_ids=qformer_input_ids
+            ).logits[:, -1, :]
+
+            # They should result in very similar logits
+            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+
+    @unittest.skip(
+        "InstructBLIP cannot generate on;y from input ids, and requires pixel values in all cases to be present"
+    )
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
