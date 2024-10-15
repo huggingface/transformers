@@ -52,7 +52,13 @@ class LlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token"]
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "num_additional_image_tokens",
+    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -61,12 +67,14 @@ class LlavaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
+        num_additional_image_tokens=None,
         vision_feature_select_strategy=None,
         chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -142,9 +150,11 @@ class LlavaProcessor(ProcessorMixin):
                 # Replace the image token with the expanded image token sequence
                 pixel_values = image_inputs["pixel_values"]
                 height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+                num_image_tokens = (height // self.patch_size) * (
+                    width // self.patch_size
+                ) + self.num_additional_image_tokens
                 if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
+                    num_image_tokens -= self.num_additional_image_tokens
 
                 prompt_strings = []
                 for sample in text:
@@ -153,8 +163,9 @@ class LlavaProcessor(ProcessorMixin):
             else:
                 logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Please add `patch_size`, `num_additional_image_tokens` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` "
+                    "and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
                 )
 

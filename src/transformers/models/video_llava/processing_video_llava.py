@@ -54,7 +54,14 @@ class VideoLlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "video_token",
+        "num_additional_image_tokens",
+    ]
     image_processor_class = "VideoLlavaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -63,6 +70,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
+        num_additional_image_tokens=None,
         vision_feature_select_strategy=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         video_token="<video>",
@@ -70,6 +78,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.video_token = video_token
@@ -149,8 +158,9 @@ class VideoLlavaProcessor(ProcessorMixin):
         if encoded_images is not None and (self.patch_size is None or self.vision_feature_select_strategy is None):
             logger.warning_once(
                 "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                "Please add `patch_size`, `num_additional_image_tokens` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` "
+                "and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
             )
         # Replace the image/video tokens with the expanded token sequence
@@ -164,13 +174,17 @@ class VideoLlavaProcessor(ProcessorMixin):
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
+                num_image_tokens -= self.num_additional_image_tokens
 
             prompt_strings = []
             for sample in text:

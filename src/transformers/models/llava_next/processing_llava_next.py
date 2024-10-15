@@ -53,7 +53,13 @@ class LlavaNextProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token"]
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "num_additional_image_tokens",
+    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -62,12 +68,14 @@ class LlavaNextProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
+        num_additional_image_tokens=None,
         vision_feature_select_strategy=None,
         chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -145,8 +153,9 @@ class LlavaNextProcessor(ProcessorMixin):
             if self.patch_size is None or self.vision_feature_select_strategy is None:
                 logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Please add `patch_size`, `num_additional_image_tokens` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` "
+                    "and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
                 )
             else:
@@ -159,7 +168,7 @@ class LlavaNextProcessor(ProcessorMixin):
                         orig_height, orig_width = image_size
                         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                         if self.vision_feature_select_strategy == "default":
-                            num_image_tokens -= 1
+                            num_image_tokens -= self.num_additional_image_tokens
                         sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
                     prompt_strings.append(sample)
                 prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
@@ -188,7 +197,7 @@ class LlavaNextProcessor(ProcessorMixin):
             orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
         # The base patch covers the entire image (+1 for the CLS)
-        base_features = patches_height * patches_width + 1
+        base_features = patches_height * patches_width + self.num_additional_image_tokens
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
