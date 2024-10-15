@@ -455,8 +455,8 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             main_input = inputs_dict[self.input_name]
 
-            # if not hasattr(config, "use_cache") or not hasattr(config.get_text_config(), "use_cache"):
-            #     self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
+            if not hasattr(config, "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
