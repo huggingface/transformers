@@ -379,9 +379,10 @@ class GenerationMixin:
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None or cache_position[-1] >= input_ids.shape[1]:  # Exception 1 or Exception 3
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -2004,6 +2005,7 @@ class GenerationMixin:
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
             model_kwargs["use_cache"] = True
+            generation_config.use_cache = True
         else:
             model_kwargs["use_cache"] = generation_config.use_cache
 
@@ -2609,12 +2611,19 @@ class GenerationMixin:
                     outputs.hidden_states[candidate_premature_layer][:, -1, :]
                 ).to(final_logits.device)
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+                continue
 
             next_token_logits = _dola_select_contrast(
                 candidate_premature_layers, candidate_premature_logits, final_logits
             )
+            next_token_logits = next_token_logits.to(input_ids.device)
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
@@ -2652,11 +2661,6 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -2791,6 +2795,7 @@ class GenerationMixin:
                 # (the clone itself is always small)
                 # .float() is needed to retain precision for later logits manipulations
                 logit_for_next_step = outputs.logits[:, -1, :].clone().float()
+                logit_for_next_step = logit_for_next_step.to(input_ids.device)
 
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs,
@@ -2985,6 +2990,7 @@ class GenerationMixin:
                     next_past_key_values = tuple(new_key_values)
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
+            logit_for_next_step = logit_for_next_step.to(input_ids.device)
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
@@ -3016,8 +3022,14 @@ class GenerationMixin:
                 )
             # contrastive_search main logic end
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+                continue
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
@@ -3027,11 +3039,6 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -3168,12 +3175,19 @@ class GenerationMixin:
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+                continue
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
             next_token_logits = outputs.logits.clone()[:, -1, :].float()
+            next_token_logits = next_token_logits.to(input_ids.device)
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
@@ -3214,11 +3228,6 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
@@ -3415,14 +3424,21 @@ class GenerationMixin:
             else:  # Unchanged original behavior
                 outputs = self(**model_inputs, return_dict=True)
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
-                continue  # don't waste resources running the code we don't need
+                continue
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
             # .float() is needed to retain precision for later logits manipulations
             next_token_logits = outputs.logits[:, -1, :].clone().float()
+            next_token_logits = next_token_logits.to(input_ids.device)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -3490,12 +3506,6 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -3670,9 +3680,15 @@ class GenerationMixin:
 
             outputs = self(**model_inputs, return_dict=True)
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
-                continue  # don't waste resources running the code we don't need
+                continue
 
             if output_scores:
                 processed_score = torch.zeros_like(outputs.logits[:, -1, :])
@@ -3680,6 +3696,7 @@ class GenerationMixin:
                 # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
                 # (the clone itself is always small)
                 raw_logit_score = outputs.logits[:, -1, :].clone()
+                raw_logit_score = raw_logit_score.to(input_ids.device)
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -3699,6 +3716,7 @@ class GenerationMixin:
                 # No need to clone() the logits here as they will not retain outputs.logits at the end of the loop
                 # .float() is needed to retain precision for later logits manipulations
                 next_token_logits = outputs.logits[batch_group_indices, -1, :].float()
+                next_token_logits = next_token_logits.to(input_ids.device)
 
                 next_token_scores = nn.functional.log_softmax(
                     next_token_logits, dim=-1
@@ -3781,12 +3799,6 @@ class GenerationMixin:
                     )
 
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
-
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -3948,14 +3960,21 @@ class GenerationMixin:
 
             outputs = self(**model_inputs, return_dict=True)
 
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
-                continue  # don't waste resources running the code we don't need
+                continue
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
             # .float() is needed to retain precision for later logits manipulations
             next_token_logits = outputs.logits[:, -1, :].clone().float()
+            next_token_logits = next_token_logits.to(input_ids.device)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -4018,11 +4037,6 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -4162,17 +4176,8 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        # This is needed if return_dict_in_generate is True
-        start_from_empty_dynamic_cache = False
-        past_key_values = model_kwargs.get("past_key_values", None)
-        if isinstance(past_key_values, DynamicCache) or (
-            isinstance(past_key_values, EncoderDecoderCache)
-            and isinstance(past_key_values.self_attention_cache, DynamicCache)
-        ):
-            if past_key_values.get_seq_length() == 0:
-                start_from_empty_dynamic_cache = True
-
         this_peer_finished = False
+        is_first_iteration = True  # to preserve the same API in the output as other generation methods
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
@@ -4218,6 +4223,7 @@ class GenerationMixin:
             # 2.3. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
             new_logits = outputs.logits[:, -candidate_length - 1 :].float()  # excludes the input prompt if present
+            new_logits = new_logits.to(input_ids.device)
             next_token_logits = new_logits.clone()
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
@@ -4271,63 +4277,60 @@ class GenerationMixin:
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
 
-            if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
-
-            # Store scores, attentions and hidden_states when required
-            # Assistant: modified to append one tuple element per token, as in the other generation methods.
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += tuple(new_logits[:, i, :] for i in range(n_matches + 1))
-                if output_logits:
-                    raw_logits += (next_token_logits,)
-
-                if "past_key_values" not in model_kwargs or start_from_empty_dynamic_cache:
-                    added_len = new_cur_len
-                    # set it to false for other iterations
-                    start_from_empty_dynamic_cache = False
-                else:
-                    added_len = n_matches + 1
-
-                if output_attentions:
-                    if self.config.is_encoder_decoder:
-                        cross_attentions = _split_model_outputs(
-                            cross_attentions, outputs.cross_attentions, cur_len, added_len
-                        )
-                        decoder_attentions = _split_model_outputs(
-                            decoder_attentions,
-                            outputs.decoder_attentions,
-                            cur_len,
-                            added_len,
-                            is_decoder_attention=True,
-                        )
-                    else:
-                        decoder_attentions = _split_model_outputs(
-                            decoder_attentions,
-                            outputs.attentions,
-                            cur_len,
-                            added_len,
-                            is_decoder_attention=True,
-                        )
-                if output_hidden_states:
-                    if self.config.is_encoder_decoder:
-                        decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, added_len
-                        )
-                    else:
-                        decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, cur_len, added_len
-                        )
-
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 num_new_tokens=n_matches + 1,
             )
+            if synced_gpus and this_peer_finished:
+                continue
+
+            # Store scores, attentions and hidden_states when required
+            # Assistant: modified to append one tuple element per token, as in the other generation methods.
+            if return_dict_in_generate:
+                newly_added_length = n_matches + 1
+                if output_scores:
+                    scores += tuple(new_logits[:, i, :] for i in range(newly_added_length))
+                if output_logits:
+                    raw_logits += tuple(next_token_logits[:, i, :] for i in range(newly_added_length))
+
+                newly_added_length = new_cur_len if is_first_iteration else newly_added_length
+                if output_attentions:
+                    if self.config.is_encoder_decoder:
+                        cross_attentions = _split_model_outputs(
+                            cross_attentions, outputs.cross_attentions, cur_len, newly_added_length
+                        )
+                        decoder_attentions = _split_model_outputs(
+                            decoder_attentions,
+                            outputs.decoder_attentions,
+                            cur_len,
+                            newly_added_length,
+                            is_decoder_attention=True,
+                        )
+                    # some (V)LLMs have hard requirement on SDPA and thus never return attn
+                    elif outputs.attentions[0] is not None:
+                        decoder_attentions = _split_model_outputs(
+                            decoder_attentions,
+                            outputs.attentions,
+                            cur_len,
+                            newly_added_length,
+                            is_decoder_attention=True,
+                        )
+                if output_hidden_states:
+                    if self.config.is_encoder_decoder:
+                        decoder_hidden_states = _split_model_outputs(
+                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
+                        )
+                    else:
+                        decoder_hidden_states = _split_model_outputs(
+                            decoder_hidden_states, outputs.hidden_states, cur_len, newly_added_length
+                        )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
+            is_first_iteration = False
 
         if streamer is not None:
             streamer.end()
