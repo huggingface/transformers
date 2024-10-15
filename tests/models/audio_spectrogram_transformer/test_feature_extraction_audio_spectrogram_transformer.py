@@ -14,14 +14,12 @@
 # limitations under the License.
 
 
-import functools
 import itertools
 import logging
 import os
 import random
 import tempfile
 import unittest
-from unittest import mock
 
 import numpy as np
 
