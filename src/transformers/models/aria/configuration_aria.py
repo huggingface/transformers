@@ -216,12 +216,11 @@ class AriaConfig(PretrainedConfig):
     as well as additional parameters for image token handling and projector mapping.
 
     Args:
-        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaMoELMConfig or dict): Configuration for the text component.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        **kwargs: Additional keyword arguments passed to the parent class.
+        vision_config (AriaVisionConfig or dict, *optional*): Configuration for the vision component.
+        text_config (AriaMoELMConfig or dict, *optional*): Configuration for the text component.
+        projector_patch_to_query_dict (dict, *optional*): Mapping of patch sizes to query dimensions.
+        ignore_index (int, *optional*, defaults to -100): Index to ignore in loss calculation.
+        image_token_index (int, *optional*, defaults to 32000): Index used to represent image tokens.
 
     Attributes:
         model_type (str): Type of the model, set to "aria".
@@ -240,10 +239,7 @@ class AriaConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        projector_patch_to_query_dict={
-            1225: 128,
-            4900: 256,
-        },
+        projector_patch_to_query_dict=None,
         ignore_index=-100,
         image_token_index=32000,
         **kwargs,
@@ -254,6 +250,11 @@ class AriaConfig(PretrainedConfig):
 
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings
+        if projector_patch_to_query_dict is None:
+            projector_patch_to_query_dict = {
+                1225: 128,
+                4900: 256,
+            }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
         if vision_config is None:
             vision_config = AriaVisionConfig()

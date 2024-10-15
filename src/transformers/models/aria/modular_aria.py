@@ -890,10 +890,7 @@ class AriaConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        projector_patch_to_query_dict={
-            1225: 128,
-            4900: 256,
-        },
+        projector_patch_to_query_dict=None,
         ignore_index=-100,
         image_token_index=32000,
         **kwargs,
@@ -904,6 +901,11 @@ class AriaConfig(PretrainedConfig):
 
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings
+        if projector_patch_to_query_dict is None:
+            projector_patch_to_query_dict = {
+                1225: 128,
+                4900: 256,
+            }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
         if vision_config is None:
             vision_config = AriaVisionConfig()

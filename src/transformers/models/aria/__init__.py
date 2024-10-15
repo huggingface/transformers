@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_aria": ["AriaConfig", "AriaVisionConfig", "AriaTextConfig", "AriaForCausalLM"],
+    "configuration_aria": ["AriaConfig", "AriaForCausalLM", "AriaTextConfig", "AriaVisionConfig"],
     "modeling_aria": ["AriaForConditionalGeneration", "AriaPreTrainedModel"],
     "processing_aria": ["AriaProcessor"],
 }

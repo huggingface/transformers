@@ -169,8 +169,8 @@ _import_structure = {
     ],
     "models.aria": [
         "AriaConfig",
-        "AriaVisionConfig",
         "AriaTextConfig",
+        "AriaVisionConfig",
     ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
@@ -1397,10 +1397,10 @@ else:
     )
     _import_structure["models.aria"].extend(
         [
-            "AriaTextModel",
-            "AriaVisionModel",
             "AriaForConditionalGeneration",
             "AriaPreTrainedModel",
+            "AriaTextModel",
+            "AriaVisionModel",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
