@@ -241,7 +241,8 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                     raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
                 trainer._hp_search_setup(trial)
-                torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                args_main_rank_list = [pickle.dumps(trainer.args)]
+                torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
                 trainer.train(resume_from_checkpoint=checkpoint)
             else:
                 trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
@@ -267,11 +268,11 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     else:
         for i in range(n_trials):
             trainer.objective = None
-            args_main_rank = list(pickle.dumps(trainer.args))
+            args_main_rank_list = [None]
             if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
-            torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            args = pickle.loads(bytes(args_main_rank))
+            torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
+            args = pickle.loads(bytes(args_main_rank_list[0]))
             for key, value in asdict(args).items():
                 if key != "local_rank":
                     setattr(trainer.args, key, value)
