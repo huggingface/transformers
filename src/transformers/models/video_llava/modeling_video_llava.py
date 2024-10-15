@@ -23,7 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -364,41 +364,62 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         return final_embedding, final_attention_mask, final_labels, position_ids, final_input_ids
 
-    def _get_vision_features(
-        self,
-        pixel_values_images: Optional[torch.FloatTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        if pixel_values_images is None and pixel_values_videos is None:
-            raise ValueError("You have to specify `pixel_values_images` or `pixel_values_videos`")
+    def get_image_features(
+        self, pixel_values_images: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+    ):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
 
-        # videos do not need to select features and it's always "full" (as it is done in the orig implementation)
-        if pixel_values_videos is not None:
-            batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
+        Args:
+            pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+            vision_feature_layer (`int`):
+                The index of the layer to select the vision feature.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
 
-            pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-            video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
-            video_outputs = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
+        image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
+        image_outputs = image_outputs.hidden_states[vision_feature_layer].squeeze(1)
+
+        if vision_feature_select_strategy == "default":
+            image_outputs = image_outputs[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            image_outputs = image_outputs
         else:
-            video_outputs = None
-            num_frames = 0
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
-        if pixel_values_images is not None:
-            image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
-            image_outputs = image_outputs.hidden_states[vision_feature_layer].squeeze(1)
+        image_features = self.multi_modal_projector(image_outputs)
 
-            if vision_feature_select_strategy == "default":
-                image_outputs = image_outputs[:, 1:]
-            elif vision_feature_select_strategy == "full":
-                image_outputs = image_outputs
-            else:
-                raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
-        else:
-            image_outputs = None
+        return image_features
 
-        return image_outputs, video_outputs, num_frames
+    def get_vision_features(self, pixel_values_videos: torch.FloatTensor, vision_feature_layer: int):
+        """
+        Obtains video last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+               The tensors corresponding to the input videos.
+            vision_feature_layer (`int`):
+                The index of the layer to select the vision feature.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
+        Returns:
+            video_features (`torch.Tensor`): Video feature tensor of shape `(num_videos * num_frames, image_length, embed_dim)`).
+            frames (`int`): Number of frames the videos have.
+        """
+        batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
+
+        pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
+        video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
+        video_features = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
+        video_features = self.multi_modal_projector(video_features)
+
+        return video_features, num_frames
 
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VideoLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -543,19 +564,15 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             )
             legacy_processing = inputs_not_expanded or pixels_present
 
-        if pixel_values_images is not None or pixel_values_videos is not None:
-            image_outputs, video_outputs, num_frames = self._get_vision_features(
-                pixel_values_images=pixel_values_images,
-                pixel_values_videos=pixel_values_videos,
+        if pixel_values_images is not None:
+            image_features = self.get_image_features(
+                pixel_values_images,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
 
-            image_features = video_features = None
-            if image_outputs is not None:
-                image_features = self.multi_modal_projector(image_outputs)
-            if video_outputs is not None:
-                video_features = self.multi_modal_projector(video_outputs)
+        if pixel_values_videos is not None:
+            video_features, num_frames = self.get_video_features(pixel_values_videos=pixel_values_videos)
 
             if legacy_processing:
                 logger.warning_once(
@@ -617,7 +634,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
-                if image_outputs is not None:
+                if pixel_values_images is not None:
                     special_image_mask = (
                         (input_ids == self.config.image_token_index)
                         .unsqueeze(-1)
@@ -627,7 +644,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
                     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-                if video_outputs is not None:
+                if pixel_values_videos is not None:
                     special_image_mask = (
                         (input_ids == self.config.video_token_index)
                         .unsqueeze(-1)
