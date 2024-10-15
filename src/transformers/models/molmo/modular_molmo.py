@@ -127,12 +127,7 @@ class MolmoTextConfig(Qwen2Config):
         self.vocab_size = vocab_size
         self.additional_vocab_size = additional_vocab_size
         self.intermediate_size = intermediate_size
-        self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
         self.max_window_layers = max_window_layers
