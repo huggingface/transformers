@@ -4897,7 +4897,9 @@ class Trainer:
                 raise ImportError(
                     "`use_stateful_dataloader` is only supported in accelerate v1.0.0 and above. Please upgrade accelerate to use this feature."
                 )
-            self.use_stateful_dataloader = use_stateful_dataloader
+            dataloader_config.use_stateful_dataloader = use_stateful_dataloader
+
+        self.use_stateful_dataloader = use_stateful_dataloader
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
