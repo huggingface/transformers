@@ -137,7 +137,7 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.trainer_pt_utils import AcceleratorConfig
-
+    from transformers.trainer import TRAINER_STATE_NAME
     if is_safetensors_available():
         import safetensors.torch
 
@@ -2618,15 +2618,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(trainer.use_stateful_dataloader)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state = dataclasses.asdict(trainer.state)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Assert the checkpoint has a saved state_dict.
+            checkpoint_5_state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+            self.assertIsNotNone(checkpoint_5_state.train_dataloader_state_dict)
 
             # Reinitialize trainer
             trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
@@ -2635,11 +2641,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Now check with a later checkpoint that it also works when we span over one epoch
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
+            # Assert the checkpoint has a saved state_dict.
+            checkpoint_15_state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+            self.assertIsNotNone(checkpoint_15_state.train_dataloader_state_dict)
+
             # Reinitialize trainer and load model
             trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
@@ -2660,15 +2671,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(trainer.use_stateful_dataloader)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state = dataclasses.asdict(trainer.state)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Assert the checkpoint has a saved state_dict.
+            checkpoint_5_state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+            self.assertIsNotNone(checkpoint_5_state.train_dataloader_state_dict)
 
             # Reinitialize trainer and load model
             trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
@@ -2677,11 +2694,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Now check with a later checkpoint that it also works when we span over one epoch
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
+            # Assert the checkpoint has a saved state_dict.
+            checkpoint_15_state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+            self.assertIsNotNone(checkpoint_15_state.train_dataloader_state_dict)
+
             # Reinitialize trainer and load model
             trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertIsNotNone(trainer.state.train_dataloader_state_dict)
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
