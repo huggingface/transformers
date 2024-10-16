@@ -49,8 +49,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.blocks.(\d+).attn_norm.weight":                                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"transformer.blocks.(\d+).attn_out.weight":                                   r"language_model.model.layers.\1.self_attn.o_proj.weight",
     r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"transformer.blocks.(\d+).ff_out.weight":                                     r"language_model.model.layers.\1.mlp.fc1.weight",
-    r"transformer.blocks.(\d+).ff_proj.weight":                                    r"language_model.model.layers.\1.mlp.fc2.weight",
+    r"transformer.blocks.(\d+).ff_out.weight":                                     r"language_model.model.layers.\1.mlp.fc2.weight",
+    r"transformer.blocks.(\d+).ff_proj.weight":                                    r"language_model.model.layers.\1.mlp.fc1.weight",
     r"transformer.ff_out.weight":                                                  r"language_model.lm_head.weight",
     r"transformer.ln_f.(weight|bias)":                                             r"language_model.model.norm.\1", # no post layernorm bias
     r"transformer.wte.embedding":                                                  r"language_model.model.word_embeddings.weight",
