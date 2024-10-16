@@ -601,11 +601,13 @@ def replace_call_to_super(
                 new_params = new_params.with_changes(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
+            # Keep decorators in `modular_xxx.py` if any, else original decorators
+            new_decorators = updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 class_finder.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params)
+                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
             else:
                 continue
 
@@ -735,29 +737,35 @@ def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
 
 
 class PostModularConverterCleaner(CSTTransformer):
-    """Allow simple cleaning after conversion. Remove top-level functions/classes without any calls (they may arise due
-    to dependency mapping, even if code parts with those functions/classes were overwritten)"""
+    """Allow simple cleaning after conversion. Remove top-level functions/classes/assignments without any calls (they may arise due
+    to dependency mapping, even if code parts with those functions/classes/assignments were overwritten)"""
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
     def __init__(self, added_dependencies: set):
         super().__init__()
-        self.top_level_functions_or_classes = {}
-        self.all_used_functions_or_classes = set()
+        self.top_level_functions_classes_assignments = {}
+        self.all_used_functions_classes_assignments = set()
         self.added_dependencies = added_dependencies
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         if m.matches(parent_node, m.Module()):
-            self.top_level_functions_or_classes[node.name.value] = node
+            self.top_level_functions_classes_assignments[node.name.value] = node
 
     def visit_ClassDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         if m.matches(parent_node, m.Module()):
-            self.top_level_functions_or_classes[node.name.value] = node
+            self.top_level_functions_classes_assignments[node.name.value] = node
+
+    def visit_SimpleStatementLine(self, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        simple_top_level_assign_structure = m.SimpleStatementLine(body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])])
+        if m.matches(parent_node, m.Module()) and m.matches(node, simple_top_level_assign_structure):
+            self.top_level_functions_classes_assignments[node.body[0].targets[0].target.value] = node
 
     def visit_Name(self, node: cst.Name):
-        """This is used to find any mention of a top-level function or class except its own definition.
+        """This is used to find any mention of a top-level function, class or assignment except its own definition.
         It will contain other names as well, but those will not be used. This is the most general way to do it
         since mentions may appear in a lot of different contexts (apart from simple Call to the function/class).
         e.g. Attention classes are only mentionned by their name in a dict assignment.
@@ -767,18 +775,19 @@ class PostModularConverterCleaner(CSTTransformer):
         if not (
             (m.matches(parent_node, m.ClassDef()) and parent_node.name.value == node.value)
             or (m.matches(parent_node, m.FunctionDef()) and parent_node.name.value == node.value)
+            or (m.matches(parent_node, m.AssignTarget()) and parent_node.target.value == node.value)
         ):
-            self.all_used_functions_or_classes.add(node.value)
+            self.all_used_functions_classes_assignments.add(node.value)
 
-    def leave_Module(self, original_node: cst.Module, node):
-        # Find any class/function that was mistakenly added as part of the dependencies and remove it
-        unused = self.added_dependencies - self.all_used_functions_or_classes
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module):
+        # Find any class/function/assignment that was mistakenly added as part of the dependencies and remove it
+        unused = self.added_dependencies - self.all_used_functions_classes_assignments
         nodes_to_remove = [
-            self.top_level_functions_or_classes[name] for name in unused if name in self.top_level_functions_or_classes
+            self.top_level_functions_classes_assignments[name] for name in unused if name in self.top_level_functions_classes_assignments
         ]
         new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
         # Return a new module with the updated body
-        return node.with_changes(body=new_body)
+        return updated_node.with_changes(body=new_body)
 
 
 class ModularConverterTransformer(CSTTransformer):
@@ -1008,6 +1017,15 @@ class ModularConverterTransformer(CSTTransformer):
 
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name, all_bases)
+                # Use decorators redefined in `modular_xxx.py` if any
+                if len(original_node.decorators) > 0:
+                    updated_node = updated_node.with_changes(decorators=original_node.decorators)
+            else:
+                raise ValueError(
+                    f"We were unable to find dependencies for {class_name} (based on inheriting from {super_class})"
+                    f"   Here are all the global dependencies that we found in you modular file: {list(class_finder.class_dependency_mapping.keys())}."
+                    f"   This usually means that the name of `{class_name}` does not match the pattern of `{super_class}`"
+                )
 
         # Now, if a class was defined without parents, we look for the name
         match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
