@@ -109,6 +109,7 @@ else:
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
+            ("molmo", ("MolmoImageProcessor",)),
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("nougat", ("NougatImageProcessor",)),
             ("oneformer", ("OneFormerImageProcessor",)),

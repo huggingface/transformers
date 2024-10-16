@@ -590,6 +590,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.molmo": ["MolmoConfig"],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -1212,6 +1213,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.molmo"].extend(["MolmoImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
@@ -2781,6 +2783,13 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForCausalLM",
+            "MolmoModel",
+            "MolmoPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5448,6 +5457,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.molmo import MolmoConfig
     from .models.mpnet import (
         MPNetConfig,
         MPNetTokenizer,
@@ -7385,6 +7395,11 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.molmo import (
+            MolmoForCausalLM,
+            MolmoModel,
+            MolmoPreTrainedModel,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
