@@ -135,7 +135,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.trainer_pt_utils import AcceleratorConfig
+    from transformers.trainer_pt_utils import AcceleratorConfig,_get_learning_rate
 
     if is_safetensors_available():
         import safetensors.torch
@@ -3237,6 +3237,46 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+    def test_lr_schedule_logging(self):
+        class LRScheduleLoggerCallback(TrainerCallback):
+            def __init__(self):
+                self.lr_schedules = []
+
+            def on_step_begin(self, args, state, control, **kwargs):
+                class Container:
+                    pass
+
+                obj = Container()
+                obj.lr_scheduler = kwargs["lr_scheduler"]
+                obj.optimizer = kwargs["optimizer"]
+                obj.is_deepspeed_enabled = False
+                lr = _get_learning_rate(obj)
+                self.lr_schedules.append(lr)
+                
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            train_dataset = RegressionDataset(length=128)
+            eval_dataset = RegressionDataset()
+
+            config = RegressionModelConfig(a=0.5, b=1.5)
+            model = RegressionPreTrainedModelWithGradientCheckpointing(config)
+            args = RegressionTrainingArguments(
+                tmp_dir,
+                learning_rate=1,
+                logging_steps=1,
+                max_steps=5,
+            )
+            cb = LRScheduleLoggerCallback()
+            trainer = Trainer(
+                model=model, args=args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[cb]
+            )
+            trainer.train()
+            expected = [9.0, 0.8, 0.6, 0.4, 0.2]
+            assert (
+                cb.lr_schedules == expected
+            ), f"Did not log the right learning rates. Expected {expected}, got {cb.lr_schedules}"
+            # Ending LR should now be zero
+            assert trainer.lr_scheduler.get_last_lr()[0] == 0.0
 
     @require_non_xpu
     @require_torch_non_multi_gpu
