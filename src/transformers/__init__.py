@@ -152,6 +152,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
+    # Losses
+    "loss": [],
     # Models
     "models": [],
     "models.albert": ["AlbertConfig"],
