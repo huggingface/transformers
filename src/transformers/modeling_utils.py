@@ -28,7 +28,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import partial, wraps
+from functools import lru_cache, partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
@@ -4981,9 +4981,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.hf_quantizer.is_trainable
 
     @property
+    @lru_cache
     def loss_function(self):
-        loss = LOSS_MAPPING.get(self.config.getattr("loss_type", self.config.architecture), DefaultCrossEntropyLoss)
-        return loss
+        if hasattr(self.config, "loss_type"):
+            loss_type = self.config.loss_type
+        else:
+            loss_type = re.findall(rf"({"|".join(LOSS_MAPPING)})", self.__class__.__name__)
+            if loss_type is not None:
+                loss_type = loss_type[0]
+
+        if loss_type is None or loss_type not in LOSS_MAPPING:
+            raise ValueError(
+                "You requestion the loss function, but we could not determine which one to use"
+                "based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`")
+
+        return LOSS_MAPPING[loss_type]
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
