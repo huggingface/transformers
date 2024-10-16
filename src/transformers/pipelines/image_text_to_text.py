@@ -71,12 +71,6 @@ class ImageText:
         self.images = images
         self.text = text
 
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        return ImageText(self.images[idx], self.text[idx])
-
 
 def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]):
     """
@@ -362,15 +356,29 @@ class ImageTextToTextPipeline(Pipeline):
             )
 
         if nested_images:
-            return super().__call__(
-                [ImageText(image, text_single) for image, text_single in zip(images, text)], **kwargs
-            )
+            return [
+                super().__call__(ImageText(image, text_single), **kwargs) for image, text_single in zip(images, text)
+            ]
 
         # otherwise, we can flatten the images and text as we have a 1:1 relationship
         if isinstance(images[0], (list, tuple)):
             images = [img for img_list in images for img in img_list]
 
-        return super().__call__(ImageText(images, text), **kwargs)
+        # Manually build batching as we are working with ImageText objects
+        batching_index = 0
+        results = []
+        while batching_index < len(images):
+            batch_results = super().__call__(
+                ImageText(
+                    images[batching_index : batching_index + batch_size],
+                    text[batching_index : batching_index + batch_size],
+                ),
+                **kwargs,
+            )
+            results.extend(batch_results)
+            batching_index += batch_size
+
+        return results
 
     def preprocess(
         self, inputs=None, truncation=None, padding=False, max_length=None, timeout=None, continue_final_message=None
