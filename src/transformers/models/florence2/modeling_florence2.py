@@ -235,7 +235,7 @@ class PositionalEmbeddingCosine1D(nn.Module):
         [1, T, D] or [T, D].
         """
         shape_len = len(seq_embeds.shape)
-        if shape_len != 2 or shape_len != 3:
+        if shape_len != 2 and shape_len != 3:
             raise ValueError(f"Exepcted `seq_embeds.shape` == 2 or 3, got {shape_len}.")
         len_seq = seq_embeds.size(-2)
         if len_seq > self.max_seq_len:
@@ -274,7 +274,7 @@ class LearnedAbsolutePositionEmbedding1D(nn.Module):
         [1, T, D] or [T, D].
         """
         shape_len = len(seq_embeds.shape)
-        if shape_len != 2 or shape_len != 3:
+        if shape_len != 2 and shape_len != 3:
             raise ValueError(f"Exepcted `seq_embeds.shape` == 2 or 3, got {shape_len}.")
         len_seq = seq_embeds.size(-2)
         if len_seq > self.max_seq_len:
