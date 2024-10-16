@@ -2433,9 +2433,13 @@ class Trainer:
                     except StopIteration:
                         break
                 if len(batch_samples) > 0 and "labels" in batch_samples[0]:
-                    num_items_in_batch = sum(
-                        [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                    )
+                    # For now we don't support object detection
+                    try:
+                        num_items_in_batch = sum(
+                            [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
+                        )
+                    except TypeError:
+                        pass
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
