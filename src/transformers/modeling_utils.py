@@ -4983,7 +4983,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @property
     @lru_cache
     def loss_function(self):
-        if hasattr(self.config, "loss_type"):
+        if getattr(self.config, "loss_type", None) is not None:
             loss_type = self.config.loss_type
         else:
             loss_type = self.__class__.__name__
@@ -4994,12 +4994,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     loss_type = loss_type[0]
                 else:
                     loss_type = None
-        if loss_type is None or loss_type not in LOSS_MAPPING:
+        if loss_type is None:
             raise ValueError(
-                "You requestion the loss function, but we could not determine which one to use"
+                "We could not determine which loss function to use."
                 f"based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`"
             )
-
+        if loss_type not in LOSS_MAPPING and getattr(self.config, "loss_type", None) is not None:
+            raise ValueError(
+                f"`loss_type={loss_type}` was set in the config but it is unrecognised"
+                f"based on the the class name. Make sure you add `{loss_type}` to the `LOSS_MAPPING`"
+            )
         return LOSS_MAPPING[loss_type]
 
 

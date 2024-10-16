@@ -1,9 +1,9 @@
-from typing import List, Optional, Tensor
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
+from torch import Tensor
 
-from ...loss_utils import LOSS_MAPPING
 from ...utils import is_accelerate_available, is_scipy_available, is_vision_available, requires_backends
 
 
@@ -548,7 +548,3 @@ def ForObjectDetectionLoss(
         weight_dict.update(aux_weight_dict)
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
     return loss
-
-
-LOSS_MAPPING["ForSegmentation"] = ForSegmentationLoss
-LOSS_MAPPING["ForObjectDetection"] = ForObjectDetectionLoss
