@@ -250,19 +250,23 @@ class ColPaliProcessor(PaliGemmaProcessor):
         Process queries for ColPali.
         This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
         """
+        prefix = "Question: "
+
         if suffix is None:
             suffix = "<pad>" * 10
         texts_query: List[str] = []
 
         for query in queries:
-            query = self.tokenizer.bos_token + f"Question: {query}"
+            query = self.tokenizer.bos_token + prefix + query
             query += suffix  # add suffix (pad tokens)
+
+            # NOTE: Make input ISO to PaliGemma's processor
+            query += "\n"
+
             texts_query.append(query)
 
-        input_strings = [f"{sample}\n" for sample in queries]
-
         batch_query = self.tokenizer(
-            input_strings,
+            texts_query,
             text_pair=None,
             return_token_type_ids=False,
             return_tensors="pt",
