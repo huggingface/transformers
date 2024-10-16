@@ -55,7 +55,7 @@ def ForSequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
     return loss
 
 
-def ForQuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, end_positions):
+def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_positions):
     total_loss = None
     if start_positions is not None and end_positions is not None:
         # If we are on multi-GPU, split add a dimension
