@@ -460,7 +460,7 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
 
-    @slow
+    @require_torch
     def test_model_from_pretrained_meta_device(self):
         def is_on_meta(model_id, dtype):
             with torch.device("meta"):
