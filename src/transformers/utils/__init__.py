@@ -100,6 +100,7 @@ from .hub import (
 )
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
+    TORCHDATA_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     GGUF_MIN_VERSION,
@@ -222,6 +223,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchdata_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,

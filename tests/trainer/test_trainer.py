@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
+    require_torchdata,
     require_torchdynamo,
     require_vision,
     require_wandb,
@@ -144,6 +145,7 @@ if is_torch_available():
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
 require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
+require_accelerate_version_min_1_0_0 = partial(require_accelerate, min_version="1.0.0")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
@@ -1272,6 +1274,48 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_eval_batch_size=32,
             dataloader_drop_last=True,
         )
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
+
+        # Check passing a new dataset for evaluation works
+        new_eval_dataset = RegressionDataset(length=128)
+        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+
+    @require_accelerate_version_min_1_0_0
+    @require_torchdata
+    def test_train_and_eval_dataloaders_with_use_stateful_dataloader(self):
+        """Identical to `test_train_and_eval_dataloaders`, however with an AcceleratorConfig that sets `use_stateful_dataloader=True`
+        (Note: Is a separate test instead of parameterized due to dependencies.)
+        """
+        accelerator_config = AcceleratorConfig(use_stateful_dataloader=True)
+        if torch_device == "cuda":
+            n_gpu = max(1, backend_device_count(torch_device))
+        else:
+            n_gpu = 1
+        trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16, accelerator_config=accelerator_config)
+        self.assertTrue(trainer.use_stateful_dataloader)
+        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
+        trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16, accelerator_config=accelerator_config)
+        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
+
+        # Check drop_last works
+        trainer = get_regression_trainer(
+            train_len=66, eval_len=74, learning_rate=0.1, per_device_train_batch_size=16, per_device_eval_batch_size=32, accelerator_config=accelerator_config
+        )
+        self.assertTrue(trainer.use_stateful_dataloader)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
+
+        trainer = get_regression_trainer(
+            train_len=66,
+            eval_len=74,
+            learning_rate=0.1,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=32,
+            dataloader_drop_last=True,
+            accelerator_config=accelerator_config
+        )
+        self.assertTrue(trainer.use_stateful_dataloader)
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
         self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
 
@@ -2552,6 +2596,111 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             self.assertAlmostEqual(a, a1, delta=1e-5)
             self.assertAlmostEqual(b, b1, delta=1e-5)
+
+    @require_accelerate_version_min_1_0_0
+    @require_torchdata
+    @require_torch_up_to_2_accelerators
+    def test_resume_training_with_stateful_dataloaders(self):
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+        accelerator_config = AcceleratorConfig(use_stateful_dataloader=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 5,
+                "accelerator_config": accelerator_config
+            }
+            trainer = get_regression_trainer(**kwargs)
+            self.assertTrue(trainer.use_stateful_dataloader)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer
+            trainer = get_regression_trainer(**kwargs)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(**kwargs)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+        # With a regular model that is not a PreTrainedModel
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "pretrained": False,
+                "accelerator_config": accelerator_config
+            }
+
+            trainer = get_regression_trainer(**kwargs)
+            self.assertTrue(trainer.use_stateful_dataloader)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(**kwargs)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(**kwargs)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+        # Now check failures
+
+        # 1. fail to find a bogus checkpoint
+        trainer = get_regression_trainer()
+        with self.assertRaises(Exception) as context:
+            trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
+        self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
+
+        # 2. fail to find any checkpoint - due a fresh output_dir
+        output_dir2 = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=output_dir2)
+        with self.assertRaises(Exception) as context:
+            trainer.train(resume_from_checkpoint=True)
+        self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
     @slow
     @require_accelerate
