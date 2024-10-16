@@ -151,6 +151,7 @@ from .utils import (
     can_return_loss,
     find_labels,
     is_accelerate_available,
+    is_adam_mini_torch_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_datasets_available,
@@ -1274,6 +1275,29 @@ class Trainer:
             optimizer_kwargs.update(adam_kwargs)
             if args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
                 optimizer_kwargs.update({"fused": True})
+        elif args.optim == OptimizerNames.ADAMW_MINI:
+            if not is_adam_mini_torch_available():
+                raise ImportError(
+                    "You need to install `adam_mini` in order to use Adam-mini optimizer"
+                    " install it with `pip install adam_mini`"
+                )
+            from adam_mini import Adam_mini
+
+            optimizer_cls = Adam_mini
+
+            hidden_size = getattr(model.config, "hidden_size", None)
+            num_q_head = getattr(model.config, "num_attention_heads", None)
+            num_kv_head = getattr(model.config, "num_key_value_heads", None)
+
+            optimizer_kwargs.update(
+                {
+                    "named_parameters": model.named_parameters(),
+                    "dim": hidden_size,
+                    "n_heads": num_q_head,
+                    "n_kv_heads": num_kv_head,
+                }
+            )
+            optimizer_kwargs.update(adam_kwargs)
         elif args.optim == OptimizerNames.ADAMW_TORCH_XLA:
             try:
                 from torch_xla.amp.syncfree import AdamW
