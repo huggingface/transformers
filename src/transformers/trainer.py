@@ -2562,6 +2562,7 @@ class Trainer:
                                 self.lr_scheduler.step()
 
                         model.zero_grad()
+                        print("Called!", is_last_step_and_steps_less_than_grad_acc)
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
