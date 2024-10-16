@@ -2416,17 +2416,22 @@ class Trainer:
             step = -1
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-            batches = []
-            num_items_in_batch = 0
-            step_in_dataloader = -1
-            for step in range(max_steps-1):
-                for ga_step in range(args.gradient_accumulation_steps):
-                    if step_in_dataloader <= max_steps:
-                        data_batch = next(epoch_iterator)
-                        batches.append(data_batch)
-                        num_items_in_batch += data_batch["labels"][..., 1:].ne(-100).sum().item()
-                        step_in_dataloader += 1
-                for inputs in batches:
+            remainder = num_examples % args.gradient_accumulation_steps
+            if remainder == 0:
+                remainder = args.gradient_accumulation_steps
+            for step in range(max_steps):
+                if step == (max_steps-1):
+                    num_batches = remainder
+                else:
+                    num_batches = args.gradient_accumulation_steps
+                batch_samples = []
+                for _ in range(num_batches):
+                    try:
+                        batch_samples += [next(epoch_iterator)]
+                    except StopIteration:
+                        break
+                num_items_in_batch = sum([data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples])
+                for inputs in batch_samples:
                     total_batched_samples += 1
 
                     if self.args.include_num_input_tokens_seen:
