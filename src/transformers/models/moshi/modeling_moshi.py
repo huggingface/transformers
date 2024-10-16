@@ -1170,6 +1170,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = []
             for position_idx in cache_position:
+                position_idx = position_idx.item()
                 if position_idx == 0:
                     inputs_embeds.append(self.text_embed_tokens(input_ids[:, [position_idx]]))
                 else:
