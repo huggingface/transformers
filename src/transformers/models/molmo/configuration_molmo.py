@@ -109,6 +109,7 @@ class MolmoVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        residual_dropout=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,6 +127,7 @@ class MolmoVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.image_num_key_value_heads = image_num_key_value_heads
         self.num_image_positions = num_image_positions
+        self.residual_dropout = residual_dropout
         self.hidden_act = hidden_act
 
     @classmethod
@@ -264,7 +266,7 @@ class MolmoTextConfig(PretrainedConfig):
         vocab_size=152064,
         additional_vocab_size=128,
         intermediate_size=37888,
-        hidden_act="silu",
+        hidden_act="swiglu",
         max_position_embeddings=32768,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -411,6 +413,8 @@ class MolmoConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         image_seq_length=576,
         initializer_range=0.02,
+        vision_feature_select_strategy="full",
+        vision_feature_layers=[-2, -9],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -418,6 +422,8 @@ class MolmoConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layers = vision_feature_layers
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the MolmoVisionConfig with default values.")
