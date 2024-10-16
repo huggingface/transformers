@@ -146,10 +146,7 @@ class ClassFinder(CSTVisitor):
 
     def leave_Name(self, node):
         if node.value in self.classes.keys() | self.assignments.keys() | self.function_def.keys():
-            try:
-                parent = self.get_metadata(cst.metadata.ScopeProvider, node)
-            except KeyError:
-                return
+            parent = self.get_metadata(cst.metadata.ScopeProvider, node)
             if not isinstance(parent, cst.metadata.scope_provider.GlobalScope):
                 self._update_class_dependency(parent._name_prefix.split(".")[0], node.value)
 
@@ -220,8 +217,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
-        # For tensorflow files, classes are defined with uppercase TF prefix, e.g. `TFModelName`
-        self.default_name = "".join(x.title() if x != "tf" else x.upper() for x in new_name.split("_"))
+        self.default_name = "".join(x.title() for x in new_name.split("_"))
         if self.new_name in CONFIG_MAPPING_NAMES:
             self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
                 "Config", ""
@@ -229,21 +225,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
-            "".join(x.title() if x != "tf" else x.upper() for x in old_name.split("_")): self.default_name,
+            "".join(x.title() for x in new_name.split("_")): self.default_name,
         }
-        # Tensorflow and Flax files are special as modeling classes start with TF/Flax, but not the Config, strings etc...
-        if new_name.split("_")[0] in ("tf", "flax") and old_name.split("_")[0] in ("tf", "flax"):
-            old_name_without_framework = "".join(old_name.split("_")[1:])
-            new_name_without_framework = "".join(new_name.split("_")[1:])
-            self.patterns.update(
-                {
-                    old_name_without_framework: new_name_without_framework,
-                    old_name_without_framework.upper(): new_name_without_framework.upper(),
-                    "".join(x.title() for x in old_name_without_framework.split("_")): self.default_name.replace(
-                        "TF", ""
-                    ).replace("Flax", ""),
-                }
-            )
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
         if self.old_name in CONFIG_MAPPING_NAMES:
@@ -836,8 +819,6 @@ class ModularConverterTransformer(CSTTransformer):
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
         self.added_dependencies = set()
-        # Keep track of top-level calls that we need to keep (function call to add docstrings to classes/functions)
-        self.top_level_calls = []
         # Keep track of decorators arguments for top-level functions/classes
         self.decorator_dependencies = defaultdict(lambda: [])
 
@@ -1091,10 +1072,7 @@ class ModularConverterTransformer(CSTTransformer):
         """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them.
         Important note: we only rely on direct Call to the functions here, not indirect mentions (such as assigning a variable with the function,
         add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible.
-
-        We also use it to keep track of top-level function calls that we need to keep, e.g. calls to add docstrings to classes or functions.
         """
-        scope = self.get_metadata(cst.metadata.ScopeProvider, node)
         # Only map function calls if we're inside a class (i.e., current_class is set)
         if self.current_class is not None:
             # Simple function calls such as foo()
@@ -1104,9 +1082,6 @@ class ModularConverterTransformer(CSTTransformer):
             # Simple function calls such as foo()
             if isinstance(node.func, cst.Name):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
-        # This is a direct call to a function, e.g. `overwrite_call_docstring(FlaxRobertaForMultipleChoice, ROBERTA_INPUTS_DOCSTRING)`
-        elif isinstance(scope, cst.metadata.scope_provider.GlobalScope) and isinstance(node.func, cst.Name):
-            self.top_level_calls.append(node)
 
     def visit_Decorator(self, node):
         """Keep track of args of decorators for all top-level functions/classes."""
@@ -1189,7 +1164,7 @@ class ModularConverterTransformer(CSTTransformer):
         self, arg_names: list, file: str, dependency_imports: dict, body_insert_idx: int
     ) -> None:
         """Add all the `args_names` elements to the body, if they are not already present in the body or the imports. This is
-        used to add potential arguments of top-level calls or decorators, that were not added though the dependency class graph.
+        used to add potential arguments of decorators, that were not added through the dependency class graph.
         IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
         added previously. This means that only args corresponding to simple assignments such as `XXX_INPUTS_DOCSTRING = ""` will be added.
         """
@@ -1203,47 +1178,6 @@ class ModularConverterTransformer(CSTTransformer):
                         arg_node = class_finder.assignments[arg]
                         # Insert the dependency
                         self._insert_node_in_body(arg_node, body, arg, body_insert_idx)
-
-    def add_all_calls_to_files(self, dependency_imports) -> None:
-        """Add all top-level function calls in the `modular_xxx.py` files to the corresponding files. Those calls are used
-        to modify docstring of classes/functions.
-        IMPORTANT: this assumes that the first argument to the call is an element of the body, i.e top-level class/function/variable
-        (which is the case for docstring helpers). Otherwise, the call will NOT be added.
-        """
-        for i, call_node in enumerate(self.top_level_calls):
-            # Iterate over the args of the Call node to find which class (one of the args) is the parent
-            all_arg_names = []
-            for arg in call_node.args:
-                # We only look at those categories to get the args dependencies, as the function calls should be
-                # fairly simple (once again, we assume doctrings helper calls)
-                if m.matches(arg.value, m.Name()):
-                    all_arg_names.append(arg.value.value)
-                elif m.matches(arg.value, m.Call(func=m.Attribute(value=m.Name()))):
-                    all_arg_names.append(arg.value.func.value.value)
-
-            # Add the node
-            # IMPORTANT: this assumes a class name is the first arg to the Call to add it in the correct location
-            class_name = all_arg_names[0]
-            for file, body in self.files.items():
-                if class_name in body.keys():
-                    # Sort the names according to their current idx
-                    body_names = [k[0] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-                    # We insert the current node after the parent, and potential functions calls already added after the parent (so
-                    # that we keep the exact same order for the calls)
-                    relative_list_idx = body_names.index(class_name) + 1
-                    if relative_list_idx < len(body_names):
-                        while "new_call" in body_names[relative_list_idx]:
-                            relative_list_idx += 1
-                    # Get the insert index
-                    if relative_list_idx < len(body_names):
-                        insert_idx = body[body_names[relative_list_idx]]["insert_idx"]
-                    else:
-                        insert_idx = body[body_names[-1]]["insert_idx"] + 1
-                    # Add the node (with 2 newlines, because Call nodes do not own their newlines)
-                    self._insert_node_in_body(call_node, body, f"new_call_{i}", insert_idx, add_new_lines=2)
-                    # We inserted the node -> we need to check arg dependencies are added if not present
-                    insert_idx = body[class_name]["insert_idx"]
-                    self._add_all_args_dependencies(all_arg_names, file, dependency_imports, insert_idx)
 
     def add_all_decorator_arguments_to_files(self, dependency_imports: dict) -> None:
         """This adds all potential arguments of class/functions decorators to the file bodies, in case they were not
@@ -1269,8 +1203,6 @@ class ModularConverterTransformer(CSTTransformer):
         # Check if any new top-level function from the `modular_xxx.py` should be added to the different files
         # (if it is called in a class in the file, then it will be copy pasted from `modular.py` to that file).
         self.recursively_add_all_new_needed_functions_in_files()
-        # Add all top-level functions call to the files (calls to modify docstrings of classes/functions)
-        self.add_all_calls_to_files(dependency_imports)
         # Add potential missing arguments of class/function decorators
         self.add_all_decorator_arguments_to_files(dependency_imports)
 
