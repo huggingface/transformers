@@ -45,6 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .loss_utils import DefaultCrossEntropyLoss
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -5157,6 +5158,10 @@ class PoolerAnswerClass(nn.Module):
         x = self.dense_1(x).squeeze(-1)
 
         return x
+
+    @property
+    def loss(self):
+        return self._loss if self._loss is not None else DefaultCrossEntropyLoss
 
 
 @dataclass
