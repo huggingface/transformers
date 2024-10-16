@@ -2057,7 +2057,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
+        # fmt: off
+        EXPECTED_OUTPUT = torch.tensor([
+            50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295,
+            264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928,
+            702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326,
+            388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13,
+            50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196,
+            295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450,
+            10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936,
+            293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13,
+            51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354,
+            1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293,
+            51836, 50364, 393, 4411, 13, 50514, 50257
+        ])
+        # fmt: on
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2068,7 +2082,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season"
                     " of the year, with Christmas and roast beef looming before us, similarly drawn from eating and"
                     " its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins'"
-                    " work is really Greek after all, and"
+                    " work is really Greek after all, and can discover."
                 ),
                 "offsets": [
                     {
@@ -2099,6 +2113,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                             " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
                         ),
                         "timestamp": (23.76, 29.44),
+                    },
+                    {
+                        "text": " can discover.",
+                        "timestamp": (29.44, 32.44),
                     },
                 ],
             }
@@ -2197,7 +2215,19 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702,  1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264,  1064,  11, 365,  5272,   293, 12904,  9256, 450, 10539, 949, 505, 11, 51245, 51287,  1034, 4680, 10117, 490, 3936, 293, 1080,  3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968,  6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50257])
+        EXPECTED_OUTPUT = torch.tensor([
+            50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295,
+            264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928,
+            702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326,
+            388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13,
+            50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196,
+            295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450,
+            10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490,
+            3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575,
+            13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617,
+            1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439,
+            11, 51799, 50365, 293, 393, 4411, 50430, 50257
+        ])
         # fmt: on
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2208,7 +2238,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive"
                     " season of the year, with Christmas and roast beef looming before us, similes drawn from eating"
                     " and its results occur most readily to the mind. He has grave doubts whether Sir Frederick "
-                    "Leighton's work is really Greek after all,"
+                    "Leighton's work is really Greek after all, and can discover"
                 ),
                 "offsets": [
                     {
@@ -2237,6 +2267,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                         ),
                         "timestamp": (23.16, 28.68),
                     },
+                    {
+                        "text": (
+                            " and can discover"
+                        ),
+                        "timestamp": (28.68, 29.98),
+                    },
+
                 ],
             }
         ]
@@ -2334,6 +2371,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
+        # modified here since we add eos token + start tokens in generate
+        # nevertheless would have to be tested and compared with expected from openai 
+
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
@@ -2366,7 +2406,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = [
-            torch.tensor([0.0000, 0.4200, 0.8200, 0.9400, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0400, 2.3400, 2.5200, 2.6600, 3.2000, 3.4400, 3.5600, 3.6800, 3.8200, 4.1000, 4.3000, 4.5800, 4.9400, 5.4000, 6.3600]),
+            torch.tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.4200, 0.8200, 0.9400, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0400, 2.3400, 2.5200, 2.6600, 3.2000, 3.4400, 3.5600, 3.6800, 3.8200, 4.1000, 4.3000, 4.5800, 4.9400, 5.4000, 6.3600]),
             torch.tensor([ 6.5400,  6.5400,  6.7400,  6.9600,  7.2600,  7.3400,  7.5800,  7.5800, 7.6400,  7.8400,  8.1000,  8.5000,  9.0000,  9.4800,  9.7200, 10.2600, 11.1000]),
             torch.tensor([11.2200, 11.2200, 11.4200, 11.6600, 12.0800, 12.4400, 12.5800, 12.8400, 13.1800, 13.6800, 14.0000, 14.2200, 14.6200, 14.9800, 15.2200, 15.6000, 15.9400, 16.2000, 16.5600, 16.8400, 16.9800]),
             torch.tensor([16.9800, 16.9800, 17.3200, 18.1600, 18.6400, 18.8600, 19.2800, 19.5600, 19.8800, 20.1800, 20.3800, 20.7200, 21.1600, 21.5400, 21.9000, 22.2000, 22.4200, 22.8600, 23.7000]),
@@ -2377,7 +2417,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch.tensor([44.7000, 44.7000, 44.8600, 44.9400, 45.1400, 45.1400, 45.2800, 45.6200, 45.9000, 46.2600, 47.1600, 47.4800, 47.7400, 48.1000, 48.2800, 48.4000, 48.6200, 48.8400, 49.0400, 49.2800, 49.4800, 49.6600, 49.9400, 50.5400]),
             torch.tensor([50.5400, 50.5400, 50.6600, 50.8800, 51.2400, 51.7200, 52.8400]),
             torch.tensor([52.9600, 52.9600, 53.0400, 53.2600, 53.4200, 53.5800, 53.9200, 54.1200, 54.7200, 54.9400, 55.2600, 55.6200, 55.9800, 56.5600, 56.8000, 56.9200, 57.3600, 57.9200, 58.1800, 58.5000, 58.6400, 58.8200]),
-            torch.tensor([58.6800, 58.6800, 59.1400, 59.5400, 59.9200, 60.1600, 60.3800, 60.8200, 61.6200, 62.2600, 75.2000]),
+            torch.tensor([58.6800, 58.6800, 59.1400, 59.5400, 59.9200, 60.1600, 60.3800, 60.8200, 61.6200, 62.2600, 75.2000, 82.6000]),
         ]
         # fmt: on
 
@@ -2520,17 +2560,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # task defaults to transcribe
         sequences = model.generate(input_features, return_timestamps=True)
 
-        transcription = processor.batch_decode(sequences)[0]
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
+        assert transcription == "<|startoftranscript|><|hi|><|transcribe|> मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?<|endoftext|>"
 
         # set task to translate
         sequences = model.generate(input_features, task="translate", return_timestamps=True)
-        transcription = processor.batch_decode(sequences)[0]
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
         assert (
             transcription
-            == " How many different species are there in the chilli? How many different species are there in the chilli?"
+            == "<|startoftranscript|><|hi|><|translate|> How many different species are there in the chilli? How many different species are there in the chilli?<|endoftext|>"
         )
 
     @slow
@@ -2794,8 +2834,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_shortform_single_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing and the most topical antilock breaks and power steering pain, Stakingly stitching, leather seating so soft, it would make JD power and her associate blush. If you were to create the luxury sedan that is my nightly model, but sometimes— you're sometimes, folks— I lurched the consciousness and the back of an abandoned school bus"]
-        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there night after night after, actually. Carefully selecting for you the day's noisiest, most aerodynamic headlines, stress testing, and the most topical, anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school"]
+        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
+        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -3004,12 +3044,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         audio = ds[:num_samples]["audio"]
         audios = [x["array"] for x in audio]
 
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6, # necessary to trigger no speech detection
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": False,
+            "logprob_threshold": -2.0, # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
+        }
+
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
             inputs = inputs.to(device=torch_device)
 
-            result = model.generate(**inputs, return_timestamps=True)
+            result = model.generate(**inputs, **gen_kwargs)
             decoded_single += processor.batch_decode(result, skip_special_tokens=True)
 
         inputs = processor(
@@ -3098,14 +3147,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         # fmt: off
         EXPECTED_TEXT = [
-            ' Mr. Kfilter is the apostle of the Middle Classes and we are glad to welcome his gospel.',
-            " Nor is Mr. Qilter's manner less interesting than his matter.",
-            ' He tells us that at this festive season of the year, with Christmas and roce beef, looming before us, similarly drawn from eating and its results occur most readily to the mind.',
-            ' He has grabbed those with her surfered trigger late and his work is really a great after all, and can discover it in it but little of Rocky Ithaka.',
-            " L'Neile's pictures are a sort of upguards and add-um paintings, and Maessin's exquisite Itals are a national as a jingo poem. Mr. Birkett Foster's landscapes smiled at one much in the same way that Mr. Carcher used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slapper in the back, before he says,",
-            ' It is obviously unnecessary for us, to point out how luminous these criticisms are, how delicate and expression.',
-            ' On the general principles of art and Mr. Kriltor rights with equal lucidity.',
-            ' Painting, he tells us is of a different quality to mathematics and finish in art is adding more effect.',
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+            " Nor is Mr. Quilters' manner less interesting than his matter.",
+            " He tells us that at this festive season of the year with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind.",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.",
+            " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his visitor a cheerful slap on the back before he says like a shampoo or a turkish bath. Next man!",
+            " It is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression.",
+            " On the general principles of art and Mr. Quilter writes with equal lucidity.",
+            " Painting he tells us is of a different quality to mathematics and finish in art is adding more effect.",
         ]
         # fmt: on
 
@@ -3271,6 +3320,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 5,
             "language": "fr",
             "task": "transcribe",
+            "return_timestamps": True,
         }
 
         torch.manual_seed(0)
