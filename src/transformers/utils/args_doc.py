@@ -163,6 +163,15 @@ class ClassDocstring:
         output) e.g. for Named-Entity-Recognition (NER) tasks.
     """
 
+    Config = r"""
+    This is the configuration class to store the configuration of a [`{}Model`] or a [`TF{}Model`]. It is
+    used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the {}
+    [{}](https://huggingface.co/{}) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
 
 class ClassAttrs:
     base_model_prefix = r"""TODO """
