@@ -273,39 +273,6 @@ def _get_fsdp_ckpt_kwargs():
         return {}
 
 
-def _init_fsdp(model, accelerator, device):
-    """
-    Initialize Fully Sharded Data Parallel (FSDP) for the model.
-
-    This function is needed to properly initialize FSDP when resuming from a checkpoint.
-    It runs a forward pass with dummy inputs to ensure FSDP is fully initialized.
-    See https://github.com/huggingface/transformers/issues/31892 for more details.
-
-    Args:
-        model: The model to initialize with FSDP.
-        accelerator: The Accelerator object.
-        device: The device to run the model on.
-
-    Returns:
-        The initialized FSDP model.
-    """
-    model = accelerator.prepare(model)
-    model.train()
-    with torch.no_grad():
-        # Run a forward pass with dummy inputs to initialize FSDP
-        dummy_input = {
-            name: torch.ones(
-                (1, 512),
-                dtype=torch.long,
-                device=device,
-            )
-            for name in model.forward.__code__.co_varnames
-            if name != "self"
-        }
-        _ = model(**dummy_input)
-    return model
-
-
 if TYPE_CHECKING:
     import optuna
 
@@ -634,10 +601,6 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-
-        if self.is_fsdp_enabled:
-            self.model = _init_fsdp(self.model, self.accelerator, self.args.device)
-
         if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
