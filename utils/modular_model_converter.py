@@ -225,7 +225,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
-            "".join(x.title() for x in new_name.split("_")): self.default_name,
+            "".join(x.title() for x in old_name.split("_")): self.default_name,
         }
         if given_old_name is not None and given_new_name is not None and given_old_name not in self.patterns:
             self.patterns[given_old_name] = given_new_name
