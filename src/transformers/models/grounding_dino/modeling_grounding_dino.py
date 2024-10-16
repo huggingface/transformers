@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
-import copy
 import math
 import os
 import warnings
@@ -49,14 +48,13 @@ from .configuration_grounding_dino import GroundingDinoConfig
 
 
 if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
+    pass
 
 if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
+    pass
 
 if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
+    pass
 
 if is_timm_available():
     from timm import create_model

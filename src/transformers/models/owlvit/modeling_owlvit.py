@@ -98,7 +98,7 @@ class OwlViTOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr._upcast
+# Copied from transformers.models.detr.loss_detr._upcast
 def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():

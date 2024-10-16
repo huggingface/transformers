@@ -41,14 +41,13 @@ from ...utils import (
     is_torch_cuda_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
 
 if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -1971,9 +1970,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             denoising_meta_values=denoising_meta_values,
         )
-
-
-
 
 
 @add_start_docstrings(

@@ -42,17 +42,16 @@ from .configuration_conditional_detr import ConditionalDetrConfig
 
 
 if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
+    pass
 
 if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
+    pass
 
 if is_timm_available():
     from timm import create_model
 
 if is_vision_available():
-    from ...image_transforms import center_to_corners_format
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -1745,7 +1744,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         reference = outputs.reference_points if return_dict else outputs[-1]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
-        outputs_coords = []
+
         hs = sequence_output
         tmp = self.bbox_predictor(hs)
         tmp[..., :2] += reference_before_sigmoid
@@ -2097,5 +2096,3 @@ class ConditionalDetrMHAttentionMap(nn.Module):
         weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
-
-

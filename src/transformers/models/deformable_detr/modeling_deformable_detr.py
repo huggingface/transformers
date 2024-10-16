@@ -87,12 +87,11 @@ def load_cuda_kernels():
 
 
 if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
+    pass
 
 
 if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
+    pass
 
 
 if is_timm_available():
@@ -100,7 +99,7 @@ if is_timm_available():
 
 
 if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -2087,6 +2086,3 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         )
 
         return dict_outputs
-
-
-
