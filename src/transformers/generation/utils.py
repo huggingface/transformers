@@ -116,10 +116,6 @@ if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
-# These keys are model inputs that, in most models, we only want them in the first iteration of cached generation
-MODEL_INPUTS_WO_CACHE = set(["pixel_values"])
-
-
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
