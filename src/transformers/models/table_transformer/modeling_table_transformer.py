@@ -1389,7 +1389,14 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            self.loss_function()
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
+                outputs_class = self.class_labels_classifier(intermediate)
+                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+            loss = self.loss_function(
+                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+            )
 
         if not return_dict:
             if auxiliary_outputs is not None:

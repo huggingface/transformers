@@ -473,7 +473,9 @@ def _set_aux_loss(self, outputs_class, outputs_coord):
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
-def ForSegmentationLoss(logits,  labels, device, pred_boxes, pred_masks, config, outputs_class=None, outputs_coord=None, **kwargs):
+def ForSegmentationLoss(
+    logits, labels, device, pred_boxes, pred_masks, config, outputs_class=None, outputs_coord=None, **kwargs
+):
     # First: create the matcher
     matcher = DetrHungarianMatcher(
         class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
@@ -511,7 +513,9 @@ def ForSegmentationLoss(logits,  labels, device, pred_boxes, pred_masks, config,
     return loss
 
 
-def ForObjectDetectionLoss(logits, labels, device, pred_boxes, config, outputs_class=None, outputs_coord=None, **kwargs):
+def ForObjectDetectionLoss(
+    logits, labels, device, pred_boxes, config, outputs_class=None, outputs_coord=None, **kwargs
+):
     # First: create the matcher
     matcher = DetrHungarianMatcher(
         class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
