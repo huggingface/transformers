@@ -393,7 +393,7 @@ class DiffLlamaAttention(nn.Module):
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn_weights = attn_weights.view(bsz, self.num_heads, 2, target_len, q_len)
+        attn_weights = attn_weights.view(bsz, self.num_heads, 2, target_len, key_states.shape[-2])
         attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -637,8 +637,8 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
 
 DIFFLLAMA_ATTENTION_CLASSES = {
     "eager": DiffLlamaAttention,
-    "flash_attention_2": DiffLlamaFlashAttention2,
-    "sdpa": DiffLlamaSdpaAttention,
+    # "flash_attention_2": DiffLlamaFlashAttention2,
+    # "sdpa": DiffLlamaSdpaAttention,
 }
 
 
@@ -927,7 +927,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
                     "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
                     "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
                 )
-
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -948,7 +947,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
-
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
