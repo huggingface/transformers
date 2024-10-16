@@ -92,7 +92,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 
 现在，你就已经可以结合 PyTorch 生态系统中的一系列其他工具，来使用完整的、未量化的模型了。
 
-为了将模型转换回`gguf`文件，我们建议使用`llama.cpp`中的[`convert-hf-to-gguf.py`文件](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py)文件。
+为了将模型转换回`gguf`文件，我们建议使用`llama.cpp`中的[`convert-hf-to-gguf.py`文件](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py)。
 
 以下是如何补充上面的脚本，以保存模型并将其导出回 `gguf`的示例：
 
