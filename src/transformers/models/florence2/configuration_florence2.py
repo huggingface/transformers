@@ -32,21 +32,21 @@ class Florence2VisionConfig(PretrainedConfig):
     Args:
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout rate of the drop path layer.
-        patch_size (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_size (`Tuple[int]`, *optional*, defaults to (7, 3, 3, 3)):
             The patch size of the image.
-        patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+        patch_stride (`Tuple[int]`, *optional*, defaults to (4, 2, 2, 2)):
             The patch stride of the image.
-        patch_padding (`List[int]`, *optional*, defaults to [3, 1, 1, 1]):
+        patch_padding (`Tuple[int]`, *optional*, defaults to (3, 1, 1, 1)):
             The patch padding of the image.
-        patch_prenorm (`List[bool]`, *optional*, defaults to [false, true, true, true]):
+        patch_prenorm (`Tuple[bool]`, *optional*, defaults to (false, true, true, true)):
             Whether to apply layer normalization before the patch embedding layer.
-        dim_embed (`List[int]`, *optional*, defaults to [256, 512, 1024, 2048]):
+        dim_embed (`Tuple[int]`, *optional*, defaults to (256, 512, 1024, 2048)):
             The dimension of the embedding layer.
-        num_heads (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+        num_heads (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
             The number of attention heads.
-        num_groups (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+        num_groups (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
             The number of groups.
-        depths (`List[int]`, *optional*, defaults to [1, 1, 9, 1]):
+        depths (`Tuple[int]`, *optional*, defaults to (1, 1, 9, 1)):
             The depth of the model.
         window_size (`int`, *optional*, defaults to 12):
             The window size of the model.
@@ -56,7 +56,7 @@ class Florence2VisionConfig(PretrainedConfig):
             The configuration of the visual temporal embedding.
         image_pos_embed (`dict`, *optional*):
             The configuration of the image position embedding.
-        image_feature_source (`List[str]`, *optional*, defaults to ["spatial_avg_pool", "temporal_avg_pool"]):
+        image_feature_source (`Tuple[str]`, *optional*, defaults to ("spatial_avg_pool", "temporal_avg_pool")):
             The source of the image feature.
     Example:
 
@@ -79,19 +79,19 @@ class Florence2VisionConfig(PretrainedConfig):
     def __init__(
         self,
         drop_path_rate=0.1,
-        patch_size=[7, 3, 3, 3],
-        patch_stride=[4, 2, 2, 2],
-        patch_padding=[3, 1, 1, 1],
-        patch_prenorm=[False, True, True, True],
-        dim_embed=[256, 512, 1024, 2048],
-        num_heads=[8, 16, 32, 64],
-        num_groups=[8, 16, 32, 64],
-        depths=[1, 1, 9, 1],
+        patch_size=(7, 3, 3, 3),
+        patch_stride=(4, 2, 2, 2),
+        patch_padding=(3, 1, 1, 1),
+        patch_prenorm=(False, True, True, True),
+        dim_embed=(256, 512, 1024, 2048),
+        num_heads=(8, 16, 32, 64),
+        num_groups=(8, 16, 32, 64),
+        depths=(1, 1, 9, 1),
         window_size=12,
         projection_dim=1024,
         visual_temporal_embedding=None,
         image_pos_embed=None,
-        image_feature_source=["spatial_avg_pool", "temporal_avg_pool"],
+        image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         **kwargs,
     ):
         self.drop_path_rate = drop_path_rate
@@ -314,7 +314,6 @@ class Florence2Config(PretrainedConfig):
         if vision_config is not None:
             vision_config = PretrainedConfig(**vision_config)
         self.vision_config = vision_config
-        self.vocab_size = self.vocab_size
 
         self.text_config = text_config
         if text_config is not None:
