@@ -476,7 +476,7 @@ class SuperTransformer(cst.CSTTransformer):
                 break
 
         return deduplicated_new_body
-    
+
     def _fix_init_location(self, new_body):
         """Fix the location of the super()__init__ in the new body, if we had new statements before it."""
         start_index = 0
@@ -509,7 +509,7 @@ class SuperTransformer(cst.CSTTransformer):
         for i, expr in enumerate(node.body):
             if is_call_to_super(expr, func_name):
                 has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i+1:]))
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i + 1 :]))
                 new_body = self._fix_init_location(new_body)
             else:
                 expr = expr.visit(self.transformer)
@@ -602,7 +602,9 @@ def replace_call_to_super(
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
             # Keep decorators in `modular_xxx.py` if any, else original decorators
-            new_decorators = updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
+            new_decorators = (
+                updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
+            )
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 class_finder.python_module.code_for_node(updated_methods[name]),
@@ -760,7 +762,9 @@ class PostModularConverterCleaner(CSTTransformer):
 
     def visit_SimpleStatementLine(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        simple_top_level_assign_structure = m.SimpleStatementLine(body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])])
+        simple_top_level_assign_structure = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
+        )
         if m.matches(parent_node, m.Module()) and m.matches(node, simple_top_level_assign_structure):
             self.top_level_functions_classes_assignments[node.body[0].targets[0].target.value] = node
 
@@ -783,7 +787,9 @@ class PostModularConverterCleaner(CSTTransformer):
         # Find any class/function/assignment that was mistakenly added as part of the dependencies and remove it
         unused = self.added_dependencies - self.all_used_functions_classes_assignments
         nodes_to_remove = [
-            self.top_level_functions_classes_assignments[name] for name in unused if name in self.top_level_functions_classes_assignments
+            self.top_level_functions_classes_assignments[name]
+            for name in unused
+            if name in self.top_level_functions_classes_assignments
         ]
         new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
         # Return a new module with the updated body
