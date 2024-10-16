@@ -521,7 +521,7 @@ def ForSegmentationLoss(
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-    return loss
+    return loss, loss_dict, auxiliary_outputs
 
 
 def ForObjectDetectionLoss(
