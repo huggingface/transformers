@@ -7,10 +7,15 @@ import numpy as np
 import torch
 import tqdm
 from sklearn import model_selection
-from synthid_text import logits_processing, synthid_mixin
+import tensorflow_datasets as tfds
+import tensorflow as tf
+import immutabledict
 
 import transformers
 from transformers import BayesianDetectorConfig, BayesianDetectorModel
+
+from huggingface_hub import HfApi, Repository, create_repo
+from huggingface_hub.utils import RepositoryNotFoundError
 
 
 def pad_to_len(
@@ -63,10 +68,11 @@ def filter_and_truncate(
 
 def process_outputs_for_training(
     all_outputs: Sequence[torch.Tensor],
-    logits_processor: logits_processing.SynthIDLogitsProcessor,
+    logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     *,
-    truncation_length: int,
+    pos_truncation_length: int,
+    neg_truncation_length: int,
     max_length: int,
     is_cv: bool,
     is_pos: bool,
@@ -78,7 +84,8 @@ def process_outputs_for_training(
     all_outputs: sequence of outputs of shape [batch_size, output_len].
     logits_processor: logits processor used for watermarking.
     tokenizer: tokenizer used for the model.
-    truncation_length: Length to truncate the outputs.
+    pos_truncation_length: Length to truncate wm outputs.
+    neg_truncation_length: Length to truncate uwm outputs.
     max_length: Length to pad truncated outputs so that all processed entries.
         have same shape.
     is_cv: Process given outputs for cross validation.
@@ -102,7 +109,11 @@ def process_outputs_for_training(
         if is_pos or is_cv:
             # filter with length for positives for both train and CV.
             # We also filter for length when CV negatives are processed.
-            outputs = filter_and_truncate(outputs, truncation_length, eos_token_mask)
+            outputs = filter_and_truncate(outputs, pos_truncation_length, eos_token_mask)
+        elif not is_pos and not is_cv:
+            outputs = filter_and_truncate(
+                outputs, neg_truncation_length, eos_token_mask
+            )
 
         # If no filtered outputs skip this batch.
         if outputs.shape[0] == 0:
@@ -327,7 +338,8 @@ def train_detector(
 def process_raw_model_outputs(
     logits_processor,
     tokenizer,
-    truncation_length,
+    pos_truncation_length,
+    neg_truncation_length,
     max_padded_length,
     tokenized_wm_outputs,
     test_size,
@@ -344,7 +356,8 @@ def process_raw_model_outputs(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_wm_outputs],
         logits_processor=logits_processor,
         tokenizer=tokenizer,
-        truncation_length=truncation_length,
+        pos_truncation_length=pos_truncation_length,
+        neg_truncation_length=neg_truncation_length,
         max_length=max_padded_length,
         is_pos=True,
         is_cv=False,
@@ -354,7 +367,8 @@ def process_raw_model_outputs(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_wm_outputs],
         logits_processor=logits_processor,
         tokenizer=tokenizer,
-        truncation_length=truncation_length,
+        pos_truncation_length=pos_truncation_length,
+        neg_truncation_length=neg_truncation_length,
         max_length=max_padded_length,
         is_pos=True,
         is_cv=True,
@@ -364,7 +378,8 @@ def process_raw_model_outputs(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_uwm_outputs],
         logits_processor=logits_processor,
         tokenizer=tokenizer,
-        truncation_length=truncation_length,
+        pos_truncation_length=pos_truncation_length,
+        neg_truncation_length=neg_truncation_length,
         max_length=max_padded_length,
         is_pos=False,
         is_cv=False,
@@ -374,7 +389,8 @@ def process_raw_model_outputs(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_uwm_outputs],
         logits_processor=logits_processor,
         tokenizer=tokenizer,
-        truncation_length=truncation_length,
+        pos_truncation_length=pos_truncation_length,
+        neg_truncation_length=neg_truncation_length,
         max_length=max_padded_length,
         is_pos=False,
         is_cv=True,
@@ -447,11 +463,12 @@ def process_raw_model_outputs(
 def train_best_detector(
     tokenized_wm_outputs: Sequence[np.ndarray] | np.ndarray,
     tokenized_uwm_outputs: Sequence[np.ndarray] | np.ndarray,
-    logits_processor: logits_processing.SynthIDLogitsProcessor,
+    logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     torch_device: torch.device,
     test_size: float = 0.3,
-    truncation_length: int = 200,
+    pos_truncation_length: int = 200,
+    neg_truncation_length: int = 100,
     max_padded_length: int = 2300,
     n_epochs: int = 50,
     learning_rate: float = 2.1e-2,
@@ -471,7 +488,8 @@ def train_best_detector(
     ) = process_raw_model_outputs(
         logits_processor,
         tokenizer,
-        truncation_length,
+        pos_truncation_length,
+        neg_truncation_length,
         max_padded_length,
         tokenized_wm_outputs,
         test_size,
@@ -506,20 +524,118 @@ def train_best_detector(
     return best_detector, lowest_loss
 
 
+def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, device):
+  dataset, info = tfds.load('wikipedia/20230601.en', split='train', with_info=True)
+
+  # take first 1000
+  dataset = dataset.take(10000)
+
+  # Convert the dataset to a DataFrame
+  df = tfds.as_dataframe(dataset, info)
+  ds = tf.data.Dataset.from_tensor_slices(dict(df))
+  tf.random.set_seed(0)
+  ds = ds.shuffle(buffer_size=10_000)
+  ds = ds.batch(batch_size=1)
+
+  tokenized_uwm_outputs = []
+  lengths = []
+  batched = []
+  # Pad to this length (on the right) for batching.
+  padded_length = 2500
+  for i, batch in tqdm.tqdm(enumerate(ds)):
+    responses = [val.decode() for val in batch['text'].numpy()]
+    inputs = tokenizer(
+        responses,
+        return_tensors='pt',
+        padding=True,
+    ).to(device)
+    line = inputs['input_ids'].cpu().numpy()[0].tolist()
+    if len(line) >= padded_length:
+      line = line[:padded_length]
+    else:
+      line = line + [
+          tokenizer.eos_token_id for _ in range(padded_length - len(line))
+      ]
+    batched.append(torch.tensor(line, dtype=torch.long, device=device)[None, :])
+    if len(batched) == neg_batch_size:
+      tokenized_uwm_outputs.append(torch.cat(batched, dim=0))
+      batched = []
+    if i > num_negatives:
+      break
+  return tokenized_uwm_outputs
+
+
+def upload_model_to_hf(model, hf_repo_name: str, private: bool = True):
+  api = HfApi()
+  
+  # Check if the repository exists
+  try:
+      api.repo_info(repo_id=hf_repo_name, use_auth_token=True)
+      print(f"Repository '{hf_repo_name}' already exists.")
+  except RepositoryNotFoundError:
+      # If the repository does not exist, create it
+      print(f"Repository '{hf_repo_name}' not found. Creating it...")
+      create_repo(repo_id=hf_repo_name, private=private, use_auth_token=True)
+      print(f"Repository '{hf_repo_name}' created successfully.")
+
+  # Push the model to the Hugging Face Hub
+  print(f"Uploading model to Hugging Face repo '{hf_repo_name}'...")
+  model.push_to_hub(repo_id=hf_repo_name, use_auth_token=True)
+
+
 if __name__ == "__main__":
     model_name = "google/gemma-7b-it"  # @param ['gpt2', 'google/gemma-2b-it', 'google/gemma-7b-it']
 
     CONFIG = synthid_mixin.DEFAULT_WATERMARKING_CONFIG
     TEMPERATURE = 0.5
     TOP_K = 40
+    DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+
+    DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
+        "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
+        "keys": [
+            654,
+            400,
+            836,
+            123,
+            340,
+            443,
+            597,
+            160,
+            57,
+            29,
+            590,
+            639,
+            13,
+            715,
+            468,
+            990,
+            966,
+            226,
+            324,
+            585,
+            118,
+            504,
+            421,
+            521,
+            129,
+            669,
+            732,
+            225,
+            90,
+            960,
+        ],
+        "sampling_table_size": 2**16,
+        "sampling_table_seed": 0,
+        "context_history_size": 1024,
+        "device": DEVICE,
+    })
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    logits_processor = logits_processing.SynthIDLogitsProcessor(**CONFIG, top_k=TOP_K, temperature=TEMPERATURE)
-
-    DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(**CONFIG)
 
     NUM_NEGATIVES = 10000
     POS_BATCH_SIZE = 32
@@ -527,16 +643,17 @@ if __name__ == "__main__":
     NEG_BATCH_SIZE = 32
 
     # Truncate outputs to this length for training.
-    TRUNCATION_LENGTH = 200
+    POS_TRUNCATION_LENGTH = 200
+    NEG_TRUNCATION_LENGTH = 100
     # Pad trucated outputs to this length for equal shape across all batches.
-    MAX_PADDED_LENGTH = 2300
+    MAX_PADDED_LENGTH = 1000
 
     ### CHANGE PATH
-    tokenized_wm_outputs = torch.load("/home/marc/local_test/synthia_test/watermarked_outputs_7B_0.7_20k.pkl")
-    tokenized_wm_outputs = tokenized_wm_outputs[:10]
+    tokenized_wm_outputs = torch.load("/content/watermarked_outputs_7B_0.7_20k.pkl")
+    tokenized_wm_outputs = tokenized_wm_outputs[:313]
 
-    tokenized_uwm_outputs = torch.load("/home/marc/local_test/synthia_test/unwatermarked_human_text.pkl")
-    tokenized_uwm_outputs = tokenized_uwm_outputs[:10]
+    tokenized_uwm_outputs = get_tokenized_uwm_outputs(NUM_NEGATIVES, NEG_BATCH_SIZE, DEVICE)
+    # tokenized_uwm_outputs = tokenized_uwm_outputs[:10]
 
     best_detector, lowest_loss = train_best_detector(
         tokenized_wm_outputs=tokenized_wm_outputs,
@@ -545,13 +662,14 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         torch_device=DEVICE,
         test_size=0.3,
-        truncation_length=TRUNCATION_LENGTH,
+        pos_truncation_length=POS_TRUNCATION_LENGTH,
+        neg_truncation_length=NEG_TRUNCATION_LENGTH,
         max_padded_length=MAX_PADDED_LENGTH,
-        n_epochs=50,
-        learning_rate=2.1e-2,
-        l2_weights=np.logspace(-3, -2, num=4),
+        n_epochs=100,
+        learning_rate=3e-3,
+        l2_weights=np.zeros((1,)),
         verbose=True,
         validation_metric=ValidationMetric.TPR_AT_FPR,
     )
 
-    best_detector.save_pretrained("bayesian_detector")
+    upload_model_to_hf(best_detector, 'synthid_text_demo')
