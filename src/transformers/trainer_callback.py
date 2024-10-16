@@ -88,7 +88,7 @@ class TrainerState:
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevent callbacks should implement a `state` and `from_state` function.
         train_dataloader_state_dict (`Dict[str, Any]`, *optional*):
-            Only populated if the trainer is using a stateful dataloader to serve training data.
+            Present if the trainer is using a stateful dataloader to serve training data.
             State dict which tracks the inner state of a training dataset StatefulDataLoader.
     """
 
