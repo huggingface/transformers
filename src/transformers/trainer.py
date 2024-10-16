@@ -4898,13 +4898,14 @@ class Trainer:
         accelerator_config.pop("gradient_accumulation_kwargs")
 
         use_stateful_dataloader = accelerator_config.pop("use_stateful_dataloader")
-        if not is_accelerate_available("1.0.0"):
-            if use_stateful_dataloader:
+        if use_stateful_dataloader:
+            if not is_accelerate_available("1.0.0"):
                 raise ImportError(
                     "`use_stateful_dataloader` is only supported in accelerate v1.0.0 and above. Please upgrade accelerate to use this feature."
                 )
             dataloader_config.use_stateful_dataloader = use_stateful_dataloader
-
+        print("Will create a new dataloader config:", dataloader_config)
+        print("Using stateful dataloader", use_stateful_dataloader)
         self.use_stateful_dataloader = use_stateful_dataloader
 
         args = {

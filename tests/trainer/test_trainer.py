@@ -2690,14 +2690,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Now check failures
 
         # 1. fail to find a bogus checkpoint
-        trainer = get_regression_trainer()
+        trainer = get_regression_trainer(accelerator_config=accelerator_config)
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
         self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
 
         # 2. fail to find any checkpoint - due a fresh output_dir
         output_dir2 = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir2)
+        trainer = get_regression_trainer(output_dir=output_dir2, accelerator_config=accelerator_config)
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
