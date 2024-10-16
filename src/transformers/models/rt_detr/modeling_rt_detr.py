@@ -37,7 +37,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_ninja_available,
-    is_scipy_available,
     is_torch_cuda_available,
     logging,
     replace_return_docstrings,
@@ -45,9 +44,6 @@ from ...utils import (
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
-
-if is_scipy_available():
-    pass
 
 logger = logging.get_logger(__name__)
 

@@ -32,9 +32,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_accelerate_available,
-    is_scipy_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
 )

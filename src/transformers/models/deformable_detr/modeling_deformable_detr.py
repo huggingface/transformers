@@ -37,12 +37,9 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_accelerate_available,
     is_ninja_available,
-    is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -86,20 +83,8 @@ def load_cuda_kernels():
     )
 
 
-if is_vision_available():
-    pass
-
-
-if is_accelerate_available():
-    pass
-
-
 if is_timm_available():
     from timm import create_model
-
-
-if is_scipy_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
