@@ -4995,7 +4995,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if loss_type is None or loss_type not in LOSS_MAPPING:
             raise ValueError(
                 "You requestion the loss function, but we could not determine which one to use"
-                "based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`"
+                f"based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`"
             )
 
         return LOSS_MAPPING[loss_type]
