@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 
 
@@ -105,4 +106,5 @@ LOSS_MAPPING = {
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
+    "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
 }
