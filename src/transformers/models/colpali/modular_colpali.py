@@ -14,20 +14,28 @@
 # limitations under the License.
 
 
+import logging
 from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from PIL import Image
 from torch import nn
+
+from transformers.models.paligemma.configuration_paligemma import PaliGemmaConfig
+from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
+from transformers.models.paligemma.processing_paligemma import (
+    IMAGE_TOKEN,
+    PaliGemmaProcessor,
+    build_string_from_input,
+    make_batched_images,
+)
 
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ProcessingKwargs,
-    TextKwargs,
     Unpack,
 )
 from ...tokenization_utils_base import (
@@ -39,13 +47,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    logging,
     replace_return_docstrings,
-)
-from ..paligemma import (
-    PaliGemmaConfig,
-    PaliGemmaForConditionalGeneration,
-    PaliGemmaProcessor,
 )
 
 
@@ -123,12 +125,17 @@ class ColPaliConfig(PaliGemmaConfig):
         self.embedding_dim = embedding_dim
 
 
-class ColPaliTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-
-
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: ColPaliTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": "longest",
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+            "do_convert_rgb": True,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
@@ -147,23 +154,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        chat_template=None,
-        **kwargs,
-    ):
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=chat_template,
-            **kwargs,
-        )
-        # NOTE: The PaliGemmaProcessor must be used with an image.
-        # To allow query processing, we create a small mock image.
-        self.mock_image = Image.new("RGB", (16, 16), color="black")
 
     @staticmethod
     def get_torch_device(device: str = "auto") -> str:
@@ -197,6 +187,14 @@ class ColPaliProcessor(PaliGemmaProcessor):
         """
         Main method to prepare for the model one or several queries or images.
         """
+        output_kwargs = self._merge_kwargs(
+            ColPaliProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+
+        return_token_type_ids = True if suffix is not None else False
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -211,66 +209,67 @@ class ColPaliProcessor(PaliGemmaProcessor):
             elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
                 raise ValueError("images must be an image, list of images or list of list of images")
 
-            return self.process_images(images, **kwargs)
+            texts_doc = ["Describe the image."] * len(images)
+            images = [image.convert("RGB") for image in images]
+
+            input_strings = [
+                build_string_from_input(
+                    prompt=prompt,
+                    bos_token=self.tokenizer.bos_token,
+                    image_seq_len=self.image_seq_length,
+                    image_token=IMAGE_TOKEN,
+                    num_images=len(image_list) if isinstance(image_list, list) else 1,
+                )
+                for prompt, image_list in zip(texts_doc, images)
+            ]
+            images = make_batched_images(images)
+            pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+
+            # max_length has to account for the image tokens
+            if output_kwargs["text_kwargs"].get("max_length", None) is not None:
+                output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
+
+            inputs = self.tokenizer(
+                input_strings,
+                return_token_type_ids=False,
+                **output_kwargs["text_kwargs"],
+            )
+
+            return_data = {**inputs, "pixel_values": pixel_values}
+
+            if return_token_type_ids:
+                labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+                return_data.update({"labels": labels})
+
+            return BatchFeature(data=return_data)
 
         elif text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif isinstance(text, list) and isinstance(text[0], str):
-                pass
+            elif not (isinstance(text, list) and isinstance(text[0], str)):
+                raise ValueError("Text must be a string or a list of strings")
+            prefix = "Question: "
 
-            return self.process_queries(text, **kwargs)
+            if suffix is None:
+                suffix = "<pad>" * 10
+            texts_query: List[str] = []
 
-    def process_images(
-        self,
-        images: List[Image.Image],
-    ) -> BatchFeature:
-        """
-        Process images for ColPali.
-        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
-        """
-        texts_doc = ["Describe the image."] * len(images)
-        images = [image.convert("RGB") for image in images]
+            for query in text:
+                query = self.tokenizer.bos_token + prefix + query
+                query += suffix  # add suffix (pad tokens)
+                # NOTE: Make input ISO to PaliGemma's processor
+                query += "\n"
+                texts_query.append(query)
 
-        batch_doc = super()(
-            text=texts_doc,
-            images=images,
-            return_tensors="pt",
-            padding="longest",
-        )
-        return batch_doc
+            output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
 
-    def process_queries(
-        self,
-        queries: List[str],
-        max_length: int = 50,
-        suffix: Optional[str] = None,
-    ) -> BatchFeature:
-        """
-        Process queries for ColPali.
-        This method is a wrapper around the `__call__` method of [`PaliGemmaProcessor`].
-        """
-        if suffix is None:
-            suffix = "<pad>" * 10
-        texts_query: List[str] = []
+            batch_query = self.tokenizer(
+                texts_query,
+                return_token_type_ids=False,
+                **output_kwargs["text_kwargs"],
+            )
 
-        for query in queries:
-            query = self.tokenizer.bos_token + f"Question: {query}"
-            query += suffix  # add suffix (pad tokens)
-            texts_query.append(query)
-
-        input_strings = [f"{sample}\n" for sample in queries]
-
-        batch_query = self.tokenizer(
-            input_strings,
-            text_pair=None,
-            return_token_type_ids=False,
-            return_tensors="pt",
-            padding="longest",
-            max_length=max_length,
-        )
-
-        return batch_query
+            return batch_query
 
     def post_process_retrieval(
         self,
@@ -318,10 +317,10 @@ class ColPaliForRetrievalOutput(ModelOutput):
     Base class for ColPali embeddings output.
 
     Args:
-        embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The embeddings of the model.
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss (for next-token prediction).
+        embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The embeddings of the model.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
@@ -344,8 +343,8 @@ class ColPaliForRetrievalOutput(ModelOutput):
             image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
-    embeddings: torch.Tensor = None
     loss: Optional[torch.FloatTensor] = None
+    embeddings: torch.Tensor = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -372,7 +371,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 )
 class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
-    main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
+    main_input_name: ClassVar[str] = "input_ids"  # transformers-related
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config=config)
@@ -381,7 +380,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.post_init()
 
@@ -432,26 +431,79 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        r"""
-        Returns:
-        """
-        vlm_outputs = super().forward(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        is_training = token_type_ids is not None and labels is not None
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+
+        # Merge text and images
+        if pixel_values is not None:
+            image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
+            selected_image_feature = image_outputs.last_hidden_state
+            image_features = self.multi_modal_projector(selected_image_feature)
+            image_features = image_features / (self.config.hidden_size**0.5)
+
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if inputs_embeds[special_image_mask].numel() != image_features.numel():
+                image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
+                raise ValueError(
+                    f"Number of images does not match number of special image tokens in the input text. "
+                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
+                    "tokens from image embeddings."
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # mask out pad-token-ids in labels for BC
+        if labels is not None and self.pad_token_id in labels:
+            logger.warning_once(
+                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. ",
+                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
+            )
+            labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training
+        )
+
+        outputs = self.language_model(
+            attention_mask=causal_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            token_type_ids=token_type_ids,
-            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
-            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=True,
+            return_dict=return_dict,
+            cache_position=cache_position,
             num_logits_to_keep=num_logits_to_keep,
         )
-        last_hidden_states = vlm_outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+
+        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -459,15 +511,20 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
 
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
+        loss = None
         if not return_dict:
-            return (embeddings,) + vlm_outputs
+            output = (embeddings,) + outputs[2:]
+            output[2] = output[2] if output_hidden_states is not None else None
+            output[-1] = (image_features if pixel_values is not None else None,)
+            return (loss,) + output if loss is not None else output
 
         return ColPaliForRetrievalOutput(
+            loss=loss,
             embeddings=embeddings,
-            past_key_values=vlm_outputs.past_key_values,
-            hidden_states=vlm_outputs.hidden_states,
-            attentions=vlm_outputs.attentions,
-            image_hidden_states=vlm_outputs.image_hidden_states,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def resize_token_embeddings(
