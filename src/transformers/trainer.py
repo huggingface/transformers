@@ -2537,7 +2537,7 @@ class Trainer:
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
 
                     # Maybe we should only update the state dict right before checkpointing?
-                    if self.args.accelerate_config.use_stateful_dataloader:
+                    if self.use_stateful_dataloader:
                         self.state.train_dataloader_state_dict = epoch_iterator.state_dict()
 
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
