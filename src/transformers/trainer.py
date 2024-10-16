@@ -2421,7 +2421,7 @@ class Trainer:
                 remainder = args.gradient_accumulation_steps
             total_updates = max_steps // args.gradient_accumulation_steps + 1
             for _ in range(total_updates):
-                if step == (total_updates-1):
+                if step == (total_updates - 1):
                     num_batches = remainder
                 else:
                     num_batches = args.gradient_accumulation_steps
@@ -2432,16 +2432,13 @@ class Trainer:
                     except StopIteration:
                         break
                 num_items_in_batch = sum(
-                    [
-                        data_batch["labels"][..., 1:].ne(-100).sum().item()
-                        for data_batch in batch_samples
-                    ]
+                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
                 )
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
                     # Since we perform prefetching, we need to manually set sync_gradients
-                    if (total_batched_samples % args.gradient_accumulation_steps != 0):
+                    if total_batched_samples % args.gradient_accumulation_steps != 0:
                         self.accelerator.gradient_state._set_sync_gradients(False)
                     else:
                         self.accelerator.gradient_state._set_sync_gradients(True)
@@ -2486,7 +2483,7 @@ class Trainer:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                     with self.accelerator.accumulate(model):
-                        tr_loss_step = self.training_step(model, inputs)
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                     if (
                         args.logging_nan_inf_filter
@@ -3558,7 +3555,9 @@ class Trainer:
 
         return ctx_manager
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], num_items_in_batch=None
+    ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -3586,7 +3585,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self._compute_loss(model, inputs)
+            loss = self._compute_loss(model, inputs, num_items_in_batch)
 
         del inputs
         if (
@@ -3623,13 +3622,13 @@ class Trainer:
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
-    def _compute_loss(self, model, inputs, return_outputs=False):
+    def _compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
         Subclass and override for custom behavior.
         """
-        if self.label_smoother is not None and "labels" in inputs:
+        if "labels" in inputs and (self.label_smoother is not None or self.compute_loss is not None):
             labels = inputs.pop("labels")
         else:
             labels = None
@@ -3645,7 +3644,14 @@ class Trainer:
                 model_name = unwrapped_model.base_model.model._get_name()
             else:
                 model_name = unwrapped_model._get_name()
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            # User-defined compute_loss function
+            if self.compute_loss is not None:
+                # Check if `num_items` is a parameter of the compute_loss function
+                if "num_items_in_batch" in inspect.signature(self.compute_loss).parameters.keys():
+                    loss = self.compute_loss(outputs, labels, num_items_in_batch=num_items_in_batch)
+                else:
+                    loss = self.compute_loss(outputs, labels)
+            elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
