@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from .models.detr.loss_detr import ForObjectDetectionLoss, ForSegmentationLoss
+from .models.rt_detr.loss_rt_detr import RtDetrForObjectDetectionLoss
 
 
 def DefaultCrossEntropyLoss(logits, labels, **kwargs):
@@ -96,3 +97,4 @@ LOSS_MAPPING = {
 
 LOSS_MAPPING["ForSegmentation"] = ForSegmentationLoss
 LOSS_MAPPING["ForObjectDetection"] = ForObjectDetectionLoss
+LOSS_MAPPING["RtForObjectDetection"] = RtDetrForObjectDetectionLoss

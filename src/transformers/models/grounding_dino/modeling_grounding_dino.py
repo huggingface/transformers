@@ -32,29 +32,18 @@ from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_ninja_available, logging
+from ...utils import is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 
-
-if is_vision_available():
-    pass
-
-if is_accelerate_available():
-    pass
-
-if is_scipy_available():
-    pass
 
 if is_timm_available():
     from timm import create_model
@@ -2647,12 +2636,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            outputs_class, outputs_coord = None, None
-            if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
-            loss = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
             )
 
