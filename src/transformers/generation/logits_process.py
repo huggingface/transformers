@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
+# Copyright 2020 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -2616,7 +2616,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # TODO: Compute top_k and then process the scores.
         # Currently indices is just a arange to compute watermarking on the desnse logits.
         all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
 
