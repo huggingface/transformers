@@ -48,7 +48,7 @@ def find_parent(model, name):
         parent = parent._modules[m]
     return parent
 
-def _quantization_type(weight: torch.Tensor):
+def _quantization_type(weight):
     if isinstance(weight, AffineQuantizedTensor):
         return f"{weight.__class__.__name__}({weight._quantization_type()})"
 
