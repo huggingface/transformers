@@ -107,4 +107,5 @@ LOSS_MAPPING = {
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
+    "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
 }

@@ -1666,7 +1666,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
                 intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
                 outputs_class = self.detr.class_labels_classifier(intermediate)
                 outputs_coord = self.detr.bbox_predictor(intermediate).sigmoid()
-            loss = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, device, pred_boxes, pred_masks, self.config, outputs_class, outputs_coord
             )
 
