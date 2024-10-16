@@ -2276,7 +2276,6 @@ class Trainer:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
-            _init_fsdp(self.model, self.args.device)
             self.model = self.model_wrapped = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -2295,6 +2294,8 @@ class Trainer:
                 )
             elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
                 self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
+            elif self.is_fsdp_enabled:
+                _init_fsdp(self.model, self.args.device)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
