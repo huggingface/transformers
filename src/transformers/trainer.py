@@ -2419,8 +2419,9 @@ class Trainer:
             remainder = num_examples % args.gradient_accumulation_steps
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
-            for step in range(max_steps):
-                if step == (max_steps-1):
+            total_updates = max_steps // args.gradient_accumulation_steps + 1
+            for _ in range(total_updates):
+                if step == (total_updates-1):
                     num_batches = remainder
                 else:
                     num_batches = args.gradient_accumulation_steps
@@ -2430,9 +2431,20 @@ class Trainer:
                         batch_samples += [next(epoch_iterator)]
                     except StopIteration:
                         break
-                num_items_in_batch = sum([data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples])
+                num_items_in_batch = sum(
+                    [
+                        data_batch["labels"][..., 1:].ne(-100).sum().item()
+                        for data_batch in batch_samples
+                    ]
+                )
                 for inputs in batch_samples:
+                    step += 1
                     total_batched_samples += 1
+                    # Since we perform prefetching, we need to manually set sync_gradients
+                    if (total_batched_samples % args.gradient_accumulation_steps != 0):
+                        self.accelerator.gradient_state._set_sync_gradients(False)
+                    else:
+                        self.accelerator.gradient_state._set_sync_gradients(True)
 
                     if self.args.include_num_input_tokens_seen:
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
@@ -2497,15 +2509,13 @@ class Trainer:
                     )
 
                     if (
-                        total_batched_samples % args.gradient_accumulation_steps == 0
+                        (total_batched_samples) % args.gradient_accumulation_steps == 0
                         or
                         # last step in epoch but step is always smaller than gradient_accumulation_steps
                         is_last_step_and_steps_less_than_grad_acc
                     ):
-                        # the `or` condition of `is_last_step_and_steps_less_than_grad_acc` is not covered
-                        # in accelerate. So, explicitly enable sync gradients to True in that case.
-                        if is_last_step_and_steps_less_than_grad_acc:
-                            self.accelerator.gradient_state._set_sync_gradients(True)
+                        # Since we perform prefetching, we need to manually set sync_gradients to True
+                        self.accelerator.gradient_state._set_sync_gradients(True)
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
@@ -2552,18 +2562,17 @@ class Trainer:
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-
                         self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
                     else:
                         self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
-                    if self.control.should_epoch_stop or self.control.should_training_stop:
-                        # PyTorch/XLA relies on the data loader to insert the mark_step for
-                        # each step. Since we are breaking the loop early, we need to manually
-                        # insert the mark_step here.
-                        if is_torch_xla_available():
-                            xm.mark_step()
-                        break
+                if self.control.should_epoch_stop or self.control.should_training_stop:
+                    # PyTorch/XLA relies on the data loader to insert the mark_step for
+                    # each step. Since we are breaking the loop early, we need to manually
+                    # insert the mark_step here.
+                    if is_torch_xla_available():
+                        xm.mark_step()
+                    break
             if step < 0:
                 logger.warning(
                     "There seems not to be a single sample in your epoch_iterator, stopping training at step"
