@@ -455,7 +455,6 @@ class SuperTransformer(cst.CSTTransformer):
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
-                continue
 
         for stmt in existing_body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
@@ -465,6 +464,9 @@ class SuperTransformer(cst.CSTTransformer):
                     continue
                 if target in self.all_assign_target:
                     stmt = self.all_assign_target[target]
+            # Skip the docstring (will be added later on, at the beginning)
+            elif m.matches(stmt, DOCSTRING_NODE):
+                continue
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             deduplicated_new_body.append(stmt)
@@ -474,16 +476,40 @@ class SuperTransformer(cst.CSTTransformer):
             code = self.python_module.code_for_node(node)
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if (
-                node not in deduplicated_new_body
-                and "super().__init__" not in comment_less_code
-                and comment_less_code not in existing_nodes
-            ):
+            if node not in deduplicated_new_body and comment_less_code not in existing_nodes:
                 if not m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
-                    # HACK here to fix the pos_init() that has to be last we kinda do this.
-                    deduplicated_new_body = deduplicated_new_body[:-1] + [node] + deduplicated_new_body[-1:]
+                    deduplicated_new_body.append(node)
                     existing_nodes.add(comment_less_code)
+
+        # Fix the post_init() that has to be last
+        for i, node in enumerate(deduplicated_new_body):
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if "self.post_init(" in comment_less_code and i < len(deduplicated_new_body) - 1:
+                # Remove it and add it again at the end
+                deduplicated_new_body.pop(i)
+                deduplicated_new_body.append(node)
+                break
+
         return deduplicated_new_body
+    
+    def _fix_init_location(self, new_body):
+        """Fix the location of the super()__init__ in the new body, if we had new statements before it."""
+        start_index = 0
+        for i, node in enumerate(new_body):
+            if m.matches(node, DOCSTRING_NODE) and i == start_index:
+                start_index += 1
+                continue
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if "super().__init__" in comment_less_code and i > start_index:
+                # Remove it and add it again at the top after the docstrings
+                node = new_body.pop(i)
+                new_body = new_body[:start_index] + [node] + new_body[start_index:]
+                break
+        return new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
         """Updates the body of the input `node`'s `func_name` function by replacing calls
@@ -497,10 +523,11 @@ class SuperTransformer(cst.CSTTransformer):
         new_body = []
         has_super_call = False
 
-        for expr in node.body:
+        for i, expr in enumerate(node.body):
             if is_call_to_super(expr, func_name):
                 has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i+1:]))
+                new_body = self._fix_init_location(new_body)
             else:
                 expr = expr.visit(self.transformer)
             if m.matches(expr, DOCSTRING_NODE):
@@ -1094,8 +1121,10 @@ class ModularConverterTransformer(CSTTransformer):
                         self.decorator_dependencies[parent_node.name.value].append(arg.value.value)
                     elif m.matches(arg.value, m.Call(func=m.Attribute(value=m.Name()))):
                         self.decorator_dependencies[parent_node.name.value].append(arg.value.func.value.value)
-        
-    def _insert_node_in_body(self, new_node, body: dict, new_body_key: str, body_insert_index: int, add_new_lines: int = 0):
+
+    def _insert_node_in_body(
+        self, new_node, body: dict, new_body_key: str, body_insert_index: int, add_new_lines: int = 0
+    ):
         """Insert the `new_node` to the`body`, with the `new_body_key`.
         The node is inserted with given `body_insert_index` (usually the index of an exising body element), and all nodes
         with same or larger index are remapped to keep the same relative order in the final body.
@@ -1108,7 +1137,7 @@ class ModularConverterTransformer(CSTTransformer):
         # Assign new element to body (after changing the count to avoid messing it)
         if add_new_lines > 0:
             # Wrap it inside a Module node to easily add the newlines
-            new_node = cst.Module(body=add_new_lines*[cst.Newline()] + [new_node])
+            new_node = cst.Module(body=add_new_lines * [cst.Newline()] + [new_node])
         body[new_body_key] = {"insert_idx": body_insert_index, "node": new_node}
 
     def _maybe_add_function_to_body(
@@ -1156,7 +1185,9 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
-    def _add_all_args_dependencies(self, arg_names: list, file: str, dependency_imports: dict, body_insert_idx: int) -> None:
+    def _add_all_args_dependencies(
+        self, arg_names: list, file: str, dependency_imports: dict, body_insert_idx: int
+    ) -> None:
         """Add all the `args_names` elements to the body, if they are not already present in the body or the imports. This is
         used to add potential arguments of top-level calls or decorators, that were not added though the dependency class graph.
         IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
@@ -1165,7 +1196,7 @@ class ModularConverterTransformer(CSTTransformer):
         body = self.files[file]
         for arg in arg_names:
             # If the arg is not one of the imports, and not part of the body -> we need to find it
-            if not arg in dependency_imports[file].keys() and not arg in body.keys():
+            if arg not in dependency_imports[file].keys() and arg not in body.keys():
                 for visited_file, class_finder in self.visited_module.items():
                     # Check for the dependency in the simple assignments
                     if arg in class_finder.assignments.keys():
@@ -1209,7 +1240,7 @@ class ModularConverterTransformer(CSTTransformer):
                     else:
                         insert_idx = body[body_names[-1]]["insert_idx"] + 1
                     # Add the node (with 2 newlines, because Call nodes do not own their newlines)
-                    self._insert_node_in_body(call_node, body, f'new_call_{i}', insert_idx, add_new_lines=2)
+                    self._insert_node_in_body(call_node, body, f"new_call_{i}", insert_idx, add_new_lines=2)
                     # We inserted the node -> we need to check arg dependencies are added if not present
                     insert_idx = body[class_name]["insert_idx"]
                     self._add_all_args_dependencies(all_arg_names, file, dependency_imports, insert_idx)
@@ -1309,7 +1340,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/roberta/modular_flax_roberta.py"],
+        default=["src/transformers/models/roberta/modular_roberta.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
