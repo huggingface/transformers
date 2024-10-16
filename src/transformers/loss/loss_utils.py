@@ -35,10 +35,8 @@ def ForCausalLMLoss(logits, labels, **kwargs):
     num_items = kwargs.pop("num_items", None)
 
     if num_items is not None:
-        # Calculate the CrossEntropyLoss manually when using grad accum
-        log_probs = nn.functional.log_softmax(shift_logits, dim=-1)
-        loss = -log_probs[range(shift_labels.size(0)), shift_labels]
-        loss = loss.sum() / num_items
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
+        loss = loss / num_items
     else:
         loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
 
