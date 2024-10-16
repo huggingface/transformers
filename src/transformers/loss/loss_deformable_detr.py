@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from .loss_for_object_detection import (
     HungarianMatcher,
@@ -53,7 +54,7 @@ class DeformableDetrHungarianMatcher(HungarianMatcher):
 
 class DeformableDetrImageLoss(ImageLoss):
     def __init__(self, matcher, num_classes, focal_alpha, losses):
-        super().__init__()
+        nn.Module.__init__(self)
         self.matcher = matcher
         self.num_classes = num_classes
         self.focal_alpha = focal_alpha
@@ -106,7 +107,7 @@ def DeformableDetrForObjectDetectionLoss(
     criterion = DeformableDetrImageLoss(
         matcher=matcher,
         num_classes=config.num_labels,
-        eos_coef=config.eos_coefficient,
+        focal_alpha=config.focal_alpha,
         losses=losses,
     )
     criterion.to(device)
