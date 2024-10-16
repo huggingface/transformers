@@ -279,7 +279,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 def lambda_init_fn(layer_idx):
     return 0.8 - 0.6 * math.exp(-0.3 * layer_idx)
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->DiffLlama
 class DiffLlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -296,8 +295,8 @@ class DiffLlamaAttention(nn.Module):
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads) // 2
+        self.num_heads = config.num_attention_heads // 2
+        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads // 2)
         self.scaling = self.head_dim ** -0.5
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
@@ -309,7 +308,7 @@ class DiffLlamaAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.hidden_size // self.num_key_value_groups, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.hidden_size // self.num_key_value_groups, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
@@ -332,8 +331,8 @@ class DiffLlamaAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
-        target_len = q_len
+        bsz, target_len, _ = hidden_states.size()
+        q_len = target_len
 
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
@@ -371,9 +370,6 @@ class DiffLlamaAttention(nn.Module):
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
             cos, sin = position_embeddings
-        print(query_states.size())
-        print(cos.size())
-        print(sin.size())
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -397,15 +393,9 @@ class DiffLlamaAttention(nn.Module):
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn_weights = attn_weights.view(bsz, self.num_heads, 2, q_len, target_len)
+        attn_weights = attn_weights.view(bsz, self.num_heads, 2, target_len, q_len)
         attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
         attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -657,7 +647,6 @@ class DiffLlamaDecoderLayer(nn.Module):
     def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
 
         self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
@@ -719,9 +708,8 @@ class DiffLlamaDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        # GroupNorm with scale
+
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = hidden_states * (1 - lambda_init_fn(self.layer_idx))
 
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
