@@ -395,7 +395,7 @@ GGUF_CONFIG_MAPPING = {
         "ssm.conv_kernel": "conv_kernel",
         "ssm.state_size": "state_size",
         "ssm.time_step_rank": "time_step_rank",
-        "ssm.inner_size": "intermediate_size"
+        "ssm.inner_size": "intermediate_size",
     },
 }
 
@@ -792,7 +792,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "gpt2": GGUFGPTConverter,
     "starcoder2": GGUFGPTConverter,
     "t5": GGUFT5Converter,
-    'mamba': GGUFGPTConverter,
+    "mamba": GGUFGPTConverter,
 }
 
 

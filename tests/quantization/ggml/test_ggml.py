@@ -771,7 +771,12 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in converted_state_dict and layer_name != "lm_head.weight":
                 # quantized models do not contain "lm_head.weight" layer
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
-                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+                if "mixer.A_log" in layer_name:
+                    # we should increase tolerance after exponential reversing
+                    # and performing np.log(-weights) operation as numbers are slightly different
+                    torch.testing.assert_close(original_params, converted_state_dict[layer_name], atol=1e-3, rtol=1e-3)
+                else:
+                    torch.testing.assert_close(original_params, converted_state_dict[layer_name])
 
     def test_mamba_q6_k(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -781,10 +786,10 @@ class GgufIntegrationTests(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.mamba_model_id, gguf_file=self.q6_k_mamba_model_id)
-        text = tokenizer(self.example_text, return_tensors="pt")['input_ids']
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = 'Hello,I answerted the question.'
+        EXPECTED_TEXT = "Hello,I answerthe question.\n\nA"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):

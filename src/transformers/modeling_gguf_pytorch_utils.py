@@ -224,11 +224,15 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 if "ssm_d" in name and "bias" not in name and "weight" not in name:
                     # ssm_d has conflicts with ssm_dt in name checking
                     # we have to explicitly check that name is exactly ssm_d
-                   name = name.replace("ssm_d", "mixer.D")
+                    name = name.replace("ssm_d", "mixer.D")
                 if "ssm_conv1d.weight" in name:
                     # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
                     # quantized one is (5120, 4)
                     weights = np.expand_dims(weights, axis=1)
+                if "ssm_a" in name:
+                    # Original exponential implementation
+                    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
+                    weights = np.log(-weights)
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name.format(bid=bid) in name:
