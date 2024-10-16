@@ -2112,7 +2112,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
-        loss, loss_dict, auxiliary_outputs = None, None, None
+        loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None
         if labels is not None:
             if self.training and denoising_meta_values is not None:
                 enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
