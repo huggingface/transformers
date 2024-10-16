@@ -18,6 +18,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
+from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
 def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
@@ -110,4 +111,5 @@ LOSS_MAPPING = {
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "GroundingDinoForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
+    "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
 }
