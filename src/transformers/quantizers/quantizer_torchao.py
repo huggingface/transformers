@@ -47,7 +47,6 @@ def find_parent(model, name):
     for m in module_tree:
         parent = parent._modules[m]
     return parent
-
 def _quantization_type(weight):
     if isinstance(weight, AffineQuantizedTensor):
         return f"{weight.__class__.__name__}({weight._quantization_type()})"
