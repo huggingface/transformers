@@ -116,6 +116,10 @@ if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
+# These keys are model inputs that, in most models, we only want them in the first iteration of cached generation
+MODEL_INPUTS_WO_CACHE = set(["pixel_values"])
+
+
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -428,10 +432,15 @@ class GenerationMixin:
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = getattr(self, self.base_model_prefix)
-            causal_mask_creation_function = getattr(
-                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
-            )
+            base_model = getattr(self, self.base_model_prefix, None)
+            if base_model is None:
+                causal_mask_creation_function = getattr(
+                    self, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                )
+            else:
+                causal_mask_creation_function = getattr(
+                    base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                )
             if causal_mask_creation_function is None:
                 logger.warning_once(
                     f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
@@ -444,10 +453,12 @@ class GenerationMixin:
                     attention_mask,
                     sequence_length=sequence_length,
                     target_length=past_key_values.get_max_cache_shape(),
-                    dtype=self.get_output_embeddings().weight.dtype,
+                    dtype=self.dtype,
                     device=device,
                     cache_position=cache_position,
                     batch_size=batch_size,
+                    config=self.config,
+                    past_key_values=past_key_values,
                 )
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask

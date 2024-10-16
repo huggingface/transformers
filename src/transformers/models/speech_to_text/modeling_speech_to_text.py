@@ -1343,6 +1343,8 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         encoder_outputs=None,
         **kwargs,
     ):
+        # Overwritten -- this model doesn't support `inputs_embeds` atm
+
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
