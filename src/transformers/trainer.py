@@ -2417,6 +2417,7 @@ class Trainer:
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = num_examples % args.gradient_accumulation_steps
+            num_items_in_batch = None
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             total_updates = max_steps // args.gradient_accumulation_steps + 1
@@ -2431,9 +2432,10 @@ class Trainer:
                         batch_samples += [next(epoch_iterator)]
                     except StopIteration:
                         break
-                num_items_in_batch = sum(
-                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                )
+                if len(batch_samples) > 0 and "labels" in batch_samples[0]:
+                    num_items_in_batch = sum(
+                        [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
+                    )
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
@@ -3628,7 +3630,7 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
-        if "labels" in inputs and (self.label_smoother is not None or self.compute_loss is not None):
+        if (self.label_smoother is not None or self.compute_loss is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
             labels = None
