@@ -2406,7 +2406,7 @@ class Trainer:
             rng_to_sync = False
             steps_skipped = 0
             if steps_trained_in_current_epoch > 0:
-                if self.args.accelerate_config.use_stateful_dataloader:
+                if self.use_stateful_dataloader:
                     epoch_iterator.load_state_dict(self.state.train_dataloader_state_dict)
                 else:
                     epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
@@ -4934,6 +4934,7 @@ class Trainer:
                 raise ImportError(
                     "`use_stateful_dataloader` is only supported in accelerate v1.0.0 and above. Please upgrade accelerate to use this feature."
                 )
+            self.use_stateful_dataloader = use_stateful_dataloader
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
