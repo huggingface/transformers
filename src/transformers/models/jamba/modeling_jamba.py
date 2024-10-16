@@ -1729,9 +1729,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config.todict()
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]

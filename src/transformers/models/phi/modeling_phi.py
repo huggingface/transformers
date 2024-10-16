@@ -1365,9 +1365,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config.todict()
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         if not return_dict:
             output = (pooled_logits,) + model_outputs[1:]

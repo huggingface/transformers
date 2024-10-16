@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 
@@ -8,18 +9,29 @@ def DefaultCrossEntropyLoss(logits, labels, **kwargs):
     # Shift so that tokens < n predict n
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
+
     # Flatten the tokens
-    loss_fct = CrossEntropyLoss()
     shift_logits = shift_logits.view(-1, kwargs["vocab_size"])
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(shift_logits.device)
-    return loss_fct(shift_logits, shift_labels)
+
+    num_items = kwargs.pop("num_items", None)
+
+    if num_items is not None:
+        # Calculate the CrossEntropyLoss manually when using grad accum
+        log_probs = nn.functional.log_softmax(shift_logits, dim=-1)
+        loss = -log_probs[range(shift_labels.size(0)), shift_labels]
+        loss = loss.sum() / num_items
+    else:
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
+
+    return loss
 
 
 def ForSequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
     config = kwargs["config"]
-    num_labels = kwargs["num_labels"]
+    num_labels = config.num_labels
     if config.problem_type is None:
         if num_labels == 1:
             config.problem_type = "regression"
@@ -63,8 +75,19 @@ def ForQuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, 
     return total_loss
 
 
+def ForTokenClassification(logits, labels, config, **kwargs):
+    # Upcast to float if we need to compute the loss to avoid potential precision issues
+    logits = logits.view(-1, config.num_labels)
+    labels = labels.view(-1)
+    logits = logits.float()
+    # Flatten the tokens
+    loss_fct = CrossEntropyLoss()
+    return loss_fct(logits, labels)
+
+
 LOSS_MAPPING = {
     "ForCausalLM": DefaultCrossEntropyLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
+    "ForTokenClassification": ForTokenClassification,
 }
