@@ -1102,56 +1102,11 @@ class ModularConverterTransformer(CSTTransformer):
                 matching_callers = calling_entities & file_elements
                 added = self._maybe_add_function_to_body(top_level_function, body, function_node, matching_callers)
                 # If the function was added, we need to recursively add all its dependencies
-                builtin_functions = [
-                    "abs",
-                    "all",
-                    "any",
-                    "ascii",
-                    "bin",
-                    "bool",
-                    "bytearray",
-                    "bytes",
-                    "chr",
-                    "dict",
-                    "divmod",
-                    "enumerate",
-                    "filter",
-                    "float",
-                    "format",
-                    "frozenset",
-                    "hash",
-                    "hex",
-                    "int",
-                    "isinstance",
-                    "issubclass",
-                    "iter",
-                    "len",
-                    "list",
-                    "map",
-                    "max",
-                    "min",
-                    "next",
-                    "oct",
-                    "ord",
-                    "pow",
-                    "range",
-                    "repr",
-                    "reversed",
-                    "round",
-                    "set",
-                    "slice",
-                    "sorted",
-                    "str",
-                    "sum",
-                    "tuple",
-                    "type",
-                    "zip",
-                ]
                 if added:
                     for dependency, parent in find_all_dependencies(
                         top_level_function, self.function_call_dependency_mapping
                     ):
-                        if dependency not in builtin_functions and dependency in self.all_definitions:
+                        if dependency in self.all_definitions:
                             self._maybe_add_function_to_body(
                                 dependency, body, self.all_definitions[dependency], parent=parent
                             )

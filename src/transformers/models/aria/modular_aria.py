@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageOps
+from PIL import Image
 from torch import nn
 from torch.nn.init import trunc_normal_
 from torchvision import transforms
@@ -14,10 +14,11 @@ from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
-from ...image_processing_utils import BaseImageProcessor, select_best_resolution
+from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...models.llava.modeling_llava import LlavaForConditionalGeneration
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
     PaddingStrategy,
@@ -41,7 +42,13 @@ from ..llama.modeling_llama import (
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionModel
-from .processing_utils import experts_gemm
+from .processing_utils import (
+    experts_gemm,
+    get_split_image,
+    keep_ratio_resize_and_pixel_mask,
+    switch_load_balancing_loss_func,
+    z_loss_func,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -123,7 +130,7 @@ class AriaVisionModel(SiglipVisionModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         """
         Forward pass of the AriaVisionModel.
 
@@ -135,7 +142,7 @@ class AriaVisionModel(SiglipVisionModel):
             return_dict (Optional[bool]): Whether to return a ModelOutput object.
 
         Returns:
-            Union[Tuple, BaseModelOutputWithPooling]: The model's output.
+            Union[Tuple, BaseModelOutput]: The model's output.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
@@ -148,9 +155,16 @@ class AriaVisionModel(SiglipVisionModel):
             return_dict=return_dict,
         )
 
-        image_atts = self._create_image_attention_mask(patch_attention_mask)
+        image_attentions = self._create_image_attention_mask(patch_attention_mask)
 
-        return vision_output, image_atts
+        if return_dict:
+            return vision_output, image_attentions
+
+        return BaseModelOutput(
+            vision_output.last_hidden_states,
+            vision_output.hidden_states,
+            image_attentions,
+        )
 
     def _create_patch_attention_mask(self, pixel_mask):
         if pixel_mask is None:
@@ -197,9 +211,9 @@ class AriaGeluDense(nn.Module):
         return hidden_states
 
 
-class CrossAttention(nn.Module):
+class AriaCrossAttention(nn.Module):
     """
-    Cross-Attention module.
+    Aria Cross-Attention module.
 
     Args:
         kv_dim (int): Dimension of key and value.
@@ -224,7 +238,7 @@ class CrossAttention(nn.Module):
 
     def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
         """
-        Forward pass of the CrossAttention module.
+        Forward pass of the AriaCrossAttention module.
 
         Args:
             x (torch.Tensor): Input tensor for key and value.
@@ -291,7 +305,7 @@ class AriaProjector(nn.Module):
 
         trunc_normal_(self.query, std=0.02)
 
-        self.cross_attn = CrossAttention(kv_dim, embed_dim, num_heads)
+        self.cross_attn = AriaCrossAttention(kv_dim, embed_dim, num_heads)
 
         self.ln_ffn = norm_layer(embed_dim)
         self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim)  # TODO: Aria Projector MMLP
@@ -335,91 +349,6 @@ class AriaProjector(nn.Module):
         out = self.ffn(self.ln_ffn(attention_out))
 
         return out
-
-
-def _split_image(
-    image: Image.Image,
-    split_image: bool,
-    split_ratio: List[List[int]],
-    patch_size: int,
-) -> List[Image.Image]:
-    """
-    Split image into multiple patches
-
-    Args:
-        image (PIL.Image): Input image.
-        split_image (bool): Whether to split the image into patches.
-        split_ratio (2d numpy array): dimension size (M,2)
-        patch_size (int): image patch size
-
-    Returns:
-        List[PIL.Image]: List of splitted images.
-    """
-    if split_image:
-        split_ratio = [(el[1], el[0]) for el in split_ratio]
-        (ratio_height, ratio_width) = select_best_resolution((image.height, image.width), split_ratio)
-        resize_width = patch_size * ratio_width
-        resize_height = patch_size * ratio_height
-        blocks = ratio_width * ratio_height
-        resized_img = image.resize((resize_width, resize_height))
-        processed_images = []
-        for i in range(blocks):
-            box = (
-                (i % (resize_width // patch_size)) * patch_size,
-                (i // (resize_width // patch_size)) * patch_size,
-                ((i % (resize_width // patch_size)) + 1) * patch_size,
-                ((i // (resize_width // patch_size)) + 1) * patch_size,
-            )
-            # split the image
-            split_img = resized_img.crop(box)
-            processed_images.append(split_img)
-        assert len(processed_images) == blocks
-        if len(processed_images) != 1:
-            processed_images.insert(0, image)
-        return processed_images
-    else:
-        return [image]
-
-
-def keep_ratio_resize_and_pixel_mask(img: Image.Image, max_size, min_size=336, padding_value=0):
-    """
-    Resize an image while maintaining aspect ratio and create a pixel mask.
-
-    Args:
-        img (PIL.Image): Input image.
-        max_size (int): Maximum size for the larger dimension of the image.
-        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
-        padding_value (int, optional): Value used for padding. Defaults to 0.
-
-    Returns:
-        tuple: A tuple containing:
-            - PIL.Image: Resized and padded image.
-            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
-                - True (1) values indicate pixels that belong to the original resized image.
-                - False (0) values indicate pixels that are part of the padding.
-              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-    """
-    img = img.convert("RGB")
-    # rescale the given image, keep the aspect ratio
-    scale = max_size / max(img.size)
-
-    w, h = img.size
-    if w >= h:
-        new_size = (max_size, max(int(h * scale), min_size))  # w, h
-    else:
-        new_size = (max(int(w * scale), min_size), max_size)  # w, h
-
-    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
-
-    # padding the right/bottom
-    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
-    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
-
-    # Create a pixel mask
-    pixel_mask = torch.zeros(max_size, max_size)
-    pixel_mask[: new_size[1], : new_size[0]] = 1
-    pixel_mask = pixel_mask.bool()
-    return img_padded, pixel_mask
 
 
 class AriaVisionProcessor(BaseImageProcessor):
@@ -540,7 +469,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         num_crops = []
 
         for image in images:
-            crop_images = _split_image(image, split_image, split_ratio, max_size)
+            crop_images = get_split_image(image, split_image, split_ratio, max_size)
             num_crops.append(torch.tensor(len(crop_images)))
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
@@ -968,45 +897,6 @@ class MoEAuxLossAutoScaler(torch.autograd.Function):
         MoEAuxLossAutoScaler.main_loss_backward_scale = scale
 
 
-def z_loss_func(logits, z_loss_coeff):
-    """Encourages the router's logits to remain small to enhance stability.
-    Please refer to the ST-MoE paper (https://arxiv.org/pdf/2202.08906.pdf) for details.
-
-    Args:
-        logits (torch.Tensor): The logits of the router.
-
-    Returns:
-        torch.Tensor: The logits after applying the z-loss.
-    """
-
-    z_loss = torch.mean(torch.square(torch.logsumexp(logits, dim=-1))) * z_loss_coeff
-    return z_loss
-
-
-def switch_load_balancing_loss_func(
-    probs: torch.Tensor,
-    tokens_per_expert: torch.Tensor,
-    topk: int,
-    moe_aux_loss_coeff: float,
-):
-    """Calculate the auxiliary loss for better load balacing.
-    Please refer to the Switch Transformer paper (https://arxiv.org/abs/2101.03961) for details.
-
-    Args:
-        probs (torch.Tensor): The softmax probs output by the router for each token. [num_tokens, num_experts]
-        tokens_per_expert (torch.Tensor): The number of assigned tokens for each expert. [num_experts]
-
-    Returns:
-        torch.Tensor: The auxiliary loss for load balancing.
-    """
-    num_tokens = probs.shape[0] * topk
-    num_experts = probs.shape[1]
-
-    probs_mean_per_expert = probs.mean(dim=0)
-    aux_loss = torch.sum(probs_mean_per_expert * tokens_per_expert) * (num_experts / num_tokens * moe_aux_loss_coeff)
-    return aux_loss
-
-
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class TopKRouter(nn.Module):
     """
@@ -1405,8 +1295,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-# adapted from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaForConditionalGeneration):
     """
     Aria model for conditional generation tasks.
 
@@ -1431,122 +1320,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        """Retrieve the input embeddings from the language model."""
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        """Set the input embeddings for the language model."""
-        self.language_model.set_input_embeddings(value)
-
-    # copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        """
-        Merge input IDs with image features to create a combined input representation.
-
-        This method handles the complex logic of interleaving text and image tokens,
-        adjusting attention masks and labels accordingly.
-
-        Args:
-            image_features (torch.Tensor): Processed image features.
-            inputs_embeds (torch.Tensor): Text input embeddings.
-            input_ids (torch.Tensor): Input token IDs.
-            attention_mask (torch.Tensor): Attention mask for input tokens.
-            labels (torch.Tensor, optional): Labels for language modeling.
-
-        Returns:
-            tuple: Contains the merged embeddings, updated attention mask,
-                   updated labels, and position IDs.
-        """
-        num_images, num_image_patches, embed_dim = image_features.shape
-        batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size,
-            max_embed_dim,
-            embed_dim,
-            dtype=inputs_embeds.dtype,
-            device=inputs_embeds.device,
-        )
-        final_attention_mask = torch.zeros(
-            batch_size,
-            max_embed_dim,
-            dtype=attention_mask.dtype,
-            device=inputs_embeds.device,
-        )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim),
-                self.config.ignore_index,
-                dtype=input_ids.dtype,
-                device=input_ids.device,
-            )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        image_to_overwrite = torch.full(
-            (batch_size, max_embed_dim),
-            True,
-            dtype=torch.bool,
-            device=inputs_embeds.device,
-        )
-        image_to_overwrite[batch_indices, text_to_overwrite] = False
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
-            )
-
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
-        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
-        indices_to_mask = new_token_positions[batch_indices, pad_indices]
-
-        final_embedding[batch_indices, indices_to_mask] = 0
-
-        if labels is None:
-            final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
 
     def forward(
         self,
@@ -1598,13 +1371,14 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs, image_attn_mask = self.vision_tower(
+                image_outputs, image_attentions = self.vision_tower(
                     pixel_values,
                     pixel_mask=pixel_mask,
                 )
+
                 selected_image_feature = image_outputs.last_hidden_state
 
-                image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+                image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attentions)
 
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
                 (

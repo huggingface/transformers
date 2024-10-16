@@ -8,9 +8,8 @@ import os
 from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
-
+from ...modeling_rope_utils import rope_config_validation
 
 logger = logging.get_logger(__name__)
 
@@ -216,11 +215,12 @@ class AriaConfig(PretrainedConfig):
     as well as additional parameters for image token handling and projector mapping.
 
     Args:
-        vision_config (AriaVisionConfig or dict, *optional*): Configuration for the vision component.
-        text_config (AriaMoELMConfig or dict, *optional*): Configuration for the text component.
-        projector_patch_to_query_dict (dict, *optional*): Mapping of patch sizes to query dimensions.
-        ignore_index (int, *optional*, defaults to -100): Index to ignore in loss calculation.
-        image_token_index (int, *optional*, defaults to 32000): Index used to represent image tokens.
+        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
+        text_config (AriaMoELMConfig or dict): Configuration for the text component.
+        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
+        ignore_index (int): Index to ignore in loss calculation.
+        image_token_index (int): Index used to represent image tokens.
+        **kwargs: Additional keyword arguments passed to the parent class.
 
     Attributes:
         model_type (str): Type of the model, set to "aria".
