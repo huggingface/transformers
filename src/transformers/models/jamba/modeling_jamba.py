@@ -1542,7 +1542,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels)
+            loss = self.loss_function(logits, labels, self.vocab_size)
 
         aux_loss = None
         if output_router_logits:

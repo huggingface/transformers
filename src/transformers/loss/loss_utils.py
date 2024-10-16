@@ -20,7 +20,7 @@ from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 
 
-def ForCausalLMLoss(logits, labels, **kwargs):
+def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
     # Shift so that tokens < n predict n
@@ -28,7 +28,7 @@ def ForCausalLMLoss(logits, labels, **kwargs):
     shift_labels = labels[..., 1:].contiguous()
 
     # Flatten the tokens
-    shift_logits = shift_logits.view(-1, kwargs["vocab_size"])
+    shift_logits = shift_logits.view(-1, vocab_size)
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(shift_logits.device)

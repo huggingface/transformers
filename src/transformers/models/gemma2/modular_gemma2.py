@@ -805,7 +805,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels)
+            loss = self.loss_function(logits, labels, self.vocab_size)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
