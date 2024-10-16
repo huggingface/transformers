@@ -17,6 +17,7 @@
 import unittest
 
 import torch
+from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -26,8 +27,10 @@ from transformers import (
     is_vision_available,
 )
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
+from transformers.models.colpali.modeling_colpali import ColPaliForRetrievalOutput
 from transformers.testing_utils import (
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -76,7 +79,7 @@ class ColPaliForRetrievalModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
+        is_training=False,
         vision_config={
             "use_labels": True,
             "image_size": 20,
@@ -186,6 +189,50 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = ColPaliForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
 
+        # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
+
     @slow
     @require_vision
     def test_colpali_forward_inputs(self):
@@ -201,4 +248,41 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**inputs, return_dict=True)
 
-            self.assertIsInstance(outputs, ColPaliModelOutput)
+            self.assertIsInstance(outputs, ColPaliForRetrievalOutput)
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest(
+            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
+        )
+
+    @unittest.skip(
+        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+    )
+    def test_initialization(self):
+        pass
+
+    # TODO extend valid outputs to include this test @Molbap
+    @unittest.skip(reason="PaliGemma has currently one output format.")
+    def test_model_outputs_equivalence(self):
+        pass

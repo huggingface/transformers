@@ -20,12 +20,13 @@
 # limitations under the License.
 
 
-from ..paligemma import (
-    PaliGemmaConfig,
-)
+import warnings
+
+from ...configuration_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING
 
 
-class ColPaliConfig(PaliGemmaConfig):
+class ColPaliConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
     ColPaliForRetrieval according to the specified arguments, defining the model architecture.
@@ -65,6 +66,9 @@ class ColPaliConfig(PaliGemmaConfig):
     ```
     """
 
+    model_type = "colpali"
+    is_composition = False
+
     def __init__(
         self,
         vision_config=None,
@@ -77,16 +81,65 @@ class ColPaliConfig(PaliGemmaConfig):
         embedding_dim: int = 128,
         **kwargs,
     ):
-        super().__init__(
-            vision_config=vision_config,
-            text_config=text_config,
-            ignore_index=ignore_index,
-            image_token_index=image_token_index,
-            vocab_size=vocab_size,
-            projection_dim=projection_dim,
-            hidden_size=hidden_size,
-            **kwargs,
-        )
+        self._ignore_index = ignore_index
+        self.image_token_index = image_token_index
+        self._vocab_size = vocab_size
+        self.projection_dim = projection_dim
+        self.hidden_size = hidden_size
+        self.vision_config = vision_config
+        self.is_encoder_decoder = False
+
+        if isinstance(self.vision_config, dict):
+            vision_config["model_type"] = (
+                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
+            )
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
+                intermediate_size=4096,
+                hidden_size=1152,
+                patch_size=14,
+                image_size=224,
+                num_hidden_layers=27,
+                num_attention_heads=16,
+                vocab_size=257152,
+                vision_use_head=False,
+            )
+
+        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            self.text_config = CONFIG_MAPPING["gemma"](
+                hidden_size=2048,
+                num_hidden_layers=18,
+                intermediate_size=16384,
+                num_attention_heads=8,
+                num_key_value_heads=1,
+                is_encoder_decoder=False,
+                vocab_size=vocab_size,
+            )
+        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
+        self.vision_config.projection_dim = projection_dim
         self.model_type = "colpali"
         self.is_composition = False
         self.embedding_dim = embedding_dim
+        super().__init__(**kwargs)
+
+    @property
+    def ignore_index(self):
+        warnings.warn(
+            "The `ignore_index` attribute is deprecated and will be removed in v4.47.",
+            FutureWarning,
+        )
+        return self._ignore_index
+
+    @ignore_index.setter
+    def ignore_index(self, value):
+        self._ignore_index = value
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("_ignore_index", None)
+        return output
