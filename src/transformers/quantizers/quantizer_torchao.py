@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import types
 from typing import TYPE_CHECKING, Union
 
 from packaging import version
@@ -30,8 +31,10 @@ from ..utils import is_torch_available, is_torchao_available, logging
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 if is_torchao_available():
+    from torchao.dtypes import AffineQuantizedTensor
     from torchao.quantization import quantize_
 
 logger = logging.get_logger(__name__)
@@ -45,6 +48,17 @@ def find_parent(model, name):
         parent = parent._modules[m]
     return parent
 
+def _quantization_type(weight: torch.Tensor):
+    if isinstance(weight, AffineQuantizedTensor):
+        return f"{weight.__class__.__name__}({weight._quantization_type()})"
+
+    if type(weight) is torch.Tensor:
+        return "not quantized"
+
+    return "not recognized"
+
+def _linear_extra_repr(self):
+    return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={_quantization_type(self.weight)}"
 
 class TorchAoHfQuantizer(HfQuantizer):
     """
@@ -152,9 +166,16 @@ class TorchAoHfQuantizer(HfQuantizer):
         Each nn.Linear layer that needs to be quantized is processsed here.
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
+
         module, tensor_name = get_module_from_name(model, param_name)
-        module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
-        quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+
+        if self.pre_quantized :
+            module._parameters[tensor_name] = param_value.to(device=target_device)
+            if isinstance(module, nn.Linear):
+                module.extra_repr = types.MethodType(_linear_extra_repr, module)
+        else :
+            module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
+            quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def _process_model_after_weight_loading(self, model):
         """No process required for torchao quantized model"""
