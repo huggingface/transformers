@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 # The corresponding mapped value is used to define the file target for the assignment
 ASSIGNMENTS_TO_KEEP = {
     "_CHECKPOINT_FOR_DOC": "modeling",
+    "logger": "modeling",
 }
 
 AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
@@ -437,7 +438,6 @@ class SuperTransformer(cst.CSTTransformer):
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
-                continue
 
         for stmt in existing_body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
@@ -447,6 +447,9 @@ class SuperTransformer(cst.CSTTransformer):
                     continue
                 if target in self.all_assign_target:
                     stmt = self.all_assign_target[target]
+            # Skip the docstring (will be added later on, at the beginning)
+            elif m.matches(stmt, DOCSTRING_NODE):
+                continue
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             deduplicated_new_body.append(stmt)
@@ -456,16 +459,40 @@ class SuperTransformer(cst.CSTTransformer):
             code = self.python_module.code_for_node(node)
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if (
-                node not in deduplicated_new_body
-                and "super().__init__" not in comment_less_code
-                and comment_less_code not in existing_nodes
-            ):
+            if node not in deduplicated_new_body and comment_less_code not in existing_nodes:
                 if not m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
-                    # HACK here to fix the pos_init() that has to be last we kinda do this.
-                    deduplicated_new_body = deduplicated_new_body[:-1] + [node] + deduplicated_new_body[-1:]
+                    deduplicated_new_body.append(node)
                     existing_nodes.add(comment_less_code)
+
+        # Fix the post_init() that has to be last
+        for i, node in enumerate(deduplicated_new_body):
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if "self.post_init(" in comment_less_code and i < len(deduplicated_new_body) - 1:
+                # Remove it and add it again at the end
+                deduplicated_new_body.pop(i)
+                deduplicated_new_body.append(node)
+                break
+
         return deduplicated_new_body
+    
+    def _fix_init_location(self, new_body):
+        """Fix the location of the super()__init__ in the new body, if we had new statements before it."""
+        start_index = 0
+        for i, node in enumerate(new_body):
+            if m.matches(node, DOCSTRING_NODE) and i == start_index:
+                start_index += 1
+                continue
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if "super().__init__" in comment_less_code and i > start_index:
+                # Remove it and add it again at the top after the docstrings
+                node = new_body.pop(i)
+                new_body = new_body[:start_index] + [node] + new_body[start_index:]
+                break
+        return new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
         """Updates the body of the input `node`'s `func_name` function by replacing calls
@@ -479,10 +506,11 @@ class SuperTransformer(cst.CSTTransformer):
         new_body = []
         has_super_call = False
 
-        for expr in node.body:
+        for i, expr in enumerate(node.body):
             if is_call_to_super(expr, func_name):
                 has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i+1:]))
+                new_body = self._fix_init_location(new_body)
             else:
                 expr = expr.visit(self.transformer)
             if m.matches(expr, DOCSTRING_NODE):
@@ -791,6 +819,8 @@ class ModularConverterTransformer(CSTTransformer):
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
         self.added_dependencies = set()
+        # Keep track of decorators arguments for top-level functions/classes
+        self.decorator_dependencies = defaultdict(lambda: [])
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -967,7 +997,7 @@ class ModularConverterTransformer(CSTTransformer):
                             and dependency in class_finder.first_lvl_dependency_mapping[class_name]
                         ):
                             # If dependency is defined, but not used, raise error
-                            calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
+                            calls = m.findall(original_node, m.Name(dependency))
                             if not calls and not is_empty_node and dependency not in all_bases:
                                 raise ValueError(
                                     f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
@@ -1002,6 +1032,7 @@ class ModularConverterTransformer(CSTTransformer):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
             self.all_definitions[node.name.value] = node
+            self.current_top_level_function = None
         return node
 
     def visit_Assign(self, node: cst.Assign) -> None:
@@ -1040,7 +1071,8 @@ class ModularConverterTransformer(CSTTransformer):
     def visit_Call(self, node: cst.Call):
         """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them.
         Important note: we only rely on direct Call to the functions here, not indirect mentions (such as assigning a variable with the function,
-        add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible."""
+        add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible.
+        """
         # Only map function calls if we're inside a class (i.e., current_class is set)
         if self.current_class is not None:
             # Simple function calls such as foo()
@@ -1050,6 +1082,38 @@ class ModularConverterTransformer(CSTTransformer):
             # Simple function calls such as foo()
             if isinstance(node.func, cst.Name):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
+
+    def visit_Decorator(self, node):
+        """Keep track of args of decorators for all top-level functions/classes."""
+        parent_node = self.get_metadata(ParentNodeProvider, node)
+        grand_parent_node = self.get_metadata(ParentNodeProvider, parent_node)
+        if m.matches(parent_node, m.ClassDef() | m.FunctionDef()) and m.matches(grand_parent_node, m.Module()):
+            if hasattr(node.decorator, "args"):
+                for arg in node.decorator.args:
+                    # We only look at those categories to get the args dependencies, as the function calls should be
+                    # fairly simple (once again, we assume doctrings helper calls)
+                    if m.matches(arg.value, m.Name()):
+                        self.decorator_dependencies[parent_node.name.value].append(arg.value.value)
+                    elif m.matches(arg.value, m.Call(func=m.Attribute(value=m.Name()))):
+                        self.decorator_dependencies[parent_node.name.value].append(arg.value.func.value.value)
+
+    def _insert_node_in_body(
+        self, new_node, body: dict, new_body_key: str, body_insert_index: int, add_new_lines: int = 0
+    ):
+        """Insert the `new_node` to the`body`, with the `new_body_key`.
+        The node is inserted with given `body_insert_index` (usually the index of an exising body element), and all nodes
+        with same or larger index are remapped to keep the same relative order in the final body.
+        Optionally, some new lines may be inserted before the given node.
+        """
+        # Reorder the elements
+        for element in body.keys():
+            if body[element]["insert_idx"] >= body_insert_index:
+                body[element]["insert_idx"] += 1
+        # Assign new element to body (after changing the count to avoid messing it)
+        if add_new_lines > 0:
+            # Wrap it inside a Module node to easily add the newlines
+            new_node = cst.Module(body=add_new_lines * [cst.Newline()] + [new_node])
+        body[new_body_key] = {"insert_idx": body_insert_index, "node": new_node}
 
     def _maybe_add_function_to_body(
         self,
@@ -1070,16 +1134,11 @@ class ModularConverterTransformer(CSTTransformer):
         if len(matching_callers) > 0 and top_level_function not in body.keys():
             # Add the function just before the first class using it
             new_idx = min([body[element]["insert_idx"] for element in matching_callers])
-            # Reorder the elements
-            for element in body.keys():
-                if body[element]["insert_idx"] >= new_idx:
-                    body[element]["insert_idx"] += 1
-            # Assign new element to body (after changing the count to avoid messing it)
-            body[top_level_function] = {"insert_idx": new_idx, "node": function_node}
+            self._insert_node_in_body(function_node, body, top_level_function, new_idx)
             return True
         return False
 
-    def _recursively_add_all_new_needed_functions_in_files(self):
+    def recursively_add_all_new_needed_functions_in_files(self):
         """For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
         the different files, and add them to the file if it is the case (also recursively adding all other functions that
         may be needed in that function body)."""
@@ -1101,6 +1160,37 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
+    def _add_all_args_dependencies(
+        self, arg_names: list, file: str, dependency_imports: dict, body_insert_idx: int
+    ) -> None:
+        """Add all the `args_names` elements to the body, if they are not already present in the body or the imports. This is
+        used to add potential arguments of decorators, that were not added through the dependency class graph.
+        IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
+        added previously. This means that only args corresponding to simple assignments such as `XXX_INPUTS_DOCSTRING = ""` will be added.
+        """
+        body = self.files[file]
+        for arg in arg_names:
+            # If the arg is not one of the imports, and not part of the body -> we need to find it
+            if arg not in dependency_imports[file].keys() and arg not in body.keys():
+                for visited_file, class_finder in self.visited_module.items():
+                    # Check for the dependency in the simple assignments
+                    if arg in class_finder.assignments.keys():
+                        arg_node = class_finder.assignments[arg]
+                        # Insert the dependency
+                        self._insert_node_in_body(arg_node, body, arg, body_insert_idx)
+
+    def add_all_decorator_arguments_to_files(self, dependency_imports: dict) -> None:
+        """This adds all potential arguments of class/functions decorators to the file bodies, in case they were not
+        already added as part of the classes graph dependency.
+        IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
+        added previously. This means that only args corresponding to simple assignments such as `XXX_INPUTS_DOCSTRING = ""` will be added.
+        """
+        for decorated_entity, args in self.decorator_dependencies.items():
+            for file, body in self.files.items():
+                if decorated_entity in body.keys():
+                    insert_idx = body[decorated_entity]["insert_idx"]
+                    self._add_all_args_dependencies(args, file, dependency_imports, insert_idx)
+
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {file_type: imports.copy() for file_type in self.files}
@@ -1112,7 +1202,9 @@ class ModularConverterTransformer(CSTTransformer):
 
         # Check if any new top-level function from the `modular_xxx.py` should be added to the different files
         # (if it is called in a class in the file, then it will be copy pasted from `modular.py` to that file).
-        self._recursively_add_all_new_needed_functions_in_files()
+        self.recursively_add_all_new_needed_functions_in_files()
+        # Add potential missing arguments of class/function decorators
+        self.add_all_decorator_arguments_to_files(dependency_imports)
 
         for file, body in self.files.items():
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
