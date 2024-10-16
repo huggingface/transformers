@@ -603,7 +603,7 @@ class TrainingArguments:
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
                 - use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
-                    Whether or not to have the dataloaders prepared by the Accelerator be backed by 
+                    Whether or not to have the dataloaders prepared by the Accelerator be backed by
                     `[torchdata.StatefulDataLoader]`(https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
                     This requires `accelerate` version 1.0.0 or higher, and `torchdata` version 0.8.0 to be installed."
 

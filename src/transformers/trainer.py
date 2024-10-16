@@ -2096,6 +2096,12 @@ class Trainer:
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None:
                 self._train_batch_size = state.train_batch_size
+            if state.train_dataloader_state_dict is None and self.use_stateful_dataloader:
+                raise ValueError(
+                    "TrainerArguments.accelerator_config.use_stateful_dataloader is true, however a checkpoint with"
+                    "no saved dataloader state_dict has been loaded. If this is the correct checkpoint to be loaded,"
+                    "please set `accelerator_config.use_stateful_dataloader` to false."
+                )
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:

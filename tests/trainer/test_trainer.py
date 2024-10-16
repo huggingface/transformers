@@ -3486,6 +3486,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
             if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 # gradient accumulation kwargs configures gradient_state
@@ -3518,6 +3519,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
             if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
@@ -3548,6 +3550,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+            self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
             if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
@@ -3572,6 +3575,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+            self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     @require_accelerate_version_min_0_28
     def test_accelerate_config_from_dataclass_grad_accum(self):
@@ -3622,6 +3626,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     def test_accelerator_config_from_dict_with_deprecated_args(self):
         # Checks that accelerator kwargs can be passed through

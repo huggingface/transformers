@@ -19,7 +19,7 @@ Callbacks to use with the Trainer class and customize the training loop.
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
