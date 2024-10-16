@@ -13,36 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from dataclasses import dataclass
-from collections import OrderedDict
 import warnings
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 
-from ...utils import logging
 from ...generation.utils import GenerationMixin
-from ..bart.modeling_bart import (
-    BartLearnedPositionalEmbedding,
-    BartScaledWordEmbedding,
-    BartAttention,
-    BartFlashAttention2,
-    BartSdpaAttention,
-    BartEncoderLayer,
-    BartDecoderLayer,
-    BartEncoder,
-    BartDecoder,
-)
 from ...modeling_outputs import (
     BaseModelOutput,
-    Seq2SeqModelOutput,
     Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -50,32 +37,53 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..bart.modeling_bart import (
+    BartAttention,
+    BartDecoder,
+    BartDecoderLayer,
+    BartEncoder,
+    BartEncoderLayer,
+    BartFlashAttention2,
+    BartLearnedPositionalEmbedding,
+    BartScaledWordEmbedding,
+    BartSdpaAttention,
+)
+from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig
+
 
 _CONFIG_FOR_DOC = "Florence2Config"
 
 
 logger = logging.get_logger(__name__)
 
+
 class Florence2LearnedPositionalEmbedding(BartLearnedPositionalEmbedding):
     pass
+
 
 class Florence2ScaledWordEmbedding(BartScaledWordEmbedding):
     pass
 
+
 class Florence2Attention(BartAttention):
     pass
+
 
 class Florence2FlashAttention2(Florence2Attention, BartFlashAttention2):
     pass
 
+
 class Florence2SdpaAttention(BartSdpaAttention):
     pass
+
 
 class Florence2EncoderLayer(BartEncoderLayer):
     pass
 
+
 class Florence2DecoderLayer(BartDecoderLayer):
     pass
+
 
 FLORENCE2_ATTENTION_CLASSES = {
     "eager": Florence2Attention,
@@ -83,9 +91,11 @@ FLORENCE2_ATTENTION_CLASSES = {
     "flash_attention_2": Florence2FlashAttention2,
 }
 
+
 def norm_cdf(x):
     # Computes standard normal cumulative distribution function
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
 
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -166,6 +176,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
+
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Florence2
 class Florence2DropPath(nn.Module):
@@ -843,10 +854,24 @@ class Florence2LanguagePreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-class Florence2Encoder(Florence2LanguagePreTrainedModel, Florence2EncoderLayer, Florence2ScaledWordEmbedding, Florence2LearnedPositionalEmbedding, BartEncoder):
+
+class Florence2Encoder(
+    Florence2LanguagePreTrainedModel,
+    Florence2EncoderLayer,
+    Florence2ScaledWordEmbedding,
+    Florence2LearnedPositionalEmbedding,
+    BartEncoder,
+):
     pass
 
-class Florence2Decoder(Florence2LanguagePreTrainedModel, Florence2DecoderLayer, Florence2ScaledWordEmbedding, Florence2LearnedPositionalEmbedding, BartDecoder):
+
+class Florence2Decoder(
+    Florence2LanguagePreTrainedModel,
+    Florence2DecoderLayer,
+    Florence2ScaledWordEmbedding,
+    Florence2LearnedPositionalEmbedding,
+    BartDecoder,
+):
     pass
 
 

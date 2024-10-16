@@ -58,6 +58,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Florence2Config"
 
+
 # Copied from transformers.models.siglip.modeling_siglip._trunc_normal_
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -141,6 +142,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
+
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Florence2
 class Florence2DropPath(nn.Module):
