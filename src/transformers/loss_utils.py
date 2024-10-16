@@ -17,7 +17,7 @@ def DefaultCrossEntropyLoss(logits, labels, **kwargs):
     return loss_fct(shift_logits, shift_labels)
 
 
-def SequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
+def ForSequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
     config = kwargs["config"]
     num_labels = kwargs["num_labels"]
     if config.problem_type is None:
@@ -43,7 +43,7 @@ def SequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
     return loss
 
 
-def QuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, end_positions):
+def ForQuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, end_positions):
     total_loss = None
     if start_positions is not None and end_positions is not None:
         # If we are on multi-GPU, split add a dimension
@@ -65,6 +65,6 @@ def QuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, end
 
 LOSS_MAPPING = {
     "ForCausalLM": DefaultCrossEntropyLoss,
-    "ForQuestionAnswering": QuestionAnsweringLoss,
-    "ForSequenceClassification": SequenceClassificationLoss,
+    "ForQuestionAnswering": ForQuestionAnsweringLoss,
+    "ForSequenceClassification": ForSequenceClassificationLoss,
 }

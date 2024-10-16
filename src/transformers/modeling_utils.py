@@ -45,7 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .loss_utils import LOSS_MAPPING, DefaultCrossEntropyLoss
+from .loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -4986,14 +4986,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(self.config, "loss_type"):
             loss_type = self.config.loss_type
         else:
-            loss_type = re.findall(rf"({"|".join(LOSS_MAPPING)})", self.__class__.__name__)
-            if loss_type is not None:
-                loss_type = loss_type[0]
+            loss_type = self.__class__.__name__
+            if loss_type not in LOSS_MAPPING:
+                loss_type = re.findall(rf"({"|".join(LOSS_MAPPING)})", self.__class__.__name__)
+                if loss_type is not None:
+                    loss_type = loss_type[0]
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             raise ValueError(
                 "You requestion the loss function, but we could not determine which one to use"
-                "based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`")
+                "based on the the class name. Make sure you add `{ self.__class__.__name__}` to the `LOSS_MAPPING`"
+            )
 
         return LOSS_MAPPING[loss_type]
 
@@ -5175,7 +5178,6 @@ class PoolerAnswerClass(nn.Module):
         x = self.dense_1(x).squeeze(-1)
 
         return x
-
 
 
 @dataclass
