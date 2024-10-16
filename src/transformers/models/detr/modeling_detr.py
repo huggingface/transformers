@@ -1376,13 +1376,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -1466,7 +1459,12 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            loss = self.loss_function()
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
+                outputs_class = self.class_labels_classifier(intermediate)
+                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+            loss = self.loss_function(logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord)
 
         if not return_dict:
             if auxiliary_outputs is not None:
@@ -1662,7 +1660,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            loss = self.loss_function()
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
+                outputs_class = self.detr.class_labels_classifier(intermediate)
+                outputs_coord = self.detr.bbox_predictor(intermediate).sigmoid()
+            loss = self.loss_function(logits,  labels, device, pred_boxes, pred_masks, self.config, outputs_class, outputs_coord)
 
         if not return_dict:
             if auxiliary_outputs is not None:

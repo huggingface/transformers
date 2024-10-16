@@ -464,8 +464,16 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     return NestedTensor(tensor, mask)
 
 
-def ForSegmentationLoss(logits, labels, pred_boxes, pred_masks, decoder_outputs, detr, return_dict, device, **kwargs):
-    config = kwargs["config"]
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+@torch.jit.unused
+def _set_aux_loss(self, outputs_class, outputs_coord):
+    # this is a workaround to make torchscript happy, as torchscript
+    # doesn't support dictionary with non-homogeneous values, such
+    # as a dict having both a Tensor and a list.
+    return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+
+
+def ForSegmentationLoss(logits,  labels, device, pred_boxes, pred_masks, config, outputs_class=None, outputs_coord=None, **kwargs):
     # First: create the matcher
     matcher = DetrHungarianMatcher(
         class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
@@ -485,10 +493,7 @@ def ForSegmentationLoss(logits, labels, pred_boxes, pred_masks, decoder_outputs,
     outputs_loss["pred_boxes"] = pred_boxes
     outputs_loss["pred_masks"] = pred_masks
     if config.auxiliary_loss:
-        intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
-        outputs_class = detr.class_labels_classifier(intermediate)
-        outputs_coord = detr.bbox_predictor(intermediate).sigmoid()
-        auxiliary_outputs = detr._set_aux_loss(outputs_class, outputs_coord)
+        auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
     loss_dict = criterion(outputs_loss, labels)
@@ -506,8 +511,7 @@ def ForSegmentationLoss(logits, labels, pred_boxes, pred_masks, decoder_outputs,
     return loss
 
 
-def ForObjectDetectionLoss(logits, labels, pred_boxes, pred_masks, outputs, detr, return_dict, device, **kwargs):
-    config = kwargs["config"]
+def ForObjectDetectionLoss(logits, labels, device, pred_boxes, config, outputs_class=None, outputs_coord=None, **kwargs):
     # First: create the matcher
     matcher = DetrHungarianMatcher(
         class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
@@ -526,10 +530,7 @@ def ForObjectDetectionLoss(logits, labels, pred_boxes, pred_masks, outputs, detr
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
     if config.auxiliary_loss:
-        intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-        outputs_class = detr.class_labels_classifier(intermediate)
-        outputs_coord = detr.bbox_predictor(intermediate).sigmoid()
-        auxiliary_outputs = detr._set_aux_loss(outputs_class, outputs_coord)
+        auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
     loss_dict = criterion(outputs_loss, labels)
@@ -545,4 +546,5 @@ def ForObjectDetectionLoss(logits, labels, pred_boxes, pred_masks, outputs, detr
     return loss
 
 
-LOSS_MAPPING["DetrForSegmentation"] = DetrLoss
+LOSS_MAPPING["ForSegmentation"] = ForSegmentationLoss
+LOSS_MAPPING["ForObjectDetection"] = ForObjectDetectionLoss

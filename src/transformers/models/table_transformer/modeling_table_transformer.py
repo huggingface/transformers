@@ -1311,14 +1311,6 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
-    # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection._set_aux_loss
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
-
     @add_start_docstrings_to_model_forward(TABLE_TRANSFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TableTransformerObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
