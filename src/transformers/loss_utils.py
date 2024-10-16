@@ -61,3 +61,10 @@ def QuestionAnsweringLoss(start_logits, end_logits, labels, start_positions, end
         end_loss = loss_fct(end_logits, end_positions)
         total_loss = (start_loss + end_loss) / 2
     return total_loss
+
+
+LOSS_MAPPING = {
+    "ForCausalLM": DefaultCrossEntropyLoss,
+    "ForQuestionAnswering": QuestionAnsweringLoss,
+    "ForSequenceClassification": SequenceClassificationLoss,
+}

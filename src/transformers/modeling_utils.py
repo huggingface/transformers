@@ -45,7 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from .loss_utils import DefaultCrossEntropyLoss
+from .loss_utils import LOSS_MAPPING, DefaultCrossEntropyLoss
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -4980,6 +4980,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return self.hf_quantizer.is_trainable
 
+    @property
+    def loss_function(self):
+        loss = LOSS_MAPPING.get(self.config.getattr("loss_type", self.config.architecture), DefaultCrossEntropyLoss)
+        return loss
+
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
@@ -5159,9 +5164,6 @@ class PoolerAnswerClass(nn.Module):
 
         return x
 
-    @property
-    def loss(self):
-        return self._loss if self._loss is not None else DefaultCrossEntropyLoss
 
 
 @dataclass

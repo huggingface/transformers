@@ -1207,7 +1207,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         if labels is not None:
-            loss = self.loss(logits, labels, vocab_size=self.config.vocab_size, **loss_kwargs)
+            loss = super().loss_function(logtis=logits, labels=labels, vocab_size=self.config.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1311,7 +1311,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss(logits, labels, pooled_logits, self.config.todict())
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config.todict())
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1364,6 +1364,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1397,7 +1398,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            loss = self.loss(start_logits, end_logits, start_positions, end_positions)
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
@@ -1481,7 +1482,7 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
