@@ -473,9 +473,14 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
     def resize_token_embeddings(
         self,
         new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of=None,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self.language_model.resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
