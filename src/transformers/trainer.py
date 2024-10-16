@@ -2562,7 +2562,6 @@ class Trainer:
                                 self.lr_scheduler.step()
 
                         model.zero_grad()
-                        print("Called!", is_last_step_and_steps_less_than_grad_acc)
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
@@ -2570,10 +2569,15 @@ class Trainer:
                     else:
                         self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
-                if self.control.should_epoch_stop or self.control.should_training_stop:
                     # PyTorch/XLA relies on the data loader to insert the mark_step for
                     # each step. Since we are breaking the loop early, we need to manually
                     # insert the mark_step here.
+                    if self.control.should_epoch_stop or self.control.should_training_stop:
+                        if is_torch_xla_available():
+                            xm.mark_step()
+                        break
+                # We also need to break out of the nested loop
+                if self.control.should_epoch_stop or self.control.should_training_stop:
                     if is_torch_xla_available():
                         xm.mark_step()
                     break
