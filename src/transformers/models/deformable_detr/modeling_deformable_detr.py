@@ -1893,7 +1893,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
 
         # Deformable DETR encoder-decoder model
         self.model = DeformableDetrModel(config)
-        self.config.loss_type = "ForObjectDetection"
         # Detection heads on top
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = DeformableDetrMLPPredictionHead(
