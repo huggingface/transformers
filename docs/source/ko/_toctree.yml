@@ -328,7 +328,7 @@
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
 
-        title: BertJapanese
+        title: 일본어 Bert
       - local: in_translation
         title: (번역중) Bertweet
       - local: in_translation
