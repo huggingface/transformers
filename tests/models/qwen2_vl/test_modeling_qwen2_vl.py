@@ -26,6 +26,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLForSequenceClassification
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -222,7 +223,9 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -313,6 +316,42 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_determinism(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_save_load(self):
+        pass
+
+    @unittest.skip("LM test not for VLM")
+    def test_training(self):
         pass
 
 
@@ -510,3 +549,68 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+
+    @slow
+    def test_sequence_classification_multi_class(self):
+        num_labels = 3
+        model = Qwen2VLForSequenceClassification.from_pretrained(
+            "Qwen/Qwen2-VL-2B-Instruct",
+            torch_dtype="auto",
+            device_map="auto",
+            num_labels=num_labels,
+            pad_token_id=-100,
+        )
+        model.to(torch_device)
+        model.eval()
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[text, text], images=[self.image, self.image], padding=True, return_tensors="pt"
+        ).to(torch_device)
+        batch_size = inputs["input_ids"].shape[0]
+        labels = torch.eye(n=num_labels, device=torch_device)[torch.randint(low=0, high=3, size=(batch_size,))]
+        result = model(**inputs, labels=labels)
+        self.assertEqual(result.logits.shape, (batch_size, num_labels))
+
+    @slow
+    def test_sequence_classification_single_label(self):
+        num_labels = 1
+        model = Qwen2VLForSequenceClassification.from_pretrained(
+            "Qwen/Qwen2-VL-2B-Instruct",
+            torch_dtype="auto",
+            device_map="auto",
+            num_labels=num_labels,
+            problem_type="single_label_classification",
+            pad_token_id=-100,
+        )
+        model.to(torch_device)
+        model.eval()
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[text, text], images=[self.image, self.image], padding=True, return_tensors="pt"
+        ).to(torch_device)
+        batch_size = inputs["input_ids"].shape[0]
+        labels = torch.randint(low=0, high=2, size=(batch_size, num_labels), device=torch_device)
+        result = model(**inputs, labels=labels)
+        self.assertEqual(result.logits.shape, (batch_size, num_labels))
+
+    @slow
+    def test_sequence_classification_multi_label(self):
+        num_labels = 3
+        model = Qwen2VLForSequenceClassification.from_pretrained(
+            "Qwen/Qwen2-VL-2B-Instruct",
+            torch_dtype="auto",
+            device_map="auto",
+            num_labels=num_labels,
+            problem_type="multi_label_classification",
+            pad_token_id=-100,
+        )
+        model.to(torch_device)
+        model.eval()
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[text, text], images=[self.image, self.image], padding=True, return_tensors="pt"
+        ).to(torch_device)
+        batch_size = inputs["input_ids"].shape[0]
+        labels = torch.randint(low=0, high=2, size=(batch_size, num_labels), device=torch_device)
+        result = model(**inputs, labels=labels)
+        self.assertEqual(result.logits.shape, (batch_size, num_labels))
