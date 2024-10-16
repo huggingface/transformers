@@ -59,6 +59,8 @@ class GgufIntegrationTests(unittest.TestCase):
     starcoder2_model_id = "QuantFactory/starcoder2-3b-GGUF"
     starcoder2_fp16_model_id = "brittlewis12/starcoder2-3b-GGUF"
     starcoder2_original_model_id = "bigcode/starcoder2-3b"
+    mamba_original_model_id = "state-spaces/mamba-2.8b-hf"
+    mamba_model_id = "jpodivin/mamba-2.8b-hf-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -102,6 +104,8 @@ class GgufIntegrationTests(unittest.TestCase):
     q6_k_gpt2_xl_model_id = "gpt2-xl.Q6_K.gguf"
     q6_k_starcoder2_model_id = "starcoder2-3b.Q6_K.gguf"
     fp16_starcoder2_gguf_model_id = "starcoder2-3b.fp16.gguf"
+    q6_k_mamba_model_id = "ggml-model-Q6_K.gguf"
+    fp16_mamba_model_id = "ggml-model-f16.gguf"
 
     example_text = "Hello"
 
@@ -746,6 +750,41 @@ class GgufIntegrationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = 'def print_hello_world():\n    print("Hello World")\n\ndef print'
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_mamba_weights_conversion_fp16(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_original_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_model_id,
+            gguf_file=self.fp16_mamba_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict and layer_name != "lm_head.weight":
+                # quantized models do not contain "lm_head.weight" layer
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+
+    def test_mamba_q6_k(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_model_id,
+            gguf_file=self.q6_k_mamba_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.mamba_model_id, gguf_file=self.q6_k_mamba_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")['input_ids']
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = 'Hello,I answerted the question.'
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
