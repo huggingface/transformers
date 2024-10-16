@@ -505,6 +505,8 @@ def ForSegmentationLoss(
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
     outputs_loss["pred_masks"] = pred_masks
+
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs

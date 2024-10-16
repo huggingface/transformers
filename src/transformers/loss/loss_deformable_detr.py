@@ -114,6 +114,8 @@ def DeformableDetrForSegmentationLoss(
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
     outputs_loss["pred_masks"] = pred_masks
+
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
@@ -129,6 +131,7 @@ def DeformableDetrForSegmentationLoss(
         for i in range(config.decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
+
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
 
