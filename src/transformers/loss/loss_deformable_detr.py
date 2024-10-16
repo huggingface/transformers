@@ -1,37 +1,23 @@
 import torch
-from .loss_for_object_detection import HungarianMatcher, ImageLoss, _set_aux_loss, sigmoid_focal_loss, linear_sum_assignment, generalized_box_iou, center_to_corners_format
+
+from .loss_for_object_detection import (
+    HungarianMatcher,
+    ImageLoss,
+    _set_aux_loss,
+    center_to_corners_format,
+    generalized_box_iou,
+    linear_sum_assignment,
+    sigmoid_focal_loss,
+)
+
 
 class DeformableDetrHungarianMatcher(HungarianMatcher):
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
-            raise ValueError("All costs of the Matcher can't be 0")
-
     @torch.no_grad()
     def forward(self, outputs, targets):
         """
-        Args:
-            outputs (`dict`):
-                A dictionary that contains at least these entries:
-                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
-                A list of targets (len(targets) = batch_size), where each target is a dict containing:
-                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
-                  ground-truth
-                 objects in the target) containing the class labels
-                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
-
-        Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
-            - index_i is the indices of the selected predictions (in order)
-            - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        Differences:
+        - out_prob = outputs["logits"].flatten(0, 1).sigmoid() instead of softmax
+        - class_cost uses alpha and gamma
         """
         batch_size, num_queries = outputs["logits"].shape[:2]
 
@@ -63,7 +49,6 @@ class DeformableDetrHungarianMatcher(HungarianMatcher):
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-
 
 
 class DeformableDetrImageLoss(ImageLoss):
