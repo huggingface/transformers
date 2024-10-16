@@ -1744,9 +1744,15 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
+                outputs_coords = []
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
                 outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+                for lvl in range(intermediate.shape[0]):
+                    tmp = self.bbox_predictor(intermediate[lvl])
+                    tmp[..., :2] += reference_before_sigmoid
+                    outputs_coord = tmp.sigmoid()
+                    outputs_coords.append(outputs_coord)
+                outputs_coord = torch.stack(outputs_coords)
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
             )
@@ -1956,9 +1962,9 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
-                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[4]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
+                outputs_class = self.conditional_detr.class_labels_classifier(intermediate)
+                outputs_coord = self.conditional_detr.bbox_predictor(intermediate).sigmoid()
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, self.device, pred_boxes, pred_masks, self.config, outputs_class, outputs_coord
             )

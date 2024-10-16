@@ -108,4 +108,5 @@ LOSS_MAPPING = {
     "ForObjectDetection": ForObjectDetectionLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
+    "GroundingDinoForObjectDetection": DeformableDetrForObjectDetectionLoss,
 }
