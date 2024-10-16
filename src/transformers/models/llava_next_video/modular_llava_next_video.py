@@ -30,7 +30,6 @@ from transformers.models.llava_next.modeling_llava_next import (
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
-    replace_return_docstrings,
 )
 from ..auto import CONFIG_MAPPING
 
@@ -309,7 +308,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         video_features = torch.split(video_features, frames, dim=0)
         return video_features
 
-    @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class="LlavaNextVideoConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,

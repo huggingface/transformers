@@ -36,10 +36,9 @@ logger = logging.get_logger(__name__)
 
 # This is used to avoid overwriting these top-level assignments even if they are in the dependency graph. Otherwise, the
 # value from the dependency is used, then mapped to current name convention, resulting in wrong value.
-# The corresponding mapped value is used to define the file target for the assignment
+# The corresponding mapped values are used to define the file targets for the assignment.
 ASSIGNMENTS_TO_KEEP = {
-    "_CHECKPOINT_FOR_DOC": "modeling",
-    "logger": "modeling",
+    "_CHECKPOINT_FOR_DOC": ["modeling"],
 }
 
 AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
@@ -887,11 +886,12 @@ class ModularConverterTransformer(CSTTransformer):
                 return updated_node
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
                 if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
-                    file_ = ASSIGNMENTS_TO_KEEP[original_node.body[0].targets[0].target.value]
-                    self.files[file_][original_node.body[0].targets[0].target.value] = {
-                        "node": original_node,
-                        "insert_idx": self.global_scope_index,
-                    }
+                    files_ = ASSIGNMENTS_TO_KEEP[original_node.body[0].targets[0].target.value]
+                    for file_ in files_:
+                        self.files[file_][original_node.body[0].targets[0].target.value] = {
+                            "node": original_node,
+                            "insert_idx": self.global_scope_index,
+                        }
             self.global_scope_index += 100
         return updated_node
 
@@ -1231,14 +1231,18 @@ class ModularConverterTransformer(CSTTransformer):
         self.add_all_decorator_arguments_to_files(dependency_imports)
 
         for file, body in self.files.items():
+            expected_body_keys = {k for k, v in ASSIGNMENTS_TO_KEEP.items() if file in v}
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-            if len(new_body) > 0:
+            if len(new_body) > 0 and body.keys() != expected_body_keys:
                 if file in dependency_imports.keys():
                     new_body = list(dependency_imports[file].values()) + new_body
                 new_module = cst.Module(body=[*new_body], header=node.header)
                 # Final cleanup
                 new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner(self.added_dependencies))
                 self.files[file] = new_module
+            # In this case, only the nodes corresponding to ASSIGNMENTS_TO_KEEP are present -> we don't want to create the file
+            else:
+                self.files[file] = {}
         return node
 
 
