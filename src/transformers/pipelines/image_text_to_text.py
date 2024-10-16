@@ -317,6 +317,7 @@ class ImageTextToTextPipeline(Pipeline):
         num_images_in_text = [text_single.count(image_token) for text_single in text]
         if sum(num_images_in_text) > 0:
             if any(num > 1 for num in num_images_in_text):
+                # if batch_size > 1, we can't handle multiple images for a single prompt as it will result in overly nested images for batched inference
                 if batch_size > 1:
                     raise ValueError(
                         "The pipeline does not support multiple images for a single prompt with batch_size > 1."
@@ -355,10 +356,12 @@ class ImageTextToTextPipeline(Pipeline):
                 "Undefined behavior, please check the number of images and prompts, and nest the images to match the prompts."
             )
 
+        # if we have nested images (with more than one image per prompt), batch_size must be 1
         if nested_images:
-            return [
-                super().__call__(ImageText(image, text_single), **kwargs) for image, text_single in zip(images, text)
-            ]
+            results = []
+            for image_group, text_single in zip(images, text):
+                results.extend(super().__call__(ImageText(image_group, text_single), **kwargs))
+            return results
 
         # otherwise, we can flatten the images and text as we have a 1:1 relationship
         if isinstance(images[0], (list, tuple)):
