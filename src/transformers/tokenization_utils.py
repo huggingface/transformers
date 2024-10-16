@@ -316,6 +316,9 @@ class ExtensionsTrie(Trie):
         """
         node = self.data
         for char in token:
+            if char not in node:
+                break
+
             node = node[char]
         return node
 
