@@ -273,7 +273,7 @@ def _get_fsdp_ckpt_kwargs():
         return {}
 
 
-def _init_fsdp(model, accelerator, device):
+def _init_fsdp(model, device):
     """
     Initialize Fully Sharded Data Parallel (FSDP) for the model.
 
@@ -283,13 +283,8 @@ def _init_fsdp(model, accelerator, device):
 
     Args:
         model: The model to initialize with FSDP.
-        accelerator: The Accelerator object.
         device: The device to run the model on.
-
-    Returns:
-        The initialized FSDP model.
     """
-    model = accelerator.prepare(model)
     model.train()
     with torch.no_grad():
         # Run a forward pass with dummy inputs to initialize FSDP
@@ -303,7 +298,6 @@ def _init_fsdp(model, accelerator, device):
             if name != "self"
         }
         _ = model(**dummy_input)
-    return model
 
 
 if TYPE_CHECKING:
@@ -634,9 +628,6 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-
-        if self.is_fsdp_enabled:
-            self.model = _init_fsdp(self.model, self.accelerator, self.args.device)
 
         if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
@@ -2285,6 +2276,7 @@ class Trainer:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
+            _init_fsdp(self.model, self.args.device)
             self.model = self.model_wrapped = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
