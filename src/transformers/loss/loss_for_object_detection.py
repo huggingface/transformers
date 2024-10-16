@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from ...utils import is_accelerate_available, is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_accelerate_available, is_scipy_available, is_vision_available, requires_backends
 
 
 if is_accelerate_available():
