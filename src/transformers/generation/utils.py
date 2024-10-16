@@ -1419,7 +1419,7 @@ class GenerationMixin:
         input_ids_length,
         inputs_tensor,
     ):
-        """Prepared max and min length in generaion configs to avoid clashes between similar attributes"""
+        """Prepared max and min length in generation configs to avoid clashes between similar attributes"""
 
         if generation_config.max_new_tokens is not None:
             if not has_default_max_length and generation_config.max_length is not None:
@@ -1594,8 +1594,10 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
-                if execution_device_map is None or len(execution_device_map) <= 1:
+                if execution_device_map is None:
                     return None
+                elif len(execution_device_map) == 1 and "" in execution_device_map:
+                    return {idx: execution_device_map[""] for idx in range(self.config.num_hidden_layers)}
                 layer_device_map = {}
                 for layer in execution_device_map:
                     for idx in range(self.config.num_hidden_layers):
@@ -1660,7 +1662,7 @@ class GenerationMixin:
         device: torch.device,
     ) -> bool:
         """
-        Prepares the cache for generation (if applicable), given `generate`'s paramaterization. If a cache is
+        Prepares the cache for generation (if applicable), given `generate`'s parameterization. If a cache is
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
 
@@ -1923,7 +1925,7 @@ class GenerationMixin:
                 deadlocking if one GPU finishes generating before other GPUs. Otherwise, defaults to `False`.
             assistant_model (`PreTrainedModel`, *optional*):
                 An assistant model that can be used to accelerate generation. The assistant model must have the exact
-                same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
+                same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistant model
                 is much faster than running generation with the model you're calling generate from. As such, the
                 assistant model should be much smaller.
             streamer (`BaseStreamer`, *optional*):
@@ -2440,7 +2442,15 @@ class GenerationMixin:
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
+        """
+        the latter code assumes the input_ids is not empty,
+        input_id has to be checked if contains elements
+		"""
+        if input_ids.numel() == 0:
+            return input_ids
+
         tail_ids = input_ids[:, -1].tolist()
+
         space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
@@ -2452,7 +2462,14 @@ class GenerationMixin:
                 continue  # skip empty sequences (all pad ids)
 
             # apply bias for alternatives (extensions) to the tail token
-            seq_bias = {(alt_tok,): 10.0 for alt_tok in vocab_trie.values(prefix=tail_tok)}
+            """
+            seq_bias key has to be tuple with int so have to use
+            tokenizer function to convert str to int
+			"""
+            seq_bias = {
+                (tokenizer.convert_tokens_to_ids(alt_tok),): 10.0 for alt_tok in vocab_trie.extensions(prefix=tail_tok)
+            }
+
             if len(seq_bias) == 1:
                 continue  # skip if there are no token alternatives to heal with
 
@@ -2461,6 +2478,14 @@ class GenerationMixin:
             generation_config.update(sequence_bias=seq_bias)
 
             trimmed_ids = batch_ids[:-1]
+
+            """
+            the latter code assumes trimmed_ids is not empty
+            so have to check the its element count
+			"""
+            if trimmed_ids.numel() == 0:
+                continue
+
             # if the prompt is a single (non-pad) token, regenerate from bos
             if len(batch_ids[batch_ids != pad_token_id]) == 1:
                 trimmed_ids[-1] = bos_token_id
@@ -2913,7 +2938,7 @@ class GenerationMixin:
                     output_attentions=output_attentions,
                 )
 
-            # This is essential to avoid having a last reference to the big past K-V and double the necesary memory
+            # This is essential to avoid having a last reference to the big past K-V and double the necessary memory
             # in the next loop
             del next_model_inputs
 
@@ -3656,7 +3681,7 @@ class GenerationMixin:
             )
 
         # initialise score of first beam of each group with 0 and the rest with -1e9. This ensures that the beams in
-        # the same group don't produce same tokens everytime.
+        # the same group don't produce same tokens every time.
         beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
