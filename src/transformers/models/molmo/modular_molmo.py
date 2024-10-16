@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List, Dict
 
 import torch
 from torch import nn
@@ -39,6 +39,7 @@ from ..clip.modeling_clip import (
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaMultiModalProjector,
+    LlavaCausalLMOutputWithPast
 )
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
@@ -49,7 +50,16 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2Model,
     Qwen2SdpaAttention,
 )
+import math
 
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
+)
 
 logger = logging.get_logger(__name__)
 
@@ -72,6 +82,7 @@ class MolmoVisionConfig(CLIPVisionConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        residual_dropout=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -94,6 +105,7 @@ class MolmoVisionConfig(CLIPVisionConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.residual_dropout = residual_dropout
 
 class MolmoTextConfig(Qwen2Config):
     def __init__(
@@ -106,7 +118,7 @@ class MolmoTextConfig(Qwen2Config):
         vocab_size = 152064,
         additional_vocab_size = 128,
         intermediate_size = 37888,
-        hidden_act="silu",
+        hidden_act="swiglu",
         max_position_embeddings=32768,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -214,6 +226,8 @@ class MolmoConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         image_seq_length=576,
         initializer_range=0.02,
+        vision_feature_select_strategy="full",
+        vision_feature_layers=[-2, -9],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -221,6 +235,8 @@ class MolmoConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layers = vision_feature_layers
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the MolmoVisionConfig with default values.")
@@ -243,14 +259,24 @@ class MolmoConfig(PretrainedConfig):
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
+
+
+# swiglu activation 
+
+class MolmoSwiGLU(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x, gate = x.chunk(2, dim=-1)
+        return nn.functional.silu(gate) * x
+    
 # text modules inherited from Qwen2
 
 
 class MolmoMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
-        self.fc2 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.activation_fn = MolmoSwiGLU()
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
 
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 class MolmoTextAttention(Qwen2Attention):
@@ -444,11 +470,12 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         )
 
 class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be doable to take from CLIP?
-    def __init__(self, config):
+    def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.image_num_key_value_heads = config.image_num_key_value_heads
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -478,88 +505,67 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
             config.hidden_size,
             bias=True,
         )
+        self.residual_dropout = nn.Dropout(config.residual_dropout)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+   
+    def _split_heads(self, hidden_states, num_heads) -> torch.Tensor:
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
+    def _merge_heads(self, hidden_states) -> torch.Tensor:
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+    def forward(self, inputs_q: torch.Tensor, inputs_kv: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if inputs_kv is not None:
+            inputs_k = inputs_kv
+            inputs_v = inputs_kv
         else:
-            attn_weights_reshaped = None
+            inputs_k = inputs_q
+            inputs_v = inputs_q
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        queries, keys, values = self.q_proj(inputs_q), self.k_proj(inputs_k), self.v_proj(inputs_v)
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        queries = self._split_heads(queries, self.num_heads)
+        keys = self._split_heads(keys, self.image_num_key_value_heads)
+        values = self._split_heads(values, self.image_num_key_value_heads)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
+        # TODO do we need this to be here?
+        if self.num_heads != self.image_num_key_value_heads:
+            keys = keys.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
+            values = values.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        original_queries_dtype = queries.dtype
 
+        #if self.config.float32_attention:
+        # Seems that the default is float32
+        queries = queries.to(torch.float)
+        keys = keys.to(torch.float)
+
+        if self.config._attn_implementation == "eager":
+            attn_weights = torch.einsum("...qhd,...khd->...hqk", queries / math.sqrt(queries.size(-1)), keys)
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(queries.dtype)
+            if self.attention_dropout is not None:
+                attn_weights = self.attention_dropout(attn_weights)
+            # TODO remove einsum!
+            attn_output = torch.einsum("...hqk,...khd->...qhd", attn_weights.to(values.dtype), values)
+
+        elif self.config._attn_implementation == "sdpa":
+            attn_output = nn.functional.scaled_dot_product_attention(
+                queries.transpose(1, 2).contiguous(),
+                keys.transpose(1, 2).contiguous(),
+                values.transpose(1, 2).contiguous(),
+                is_causal=False,
+                dropout_p=self.config.vision_backbone.attention_dropout
+            ).transpose(1, 2)
+        else:
+            raise NotImplementedError(f"{self.config._attn_implementation} is not supported.")
+        attn_output = attn_output.to(original_queries_dtype)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.o_proj(attn_output)
+        attn_output = self.residual_dropout(attn_output)
 
-        return attn_output, attn_weights_reshaped
-
+        return attn_output
 
 class MolmoVisionModel(CLIPVisionModel):
     config_class = MolmoVisionConfig  # needed because renames
@@ -572,6 +578,9 @@ class MolmoVisionModel(CLIPVisionModel):
         self.image_pooling_2d = MolmoImagePooling2d(config)
         self.pad_embed = nn.Parameter(torch.zeros((2, self.image_hidden_size)))
 
+class MolmoCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    pass
+
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
@@ -583,7 +592,161 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         self.vision_tower = MolmoVisionModel._from_config(config.vision_config)
         self.post_init()
 
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layers: List, vision_feature_select_strategy: str
+    ):
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        features = []
+        image_features = image_outputs.hidden_states
+        for layer in vision_feature_layers:
+            features.append(image_features[layer])
+        image_features = torch.cat(features, dim=-1)
+        # TODO add pad embed, dropout, pooling, reshaping, then multimodal projection
+        return image_features
+    
+    # redefinition of forward to include the vision feature selection
+    # TODO (modular): how do we change this kind of attribute within a method
+    # without changing the whole method? 
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layers: Optional[int] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: int = 0,
+    ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, MolmoForConditionalGeneration
+
+        >>> model = MolmoForConditionalGeneration.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_feature_layers = (
+            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                vision_feature_layers=vision_feature_layers,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
+
+            special_image_mask = (
+                (input_ids == self.config.image_token_index)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+                .to(inputs_embeds.device)
+            )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            num_logits_to_keep=num_logits_to_keep,
+        )
+
+        logits = outputs[0]
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            if attention_mask is not None:
+                shift_attention_mask = attention_mask[..., 1:]
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+            else:
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return MolmoCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
 __all__ = [
     "MolmoConfig",
     "MolmoVisionConfig",
