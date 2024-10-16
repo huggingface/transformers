@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from .models.detr.loss_detr import ForObjectDetectionLoss, ForSegmentationLoss
-from .models.rt_detr.loss_rt_detr import RtDetrForObjectDetectionLoss
+from ..models.rt_detr import RtDetrForObjectDetectionLoss
+from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 
 
-def DefaultCrossEntropyLoss(logits, labels, **kwargs):
+def ForCausalLMLoss(logits, labels, **kwargs):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
     # Shift so that tokens < n predict n
@@ -32,8 +32,7 @@ def DefaultCrossEntropyLoss(logits, labels, **kwargs):
     return loss
 
 
-def ForSequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
-    config = kwargs["config"]
+def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
     num_labels = config.num_labels
     if config.problem_type is None:
         if num_labels == 1:
@@ -58,7 +57,7 @@ def ForSequenceClassificationLoss(logits, labels, pooled_logits, **kwargs):
     return loss
 
 
-def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_positions):
+def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_positions, **kwargs):
     total_loss = None
     if start_positions is not None and end_positions is not None:
         # If we are on multi-GPU, split add a dimension
@@ -89,12 +88,11 @@ def ForTokenClassification(logits, labels, config, **kwargs):
 
 
 LOSS_MAPPING = {
-    "ForCausalLM": DefaultCrossEntropyLoss,
+    "ForCausalLM": ForCausalLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
+    "ForSegmentation": ForSegmentationLoss,
+    "ForObjectDetection": ForObjectDetectionLoss,
+    "RtForObjectDetection": RtDetrForObjectDetectionLoss,
 }
-
-LOSS_MAPPING["ForSegmentation"] = ForSegmentationLoss
-LOSS_MAPPING["ForObjectDetection"] = ForObjectDetectionLoss
-LOSS_MAPPING["RtForObjectDetection"] = RtDetrForObjectDetectionLoss
