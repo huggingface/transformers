@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
+from ..image_transforms import center_to_corners_format
 from .loss_for_object_detection import (
     HungarianMatcher,
     ImageLoss,
     _set_aux_loss,
-    center_to_corners_format,
     generalized_box_iou,
     linear_sum_assignment,
     sigmoid_focal_loss,
