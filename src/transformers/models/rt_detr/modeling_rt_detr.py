@@ -2109,17 +2109,25 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
 
-        if self.training and denoising_meta_values is not None:
-            dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
-            dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
-
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
+            if self.training and denoising_meta_values is not None:
+                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_bboxes,
+                denoising_meta_values=denoising_meta_values,
             )
 
         if not return_dict:
