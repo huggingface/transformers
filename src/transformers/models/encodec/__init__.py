@@ -23,6 +23,7 @@ from ...utils import (
 _import_structure = {
     "configuration_encodec": ["EncodecConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
+    "loss_encodec": ["compute_discriminator_loss", "compute_generator_adv_loss", "compute_feature_matching_loss", "Balancer"],
 }
 
 try:
@@ -34,6 +35,8 @@ else:
     _import_structure["modeling_encodec"] = [
         "EncodecModel",
         "EncodecPreTrainedModel",
+        "EncodecDiscriminatorConfig",
+        "EncodecDiscriminator",
     ]
 
 if TYPE_CHECKING:
@@ -41,6 +44,12 @@ if TYPE_CHECKING:
         EncodecConfig,
     )
     from .feature_extraction_encodec import EncodecFeatureExtractor
+    from .loss_encodec import (
+        compute_discriminator_loss,
+        compute_generator_adv_loss,
+        compute_feature_matching_loss,
+        Balancer
+    )
 
     try:
         if not is_torch_available():
@@ -51,6 +60,8 @@ if TYPE_CHECKING:
         from .modeling_encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
+            EncodecDiscriminatorConfig,
+            EncodecDiscriminator,
         )
 
 else:
