@@ -27,7 +27,6 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .integrations.ggml import GgufConverter
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -1634,33 +1633,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "GemmaTokenizer": GemmaConvert,
     "Phi3Tokenizer": LlamaConverter,
 }
-
-
-SUPPORTED_FILE_NAMES = {
-    "tokenizer.json",  # fast tokenizer file -> `PreTrainedTokenizerFast`
-    "tokenizer.model",  # both sentencepiece and tiktoken
-    "tekken.json",  # mistral file
-    "tokenizer_config.json",  # transformers filename, for Slow and Fast classes
-    ".gguf",
-}
-
-
-def get_tokenizer_converter(file_pathes: set, tokenizer_class_name, **kwargs):
-    if file_pathes == {"tekken.json"}:
-        return TekkenConverter  # convert from tekken fromat
-    if any(file_path.endswith(".gguf") for file_path in file_pathes):
-        return GgufConverter
-    if file_pathes == {"tokenizer.model"}:
-        return [TikTokenConverter, SpmConverter]  # convert from tiktoken format / spm
-    if file_pathes == {"tokenizer_config.json"}:
-        if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
-            converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-            return converter_class
-    elif "tokenizer_config.json" in file_pathes and kwargs.get("from_slow", False):
-        if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
-            converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-            return converter_class
-    raise ValueError("Could not find a correct format to convert your tokenizers.")
 
 
 def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:

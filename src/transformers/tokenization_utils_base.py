@@ -35,7 +35,6 @@ from huggingface_hub import list_repo_files
 from packaging import version
 
 from . import __version__
-from .convert_slow_tokenizer import SUPPORTED_FILE_NAMES
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     ExplicitEnum,
@@ -151,6 +150,14 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
 _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
+
+SUPPORTED_TOKENIZER_FORMAT_NAMES = {
+    "tokenizer.json",  # fast tokenizer file -> `PreTrainedTokenizerFast`
+    "tokenizer.model",  # both sentencepiece and tiktoken
+    "tekken.json",  # mistral file
+    "tokenizer_config.json",  # transformers filename, for Slow and Fast classes
+    ".gguf",
+}
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -2103,7 +2110,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif not gguf_file:
             remote_or_local_files = os.listdir(pretrained_model_name_or_path)
 
-        file_pathes = {f for f in remote_or_local_files if f in SUPPORTED_FILE_NAMES}
+        file_pathes = {f for f in remote_or_local_files if f in SUPPORTED_TOKENIZER_FORMAT_NAMES}
 
         if gguf_file:
             if os.path.isfile(gguf_file):

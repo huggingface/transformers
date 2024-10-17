@@ -29,7 +29,13 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
-from .convert_slow_tokenizer import get_tokenizer_converter
+from .convert_slow_tokenizer import (
+    SLOW_TO_FAST_CONVERTERS,
+    SpmConverter,
+    TekkenConverter,
+    TikTokenConverter,
+)
+from .integrations.ggml import GgufConverter
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -74,6 +80,24 @@ MODEL_TO_TRAINER_MAPPING = {
 }
 
 VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
+
+
+def get_tokenizer_converter(file_pathes: set, tokenizer_class_name, **kwargs):
+    if file_pathes == {"tekken.json"}:
+        return TekkenConverter  # convert from tekken fromat
+    if any(file_path.endswith(".gguf") for file_path in file_pathes):
+        return GgufConverter
+    if file_pathes == {"tokenizer.model"}:
+        return [TikTokenConverter, SpmConverter]  # convert from tiktoken format / spm
+    if file_pathes == {"tokenizer_config.json"}:
+        if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
+            converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+            return converter_class
+    elif "tokenizer_config.json" in file_pathes and kwargs.get("from_slow", False):
+        if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
+            converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+            return converter_class
+    raise ValueError("Could not find a correct format to convert your tokenizers.")
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
