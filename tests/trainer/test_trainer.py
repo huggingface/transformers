@@ -196,9 +196,10 @@ def ForCausalLMLoss(logits, labels, vocab_size, num_items_in_batch, disable_num_
     # Enable model parallelism
     shift_labels = shift_labels.to(shift_logits.device)
     if num_items_in_batch is None or disable_num_items_in_batch:
-        num_items_in_batch = shift_labels.numel()
-    loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
-    loss = loss / num_items_in_batch
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="mean")
+    else:
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
+        loss = loss / num_items_in_batch
     return loss
 
 
