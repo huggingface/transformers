@@ -47,6 +47,8 @@ def find_parent(model, name):
     for m in module_tree:
         parent = parent._modules[m]
     return parent
+
+
 def _quantization_type(weight):
     if isinstance(weight, AffineQuantizedTensor):
         return f"{weight.__class__.__name__}({weight._quantization_type()})"
@@ -56,8 +58,10 @@ def _quantization_type(weight):
 
     return "not recognized"
 
+
 def _linear_extra_repr(self):
     return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={_quantization_type(self.weight)}"
+
 
 class TorchAoHfQuantizer(HfQuantizer):
     """
@@ -168,11 +172,11 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        if self.pre_quantized :
+        if self.pre_quantized:
             module._parameters[tensor_name] = param_value.to(device=target_device)
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
-        else :
+        else:
             module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
