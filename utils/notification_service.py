@@ -528,16 +528,17 @@ class Message:
             with open(file_path, "w", encoding="UTF-8") as fp:
                 fp.write(failure_text)
 
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            commit_info = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
-            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+            # # upload results to Hub dataset
+            # file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            # commit_info = api.upload_file(
+            #     path_or_fileobj=file_path,
+            #     path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+            #     repo_id="hf-internal-testing/transformers_daily_ci",
+            #     repo_type="dataset",
+            #     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            # )
+            # url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci"
 
             # extra processing to save to json format
             new_failed_tests = {}
@@ -1250,15 +1251,14 @@ if __name__ == "__main__":
             )
 
     prev_ci_artifacts = None
-    if is_scheduled_ci_run:
-        if job_name == "run_models_gpu":
-            # Get the last previously completed CI's failure tables
-            artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-            )
+    if job_name == "run_models_gpu":
+        # Get the last previously completed CI's failure tables
+        artifact_names = [f"ci_results_{job_name}"]
+        output_dir = os.path.join(os.getcwd(), "previous_reports")
+        os.makedirs(output_dir, exist_ok=True)
+        prev_ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        )
 
     message = Message(
         title,

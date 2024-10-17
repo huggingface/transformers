@@ -131,8 +131,10 @@ def get_commit_info(commit):
 
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}/pulls"
     pr_info_for_commit = requests.get(url).json()
+    print(pr_info_for_commit)
 
     if len(pr_info_for_commit) > 0:
+        print(pr_info_for_commit)
         pr_number = pr_info_for_commit[0]["number"]
 
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
