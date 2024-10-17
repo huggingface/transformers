@@ -442,7 +442,6 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -692,7 +691,6 @@ class Blip2ModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -712,7 +710,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -818,7 +816,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        keys_to_pop = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"]
+        keys_to_pop = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
 
         for key in keys_to_pop:
             inputs_dict.pop(key)
@@ -838,7 +836,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_get_qformer_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        keys_to_pop = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"]
+        keys_to_pop = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
 
         for key in keys_to_pop:
             inputs_dict.pop(key)
@@ -948,7 +946,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
 
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -1272,7 +1270,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
