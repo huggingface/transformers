@@ -250,6 +250,25 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
 
+    def test_non_nested_images_with_batched_text(self):
+        processor = self.get_processor()
+        processor.image_processor.do_image_splitting = False
+
+        image_str = "<image>"
+        text_str_1 = "In this image, we see"
+        text_str_2 = "In this image, we see"
+
+        text = [
+            image_str + text_str_1,
+            image_str + image_str + text_str_2,
+        ]
+        images = [self.image1, self.image2, self.image3]
+
+        inputs = processor(text=text, images=images, padding=True)
+
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 2, 3, 364, 364))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (2, 2, 364, 364))
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
@@ -299,16 +318,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             batch_size - 2
         )
 
-    # Override as Idefics3Processor needs nested images to work properly with batched inputs
-    @require_vision
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
-        """This function prepares a list of PIL images for testing"""
-        if batch_size is None:
-            return super().prepare_image_inputs()
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-        return [[super().prepare_image_inputs()]] * batch_size
-
+    # Override tests as inputs_ids padded dimension is the second one but not the last one
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
