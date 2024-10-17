@@ -575,6 +575,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mimi": ["MimiConfig"],
+    "models.mingru": ["MinGRUConfig", "MinGRUTokenizer"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
@@ -1089,6 +1090,7 @@ else:
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
     _import_structure["models.mbart50"].append("MBart50TokenizerFast")
+    _import_structure["models.mingru"].append("MinGRUTokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
@@ -2707,6 +2709,15 @@ else:
         [
             "MimiModel",
             "MimiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mingru"].extend(
+        [
+            "MinGRUModel",
+            "MinGRUPreTrainedModel",
+            "MinGRUForSequenceClassification",
+            "MinGRUForTokenClassification",
+            "MinGRUForCausalLM",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -5437,6 +5448,7 @@ if TYPE_CHECKING:
     from .models.mimi import (
         MimiConfig,
     )
+    from .models.mingru import MinGRUConfig, MinGRUTokenizer
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
@@ -5993,6 +6005,7 @@ if TYPE_CHECKING:
         from .models.markuplm import MarkupLMTokenizerFast
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
+        from .models.mingru import MinGRUTokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
@@ -7338,6 +7351,13 @@ if TYPE_CHECKING:
         from .models.mimi import (
             MimiModel,
             MimiPreTrainedModel,
+        )
+        from .models.mingru import (
+            MinGRUForSequenceClassification,
+            MinGRUForTokenClassification,
+            MinGRULMHeadModel,
+            MinGRUModel,
+            MinGRUPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,
