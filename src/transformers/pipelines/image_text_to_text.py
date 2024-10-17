@@ -16,6 +16,7 @@
 import enum
 from typing import Dict, List, Optional, Union
 
+from ..processing_utils import ProcessingKwargs, Unpack
 from ..tokenization_utils_base import AddedToken
 from ..utils import (
     add_end_docstrings,
@@ -174,30 +175,21 @@ class ImageTextToTextPipeline(Pipeline):
         self,
         max_new_tokens=None,
         generate_kwargs=None,
-        truncation=None,
-        padding=None,
-        max_length=None,
         timeout=None,
         return_full_text=None,
         return_tensors=None,
         return_type=None,
         continue_final_message=None,
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         forward_kwargs = {}
         preprocess_params = {}
         postprocess_params = {}
 
+        preprocess_params["processing_kwargs"] = kwargs
+
         if timeout is not None:
             preprocess_params["timeout"] = timeout
-
-        if truncation is not None:
-            preprocess_params["truncation"] = truncation
-
-        if padding is not None:
-            preprocess_params["padding"] = padding
-
-        if max_length is not None:
-            preprocess_params["max_length"] = max_length
 
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
@@ -383,16 +375,9 @@ class ImageTextToTextPipeline(Pipeline):
 
         return results
 
-    def preprocess(
-        self, inputs=None, truncation=None, padding=False, max_length=None, timeout=None, continue_final_message=None
-    ):
-        kwargs = {
-            "legacy": False,
-            "truncation": truncation,
-            "padding": padding,
-            "max_length": max_length,
-        }
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    def preprocess(self, inputs=None, timeout=None, continue_final_message=None, processing_kwargs=None):
+        processing_kwargs["legacy"] = False
+        processing_kwargs = {k: v for k, v in processing_kwargs.items() if v is not None}
 
         images = inputs.images
 
@@ -405,9 +390,7 @@ class ImageTextToTextPipeline(Pipeline):
                 inputs.messages,
                 add_generation_prompt=not continue_final_message,
                 continue_final_message=continue_final_message,
-                # return_dict=True,
                 return_tensors=self.framework,
-                **kwargs,
             )
             inputs_text = inputs
         else:
@@ -420,14 +403,14 @@ class ImageTextToTextPipeline(Pipeline):
             images = [load_image(image, timeout=timeout) for image in images]
 
         try:
-            model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **kwargs).to(
-                dtype=self.torch_dtype
-            )
+            model_inputs = self.processor(
+                images=images, text=text, return_tensors=self.framework, **processing_kwargs
+            ).to(dtype=self.torch_dtype)
         except TypeError:
-            kwargs.pop("legacy", None)
-            model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **kwargs).to(
-                dtype=self.torch_dtype
-            )
+            processing_kwargs.pop("legacy", None)
+            model_inputs = self.processor(
+                images=images, text=text, return_tensors=self.framework, **processing_kwargs
+            ).to(dtype=self.torch_dtype)
 
         model_inputs["text"] = inputs_text
 
