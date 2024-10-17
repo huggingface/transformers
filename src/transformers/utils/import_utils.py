@@ -320,8 +320,10 @@ def is_torch_available():
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
+
 def is_torchdata_available(min_version: str = TORCHDATA_MIN_VERSION):
     return _torchdata_available and version.parse(_torchdata_version) >= version.parse(min_version)
+
 
 def is_torch_deterministic():
     """

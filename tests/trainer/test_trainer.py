@@ -136,8 +136,9 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.trainer_pt_utils import AcceleratorConfig
     from transformers.trainer import TRAINER_STATE_NAME
+    from transformers.trainer_pt_utils import AcceleratorConfig
+
     if is_safetensors_available():
         import safetensors.torch
 
@@ -1292,15 +1293,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             n_gpu = 1
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16, accelerator_config=accelerator_config)
+        trainer = get_regression_trainer(
+            learning_rate=0.1, per_device_train_batch_size=16, accelerator_config=accelerator_config
+        )
         self.assertTrue(trainer.use_stateful_dataloader)
         self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16, accelerator_config=accelerator_config)
+        trainer = get_regression_trainer(
+            learning_rate=0.1, per_device_eval_batch_size=16, accelerator_config=accelerator_config
+        )
         self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
 
         # Check drop_last works
         trainer = get_regression_trainer(
-            train_len=66, eval_len=74, learning_rate=0.1, per_device_train_batch_size=16, per_device_eval_batch_size=32, accelerator_config=accelerator_config
+            train_len=66,
+            eval_len=74,
+            learning_rate=0.1,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=32,
+            accelerator_config=accelerator_config,
         )
         self.assertTrue(trainer.use_stateful_dataloader)
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
@@ -1313,7 +1323,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=16,
             per_device_eval_batch_size=32,
             dataloader_drop_last=True,
-            accelerator_config=accelerator_config
+            accelerator_config=accelerator_config,
         )
         self.assertTrue(trainer.use_stateful_dataloader)
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
@@ -2612,7 +2622,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "save_steps": 5,
                 "learning_rate": 0.1,
                 "logging_steps": 5,
-                "accelerator_config": accelerator_config
+                "accelerator_config": accelerator_config,
             }
             trainer = get_regression_trainer(**kwargs)
             self.assertTrue(trainer.use_stateful_dataloader)
@@ -2664,7 +2674,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "save_steps": 5,
                 "learning_rate": 0.1,
                 "pretrained": False,
-                "accelerator_config": accelerator_config
+                "accelerator_config": accelerator_config,
             }
 
             trainer = get_regression_trainer(**kwargs)
