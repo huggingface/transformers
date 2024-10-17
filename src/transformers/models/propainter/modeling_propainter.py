@@ -3857,14 +3857,14 @@ class ProPainterLosses:
             gen_loss += perc_loss
 
         # gan loss
-        if not self.config.no_dis:
+        if self.config.use_discriminator:
             # generator adversarial loss
             gen_clip = discriminator(comp_frames)
             gan_loss = self.adversarial_loss(gen_clip, True, False)
             gan_loss = gan_loss * self.config.adversarial_weight
             gen_loss += gan_loss
 
-        if not self.config.no_dis:
+        if self.config.use_discriminator:
             # discriminator adversarial loss
             real_clip = discriminator(frames)
             fake_clip = discriminator(comp_frames.detach())

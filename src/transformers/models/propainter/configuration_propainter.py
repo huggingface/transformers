@@ -93,8 +93,8 @@ class ProPainterConfig(PretrainedConfig):
             The size of the sliding window for attention operations.
         pool_size (`List[int]`, *optional*, defaults to `[4, 4]`):
             The size of the pooling layers in the model.
-        no_dis (`bool`, *optional*, defaults to `False`):
-            Whether to disable discriminator.
+        use_discriminator (`bool`, *optional*, defaults to `True`):
+            Whether to enable discriminator.
         in_channels (`List[int]`, *optional*, defaults to `[64, 64, 96]`):
             The number of input channels at different levels of the model.
         channels (`List[int]`, *optional*, defaults to `[64, 96, 128]`):
@@ -158,7 +158,7 @@ class ProPainterConfig(PretrainedConfig):
         num_attention_heads=4,
         window_size=[5, 9],
         pool_size=[4, 4],
-        no_dis=False,
+        use_discriminator=True,
         in_channels=[64, 64, 96],
         channels=[64, 96, 128],
         strides=[1, 2, 2],
@@ -197,7 +197,7 @@ class ProPainterConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.window_size = window_size
         self.pool_size = pool_size
-        self.no_dis = no_dis
+        self.use_discriminator = use_discriminator
         self.in_channels = in_channels
         self.channels = channels
         self.strides = strides
