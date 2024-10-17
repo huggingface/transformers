@@ -716,6 +716,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_torch_fx_output_loss(self, *args, **kwargs):
         pass
 
+
 @require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
