@@ -2359,6 +2359,10 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
 
 
 def run_test_using_subprocess(func):
+    """
+    To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
+    issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+    """
     import pytest
 
     @functools.wraps(func)
