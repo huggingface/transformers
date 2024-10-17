@@ -259,7 +259,7 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @run_test_using_subprocess
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
+        super().test_beam_search_generate_dict_outputs_use_cache()
 
     def setUp(self):
         self.model_tester = ImageGPTModelTester(self)
