@@ -36,6 +36,7 @@ from transformers import (
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoImageProcessor,
     LlavaNextVideoProcessor,
+    SiglipVisionConfig,
 )
 
 
@@ -115,12 +116,44 @@ chat_yi = (
     "{% endif %}"
 )
 
+chat_qwen = (
+    "{% for message in messages %}"
+    "{{'<|im_start|>' + message['role'] + '\n'}}"
+    "{# Render all images first #}"
+    "{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+    "{{ '<image>' }}"
+    "{% endfor %}"
+    "{# Render all videos first #}"
+    "{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}"
+    "{{ '<video>' }}"
+    "{% endfor %}"
+    "{# Render all text next #}"
+    "{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+    "{{ '\n' + content['text'] }}"
+    "{% endfor %}"
+    "{% else %}"
+    "{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+    "{% generation %}"
+    "{{ '\n' + content['text'] }}"
+    "{% endgeneration %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{{'<|im_end|>' + '\n'}}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+    "{{ '<|im_start|>assistant\n' }}"
+    "{% endif %}"
+)
+
 model2template = {
     "lmms-lab/LLaVA-NeXT-Video-7B-32K": chat_mistral,
     "lmms-lab/LLaVA-NeXT-Video-7B": chat_vicuna,
     "lmms-lab/LLaVA-NeXT-Video-7B-DPO": chat_vicuna,
     "lmms-lab/LLaVA-NeXT-Video-34B": chat_yi,
     "lmms-lab/LLaVA-NeXT-Video-34B-DPO": chat_yi,
+    "lmms-lab/LLaVA-Video-7B-Qwen2": chat_qwen,
+    "lmms-lab/LLaVA-Video-32B-Qwen": chat_qwen,
+    "lmms-lab/LLaVA-Video-72B-Qwen2": chat_qwen,
 }
 
 
@@ -172,10 +205,42 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         video_token_index = 64000
         image_token_index = 64001
         overwrite_text_config = {}
+    elif model_id == "lmms-lab/LLaVA-Video-7B-Qwen2":
+        text_model_id = "Qwen/Qwen2-7B-Instruct"
+        video_token_index = 151646
+        image_token_index = 151647
+        overwrite_text_config = {}
+    elif model_id == "lmms-lab/LLaVA-Video-32B-Qwen":
+        text_model_id = "Qwen/Qwen1.5-32B-Chat"
+        video_token_index = 151646
+        image_token_index = 151647
+        overwrite_text_config = {}
+    elif model_id == "lmms-lab/LLaVA-Video-72B-Qwen2":
+        text_model_id = "Qwen/Qwen2-72B-Instruct"
+        video_token_index = 151646
+        image_token_index = 151647
+        overwrite_text_config = {}
     else:
         raise ValueError("Incorrect checkpoint referenced. Text model-id not identified!")
 
     vision_model_id = data["mm_vision_tower"]
+
+    if vision_model_id == "google/siglip-so400m-patch14-384":
+        vision_config = SiglipVisionConfig(
+            hidden_size=1152,
+            image_size=384,
+            intermediate_size=4304,
+            num_attention_heads=16,
+            num_hidden_layers=26,  # drop the last layer
+            patch_size=14,
+            vision_use_head=False,  # no head
+        ).to_dict()
+        vision_feature_select_strategy = "full"
+        vision_feature_layer = -1
+    else:
+        vision_config = None  # fallback to default
+        vision_feature_select_strategy = "default"
+        vision_feature_layer = -2
 
     torch.set_default_dtype(torch.bfloat16)
     text_config = AutoConfig.from_pretrained(text_model_id)
@@ -186,7 +251,13 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     tokenizer.add_tokens(AddedToken("<video>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
-    image_processor = LlavaNextImageProcessor.from_pretrained(vision_model_id)
+    image_processor = LlavaNextImageProcessor.from_pretrained(
+        vision_model_id, image_grid_pinpoints=data["image_grid_pinpoints"]
+    )
+    if vision_model_id == "google/siglip-so400m-patch14-384":
+        image_processor.do_center_crop = False  # otherwise it will default to True in `LlavaNextImageProcessor`
+        image_processor.crop_size = None
+
     video_processor = LlavaNextVideoImageProcessor.from_pretrained(vision_model_id)
     processor = LlavaNextVideoProcessor(
         tokenizer=tokenizer,
@@ -197,10 +268,15 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     config = LlavaNextVideoConfig(
         text_config=text_config,
+        vision_config=vision_config,
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
         use_image_newline_parameter=True,
+        spatial_pool_mode=data.get("mm_spatial_pool_mode", "average"),
         video_token_index=video_token_index,
         image_token_index=image_token_index,
+        vision_feature_select_strategy=vision_feature_select_strategy,
+        vision_feature_layer=vision_feature_layer,
+        newline_position=data["mm_newline_position"],
     )
 
     with init_empty_weights():
@@ -262,6 +338,9 @@ if __name__ == "__main__":
             "lmms-lab/LLaVA-NeXT-Video-7B-32K",
             "lmms-lab/LLaVA-NeXT-Video-34B",
             "lmms-lab/LLaVA-NeXT-Video-34B-DPO",
+            "lmms-lab/LLaVA-Video-7B-Qwen2",
+            "lmms-lab/LLaVA-Video-32B-Qwen",
+            "lmms-lab/LLaVA-Video-72B-Qwen2",
         ],
         required=False,
     )
