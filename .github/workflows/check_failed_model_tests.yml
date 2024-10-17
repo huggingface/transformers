@@ -3,9 +3,6 @@ name: Process failed tests
 on:
   workflow_call:
     inputs:
-      runner:
-        required: true
-        type: string
       docker:
         required: true
         type: string

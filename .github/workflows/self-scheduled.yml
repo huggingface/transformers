@@ -569,7 +569,6 @@ jobs:
     needs: send_results
     uses: ./.github/workflows/check_failed_model_tests.yml
     with:
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
       start_sha: ${{ github.sha }}
     secrets: inherit
