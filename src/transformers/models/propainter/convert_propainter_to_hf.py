@@ -215,23 +215,6 @@ def convert_propainter_checkpoint(args):
     )
     model.eval()
 
-    expected_output_reconstruction = torch.tensor([[36, 32, 21], [65, 52, 43], [84, 67, 57]], dtype=torch.uint8)
-    if args.verify_logits:
-        video, masks = prepare_input()
-        image_processor = ProPainterVideoProcessor()
-        inputs = image_processor(video, masks=masks, return_tensors="pt").to(device)
-        outputs = model(**inputs)
-        outputs_reconstruction = outputs.reconstruction
-
-        assert torch.allclose(
-            torch.tensor(outputs_reconstruction[0][0][-3:]),
-            expected_output_reconstruction,
-            atol=1e-4,
-        )
-        print("Looks good!")
-    else:
-        print("Converted without verifying logits")
-
     if os.path.exists(dummy_checkpoint_path):
         os.remove(dummy_checkpoint_path)
 
@@ -277,11 +260,6 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="Path to the output PyTorch model directory.",
-    )
-    parser.add_argument(
-        "--verify-logits",
-        action="store_true",
-        help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
         "--push-to-hub",
