@@ -2408,7 +2408,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         blank_user_audio_codes: Optional[torch.FloatTensor] = None,
         **kwargs,
     ):
-        # Overwritten -- Moshi has custom processing
+        # Overwritten -- Moshi has custom post-processing
         # 1. Do usual operations done on LLMs like Gemma - because we pre-processed inputs, the first pass always has inputs_embeds
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
