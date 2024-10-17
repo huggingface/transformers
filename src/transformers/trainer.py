@@ -373,12 +373,25 @@ class Trainer:
             The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
             be able to choose different architectures according to hyper parameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
+        compute_loss (`Callable`, *optional*):
+            A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
+            batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, here is one using
+            the loss function from `transformers`:
+            ```python
+            from functools import partial
+            from transformers.loss import ForCausalLMLoss
+
+            def loss_fn(model_output, labels, num_items_in_batch, vocab_size):
+                return ForCausalLMLoss(model_output["logits"], labels, vocab_size=vocab_size, num_items_in_batch=num_items_in_batch)
+
+            compute_loss = partial(loss_fn, vocab_size=30522)
+            ```
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
             a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
             `True`, your compute_metrics function must take a boolean `compute_result` argument. This will be triggered
             after the last eval batch to signal that the function needs to calculate and return the global summary
-            statistics rather than accumulating the batch-level statistics.
+            statistics rather than accumulating the batch-level statistics
         callbacks (List of [`TrainerCallback`], *optional*):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in [here](callback).
