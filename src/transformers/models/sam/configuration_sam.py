@@ -299,6 +299,9 @@ class SamConfig(PretrainedConfig):
         if isinstance(mask_decoder_config, SamMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
+        vision_config["attn_implementation"] = self._attn_implementation
+        mask_decoder_config["attn_implementation"] = self._attn_implementation
+
         self.vision_config = SamVisionConfig(**vision_config)
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
