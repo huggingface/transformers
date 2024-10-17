@@ -67,7 +67,6 @@ from .utils import (
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
-    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -756,13 +755,6 @@ def require_spacy(test_case):
     Decorator marking a test that requires SpaCy. These tests are skipped when SpaCy isn't installed.
     """
     return unittest.skipUnless(is_spacy_available(), "test requires spacy")(test_case)
-
-
-def require_decord(test_case):
-    """
-    Decorator marking a test that requires decord. These tests are skipped when decord isn't installed.
-    """
-    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
 
 
 def require_torch_multi_gpu(test_case):
