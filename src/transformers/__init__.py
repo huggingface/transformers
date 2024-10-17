@@ -169,6 +169,11 @@ _import_structure = {
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
     ],
+    "models.aria": [
+        "AriaConfig",
+        "AriaTextConfig",
+        "AriaVisionConfig",
+    ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
         "ASTFeatureExtractor",
@@ -1390,6 +1395,14 @@ else:
             "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
+        ]
+    )
+    _import_structure["models.aria"].extend(
+        [
+            "AriaForConditionalGeneration",
+            "AriaPreTrainedModel",
+            "AriaTextModel",
+            "AriaVisionModel",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
@@ -4996,6 +5009,11 @@ if TYPE_CHECKING:
         AltCLIPTextConfig,
         AltCLIPVisionConfig,
     )
+    from .models.aria import (
+        AriaConfig,
+        AriaTextConfig,
+        AriaVisionConfig,
+    )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
         ASTFeatureExtractor,
@@ -6277,6 +6295,13 @@ if TYPE_CHECKING:
             AltCLIPPreTrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
+        )
+        from .models.aria import (
+            AriaForCausalLM,
+            AriaForConditionalGeneration,
+            AriaPreTrainedModel,
+            AriaTextModel,
+            AriaVisionModel,
         )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
