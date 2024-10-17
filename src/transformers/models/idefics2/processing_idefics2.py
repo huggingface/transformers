@@ -218,7 +218,20 @@ class Idefics2Processor(ProcessorMixin):
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                images = [images]
+                if text is not None:
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {image_token} tokens and {len(images)} images."
+                        )
+                    # Reorganize the images to match the prompts
+                    images = [
+                        images[sum(n_images_in_text[:i]) : sum(n_images_in_text[: i + 1])]
+                        for i in range(len(n_images_in_text))
+                    ]
+                else:
+                    images = [images]
+
             elif (
                 not isinstance(images, list)
                 and not isinstance(images[0], list)
