@@ -1,4 +1,5 @@
 import inspect
+import warnings
 from typing import List, Union
 
 import numpy as np
@@ -162,7 +163,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, List[str]],
+        text: Union[str, List[str]] = None,
         *args,
         **kwargs,
     ):
@@ -171,7 +172,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         information.
 
         Args:
-            sequences (`str` or `List[str]`):
+            text (`str` or `List[str]`):
                 The sequence(s) to classify, will be truncated if the model input is too large.
             candidate_labels (`str` or `List[str]`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
@@ -203,7 +204,17 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         else:
             raise ValueError(f"Unable to understand extra arguments {args}")
 
-        return super().__call__(sequences, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `text`
+        if "sequences" in kwargs:
+            warnings.warn(
+                "The `sequences` argument has been renamed to `text`. In version 5 of Transformers, `sequences` will no longer be accepted",
+                FutureWarning,
+            )
+            text = kwargs.pop("sequences")
+        if text is None:
+            raise ValueError("Cannot call the zero_shot_classification pipeline without a text argument!")
+
+        return super().__call__(text, **kwargs)
 
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
