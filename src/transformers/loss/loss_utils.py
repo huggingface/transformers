@@ -21,9 +21,7 @@ from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLo
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-def fixed_cross_entropy(source, target, **kwargs):
-    ignore_index = kwargs.get("ignore_index", -100)
-    num_items_in_batch = kwargs.get("num_items_in_batch", None)
+def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
@@ -31,7 +29,9 @@ def fixed_cross_entropy(source, target, **kwargs):
     return loss
 
 
-def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
+def ForCausalLMLoss(
+    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
     # Shift so that tokens < n predict n
@@ -43,7 +43,7 @@ def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(shift_logits.device)
-    loss = fixed_cross_entropy(shift_logits, shift_labels, **kwargs)
+    loss = fixed_cross_entropy(shift_logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
 
 
