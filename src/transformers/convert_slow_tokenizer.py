@@ -1568,7 +1568,7 @@ class TekkenConverter:
         return special_tokens
 
     def extract_vocab_merges_from_model(self, tekken_url: str):
-        self.extract_config()
+        self.extract_config(tekken_url)
         bpe_ranks = self.extract_bpe_ranks(tekken_url)
         byte_encoder = bytes_to_unicode()
 

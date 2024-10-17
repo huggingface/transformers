@@ -85,7 +85,7 @@ VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VO
 
 def get_tokenizer_converter(file_pathes: set, tokenizer_class_name, **kwargs):
     if file_pathes.keys() == {"tekken.json"}:
-        return TekkenConverter  # convert from tekken fromat
+        return TekkenConverter, file_pathes["tekken.json"] # convert from tekken fromat
     if any(file_path.endswith(".gguf") for file_path in file_pathes):
         gguf_params = load_gguf_checkpoint(kwargs.get("vocab_file"))
         return GgufConverter(gguf_params)
@@ -94,7 +94,7 @@ def get_tokenizer_converter(file_pathes: set, tokenizer_class_name, **kwargs):
     if file_pathes == {"tokenizer_config.json"}:
         if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
             converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-            return converter_class
+            return converter_class()
     elif "tokenizer_config.json" in file_pathes and kwargs.get("from_slow", False):
         if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
             converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
@@ -132,8 +132,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "have sentencepiece installed."
             )
 
-        tokenizer_converter = get_tokenizer_converter(kwargs.get("resolved_vocab_files", None), self.__class__.__name__)
-        vocab_file = kwargs.get("vocab_file", None)
+        tokenizer_converter, vocab_file = get_tokenizer_converter(kwargs.get("resolved_vocab_files", None), self.__class__.__name__)
         additional_special_tokens = kwargs.get("additional_special_tokens", [])
 
         if tokenizer_object is not None:
@@ -142,7 +141,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif not slow_tokenizer:
-            fast_tokenizer = tokenizer_converter(self, vocab_file, additional_special_tokens).converted()
+            fast_tokenizer = tokenizer_converter(vocab_file, additional_special_tokens=additional_special_tokens).converted()
         else:
             raise ValueError(
                 "Couldn't instantiate the backend tokenizer from one of: \n"
