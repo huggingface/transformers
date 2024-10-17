@@ -373,7 +373,7 @@ class Trainer:
             The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
             be able to choose different architectures according to hyper parameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
-        compute_loss (`Callable`, *optional*):
+        compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
             batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, here is one using
             the loss function from `transformers`:
@@ -384,7 +384,7 @@ class Trainer:
             def loss_fn(model_output, labels, num_items_in_batch, vocab_size):
                 return ForCausalLMLoss(model_output["logits"], labels, vocab_size=vocab_size, num_items_in_batch=num_items_in_batch)
 
-            compute_loss = partial(loss_fn, vocab_size=30522)
+            compute_loss_func = partial(loss_fn, vocab_size=30522)
             ```
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
@@ -440,7 +440,7 @@ class Trainer:
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
         ] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
-        compute_loss: Optional[Callable] = None,
+        compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
@@ -462,7 +462,7 @@ class Trainer:
                 f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
             )
         self.args = args
-        self.compute_loss_func = compute_loss
+        self.compute_loss_func = compute_loss_func
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
@@ -3659,8 +3659,8 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        if num_items_in_batch is not None:
-            inputs["num_items_in_batch"] = num_items_in_batch
+        # if num_items_in_batch is not None:
+        #     inputs["num_items_in_batch"] = num_items_in_batch
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -3674,7 +3674,7 @@ class Trainer:
             else:
                 model_name = unwrapped_model._get_name()
             # User-defined compute_loss function
-            if self.compute_loss is not None:
+            if self.compute_loss_func is not None:
                 loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
             elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
@@ -4410,7 +4410,7 @@ class Trainer:
             else:
                 if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
-                        loss, outputs = self._compute_loss(model, inputs, return_outputs=True)
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
                     if isinstance(outputs, dict):
