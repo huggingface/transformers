@@ -186,7 +186,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
-_torchvision_available = _is_package_available("torchvision")
+_torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
@@ -360,6 +360,14 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_torchvision_v2_available():
+    if not is_torchvision_available():
+        return False
+
+    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
+    return version.parse(_torchvision_version) >= version.parse("0.15")
 
 
 def is_galore_torch_available():
