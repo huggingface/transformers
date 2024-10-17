@@ -57,11 +57,6 @@ def _quantization_type(weight):
     if isinstance(weight, LinearActivationQuantizedTensor):
         return f"{weight.__class__.__name__}(activation={weight.input_quant_func}, weight={_quantization_type(weight.original_weight_tensor)})"
 
-    if type(weight) is torch.Tensor:
-        return "not quantized"
-
-    return "not recognized"
-
 
 def _linear_extra_repr(self):
     return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={_quantization_type(self.weight)}"
