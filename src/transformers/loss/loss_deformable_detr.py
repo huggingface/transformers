@@ -2,14 +2,18 @@ import torch
 import torch.nn as nn
 
 from ..image_transforms import center_to_corners_format
+from ..utils import is_scipy_available
 from .loss_for_object_detection import (
     HungarianMatcher,
     ImageLoss,
     _set_aux_loss,
     generalized_box_iou,
-    linear_sum_assignment,
     sigmoid_focal_loss,
 )
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
 
 
 class DeformableDetrHungarianMatcher(HungarianMatcher):
