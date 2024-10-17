@@ -323,10 +323,12 @@ class ImageTextToTextPipeline(Pipeline):
                     if num_images_in_text != num_images_in_images:
                         raise ValueError(
                             f"The number of images in each nested image group should be the same as the number of {image_token} tokens in the corresponding prompt."
+                            f" Found {num_images_in_text} {image_token} tokens and {num_images_in_images} images."
                         )
                 elif sum(num_images_in_text) != len(images):
                     raise ValueError(
                         f"The total number of {image_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found {sum(num_images_in_text)} {image_token} tokens and {len(images)} images."
                     )
                 else:
                     # Reorganize the images to match the prompts
@@ -335,12 +337,18 @@ class ImageTextToTextPipeline(Pipeline):
                         images_reorganized.append(images[:num_images])
                         images = images[num_images:]
                     images = images_reorganized
-        elif len(text) == 1 and len(images) > 1:
-            logger.warning(
-                "The pipeline detected multiple images for one prompt, but no image tokens in the prompt. "
-                "The prompt will be repeated for each image."
-            )
-            text = [text[0]] * len(images)
+        else:
+            if hasattr(self.processor, "image_token") and self.processor.image_token is not None:
+                logger.warning(
+                    "The pipeline detected no image tokens in the prompt, but this model does support image tokens. "
+                    "Results may be suboptimal or unexpected."
+                )
+            if len(text) == 1 and len(images) > 1:
+                logger.warning(
+                    "The pipeline detected multiple images for one prompt, but no image tokens in the prompt. "
+                    "The prompt will be repeated for each image."
+                )
+                text = [text[0]] * len(images)
 
         # After reorganizing, these should be the same
         if len(text) > 1 and len(images) != len(text):
@@ -402,6 +410,9 @@ class ImageTextToTextPipeline(Pipeline):
         else:
             images = [load_image(image, timeout=timeout) for image in images]
 
+        # if batched text inputs, we set padding to True unless specified otherwise
+        if isinstance(text, (list, tuple)) and len(text) > 1:
+            processing_kwargs.setdefault("padding", True)
         try:
             model_inputs = self.processor(
                 images=images, text=text, return_tensors=self.framework, **processing_kwargs
