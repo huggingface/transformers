@@ -2522,8 +2522,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 max_steps=11,
             )
             trainer.train()
-            # Print all files at tmpdir
-            print(os.listdir(tmpdir))
             # Check that we have the last known step:
             assert os.path.exists(os.path.join(tmpdir, "checkpoint-11")), "Could not find checkpoint-11"
             # And then check the last multiple

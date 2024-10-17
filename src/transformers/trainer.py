@@ -376,16 +376,7 @@ class Trainer:
         compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
             batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, here is one using
-            the loss function from `transformers`:
-            ```python
-            from functools import partial
-            from transformers.loss import ForCausalLMLoss
-
-            def loss_fn(model_output, labels, num_items_in_batch, vocab_size):
-                return ForCausalLMLoss(model_output["logits"], labels, vocab_size=vocab_size, num_items_in_batch=num_items_in_batch)
-
-            compute_loss_func = partial(loss_fn, vocab_size=30522)
-            ```
+            the loss function from `transformers`
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
             a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
@@ -2473,17 +2464,9 @@ class Trainer:
                                 "a `main_input_name` attribute to the model class you are using."
                             )
                         else:
-                            self.state.num_input_tokens_seen += (
-                                torch.sum(
-                                    self.accelerator.gather(
-                                        torch.tensor(
-                                            inputs[main_input_name].numel(), device=self.args.device, dtype=torch.int64
-                                        )
-                                    )
-                                )
-                                .cpu()
-                                .item()
-                            )
+                            input_tokens = inputs[main_input_name].numel()
+                            input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+                            self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).cpu().item()
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
