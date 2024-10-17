@@ -1256,6 +1256,9 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
+        # precedence is moved to the model, we can remove this fn)
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
             if inputs_embeds is not None:  # Exception 1
