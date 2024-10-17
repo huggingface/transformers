@@ -36,6 +36,7 @@ if is_torch_available():
 if is_torchao_available():
     from torchao.dtypes import AffineQuantizedTensor
     from torchao.quantization import quantize_
+    from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
 
 logger = logging.get_logger(__name__)
 
@@ -52,6 +53,9 @@ def find_parent(model, name):
 def _quantization_type(weight):
     if isinstance(weight, AffineQuantizedTensor):
         return f"{weight.__class__.__name__}({weight._quantization_type()})"
+
+    if isinstance(weight, LinearActivationQuantizedTensor):
+        return f"{weight.__class__.__name__}(activation={weight.input_quant_func}, weight={_quantization_type(weight.original_weight_tensor)})"
 
     if type(weight) is torch.Tensor:
         return "not quantized"
@@ -173,7 +177,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            module._parameters[tensor_name] = param_value.to(device=target_device)
+            module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
