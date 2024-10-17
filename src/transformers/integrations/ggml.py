@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -667,3 +667,31 @@ def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
     converter = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name](tokenizer_dict)
     fast_tokenizer = converter.converted()
     return fast_tokenizer, converter.additional_kwargs
+
+
+class GgufConverter:
+    r"""
+    Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
+
+    Args:
+        architecture (`str`): The model architecture derived from gguf file.
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
+            Instance of a slow tokenizer to convert in the backend tokenizer for
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+
+    Return:
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
+    """
+
+    def converted(self, gguf_param, architecture, tokenizer_dict):
+        # We need to convert a slow tokenizer to build the backend
+        architecture = gguf_param["config"]["model_type"]
+        tokenizer_dict = gguf_param["tokenizer"]
+        tokenizer_config = gguf_param["tokenizer_config"]
+
+        tokenizer_class_name = architecture
+        converter = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name](tokenizer_dict)
+        fast_tokenizer = converter.converted()
+
+        return fast_tokenizer, tokenizer_config, converter.additional_kwargs
