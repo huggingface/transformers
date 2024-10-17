@@ -44,6 +44,7 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 if is_tf_available():
     import tensorflow as tf
@@ -289,6 +290,7 @@ def resize(
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    align_corners: Optional[bool] = False,
 ) -> np.ndarray:
     """
     Resizes `image` to `(height, width)` specified by `size` using the PIL library.
@@ -310,12 +312,12 @@ def resize(
             returned.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
+        align_corners (`bool`, *optional*, defaults to `False`):
+            If True, resizes using Torch with align_corners parameter.
 
     Returns:
         `np.ndarray`: The resized image.
     """
-    requires_backends(resize, ["vision"])
-
     resample = resample if resample is not None else PILImageResampling.BILINEAR
 
     if not len(size) == 2:
@@ -327,15 +329,36 @@ def resize(
         input_data_format = infer_channel_dimension_format(image)
     data_format = input_data_format if data_format is None else data_format
 
-    # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
-    # the pillow library to resize the image and then convert back to numpy
     do_rescale = False
-    if not isinstance(image, PIL.Image.Image):
-        do_rescale = _rescale_for_pil_conversion(image)
-        image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
     height, width = size
-    # PIL images are in the format (width, height)
-    resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
+
+    if not align_corners:
+        # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
+        # the pillow library to resize the image and then convert back to numpy.
+        requires_backends(resize, ["vision"])
+
+        if not isinstance(image, PIL.Image.Image):
+            do_rescale = _rescale_for_pil_conversion(image)
+            image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
+        # PIL images are in the format (width, height)
+        resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
+
+    else:
+        # Resize using torch to align_corners which is required for some models and converting it to channel last format.
+        requires_backends(resize, ["torch"])
+
+        torch_image = torch.from_numpy(image).unsqueeze(0)
+        if input_data_format == "channels_last":
+            torch_image = torch_image.permute(0, 3, 1, 2)
+
+        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+        mode = resample_to_mode[resample]
+
+        resized_image = nn.functional.interpolate(torch_image, size, mode=mode, align_corners=True).squeeze().numpy()
+
+        resized_image = to_channel_dimension_format(
+            resized_image, channel_dim=ChannelDimension.LAST, input_channel_dim=ChannelDimension.FIRST
+        )
 
     if return_numpy:
         resized_image = np.array(resized_image)
