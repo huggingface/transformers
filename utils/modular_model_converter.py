@@ -567,7 +567,7 @@ def replace_call_to_super(
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
             kwarg_name = getattr(updated_methods[name].params, "star_kwarg", None)
-            if kwarg_name and kwarg_name.name.value == "super_kwargs":
+            if kwarg_name and kwarg_name.name.value == "kwargs":
                 parent_params = {k.name.value: k for k in func.params.params}
                 parent_params.update({k.name.value: k for k in new_params.params[1:]})
                 new_params = new_params.with_changes(
@@ -598,12 +598,17 @@ def replace_call_to_super(
         if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            original_docstring = docstring_node[0].body[0].value.value
-            merged_doc = merge_docstrings(original_docstring, updated_docstring)
-            # Update the docstring in the original function
-            docstring_node = [
-                docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
-            ]
+            if len(docstring_node) == 0:  # If the original docstring is empty, just create one from the updated.
+                docstring_node = [
+                    cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+                ]
+            else:
+                original_docstring = docstring_node[0].body[0].value.value
+                merged_doc = merge_docstrings(original_docstring, updated_docstring)
+                # Update the docstring in the original function
+                docstring_node = [
+                    docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
+                ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
@@ -767,7 +772,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.python_module = python_module  # we store the original module to use `code_for_node`
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
         self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
-        self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
+        self.visited_modules = {}            # modules visited like "transformers.models.llama.modeling_llama"
         self.inserted_deps = []             # nodes inserted via super dependency
         self.all_imports = []               # just stores all of the imports
         self.all_safe_imports = []          # stores the import under simple statements
@@ -798,7 +803,11 @@ class ModularConverterTransformer(CSTTransformer):
         2. Parse it into an AST Tree
         3. Add this import to `self.transformers_imports` as visited to not parse it twice
         """
+        if node.module is None:
+            logger.warning(f"Debug: node.module is None.\n Full Node:{node}")
+            raise Exception(f"Trying to import from None module.\nFull Node:{node}")
         import_statement = self.python_module.code_for_node(node.module)
+        logger.info(f"Importing {import_statement}")
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", import_statement)
@@ -884,8 +893,8 @@ class ModularConverterTransformer(CSTTransformer):
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
-            visited_module = self.visited_module
-            if super_file_name not in visited_module:  # only extract classes once
+            visited_modules = self.visited_modules
+            if super_file_name not in visited_modules:  # only extract classes once
                 class_finder = find_classes_in_file(
                     self.transformers_imports[super_file_name],
                     model_name,
@@ -893,13 +902,13 @@ class ModularConverterTransformer(CSTTransformer):
                     self.given_old_name,
                     self.given_new_name,
                 )
-                visited_module[super_file_name] = class_finder
+                visited_modules[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
             else:  # we are re-using the previously parsed data
-                class_finder = visited_module[super_file_name]
+                class_finder = visited_modules[super_file_name]
 
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
@@ -909,7 +918,7 @@ class ModularConverterTransformer(CSTTransformer):
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
                 potential_given_name = get_new_part(class_name, super_class)
-                del visited_module[super_file_name]
+                del visited_modules[super_file_name]
                 class_finder = find_classes_in_file(
                     self.transformers_imports[super_file_name],
                     model_name,
@@ -971,7 +980,7 @@ class ModularConverterTransformer(CSTTransformer):
                             if not calls and not is_empty_node and dependency not in all_bases:
                                 raise ValueError(
                                     f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
-                                    when you define `{class_name}`, as it is one of it's direct dependencies. Make sure
+                                    when you define `{class_name}`, as it is one of its direct dependencies. Make sure
                                     you use it in the `__init__` function."""
                                 )
                     self.inserted_deps.append(dependency)
@@ -1083,7 +1092,7 @@ class ModularConverterTransformer(CSTTransformer):
         """For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
         the different files, and add them to the file if it is the case (also recursively adding all other functions that
         may be needed in that function body)."""
-        # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modualr_xxx.py`
+        # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modular_xxx.py`
         for top_level_function, function_node in self.all_definitions.items():
             calling_entities = self.function_call_class_mapping[top_level_function]
             # The function may be needed in different files, we need to iterate on them
@@ -1097,14 +1106,15 @@ class ModularConverterTransformer(CSTTransformer):
                     for dependency, parent in find_all_dependencies(
                         top_level_function, self.function_call_dependency_mapping
                     ):
-                        self._maybe_add_function_to_body(
-                            dependency, body, self.all_definitions[dependency], parent=parent
-                        )
+                        if dependency in self.all_definitions:
+                            self._maybe_add_function_to_body(
+                                dependency, body, self.all_definitions[dependency], parent=parent
+                            )
 
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {file_type: imports.copy() for file_type in self.files}
-        for super_file_name, visiter in self.visited_module.items():
+        for super_file_name, visiter in self.visited_modules.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(
                 {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
