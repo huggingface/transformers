@@ -23,7 +23,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -491,9 +490,6 @@ class ImageBindAttention(nn.Module):
             self.k_bias = None
             self.v_bias = None
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -515,11 +511,11 @@ class ImageBindAttention(nn.Module):
             key_states = torch.cat([key_states, self.k_bias.repeat(batch_size, 1, 1)], dim=1)
             value_states = torch.cat([value_states, self.v_bias.repeat(batch_size, 1, 1)], dim=1)
 
-        key_states = self._shape(key_states, -1, batch_size)
-        value_states = self._shape(value_states, -1, batch_size)
+        key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, seq_len, batch_size).view(*proj_shape)
+        query_states = query_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -576,7 +572,7 @@ class ImageBindMlp(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        intermediate_size = int(config.hidden_size * config.mlp_ratio)
+        intermediate_size = config.intermediate_size
 
         self.fc1 = nn.Linear(config.hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, config.hidden_size)
@@ -1084,6 +1080,11 @@ class ImageBindTextTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
+    @staticmethod
+    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype):
+        # Expand and invert the mask, then fill masked areas
+        return (1.0 - mask[:, None, None, :].to(dtype)).masked_fill(mask[:, None, None, :].to(dtype) == 0, torch.finfo(dtype).min)
+
     def _build_attention_mask(self, attention_mask, batch_size, seq_len, dtype, device=None):
         # Build causal mask
         mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype, device=device)
@@ -1093,7 +1094,7 @@ class ImageBindTextTransformer(nn.Module):
 
         # If attention_mask update causal mask
         if attention_mask is not None:
-            attention_mask = AttentionMaskConverter._expand_mask(attention_mask, dtype)
+            attention_mask = self._expand_mask(attention_mask, dtype)
             return mask + attention_mask
         return mask
 
