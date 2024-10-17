@@ -30,7 +30,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -1134,6 +1134,9 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

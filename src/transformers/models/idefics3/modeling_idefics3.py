@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
@@ -953,6 +953,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         past_seen_tokens = 0
         if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache()
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:

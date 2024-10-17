@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -1619,6 +1619,9 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -1838,7 +1841,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
 )
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config_class = MllamaTextConfig
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
