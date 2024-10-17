@@ -1290,6 +1290,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.num_layers = config.num_layers
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
         self.layer = nn.ModuleList(
@@ -1418,7 +1419,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
-            past_key_values = [None] * len(self.layer)
+            past_key_values = [None] * self.num_layers
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
