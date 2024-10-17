@@ -1336,12 +1336,6 @@ class AriaGroupedMLP(nn.Module):
         self.fc1 = AriaGroupedGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
         self.fc2 = AriaGroupedGEMM(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
 
-        def glu(x):
-            x = torch.chunk(x, 2, dim=-1)
-            return F.silu(x[0]) * x[1]  # TODO: degager
-
-        self.activation_func = glu
-
     def forward(self, permuted_tokens, tokens_per_expert):
         """
         Forward pass of the Grouped MLP.
@@ -1354,7 +1348,8 @@ class AriaGroupedMLP(nn.Module):
             torch.Tensor: Output tensor after passing through the MLP.
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        fc1_output = self.activation_func(fc1_output)
+        x = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = F.silu(x[0]) * x[1]
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
