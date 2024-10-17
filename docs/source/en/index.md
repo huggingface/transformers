@@ -224,6 +224,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [MobileNetV2](model_doc/mobilenet_v2)                   |       ✅        |         ❌         |      ❌      |
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
+|                         [Moshi](model_doc/moshi)                         |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
 |                           [MRA](model_doc/mra)                           |       ✅        |         ❌         |      ❌      |
