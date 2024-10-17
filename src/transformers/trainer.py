@@ -2428,24 +2428,8 @@ class Trainer:
             total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
             for _ in range(total_updates):
                 update_step += 1
-                if update_step == (total_updates - 1):
-                    num_batches = remainder
-                else:
-                    num_batches = args.gradient_accumulation_steps
-                batch_samples = []
-                for _ in range(num_batches):
-                    try:
-                        batch_samples += [next(epoch_iterator)]
-                    except StopIteration:
-                        break
-                if len(batch_samples) > 0 and "labels" in batch_samples[0]:
-                    # For now we don't support object detection
-                    try:
-                        num_items_in_batch = sum(
-                            [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                        )
-                    except TypeError:
-                        pass
+                num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
+                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
@@ -5051,3 +5035,21 @@ class Trainer:
                 fsdp_plugin.set_mixed_precision(
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
+
+    def get_batch_samples(self, epoch_iterator, num_batches):
+        batch_samples = []
+        num_items_in_batch = None
+        for _ in range(num_batches):
+            try:
+                batch_samples += [next(epoch_iterator)]
+            except StopIteration:
+                break
+        if len(batch_samples) > 0 and "labels" in batch_samples[0]:
+            # For now we don't support object detection
+            try:
+                num_items_in_batch = sum(
+                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
+                )
+            except TypeError:
+                pass
+        return batch_samples, num_items_in_batch
