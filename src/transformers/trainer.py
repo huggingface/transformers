@@ -462,7 +462,7 @@ class Trainer:
                 f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
             )
         self.args = args
-        self.compute_loss = compute_loss
+        self.compute_loss_func = compute_loss
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
@@ -3611,7 +3611,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self._compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -3649,13 +3649,13 @@ class Trainer:
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
-    def _compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
         Subclass and override for custom behavior.
         """
-        if (self.label_smoother is not None or self.compute_loss is not None) and "labels" in inputs:
+        if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
             labels = None
@@ -3675,7 +3675,7 @@ class Trainer:
                 model_name = unwrapped_model._get_name()
             # User-defined compute_loss function
             if self.compute_loss is not None:
-                loss = self.compute_loss(outputs, labels, num_items_in_batch=num_items_in_batch)
+                loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
             elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
