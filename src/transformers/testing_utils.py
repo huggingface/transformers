@@ -55,6 +55,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    TORCHDATA_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
@@ -135,6 +136,7 @@ from .utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchdata_available,
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
@@ -827,8 +829,9 @@ def require_torch_up_to_2_accelerators(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
-    (test_case)
+    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")(
+        test_case
+    )
 
 
 def require_torch_xla(test_case):
@@ -954,6 +957,15 @@ if is_flax_available():
     jax_device = jax.default_backend()
 else:
     jax_device = None
+
+
+def require_torchdata(test_case, min_version: str = TORCHDATA_MIN_VERSION):
+    """
+    Decorator marking a test that requires torchdata. These tests are skipped when accelerate isn't installed.
+    """
+    return unittest.skipUnless(
+        is_torchdata_available(min_version), f"test requires is_torchdata_available version >= {min_version}"
+    )(test_case)
 
 
 def require_torchdynamo(test_case):
