@@ -3646,6 +3646,8 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+        if num_items_in_batch is not None:
+            inputs["num_items_in_batch"] = num_items_in_batch
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -3660,11 +3662,7 @@ class Trainer:
                 model_name = unwrapped_model._get_name()
             # User-defined compute_loss function
             if self.compute_loss is not None:
-                # Check if `num_items` is a parameter of the compute_loss function
-                if "num_items_in_batch" in inspect.signature(self.compute_loss).parameters.keys():
-                    loss = self.compute_loss(outputs, labels, num_items_in_batch=num_items_in_batch)
-                else:
-                    loss = self.compute_loss(outputs, labels)
+                loss = self.compute_loss(outputs, labels, num_items_in_batch=num_items_in_batch)
             elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
