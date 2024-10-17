@@ -644,6 +644,7 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.paligemma": ["PaliGemmaConfig"],
+    "models.colpali": ["ColPaliConfig"],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -1744,6 +1745,12 @@ else:
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForRetrieval",
+            "ColPaliProcessor",
+        ]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -5128,6 +5135,9 @@ if TYPE_CHECKING:
         CodeGenTokenizer,
     )
     from .models.cohere import CohereConfig
+    from .models.colpali import (
+        ColPaliConfig,
+    )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
@@ -6578,6 +6588,10 @@ if TYPE_CHECKING:
             CohereForCausalLM,
             CohereModel,
             CoherePreTrainedModel,
+        )
+        from .models.colpali import (
+            ColPaliForRetrieval,
+            ColPaliProcessor,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
