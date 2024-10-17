@@ -1713,6 +1713,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
+        add_eos_token: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
         padding: bool = False,
@@ -1752,6 +1753,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
+            add_eos_token (bool, *optional*):
+                Adds the eos token at the end of the chat template. Chat template in some models doesn't have EOS tokens at the end, use this to forcefully add
+                EOS token at the end. Cannot be used along with 'add_generation_prompt'
             continue_final_message (bool, *optional*):
                 If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
@@ -1819,6 +1823,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        if add_eos_token:
+            if add_generation_prompt:
+                raise ValueError(
+                    "add_eos_token and add_generation_prompt are not compatible. Use add_eos_token when you want the tokenizer to add a EOS token at the end, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+
         if continue_final_message:
             if add_generation_prompt:
                 raise ValueError(
@@ -1876,6 +1886,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if continue_final_message:
                 final_message = chat[-1]["content"]
                 rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
+            if add_eos_token:
+                rendered_chat += self.eos_token
             rendered.append(rendered_chat)
 
         if not is_batched:
