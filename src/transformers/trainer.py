@@ -2421,7 +2421,7 @@ class Trainer:
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
-            total_updates = max_steps // args.gradient_accumulation_steps + 1
+            total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
             for _ in range(total_updates):
                 update_step += 1
                 if update_step == (total_updates - 1):
