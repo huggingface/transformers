@@ -235,12 +235,28 @@ class PeftAdapterMixin:
         )
 
         if incompatible_keys is not None:
-            # check only for unexpected keys
+            err_msg = ""
+            origin_name = peft_model_id if peft_model_id is not None else "state_dict"
+            # Check for unexpected keys.
             if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
-                logger.warning(
-                    f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
-                    f" {incompatible_keys.unexpected_keys}. "
+                err_msg = (
+                    f"Loading adapter weights from {origin_name} led to unexpected keys not found in the model: "
+                    f"{', '.join(incompatible_keys.unexpected_keys)}. "
                 )
+
+            # Check for missing keys.
+            missing_keys = getattr(incompatible_keys, "missing_keys", None)
+            if missing_keys:
+                # Filter missing keys specific to the current adapter, as missing base model keys are expected.
+                lora_missing_keys = [k for k in missing_keys if "lora_" in k and adapter_name in k]
+                if lora_missing_keys:
+                    err_msg += (
+                        f"Loading adapter weights from {origin_name} led to missing keys in the model: "
+                        f"{', '.join(lora_missing_keys)}"
+                    )
+
+            if err_msg:
+                logger.warning(err_msg)
 
         # Re-dispatch model and hooks in case the model is offloaded to CPU / Disk.
         if (
