@@ -155,7 +155,7 @@ class ProPainterBasicEncoder(nn.Module):
             3,
             config.in_channels[0],
             kernel_size=config.kernel_size[0],
-            stride=config.strides[1],
+            stride=config.multi_level_conv_stride[1],
             padding=3,
         )
         self.relu1 = nn.ReLU(inplace=True)
@@ -165,7 +165,7 @@ class ProPainterBasicEncoder(nn.Module):
                 ProPainterResidualBlock(config, in_channel, num_channels, norm_fn, stride),
                 ProPainterResidualBlock(config, num_channels, num_channels, norm_fn, stride=1),
             ]
-            for in_channel, num_channels, stride in zip(config.in_channels, config.channels, config.strides)
+            for in_channel, num_channels, stride in zip(config.in_channels, config.channels, config.multi_level_conv_stride)
         ]
         # using itertools makes flattening a little faster :)
         self.resblocks = nn.ModuleList(list(itertools.chain.from_iterable(self.resblocks)))
@@ -359,7 +359,7 @@ class ProPainterCorrBlock:
 
         self.correlation_pyramid.append(correlation)
         for _ in range(self.num_levels - 1):
-            correlation = F.avg_pool2d(correlation, 2, stride=config.strides[1])
+            correlation = F.avg_pool2d(correlation, 2, stride=config.multi_level_conv_stride[1])
             self.correlation_pyramid.append(correlation)
 
     def __call__(self, coords):
@@ -570,7 +570,7 @@ class ProPainterEdgeDetection(nn.Module):
                 in_channel,
                 intermediate_channel,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -581,7 +581,7 @@ class ProPainterEdgeDetection(nn.Module):
                 intermediate_channel,
                 intermediate_channel,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -592,14 +592,14 @@ class ProPainterEdgeDetection(nn.Module):
                 intermediate_channel,
                 intermediate_channel,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             )
         )
 
         self.relu = nn.LeakyReLU(0.01, inplace=True)
 
-        self.out_layer = nn.Conv2d(intermediate_channel, out_channel, 1, config.strides[0], 0)
+        self.out_layer = nn.Conv2d(intermediate_channel, out_channel, 1, config.multi_level_conv_stride[0], 0)
 
     def forward(self, flow):
         flow = self.projection(flow)
@@ -636,7 +636,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                     (2 + i) * config.num_channels,
                     config.num_channels,
                     config.patch_size,
-                    config.strides[0],
+                    config.multi_level_conv_stride[0],
                     config.padding,
                 ),
                 nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -644,7 +644,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                     config.num_channels,
                     config.num_channels,
                     config.patch_size,
-                    config.strides[0],
+                    config.multi_level_conv_stride[0],
                     config.padding,
                 ),
             )
@@ -652,7 +652,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
         self.fusion = nn.Conv2d(
             2 * config.num_channels,
             config.num_channels,
-            config.strides[0],
+            config.multi_level_conv_stride[0],
             config.padding,
             0,
         )
@@ -806,7 +806,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                         2 * num_channels + 2,
                         num_channels,
                         config.patch_size,
-                        config.strides[0],
+                        config.multi_level_conv_stride[0],
                         config.padding,
                     ),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
@@ -814,7 +814,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                         num_channels,
                         num_channels,
                         config.patch_size,
-                        config.strides[0],
+                        config.multi_level_conv_stride[0],
                         config.padding,
                     ),
                 )
@@ -824,7 +824,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                     2 * num_channels + 2,
                     num_channels,
                     config.patch_size,
-                    config.strides[0],
+                    config.multi_level_conv_stride[0],
                     config.padding,
                 ),
                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
@@ -832,7 +832,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                     num_channels,
                     num_channels,
                     config.patch_size,
-                    config.strides[0],
+                    config.multi_level_conv_stride[0],
                     config.padding,
                 ),
             )
@@ -1009,7 +1009,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 2 * self.out_channels + 2 + 1 + 2,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1017,7 +1017,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 self.out_channels,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1025,7 +1025,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 self.out_channels,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1033,7 +1033,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 self.out_channels,
                 27 * self.deform_groups,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
         )
@@ -1106,7 +1106,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 3 * self.out_channels,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1114,7 +1114,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 self.out_channels,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1122,7 +1122,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 self.out_channels,
                 self.out_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -1130,7 +1130,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 self.out_channels,
                 27 * self.deform_groups,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
         )
@@ -1170,7 +1170,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 3,
                 config.num_channels // 4,
                 kernel_size=(1, 5, 5),
-                stride=config.strides,
+                stride=config.multi_level_conv_stride,
                 padding=(0, 2, 2),
                 padding_mode="replicate",
             ),
@@ -1182,7 +1182,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.num_channels // 4,
                 config.num_channels // 4,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1190,7 +1190,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.num_channels // 4,
                 config.in_channels[0],
                 config.patch_size,
-                config.strides[1],
+                config.multi_level_conv_stride[1],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1201,7 +1201,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.in_channels[0],
                 config.in_channels[0],
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1209,7 +1209,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.in_channels[0],
                 self.config.num_channels,
                 config.patch_size,
-                config.strides[1],
+                config.multi_level_conv_stride[1],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1220,7 +1220,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 self.config.num_channels,
                 config.kernel_size_3d,
-                config.stride_3d,
+                config.conv3d_stride,
                 padding=(0, 3, 3),
                 dilation=(1, 3, 3),
             ),  # p = d*(k-1)/2
@@ -1229,7 +1229,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 self.config.num_channels,
                 config.kernel_size_3d,
-                config.stride_3d,
+                config.conv3d_stride,
                 padding=(0, 2, 2),
                 dilation=(1, 2, 2),
             ),
@@ -1238,7 +1238,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 self.config.num_channels,
                 config.kernel_size_3d,
-                config.stride_3d,
+                config.conv3d_stride,
                 padding=(0, 1, 1),
                 dilation=(1, 1, 1),
             ),
@@ -1253,7 +1253,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 self.config.num_channels,
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1266,7 +1266,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.in_channels[0],
                 config.in_channels[0],
                 config.patch_size,
-                config.strides[0],
+                config.multi_level_conv_stride[0],
                 config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1383,7 +1383,7 @@ class ProPainterEncoder(nn.Module):
                     5,
                     config.in_channels[0],
                     kernel_size=config.patch_size,
-                    stride=config.strides[1],
+                    stride=config.multi_level_conv_stride[1],
                     padding=config.padding,
                 ),
                 nn.LeakyReLU(negative_slope, inplace=True),
@@ -1399,7 +1399,7 @@ class ProPainterEncoder(nn.Module):
                     config.in_channels[0],
                     config.num_channels,
                     kernel_size=config.patch_size,
-                    stride=config.strides[1],
+                    stride=config.multi_level_conv_stride[1],
                     padding=config.padding,
                 ),
                 nn.LeakyReLU(negative_slope, inplace=True),
@@ -1451,7 +1451,7 @@ class ProPainterEncoder(nn.Module):
                     config.hidden_size,
                     config.num_channels,
                     kernel_size=config.patch_size,
-                    stride=config.strides[0],
+                    stride=config.multi_level_conv_stride[0],
                     padding=config.padding,
                     groups=1,
                 ),
@@ -1482,11 +1482,11 @@ class ProPainterSoftSplit(nn.Module):
         self.config = config
 
         self.kernel_size = config.kernel_size
-        self.stride = config.stride
+        self.stride = config.conv2d_stride
         self.padding = config.padding_inpaint_generator
         self.unfold = nn.Unfold(
             kernel_size=config.kernel_size,
-            stride=config.stride,
+            stride=config.conv2d_stride,
             padding=config.padding_inpaint_generator,
         )
         input_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
@@ -1516,7 +1516,7 @@ class ProPainterSoftComp(nn.Module):
         output_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
         self.embedding = nn.Linear(config.hidden_size, output_features)
         self.kernel_size = config.kernel_size
-        self.stride = config.stride
+        self.stride = config.conv2d_stride
         self.padding = config.padding_inpaint_generator
         self.bias_conv = nn.Conv2d(
             config.num_channels,
@@ -2158,7 +2158,7 @@ class ProPainterInpaintGenerator(nn.Module):
                 config.in_channels[0],
                 out_channels=3,
                 kernel_size=config.patch_size,
-                stride=config.strides[0],
+                stride=config.multi_level_conv_stride[0],
                 padding=config.padding,
             ),
         )
@@ -2166,14 +2166,14 @@ class ProPainterInpaintGenerator(nn.Module):
         # soft split and soft composition
         token_to_token_params = {
             "kernel_size": config.kernel_size,
-            "stride": config.stride,
+            "stride": config.conv2d_stride,
             "padding": config.padding_inpaint_generator,
         }
         self.soft_split = ProPainterSoftSplit(config)
 
         self.soft_comp = ProPainterSoftComp(config)
 
-        self.max_pool = nn.MaxPool2d(config.kernel_size, config.stride, config.padding_inpaint_generator)
+        self.max_pool = nn.MaxPool2d(config.kernel_size, config.conv2d_stride, config.padding_inpaint_generator)
 
         # feature propagation module
         self.img_prop_module = ProPainterBidirectionalPropagationInPaint(config, num_channels=3, learnable=False)
@@ -2589,7 +2589,7 @@ class ProPainterDiscriminator(nn.Module):
                     in_channels=in_channels,
                     out_channels=num_features * 1,
                     kernel_size=config.kernel_size_3d_discriminator,
-                    stride=config.strides,
+                    stride=config.multi_level_conv_stride,
                     padding=config.padding,
                     bias=not use_spectral_norm,
                 )
@@ -2600,8 +2600,8 @@ class ProPainterDiscriminator(nn.Module):
                     num_features * 1,
                     num_features * 2,
                     kernel_size=config.kernel_size_3d_discriminator,
-                    stride=config.strides,
-                    padding=config.strides,
+                    stride=config.multi_level_conv_stride,
+                    padding=config.multi_level_conv_stride,
                     bias=not use_spectral_norm,
                 )
             ),
@@ -2611,8 +2611,8 @@ class ProPainterDiscriminator(nn.Module):
                     num_features * 2,
                     num_features * 4,
                     kernel_size=config.kernel_size_3d_discriminator,
-                    stride=config.strides,
-                    padding=config.strides,
+                    stride=config.multi_level_conv_stride,
+                    padding=config.multi_level_conv_stride,
                     bias=not use_spectral_norm,
                 )
             ),
@@ -2622,8 +2622,8 @@ class ProPainterDiscriminator(nn.Module):
                     num_features * 4,
                     num_features * 4,
                     kernel_size=config.kernel_size_3d_discriminator,
-                    stride=config.strides,
-                    padding=config.strides,
+                    stride=config.multi_level_conv_stride,
+                    padding=config.multi_level_conv_stride,
                     bias=not use_spectral_norm,
                 )
             ),
@@ -2633,8 +2633,8 @@ class ProPainterDiscriminator(nn.Module):
                     num_features * 4,
                     num_features * 4,
                     kernel_size=config.kernel_size_3d_discriminator,
-                    stride=config.strides,
-                    padding=config.strides,
+                    stride=config.multi_level_conv_stride,
+                    padding=config.multi_level_conv_stride,
                     bias=not use_spectral_norm,
                 )
             ),
@@ -2643,8 +2643,8 @@ class ProPainterDiscriminator(nn.Module):
                 num_features * 4,
                 num_features * 4,
                 kernel_size=config.kernel_size_3d_discriminator,
-                stride=config.strides,
-                padding=config.strides,
+                stride=config.multi_level_conv_stride,
+                padding=config.multi_level_conv_stride,
             ),
         )
 
