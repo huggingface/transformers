@@ -28,7 +28,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    run_test_using_subprocess,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -237,9 +244,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        reason="After #33533, this still passes, but many subsequential tests fail with `device-side assert triggered`"
-    )
+    @run_test_using_subprocess
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
