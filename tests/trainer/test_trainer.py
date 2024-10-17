@@ -661,16 +661,16 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def setUp(self):
         super().setUp()
-        # args = TrainingArguments("..")
-        # self.n_epochs = args.num_train_epochs
-        # self.batch_size = args.train_batch_size
-        # trainer = get_regression_trainer(learning_rate=0.1)
-        # trainer.train()
-        # self.default_trained_model = (trainer.model.a, trainer.model.b)
+        args = TrainingArguments("..")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+        trainer = get_regression_trainer(learning_rate=0.1)
+        trainer.train()
+        self.default_trained_model = (trainer.model.a, trainer.model.b)
 
-        # trainer = get_regression_trainer(learning_rate=0.1, seed=314)
-        # trainer.train()
-        # self.alternate_trained_model = (trainer.model.a, trainer.model.b)
+        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
+        trainer.train()
+        self.alternate_trained_model = (trainer.model.a, trainer.model.b)
 
     def check_trained_model(self, model, alternate_seed=False):
         # Checks a training seeded with learning_rate = 0.1
