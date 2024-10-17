@@ -19,6 +19,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import base64
 import json
 import warnings
 from typing import Dict, List, Tuple
@@ -1513,7 +1514,6 @@ class TekkenConverter:
     def __init__(
         self,
         vocab_file=None,
-        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
         *args,
@@ -1521,22 +1521,67 @@ class TekkenConverter:
     ):
         super().__init__(*args)
         self.vocab_file = vocab_file
-        self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = additional_special_tokens
 
-    def extract_vocab_merges_from_model(self, tekken_url: str):
+    def extract_config(self, tekken_url: str):
         with open(tekken_url, "r") as f:
-            bpe_ranks = json.load(f)
+            self.config = json.load(f)["config"]
+        
+    def extract_bpe_ranks(self, tekken_url: str):
+        with open(tekken_url, "r") as f:
+            tekken = json.load(f)
+            tekken_vocab = tekken["vocab"]
 
+        vocab_size_without_specials = self.config["default_vocab_size"] - self.config["default_num_special_tokens"]
+        tekken_vocab = tekken_vocab[:vocab_size_without_specials]
+        
+        bpe_ranks = {}
+        for item in tekken_vocab:
+            rank, token_bytes = item["rank"], item["token_bytes"] # token_str ignored
+            token = base64.b64decode(token_bytes)
+            bpe_ranks[token] = rank
+        return bpe_ranks
+    
+    def get_special_tokens(self, num_special_tokens):
+        # TODO: these should be configurable
+        special_tokens = [
+            '<unk>',
+            '<s>',
+            '</s>',
+            '[INST]',
+            '[/INST]',
+            '[AVAILABLE_TOOLS]',
+            '[/AVAILABLE_TOOLS]',
+            '[TOOL_RESULTS]',
+            '[/TOOL_RESULTS]',
+            '[TOOL_CALLS]',
+            '[IMG]',
+            '<pad>',
+            '[IMG_BREAK]',
+            '[IMG_END]',
+            '[PREFIX]',
+            '[MIDDLE]',
+            '[SUFFIX]',
+        ]
+        special_tokens += [f'<SPECIAL_{t}>' for t in range(len(special_tokens), num_special_tokens)]
+        return special_tokens
+
+    def extract_vocab_merges_from_model(self, tekken_url: str):
+        self.extract_config()
+        bpe_ranks = self.extract_bpe_ranks(tekken_url)
         byte_encoder = bytes_to_unicode()
 
         def token_bytes_to_string(b):
             return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
 
+        num_special_tokens = self.config["default_num_special_tokens"]
+        special_tokens = self.get_special_tokens(num_special_tokens)
+        
         merges = []
-        vocab = {}
+        vocab = {k: i for i, k in enumerate(special_tokens)}
         for token, rank in bpe_ranks.items():
+            rank += num_special_tokens
             vocab[token_bytes_to_string(token)] = rank
             if len(token) == 1:
                 continue
@@ -1547,6 +1592,7 @@ class TekkenConverter:
                     local.append((piece_l, piece_r, rank))
             local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
             merges.extend(local)
+
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
         merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
         return vocab, merges
@@ -1562,12 +1608,15 @@ class TekkenConverter:
         tokenizer = self.tokenizer()
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
+                pre_tokenizers.Split(Regex(self.config["pattern"]), behavior="isolated", invert=False),
                 pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
+        
+        num_special_tokens = self.config["default_num_special_tokens"]
+        special_tokens = self.get_special_tokens(num_special_tokens)
+        tokenizer.add_special_tokens(special_tokens)
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
