@@ -1935,6 +1935,14 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     ):  # support for the kwargs
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+
+        if hasattr(generate_config, "number_timestamp_tokens"):
+            number_timestamp_tokens = generate_config.number_timestamp_tokens
+        else:
+            # Whisper uses by default 1501 timestamp tokens, from <|0.00|> to <|30.00|> with a step of 20ms
+            number_timestamp_tokens = 1501
+
+        self.timestamp_end = self.timestamp_begin + number_timestamp_tokens - 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
@@ -1967,16 +1975,19 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             sampled_tokens = input_ids[k, self.begin_index :]
             seq = list(sampled_tokens.tolist())
 
-            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
-            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+            last_was_timestamp = len(seq) >= 1 and (self.timestamp_begin <= seq[-1] <= self.timestamp_end)
+            penultimate_was_timestamp = len(seq) < 2 or (self.timestamp_begin <= seq[-2] <= self.timestamp_end)
 
             if last_was_timestamp:
                 if penultimate_was_timestamp:  # has to be non-timestamp
-                    scores_processed[k, self.timestamp_begin :] = -float("inf")
+                    scores_processed[k, self.timestamp_begin : self.timestamp_end + 1] = -float("inf")
                 else:  # cannot be normal text tokens
                     scores_processed[k, : self.eos_token_id] = -float("inf")
+                    scores_processed[k, self.timestamp_end + 1 :] = -float("inf")
 
-            timestamps = sampled_tokens[sampled_tokens.ge(self.timestamp_begin)]
+            timestamps = sampled_tokens[
+                (self.timestamp_begin <= sampled_tokens) & (sampled_tokens <= self.timestamp_end)
+            ]
             if timestamps.numel() > 0:
                 # `timestamps` shouldn't decrease; forbid timestamp tokens smaller than the last
                 # The following lines of code are copied from: https://github.com/openai/whisper/pull/914/files#r1137085090
@@ -1991,6 +2002,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
             scores_processed[:, : self.timestamp_begin] = -float("inf")
+            scores_processed[:, self.timestamp_end + 1 :] = -float("inf")
 
             if self.max_initial_timestamp_index is not None:
                 last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
@@ -1999,10 +2011,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         # if sum of probability over timestamps is above any other token, sample timestamp
         logprobs = torch.nn.functional.log_softmax(scores_processed.float(), dim=-1)
         for k in range(input_ids.shape[0]):
-            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+            timestamp_logprob = logprobs[k, self.timestamp_begin : self.timestamp_end + 1].logsumexp(dim=-1)
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
                 scores_processed[k, : self.timestamp_begin] = -float("inf")
+                scores_processed[:, self.timestamp_end + 1 :] = -float("inf")
 
         return scores_processed
 
