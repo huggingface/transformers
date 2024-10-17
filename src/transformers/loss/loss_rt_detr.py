@@ -16,20 +16,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..utils import is_accelerate_available, is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_scipy_available, is_vision_available, requires_backends
 from .loss_for_object_detection import (
     _set_aux_loss,
     box_iou,
     dice_loss,
     generalized_box_iou,
-    linear_sum_assignment,
     nested_tensor_from_tensor_list,
     sigmoid_focal_loss,
 )
 
-
-if is_accelerate_available():
-    pass
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
