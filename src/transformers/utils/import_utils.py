@@ -111,6 +111,7 @@ _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
+_yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
@@ -309,6 +310,10 @@ def is_kenlm_available():
 
 def is_cv2_available():
     return _cv2_available
+
+
+def is_yt_dlp_available():
+    return _yt_dlp_available
 
 
 def is_torch_available():
@@ -1234,6 +1239,15 @@ pip install av
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+YT_DLP_IMPORT_ERROR = """
+{0} requires the YT-DLP library but it was not found in your environment. You can install it with:
+```
+pip install yt-dlp
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
 
 # docstyle-ignore
 CV2_IMPORT_ERROR = """
@@ -1617,6 +1631,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
+        ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
     ]
 )
 
