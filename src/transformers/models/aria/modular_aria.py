@@ -46,14 +46,10 @@ from .processing_utils import (
     experts_gemm,
     get_split_image,
     keep_ratio_resize_and_pixel_mask,
-    switch_load_balancing_loss_func,
-    z_loss_func,
 )
 
 
 logger = logging.get_logger(__name__)
-
-# TODO: ajouter quelques tests parmi test_modeling_lava.py, test_processing_llava.py, test_mdoelling_pixtral.py
 
 
 class AriaVisionConfig(SiglipVisionConfig):
@@ -311,7 +307,6 @@ class AriaProjector(nn.Module):
         self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim)  # TODO: Aria Projector MMLP
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
-
 
     def forward(self, x, attn_mask=None):
         """
@@ -844,6 +839,28 @@ class AriaConfig(PretrainedConfig):
         self.text_config = text_config
 
 
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
+
+
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class AriaTopKRouter(nn.Module):
     """
@@ -1003,7 +1020,6 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         self.hidden_states_shape = None
         self.reversed_input_permutation_mapping = None
 
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the MoE Layer.
@@ -1106,28 +1122,6 @@ class AriaForCausalLM(LlamaForCausalLM):
         self.post_init()
 
 
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = []
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
-
-
 class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
@@ -1138,6 +1132,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
 
     This model combines a vision tower, a multi-modal projector, and a language model
     to perform tasks that involve both image and text inputs.
+
+    Args:
+        config (AriaConfig): Configuration object for the model.
     """
 
     def __init__(self, config: AriaConfig):
@@ -1156,7 +1153,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
-
 
     def forward(
         self,

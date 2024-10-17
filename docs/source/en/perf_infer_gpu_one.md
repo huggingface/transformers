@@ -37,7 +37,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
 
 FlashAttention-2 is currently supported for the following architectures:
-* [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaModel)
+* [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)

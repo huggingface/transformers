@@ -17,7 +17,6 @@ from torch.nn.init import trunc_normal_
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
 from ...generation.utils import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
@@ -54,10 +53,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils import (
-    ModelOutput,
-    is_flash_attn_2_available,
-)
+from ...utils import is_flash_attn_2_available
 from .configuration_aria import AriaTextConfig
 
 
@@ -161,7 +157,6 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
             tensor.uniform_(-bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
-
 
 
 class AriaPreTrainedModel(PreTrainedModel):
@@ -863,7 +858,7 @@ class AriaVisionTransformer(nn.Module):
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
+        self.embed_dim = config.hidden_size
 
         self.config = config
         self.embeddings = AriaVisionEmbeddings(config)
@@ -2819,6 +2814,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
     This model combines a vision tower, a multi-modal projector, and a language model
     to perform tasks that involve both image and text inputs.
+
+    Args:
+        config (AriaConfig): Configuration object for the model.
     """
 
     def __init__(self, config: AriaConfig):
