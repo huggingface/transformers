@@ -332,11 +332,10 @@ class ImageTextToTextPipeline(Pipeline):
                     )
                 else:
                     # Reorganize the images to match the prompts
-                    images_reorganized = []
-                    for num_images in num_images_in_text:
-                        images_reorganized.append(images[:num_images])
-                        images = images[num_images:]
-                    images = images_reorganized
+                    images = [
+                        images[sum(num_images_in_text[:i]) : sum(num_images_in_text[: i + 1])]
+                        for i in range(len(num_images_in_text))
+                    ]
         else:
             if hasattr(self.processor, "image_token") and self.processor.image_token is not None:
                 logger.warning(
