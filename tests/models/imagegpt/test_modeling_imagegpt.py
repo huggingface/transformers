@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from transformers import ImageGPTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device, run_test_using_subprocess
+from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin

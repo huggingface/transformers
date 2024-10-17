@@ -2366,9 +2366,10 @@ def run_test_using_subprocess(func):
         if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
             func(*args, **kwargs)
         else:
-            test = ' '.join(os.environ.get('PYTEST_CURRENT_TEST').split(' ')[:-1])
+            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
             try:
                 import copy
+
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
 
@@ -2379,11 +2380,11 @@ def run_test_using_subprocess(func):
                         if x in kwargs["pytestconfig"].args:
                             test = test.split("::")[1:]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
-                    command = [f'{sys.executable}', '-m', 'pytest'] + command
+                    command = [f"{sys.executable}", "-m", "pytest"] + command
                     command = [x for x in command if x not in ["--no-summary"]]
                 # Otherwise, simply run the test with no option at all
                 else:
-                    command = [f'{sys.executable}', '-m', 'pytest', f'{test}']
+                    command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
 
                 subprocess.run(command, env=env, check=True, capture_output=True)
             except subprocess.CalledProcessError as e:
