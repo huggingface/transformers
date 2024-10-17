@@ -287,9 +287,11 @@ class ImageTextToTextPipeline(Pipeline):
                 chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
-        # If we are not in chat mode, we need both images and text
-        if images is None or text is None:
-            raise ValueError("You must provide both images and text when not using chat templates.")
+        # support text only generation
+        if images is None:
+            return super().__call__(text, **kwargs)
+        if text is None:
+            raise ValueError("You must provide text for this pipeline.")
 
         if not isinstance(images, (list, tuple)):
             images = [images]
@@ -386,28 +388,37 @@ class ImageTextToTextPipeline(Pipeline):
         processing_kwargs["legacy"] = False
         processing_kwargs = {k: v for k, v in processing_kwargs.items() if v is not None}
 
-        images = inputs.images
-
-        if isinstance(inputs, Chat):
-            # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
-            # because very few models support multiple separate, consecutive assistant messages
-            if continue_final_message is None:
-                continue_final_message = inputs.messages[-1]["role"] == "assistant"
-            text = self.processor.apply_chat_template(
-                inputs.messages,
-                add_generation_prompt=not continue_final_message,
-                continue_final_message=continue_final_message,
-                return_tensors=self.framework,
-            )
+        # In case we only have text inputs
+        if isinstance(inputs, (list, tuple, str)):
+            images = None
+            text = inputs
             inputs_text = inputs
         else:
-            text = inputs.text
-            inputs_text = inputs.text
+            # We have an ImageText or Chat inputs
+            images = inputs.images
+            if len(images) > 0:
+                if not isinstance(images, (list, tuple)):
+                    images = load_image(images, timeout=timeout)
+                else:
+                    images = [load_image(image, timeout=timeout) for image in images]
+            else:
+                images = None
 
-        if not isinstance(images, (list, tuple)):
-            images = load_image(images, timeout=timeout)
-        else:
-            images = [load_image(image, timeout=timeout) for image in images]
+            if isinstance(inputs, Chat):
+                # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
+                # because very few models support multiple separate, consecutive assistant messages
+                if continue_final_message is None:
+                    continue_final_message = inputs.messages[-1]["role"] == "assistant"
+                text = self.processor.apply_chat_template(
+                    inputs.messages,
+                    add_generation_prompt=not continue_final_message,
+                    continue_final_message=continue_final_message,
+                    return_tensors=self.framework,
+                )
+                inputs_text = inputs
+            else:
+                text = inputs.text
+                inputs_text = inputs.text
 
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
