@@ -943,7 +943,7 @@ class ModularConverterTransformer(CSTTransformer):
                     super_class,
                     class_name,
                 )
-                visited_module[super_file_name] = class_finder
+                visited_modules[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
