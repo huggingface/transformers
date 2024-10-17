@@ -14,11 +14,21 @@
 
 import torch
 import torch.nn as nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+
+
+def fixed_cross_entropy(source, target, **kwargs):
+    ignore_index = kwargs.get("ignore_index", -100)
+    num_items_in_batch = kwargs.get("num_items_in_batch", None)
+    reduction = "sum" if num_items_in_batch is not None else "mean"
+    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
+    if reduction == "sum":
+        loss = loss / num_items_in_batch
+    return loss
 
 
 def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
@@ -33,15 +43,7 @@ def ForCausalLMLoss(logits, labels, vocab_size, **kwargs):
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(shift_logits.device)
-
-    num_items_in_batch = kwargs.pop("num_items_in_batch", None)
-
-    if num_items_in_batch is not None and num_items_in_batch > 0:
-        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
-        loss = loss / num_items_in_batch
-    else:
-        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
-
+    loss = fixed_cross_entropy(shift_logits, shift_labels, **kwargs)
     return loss
 
 
@@ -62,8 +64,7 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
         else:
             loss = loss_fct(pooled_logits, labels)
     elif config.problem_type == "single_label_classification":
-        loss_fct = CrossEntropyLoss()
-        loss = loss_fct(pooled_logits.view(-1, num_labels), labels.view(-1))
+        loss = fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs)
     elif config.problem_type == "multi_label_classification":
         loss_fct = BCEWithLogitsLoss()
         loss = loss_fct(pooled_logits, labels)
@@ -83,9 +84,8 @@ def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_posi
         start_positions = start_positions.clamp(0, ignored_index)
         end_positions = end_positions.clamp(0, ignored_index)
 
-        loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-        start_loss = loss_fct(start_logits, start_positions)
-        end_loss = loss_fct(end_logits, end_positions)
+        start_loss = fixed_cross_entropy(start_logits, start_positions, ignore_index=ignored_index, **kwargs)
+        end_loss = fixed_cross_entropy(end_logits, end_positions, ignore_index=ignored_index, **kwargs)
         total_loss = (start_loss + end_loss) / 2
     return total_loss
 
@@ -96,8 +96,7 @@ def ForTokenClassification(logits, labels, config, **kwargs):
     labels = labels.view(-1)
     logits = logits.float()
     # Flatten the tokens
-    loss_fct = CrossEntropyLoss()
-    return loss_fct(logits, labels)
+    return fixed_cross_entropy(logits, labels, **kwargs)
 
 
 LOSS_MAPPING = {
