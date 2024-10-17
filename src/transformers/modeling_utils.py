@@ -4981,7 +4981,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.hf_quantizer.is_trainable
 
     @property
-    @lru_cache
     def loss_function(self):
         if getattr(self.config, "loss_type", None) is not None:
             loss_type = self.config.loss_type
