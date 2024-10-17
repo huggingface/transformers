@@ -36,6 +36,7 @@ from .convert_slow_tokenizer import (
     TikTokenConverter,
 )
 from .integrations.ggml import GgufConverter
+from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -83,10 +84,11 @@ VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VO
 
 
 def get_tokenizer_converter(file_pathes: set, tokenizer_class_name, **kwargs):
-    if file_pathes == {"tekken.json"}:
+    if file_pathes.keys() == {"tekken.json"}:
         return TekkenConverter  # convert from tekken fromat
     if any(file_path.endswith(".gguf") for file_path in file_pathes):
-        return GgufConverter
+        gguf_params = load_gguf_checkpoint(kwargs.get("vocab_file"))
+        return GgufConverter(gguf_params)
     if file_pathes == {"tokenizer.model"}:
         return [TikTokenConverter, SpmConverter]  # convert from tiktoken format / spm
     if file_pathes == {"tokenizer_config.json"}:
@@ -130,7 +132,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "have sentencepiece installed."
             )
 
-        tokenizer_converter = get_tokenizer_converter(kwargs.get("resolved_files_pathes", None))
+        tokenizer_converter = get_tokenizer_converter(kwargs.get("resolved_vocab_files", None), self.__class__.__name__)
         vocab_file = kwargs.get("vocab_file", None)
         additional_special_tokens = kwargs.get("additional_special_tokens", [])
 

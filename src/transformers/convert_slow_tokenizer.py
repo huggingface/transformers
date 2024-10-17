@@ -1527,7 +1527,7 @@ class TekkenConverter:
     def extract_config(self, tekken_url: str):
         with open(tekken_url, "r") as f:
             self.config = json.load(f)["config"]
-        
+
     def extract_bpe_ranks(self, tekken_url: str):
         with open(tekken_url, "r") as f:
             tekken = json.load(f)
@@ -1535,36 +1535,36 @@ class TekkenConverter:
 
         vocab_size_without_specials = self.config["default_vocab_size"] - self.config["default_num_special_tokens"]
         tekken_vocab = tekken_vocab[:vocab_size_without_specials]
-        
+
         bpe_ranks = {}
         for item in tekken_vocab:
-            rank, token_bytes = item["rank"], item["token_bytes"] # token_str ignored
+            rank, token_bytes = item["rank"], item["token_bytes"]  # token_str ignored
             token = base64.b64decode(token_bytes)
             bpe_ranks[token] = rank
         return bpe_ranks
-    
+
     def get_special_tokens(self, num_special_tokens):
         # TODO: these should be configurable
         special_tokens = [
-            '<unk>',
-            '<s>',
-            '</s>',
-            '[INST]',
-            '[/INST]',
-            '[AVAILABLE_TOOLS]',
-            '[/AVAILABLE_TOOLS]',
-            '[TOOL_RESULTS]',
-            '[/TOOL_RESULTS]',
-            '[TOOL_CALLS]',
-            '[IMG]',
-            '<pad>',
-            '[IMG_BREAK]',
-            '[IMG_END]',
-            '[PREFIX]',
-            '[MIDDLE]',
-            '[SUFFIX]',
+            "<unk>",
+            "<s>",
+            "</s>",
+            "[INST]",
+            "[/INST]",
+            "[AVAILABLE_TOOLS]",
+            "[/AVAILABLE_TOOLS]",
+            "[TOOL_RESULTS]",
+            "[/TOOL_RESULTS]",
+            "[TOOL_CALLS]",
+            "[IMG]",
+            "<pad>",
+            "[IMG_BREAK]",
+            "[IMG_END]",
+            "[PREFIX]",
+            "[MIDDLE]",
+            "[SUFFIX]",
         ]
-        special_tokens += [f'<SPECIAL_{t}>' for t in range(len(special_tokens), num_special_tokens)]
+        special_tokens += [f"<SPECIAL_{t}>" for t in range(len(special_tokens), num_special_tokens)]
         return special_tokens
 
     def extract_vocab_merges_from_model(self, tekken_url: str):
@@ -1577,7 +1577,7 @@ class TekkenConverter:
 
         num_special_tokens = self.config["default_num_special_tokens"]
         special_tokens = self.get_special_tokens(num_special_tokens)
-        
+
         merges = []
         vocab = {k: i for i, k in enumerate(special_tokens)}
         for token, rank in bpe_ranks.items():
@@ -1613,7 +1613,7 @@ class TekkenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        
+
         num_special_tokens = self.config["default_num_special_tokens"]
         special_tokens = self.get_special_tokens(num_special_tokens)
         tokenizer.add_special_tokens(special_tokens)

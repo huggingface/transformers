@@ -25,8 +25,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
-from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -626,6 +625,26 @@ GGUF_TO_FAST_CONVERTERS = {
 }
 
 
+def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
+    """
+    Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
+
+    Args:
+        architecture (`str`): The model architecture derived from gguf file.
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
+            Instance of a slow tokenizer to convert in the backend tokenizer for
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+
+    Return:
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
+    """
+    tokenizer_class_name = architecture
+    converter = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name](tokenizer_dict)
+    fast_tokenizer = converter.converted()
+    return fast_tokenizer, converter.additional_kwargs
+
+
 class GgufConverter:
     r"""
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
@@ -641,9 +660,8 @@ class GgufConverter:
         [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
 
-    def converted(self, vocab_file, architecture, tokenizer_dict):
+    def converted(self, gguf_param, architecture, tokenizer_dict):
         # We need to convert a slow tokenizer to build the backend
-        gguf_param = load_gguf_checkpoint(vocab_file)
         architecture = gguf_param["config"]["model_type"]
         tokenizer_dict = gguf_param["tokenizer"]
         tokenizer_config = gguf_param["tokenizer_config"]

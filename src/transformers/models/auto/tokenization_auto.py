@@ -930,7 +930,7 @@ class AutoTokenizer:
 
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
-            tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
+            tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING.get(type(config), PreTrainedTokenizerFast)
 
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -942,6 +942,8 @@ class AutoTokenizer:
                         "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
                         "in order to use this tokenizer."
                     )
+        else:
+            return PreTrainedTokenizerFast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"

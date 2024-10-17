@@ -2122,8 +2122,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Get shortlisted `remote_or_local_files` from url, cache, or disk depending on the case
         unresolved_files = []
-        for file_id, file_path in file_pathes.items():
-            resolved_vocab_files[file_id] = cached_file(
+        for file_path in file_pathes:
+            resolved_vocab_files[file_path] = cached_file(
                 pretrained_model_name_or_path,
                 file_path,
                 cache_dir=cache_dir,
@@ -2140,7 +2140,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 _raise_exceptions_for_connection_errors=False,
                 _commit_hash=commit_hash,
             )
-            commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
+            commit_hash = extract_commit_hash(resolved_vocab_files[file_path], commit_hash)
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -2190,12 +2190,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
-        gguf_file = kwargs.get("gguf_file", None)
-        has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+        only_slow_available = resolved_vocab_files == {"tokenizer.model"}
+        tokenizer_file = "tokenizer.json" in resolved_vocab_files
 
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
+
+        if (from_slow or only_slow_available) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
@@ -2212,15 +2211,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
-        tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
+        tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config.json", None)
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
-            if not has_tokenizer_file:
-                init_kwargs.pop("tokenizer_file", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -2299,10 +2296,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
-        for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in init_kwargs:
-                init_kwargs[args_name] = file_path
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
+        init_kwargs["resolved_vocab_files"] = resolved_vocab_files
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
@@ -2370,7 +2364,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `tokenizer_config.json` is `None`
-            if tokenizer_file is not None:
+            if tokenizer_file is not None and tokenizer_file:
                 # This is for slow so can be done before
                 with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
                     tokenizer_file_handle = json.load(tokenizer_file_handle)
