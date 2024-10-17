@@ -229,7 +229,9 @@ class AriaCrossAttention(nn.Module):
         self.k_proj = nn.Linear(kv_dim, embed_dim, bias=False)
         self.v_proj = nn.Linear(kv_dim, embed_dim, bias=False)
 
-        self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads)
+        # Use batch_first=True to simplify code by removing permutations compared to the original.
+        # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
+        self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
         self.linear = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(drop_out_rate)
 
@@ -250,15 +252,13 @@ class AriaCrossAttention(nn.Module):
             torch.Tensor: Output tensor after cross-attention.
         """
         normed_hidden_states = self.layer_norm(hidden_states)
-        query = self.q_proj(normed_hidden_states).permute(1, 0, 2)
+        query = self.q_proj(normed_hidden_states)
 
         x = self.ln_kv(x)
-        key = self.k_proj(x).permute(1, 0, 2)
-        value = self.v_proj(x).permute(1, 0, 2)
+        key = self.k_proj(x)
+        value = self.v_proj(x)
 
         attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
-
-        attn_output = attn_output.permute(1, 0, 2)
 
         if add_residual:
             attn_output = hidden_states + self.dropout(self.linear(attn_output))
@@ -309,17 +309,9 @@ class AriaProjector(nn.Module):
 
         self.ln_ffn = norm_layer(embed_dim)
         self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim)  # TODO: Aria Projector MMLP
+        # Removed weight inits compared to original:
+        # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x, attn_mask=None):
         """
@@ -333,12 +325,12 @@ class AriaProjector(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
         bs = x.shape[0]
-        queries = self.query.unsqueeze(0).repeat(bs, 1, 1)
 
         query_num = self.patch_to_query_dict.get(x.shape[1], None)
         assert query_num is not None, f"Query number for {x.shape[1]} patches is not provided"
 
-        queries = queries[:, :query_num, :]
+        # Compared to original, simplify definition and use expand instead of repeat.
+        queries = self.query[:query_num].unsqueeze(0).expand(bs, -1, -1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -852,53 +844,8 @@ class AriaConfig(PretrainedConfig):
         self.text_config = text_config
 
 
-# copied from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/moe_utils.py#L101-L142
-class MoEAuxLossAutoScaler(torch.autograd.Function):
-    """An AutoScaler that compute and scales the grad for auxiliary loss."""
-
-    main_loss_backward_scale: torch.Tensor = torch.tensor(1.0)
-
-    @staticmethod
-    def forward(ctx, output: torch.Tensor, aux_loss: torch.Tensor):
-        """Preserve the aux_loss by storing it in the context to avoid garbage collection.
-
-        Args:
-            output (torch.Tensor): The output tensor.
-            aux_loss (torch.Tensor): The auxiliary loss tensor.
-
-        Returns:
-            torch.Tensor: The output tensor.
-        """
-        ctx.save_for_backward(aux_loss)
-        return output
-
-    @staticmethod
-    def backward(ctx, grad_output: torch.Tensor):
-        """Compute and scale the gradient for auxiliary loss..
-
-        Args:
-            grad_output (torch.Tensor): The gradient of the output.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: The gradient of the output, scaled auxiliary loss gradient.
-        """
-        (aux_loss,) = ctx.saved_tensors
-        aux_loss_backward_scale = MoEAuxLossAutoScaler.main_loss_backward_scale
-        scaled_aux_loss_grad = torch.ones_like(aux_loss) * aux_loss_backward_scale
-        return grad_output, scaled_aux_loss_grad
-
-    @staticmethod
-    def set_loss_scale(scale: torch.Tensor):
-        """set the scale of the aux loss.
-
-        Args:
-            scale (torch.Tensor): The scale value to set. Please ensure that the scale passed in matches the scale of the main_loss.
-        """
-        MoEAuxLossAutoScaler.main_loss_backward_scale = scale
-
-
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
-class TopKRouter(nn.Module):
+class AriaTopKRouter(nn.Module):
     """
     Top-K Router for Mixture of Experts (MoE) models.
 
@@ -916,36 +863,12 @@ class TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
         # FIXME: initialize the weight
 
-    def gating(self, input: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the gating logits for each token-expert pair.
-
-        Args:
-            input (torch.Tensor): Input tensor of shape [batch_size * seq_len, hidden_size].
-
-        Returns:
-            torch.Tensor: Logits tensor of shape [batch_size * seq_len, num_experts].
-        """
-        logits = torch.nn.functional.linear(input, self.weight)
-        return logits
-
-    def routing(self, logits: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Perform the routing operation to determine expert assignments.
-
-        Args:
-            logits (torch.Tensor): Router logits.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-                - scores: Softmax probabilities for top-k experts.
-                - top_indices: Indices of top-k experts for each token.
-                - tokens_per_expert: Number of tokens assigned to each expert.
-        """
-        logits = self.apply_z_loss(logits)
-
+    # Simplify code a lot compared to original, since we do not need training.
+    # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        logits = F.linear(input, self.weight)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
+        scores = F.softmax(top_logits, dim=-1)
 
         tokens_per_expert = torch.histc(
             top_indices.flatten(),
@@ -954,65 +877,6 @@ class TopKRouter(nn.Module):
             max=self.config.moe_num_experts - 1,
         )
 
-        scores = self.apply_aux_loss(logits, tokens_per_expert, scores)
-        return scores, top_indices, tokens_per_expert
-
-    def apply_z_loss(self, logits: torch.Tensor) -> torch.Tensor:
-        """
-        Apply z-loss to encourage router logits to remain small for enhanced stability.
-
-        Args:
-            logits (torch.Tensor): Router logits.
-
-        Returns:
-            torch.Tensor: Logits with z-loss applied.
-        """
-        z_loss = z_loss_func(logits, self.config.moe_z_loss_coeff)
-        logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
-        return logits
-
-    def apply_aux_loss(
-        self,
-        logits: torch.Tensor,
-        tokens_per_expert: torch.Tensor,
-        activation: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Apply auxiliary loss for load balancing among experts.
-
-        Args:
-            logits (torch.Tensor): Router logits.
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-            activation (torch.Tensor): Activation values.
-
-        Returns:
-            torch.Tensor: Activation with auxiliary loss applied.
-        """
-        probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
-        aux_loss = switch_load_balancing_loss_func(
-            probs,
-            tokens_per_expert,
-            self.config.moe_topk,
-            self.config.moe_aux_loss_coeff,
-        )
-        return MoEAuxLossAutoScaler.apply(activation, aux_loss)
-
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass of the TopKRouter.
-
-        Args:
-            input (torch.Tensor): Input tensor of shape [batch_size * seq_len, hidden_size].
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-                - scores: Softmax probabilities for top-k experts.
-                - top_indices: Indices of top-k experts for each token.
-                - tokens_per_expert: Number of tokens assigned to each expert.
-        """
-        logits = self.gating(input)
-        logits = logits.view(-1, self.config.moe_num_experts)
-        scores, top_indices, tokens_per_expert = self.routing(logits)
         return scores, top_indices, tokens_per_expert
 
 
@@ -1132,12 +996,13 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
     def __init__(self, config: AriaTextConfig):
         super().__init__()
 
-        self.router = TopKRouter(config)
+        self.router = AriaTopKRouter(config)
         self.experts = AriaGroupedMLP(config)
         self.shared_experts = AriaMLP(config)
         self.config = config
         self.hidden_states_shape = None
         self.reversed_input_permutation_mapping = None
+
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -1156,61 +1021,33 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         4. Unpermute and combine expert outputs.
         5. Add shared expert output to the final result.
         """
+        original_shape = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
+
         scores, indices, tokens_per_expert = self.router(hidden_states)
 
-        permuted_tokens = self.token_permutation(hidden_states, indices)
+        # Token permutation
+        flatten_indices = indices.view(-1)
+        sorted_indices = torch.argsort(flatten_indices)
+        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
 
+        # Process through experts
         expert_output = self.experts(permuted_tokens, tokens_per_expert)
 
-        output = self.token_unpermutation(expert_output, scores)
-
-        shared_expert_output = self.shared_experts(hidden_states)
-        output += shared_expert_output
-        return output
-
-    def token_permutation(self, hidden_states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-        """
-        Permute tokens based on expert assignments.
-
-        Args:
-            hidden_states (torch.Tensor): Input hidden states.
-            indices (torch.Tensor): Expert assignment indices.
-
-        Returns:
-            torch.Tensor: Permuted tokens.
-        """
-        self.hidden_states_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        flatten_indices = indices.flatten()
-        sorted_indices = torch.argsort(flatten_indices, stable=True)
-        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
-        self.reversed_input_permutation_mapping = sorted_indices
-        return permuted_tokens
-
-    def token_unpermutation(self, permuted_tokens: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
-        """
-        Unpermute tokens and combine expert outputs.
-
-        Args:
-            permuted_tokens (torch.Tensor): Tokens after expert processing.
-            scores (torch.Tensor): Expert assignment scores.
-
-        Returns:
-            torch.Tensor: Unpermuted and combined output.
-        """
-        num_unpermuted_tokens = scores.numel()
+        # Token unpermutation
         unpermuted_tokens = torch.zeros(
-            (num_unpermuted_tokens, permuted_tokens.size(1)),
-            dtype=permuted_tokens.dtype,
-            device=permuted_tokens.device,
+            (scores.shape[0] * self.config.moe_topk, expert_output.size(1)),
+            dtype=expert_output.dtype,
+            device=expert_output.device,
         )
-        unpermuted_tokens.index_copy_(0, self.reversed_input_permutation_mapping, permuted_tokens)
-        unpermuted_tokens = unpermuted_tokens.reshape(-1, self.config.moe_topk, permuted_tokens.size(1))
+        unpermuted_tokens.index_copy_(0, sorted_indices, expert_output)
+        unpermuted_tokens = unpermuted_tokens.view(-1, self.config.moe_topk, expert_output.size(1))
 
-        unpermuted_tokens = unpermuted_tokens * scores.unsqueeze(-1)
-        unpermuted_tokens = unpermuted_tokens.sum(dim=1).type_as(permuted_tokens)
-        output = unpermuted_tokens.view(self.hidden_states_shape)
-        return output
+        output = (unpermuted_tokens * scores.unsqueeze(-1)).sum(dim=1).view(original_shape)
+
+        # Add shared expert output
+        shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
+        return output + shared_expert_output
 
 
 class AriaDecoderLayer(LlamaDecoderLayer):
