@@ -308,7 +308,7 @@
       title: DeepSpeed
     - local: main_classes/executorch
       title: ExecuTorch
-    - local: in_translation
+    - local:  main_classes/feature_extractor
       title: (번역중) Feature Extractor
     - local: in_translation
       title: (번역중) Image Processor
