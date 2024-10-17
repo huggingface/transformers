@@ -59,6 +59,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     batch_size: int,
     is_training: bool = False,
     token_type_ids: torch.Tensor = None,
+    **kwargs,
 ):
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -572,6 +573,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -581,32 +583,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             cache_position=cache_position,
             use_cache=use_cache,
             num_logits_to_keep=num_logits_to_keep,
+            token_type_ids=token_type_ids,
             **kwargs,
         )
-
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            dtype = self.get_output_embeddings().weight.dtype
-            min_dtype = torch.finfo(dtype).min
-
-            model_inputs["attention_mask"] = _prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
-                dtype=dtype,
-                device=device,
-                min_dtype=min_dtype,
-                cache_position=cache_position,
-                batch_size=batch_size,
-            )
-
-        model_inputs["token_type_ids"] = token_type_ids
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:

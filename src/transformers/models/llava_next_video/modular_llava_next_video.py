@@ -572,6 +572,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- extra custom processing
+
         if input_ids is not None:
             img_token_not_enough = (input_ids == self.config.image_token_index).sum(
                 1

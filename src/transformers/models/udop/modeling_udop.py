@@ -1869,36 +1869,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-            "bbox": kwargs.get("bbox", None),
-            "pixel_values": kwargs.get("pixel_values", None),
-            "visual_bbox": kwargs.get("visual_bbox", None),
-        }
-
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output

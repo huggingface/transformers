@@ -390,13 +390,16 @@ class GenerationMixin:
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and not self.config.is_encoder_decoder and cache_position[0] == 0:
-            model_inputs[input_ids_key] = None
-            model_inputs["inputs_embeds"] = inputs_embeds
+        if not self.config.is_encoder_decoder:
+            if inputs_embeds is not None and cache_position[0] == 0:
+                model_inputs[input_ids_key] = None
+                model_inputs["inputs_embeds"] = inputs_embeds
+            else:
+                # `clone` calls in this function ensure a consistent stride. See #32227
+                model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
+                model_inputs["inputs_embeds"] = None
         else:
-            # `clone` calls in this function ensure a consistent stride. See #32227
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
-            model_inputs["inputs_embeds"] = None
 
         # 4. Create missing `position_ids` on the fly
         if (
@@ -428,10 +431,15 @@ class GenerationMixin:
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class).
-            base_model = getattr(self, self.base_model_prefix)
-            causal_mask_creation_function = getattr(
-                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
-            )
+            base_model = getattr(self, self.base_model_prefix, None)
+            if base_model is None:
+                causal_mask_creation_function = getattr(
+                    self, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                )
+            else:
+                causal_mask_creation_function = getattr(
+                    base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                )
             if causal_mask_creation_function is None:
                 logger.warning_once(
                     f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
@@ -444,10 +452,12 @@ class GenerationMixin:
                     attention_mask,
                     sequence_length=sequence_length,
                     target_length=past_key_values.get_max_cache_shape(),
-                    dtype=self.get_output_embeddings().weight.dtype,
+                    dtype=self.dtype,
                     device=device,
                     cache_position=cache_position,
                     batch_size=batch_size,
+                    config=self.config,
+                    past_key_values=past_key_values,
                 )
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
