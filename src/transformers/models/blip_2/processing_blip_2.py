@@ -137,7 +137,9 @@ class Blip2Processor(ProcessorMixin):
             # because BLIP expects image tokens to be at the beginning even before BOS token
             if self.num_query_tokens is not None:
                 image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                image_token_encoding = self.tokenizer(
+                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
