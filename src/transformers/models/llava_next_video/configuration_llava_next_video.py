@@ -61,6 +61,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
             Pooling mode to use for videos. Can be "average", "max" or "conv".
         spatial_pool_stride (`int`, *optional*, defaults to 2):
             Stride used in the pooling layer for videos.
+        newline_position (`str`, *optional*):
+            Defines where to add `image_newline` when processing videos. If `newline_position="grid"` then newline is added on each grid,
+            otherwise no newlines is added.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
@@ -102,6 +105,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
+        newline_position=None,
         image_seq_length=576,
         video_seq_length=288,
         **kwargs,
@@ -114,6 +118,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.newline_position = newline_position
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(

@@ -75,6 +75,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
             Pooling mode to use for videos. Can be "average", "max" or "conv".
         spatial_pool_stride (`int`, *optional*, defaults to 2):
             Stride used in the pooling layer for videos.
+        newline_position (`str`, *optional*):
+            Defines where to add `image_newline` when processing videos. If `newline_position="grid"` then newline is added on each grid,
+            otherwise no newlines is added.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
@@ -116,6 +119,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
+        newline_position=None,
         image_seq_length=576,
         video_seq_length=288,
         **kwargs,
@@ -128,6 +132,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.newline_position = newline_position
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -198,6 +203,8 @@ class LlavaNextVideoPooler(nn.Module):
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
         elif mode == "max":
             self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
+        elif mode == "bilinear":
+            self.pool = nn.Upsample(scale_factor=(1 / stride), mode="bilinear")
         elif mode == "conv":
             self.pool = nn.Conv2d(
                 in_channels=config.vision_config.hidden_size,
@@ -206,7 +213,7 @@ class LlavaNextVideoPooler(nn.Module):
                 stride=stride,
             )
         else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`, `bilinear`]")
 
     def forward(self, image_features):
         ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
@@ -267,7 +274,24 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_features = self.vision_resampler(selected_image_feature)
         image_features = self.multi_modal_projector(image_features)
         image_features = torch.split(image_features, frames, dim=0)
-        return image_features
+
+        if self.config.newline_position == "grid":
+            features_processed = []
+            for feature in image_features:
+                resize_height = int(math.sqrt(feature.shape[1]))
+                feature = feature.view(frames, 1, resize_height, resize_height, -1)
+                feature = feature.permute(4, 0, 2, 1, 3).contiguous()
+                feature = feature.flatten(1, 2).flatten(2, 3)
+                feature = torch.cat(
+                    (feature, self.image_newline[:, None, None].expand(*feature.shape[:-1], 1).to(feature.device)),
+                    dim=-1,
+                )
+                feature = feature.flatten(1, 2).transpose(0, 1)
+                features_processed.append(feature)
+        else:
+            features_processed = [feature.flatten(0, 1) for feature in image_features]
+
+        return features_processed
 
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class="LlavaNextVideoConfig")
     def forward(
@@ -418,7 +442,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         video_features = video_feature_lens = None
         if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
             video_features = self._get_video_features(pixel_values_videos)
-            video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)

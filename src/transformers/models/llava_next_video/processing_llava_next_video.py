@@ -66,7 +66,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
     image_processor_class = "LlavaNextImageProcessor"
     video_processor_class = "LlavaNextVideoImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
