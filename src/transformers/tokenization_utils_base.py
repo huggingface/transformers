@@ -31,6 +31,7 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from huggingface_hub import list_repo_files
 from packaging import version
 
 from . import __version__
@@ -149,6 +150,14 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
 _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
+
+SUPPORTED_TOKENIZER_FORMAT_NAMES = {
+    "tokenizer.json",  # fast tokenizer file -> `PreTrainedTokenizerFast`
+    "tokenizer.model",  # both sentencepiece and tiktoken
+    "tekken.json",  # mistral file
+    "tokenizer_config.json",  # transformers filename, for Slow and Fast classes
+    ".gguf",
+}
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -2090,97 +2099,48 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        vocab_files = {}
         init_configuration = {}
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1 and not gguf_file:
-                raise ValueError(
-                    f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
-                    "supported for this tokenizer. Use a model identifier or the path to a directory instead."
-                )
-            warnings.warn(
-                f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
-                "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
-                FutureWarning,
-            )
-            file_id = list(cls.vocab_files_names.keys())[0]
 
-            vocab_files[file_id] = pretrained_model_name_or_path
-            single_file_id = file_id
-        else:
-            if gguf_file:
-                vocab_files["vocab_file"] = gguf_file
-            else:
-                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-                additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
-                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
-                    "tokenizer_file": FULL_TOKENIZER_FILE,
-                }
-                vocab_files = {**cls.vocab_files_names, **additional_files_names}
-                if "tokenizer_file" in vocab_files:
-                    # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                    fast_tokenizer_file = FULL_TOKENIZER_FILE
-                    resolved_config_file = cached_file(
-                        pretrained_model_name_or_path,
-                        TOKENIZER_CONFIG_FILE,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        resume_download=resume_download,
-                        proxies=proxies,
-                        token=token,
-                        revision=revision,
-                        local_files_only=local_files_only,
-                        subfolder=subfolder,
-                        user_agent=user_agent,
-                        _raise_exceptions_for_gated_repo=False,
-                        _raise_exceptions_for_missing_entries=False,
-                        _raise_exceptions_for_connection_errors=False,
-                        _commit_hash=commit_hash,
-                    )
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                    if resolved_config_file is not None:
-                        with open(resolved_config_file, encoding="utf-8") as reader:
-                            tokenizer_config = json.load(reader)
-                            if "fast_tokenizer_files" in tokenizer_config:
-                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file
-
-        # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
+
+        if not is_local:
+            remote_or_local_files = list_repo_files(pretrained_model_name_or_path)
+        elif not gguf_file:
+            remote_or_local_files = os.listdir(pretrained_model_name_or_path)
+
+        file_pathes = {f for f in remote_or_local_files if f in SUPPORTED_TOKENIZER_FORMAT_NAMES}
+
+        if gguf_file:
+            if os.path.isfile(gguf_file):
+                resolved_file_path = gguf_file
+            elif is_remote_url(gguf_file):
+                resolved_file_path = download_url(gguf_file, proxies=proxies)
+            resolved_vocab_files["vocab_file"] = resolved_file_path
+            file_pathes = gguf_file
+
+        # Get shortlisted `remote_or_local_files` from url, cache, or disk depending on the case
         unresolved_files = []
-        for file_id, file_path in vocab_files.items():
-            if file_path is None:
-                resolved_vocab_files[file_id] = None
-            elif single_file_id == file_id:
-                if os.path.isfile(file_path):
-                    resolved_vocab_files[file_id] = file_path
-                elif is_remote_url(file_path):
-                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
-            else:
-                resolved_vocab_files[file_id] = cached_file(
-                    pretrained_model_name_or_path,
-                    file_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                    _commit_hash=commit_hash,
-                )
-                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
+        for file_path in file_pathes:
+            resolved_vocab_files[file_path] = cached_file(
+                pretrained_model_name_or_path,
+                file_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                token=token,
+                user_agent=user_agent,
+                revision=revision,
+                subfolder=subfolder,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                _commit_hash=commit_hash,
+            )
+            commit_hash = extract_commit_hash(resolved_vocab_files[file_path], commit_hash)
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -2197,15 +2157,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
                 f"containing all relevant files for a {cls.__name__} tokenizer."
             )
-
-        for file_id, file_path in vocab_files.items():
-            if file_id not in resolved_vocab_files:
-                continue
-
-            if is_local:
-                logger.info(f"loading file {file_path}")
-            else:
-                logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
 
         return cls._from_pretrained(
             resolved_vocab_files,
@@ -2239,12 +2190,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
-        gguf_file = kwargs.get("gguf_file", None)
-        has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+        only_slow_available = resolved_vocab_files == {"tokenizer.model"}
+        tokenizer_file = "tokenizer.json" in resolved_vocab_files
 
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
+
+        if (from_slow or only_slow_available) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
@@ -2261,15 +2211,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
-        tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
+        tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config.json", None)
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
-            if not has_tokenizer_file:
-                init_kwargs.pop("tokenizer_file", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -2348,10 +2296,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
-        for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in init_kwargs:
-                init_kwargs[args_name] = file_path
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
+        init_kwargs["resolved_vocab_files"] = resolved_vocab_files
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
@@ -2419,7 +2364,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `tokenizer_config.json` is `None`
-            if tokenizer_file is not None:
+            if tokenizer_file is not None and tokenizer_file:
                 # This is for slow so can be done before
                 with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
                     tokenizer_file_handle = json.load(tokenizer_file_handle)

@@ -20,7 +20,7 @@ from typing import Dict, Optional
 import numpy as np
 from tqdm import tqdm
 
-from .integrations import (
+from .integrations.ggml import (
     GGUF_CONFIG_MAPPING,
     GGUF_TENSOR_MAPPING,
     GGUF_TOKENIZER_MAPPING,
