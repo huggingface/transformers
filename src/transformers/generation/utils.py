@@ -2588,13 +2588,13 @@ class GenerationMixin:
         def model_forward(model, *args, **kwargs):
             return model.forward(*args, **kwargs)
 
-        model_forward= torch.compile(model_forward, mode="reduce-overhead", fullgraph=True) # 
-        
-        i = 0 
+        model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)  #
+
+        i = 0
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            if i ==0 :
+            if i == 0:
                 # forward pass to get next token
                 outputs = self(
                     **model_inputs,
@@ -2602,11 +2602,10 @@ class GenerationMixin:
                     output_attentions=output_attentions,
                     output_hidden_states=True,
                 )
+                i += 1
             else:
-                model_forward(**model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=True
+                outputs = model_forward(
+                    **model_inputs, return_dict=True, output_attentions=output_attentions, output_hidden_states=True
                 )
             # .float() is needed to retain precision for later logits manipulations
             final_layer_next_token_logits = outputs.logits[:, -1, :].detach().clone().float()
@@ -3166,10 +3165,9 @@ class GenerationMixin:
         def model_forward(model, *args, **kwargs):
             return model.forward(*args, **kwargs)
 
-        model_forward= torch.compile(model_forward, mode="reduce-overhead", fullgraph=True) # 
-        
-        i = 0 
-        import time
+        model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)  #
+
+        i = 0
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3181,24 +3179,11 @@ class GenerationMixin:
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            if i == 0 :
-                # forward pass to get next token
-                # start = time.perf_counter()
-                outputs = self(**model_inputs,return_dict=True)
-                # torch.cuda.synchronize()
-                # print(" time to first token: ", time.perf_counter()-start)
+            if i == 0:
+                outputs = self(**model_inputs, return_dict=True)
                 i += 1
             else:
-                # start = time.perf_counter()
-                i += 1
-                del model_inputs["attention_mask"]
-                outputs = model_forward(self, return_dict=True,output_attentions=output_attentions,output_hidden_states=True, **model_inputs)
-                # torch.cuda.synchronize()
-                # print(f" compiled time to {i} token: ", time.perf_counter()-start)
-
-
-            # # forward pass to get next token
-            # outputs = self(**model_inputs, return_dict=True)
+                outputs = model_forward(self, return_dict=True, **model_inputs)
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
