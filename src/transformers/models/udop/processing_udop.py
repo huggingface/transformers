@@ -118,8 +118,6 @@ class UdopProcessor(ProcessorMixin):
             **self.prepare_and_validate_optional_call_args(*args),
         )
 
-        test_val = 5  # Just triggering the UDOP CI
-
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)
         word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
         text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
