@@ -287,6 +287,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
 |                [RT-DETR-ResNet](model_doc/rt_detr_resnet)                |       ✅        |         ❌         |      ❌      |
+|                    [RT-DETRv2](model_doc/rt_detr_v2)                     |       ✅        |         ❌         |      ❌      |
+|             [RT-DETRv2-ResNet](model_doc/rt_detr_v2_resnet)              |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
