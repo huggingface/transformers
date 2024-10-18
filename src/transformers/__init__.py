@@ -142,7 +142,9 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "loss": [],
     "modelcard": ["ModelCard"],
+    # Losses
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
         "load_pytorch_checkpoint_in_tf2_model",
