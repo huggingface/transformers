@@ -486,7 +486,7 @@ GLM_ATTENTION_CLASSES = {
 
 
 class GlmDecoderLayer(nn.Module):
-    def __init__(self, config: GlmConfig, layer_idx: int):
+    def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -971,7 +971,7 @@ class GlmModel(GlmPreTrainedModel):
 class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.model = GlmModel(config)
         self.vocab_size = config.vocab_size
@@ -1113,7 +1113,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     GLM_START_DOCSTRING,
 )
 class GlmForSequenceClassification(GlmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GlmModel(config)
@@ -1228,7 +1228,7 @@ class GlmForSequenceClassification(GlmPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GlmForTokenClassification(GlmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GlmModel(config)

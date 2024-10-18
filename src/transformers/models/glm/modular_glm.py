@@ -21,7 +21,6 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...utils import logging
-from ..gemma.configuration_gemma import GemmaConfig
 from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
@@ -42,41 +41,10 @@ from ..phi3.modeling_phi3 import (
     Phi3RMSNorm,
     Phi3RotaryEmbedding,
 )
+from .configuration_glm import GlmConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class GlmConfig(GemmaConfig):
-    model_type = "glm"
-
-    def __init__(
-        self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
-        head_dim=128,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=0.00000015625,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        pad_token_id=151329,
-        eos_token_id=[151329, 151336, 151338],
-        bos_token_id=None,
-        attention_bias=True,
-        **kwargs,
-    ):
-        super().__init__(
-            **kwargs,
-        )
-        del self.hidden_activation
 
 
 class GlmRMSNorm(Phi3RMSNorm):
@@ -162,7 +130,7 @@ GLM_ATTENTION_CLASSES = {
 
 
 class GlmDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: GlmConfig, layer_idx: int):
+    def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__()
 
         self.mlp = GlmMLP(config)
@@ -191,28 +159,27 @@ class GlmModel(GlmPreTrainedModel, LlamaModel):
 
 
 class GlmForCausalLM(GemmaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.model = GlmModel(config)
         self.post_init()
 
 
 class GlmForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.model = GlmModel(config)
         self.post_init()
 
 
 class GlmForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.model = GlmModel(config)
         self.post_init()
 
 
 __all__ = [
-    "GlmConfig",
     "GlmPreTrainedModel",
     "GlmModel",
     "GlmForCausalLM",
