@@ -74,26 +74,26 @@ In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. N
 >>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
-## GLMConfig
+## GlmConfig
 
 [[autodoc]] GLMConfig
 
-## GLMModel
+## GlmModel
 
 [[autodoc]] GLMModel
     - forward
 
-## GLMForCausalLM
+## GlmForCausalLM
 
 [[autodoc]] GLMForCausalLM
     - forward
 
-## GLMForSequenceClassification
+## GlmForSequenceClassification
 
 [[autodoc]] GLMForSequenceClassification
     - forward
 
-## GLMForTokenClassification
+## GlmForTokenClassification
 
 [[autodoc]] GLMForTokenClassification
     - forward
