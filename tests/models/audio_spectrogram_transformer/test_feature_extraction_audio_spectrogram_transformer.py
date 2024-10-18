@@ -15,6 +15,7 @@
 
 
 import itertools
+import logging
 import os
 import random
 import tempfile
@@ -23,10 +24,17 @@ import unittest
 import numpy as np
 
 from transformers import ASTFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
+from transformers.testing_utils import (
+    CaptureLogger,
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torchaudio,
+)
 from transformers.utils.import_utils import is_torch_available
 
-from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
+from ...test_sequence_feature_extraction_common import (
+    SequenceFeatureExtractionTestMixin,
+)
 
 
 global_rng = random.Random()
@@ -136,6 +144,146 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_with_all_data_augmentations(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input with time_mask_length and frequency_mask_length
+        torch.manual_seed(0)
+        # set the numpy seed
+        np.random.seed(0)
+        encoded_sequences_1 = feat_extract(
+            speech_inputs[0],
+            return_tensors="np",
+            time_mask_length=40,
+            frequency_mask_length=40,
+            add_noise=True,
+            add_temporal_shift=True,
+        ).input_values
+        torch.manual_seed(0)
+        np.random.seed(0)
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs[0],
+            return_tensors="np",
+            time_mask_length=40,
+            frequency_mask_length=40,
+            add_noise=True,
+            add_temporal_shift=True,
+        ).input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+    def test_call_with_time_mask_length_and_frequency_mask_length(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input with time_mask_length and frequency_mask_length
+        torch.manual_seed(0)
+        encoded_sequences_1 = feat_extract(
+            speech_inputs[0], return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        torch.manual_seed(0)
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs[0], return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched input with time_mask_length and frequency_mask_length
+        torch.manual_seed(0)
+        encoded_sequences_1 = feat_extract(
+            speech_inputs, padding=True, return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        torch.manual_seed(0)
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs, padding=True, return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched with time_mask_length and frequency_mask_length
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        torch.manual_seed(0)
+        encoded_sequences_1 = feat_extract(
+            speech_inputs, return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        torch.manual_seed(0)
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs, return_tensors="np", time_mask_length=40, frequency_mask_length=40
+        ).input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def test_call_with_only_time_mask_length(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input with time_mask_length and frequency_mask_length
+        torch.manual_seed(0)
+        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np", time_mask_length=40).input_values
+        torch.manual_seed(0)
+        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np", time_mask_length=40).input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+    def test_call_with_only_frequency_mask_length(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input with frequency_mask_length
+        torch.manual_seed(0)
+        encoded_sequences_1 = feat_extract(
+            speech_inputs[0], return_tensors="np", frequency_mask_length=40
+        ).input_values
+        torch.manual_seed(0)
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs[0], return_tensors="np", frequency_mask_length=40
+        ).input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+    def test_call_with_add_noise(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        feat_extract(speech_inputs[0], return_tensors="np", add_noise=True).input_values
+
+    def test_call_with_add_temporal_shit(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        feat_extract(speech_inputs[0], return_tensors="np", add_temporal_shit=True).input_values
+
+    def test_warning_raised_audio_too_short(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        short_input = floats_list((1, 399))[0]
+
+        logger = logging.getLogger(
+            "transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer"
+        )
+        logger.warning_once.cache_clear()
+
+        with CaptureLogger(logger) as cl:
+            feat_extract(short_input, return_tensors="np", sampling_rate=16000).input_values
+
+        self.assertIn(
+            "One of the input waveforms has length 399, which is less than the minimum of 400. This would result in an error when creating the spectrogram. Padding it to have length 400.",
+            cl.out,
+        )
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
@@ -220,3 +368,38 @@ class ASTFeatureExtractionWithoutTorchaudioTest(ASTFeatureExtractionTest):
         )
 
         self.assertFalse(is_speech_available())
+
+    def test_call_with_time_mask_length_and_frequency_mask_length(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        with self.assertRaises(ImportError) as _:
+            feat_extract(speech_inputs, return_tensors="np", time_mask_length=40, frequency_mask_length=40)
+
+    def test_call_with_only_time_mask_length(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        with self.assertRaises(ImportError) as _:
+            feat_extract(speech_inputs, return_tensors="np", time_mask_length=40)
+
+    def test_call_with_only_frequency_mask_length(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        with self.assertRaises(ImportError) as _:
+            feat_extract(speech_inputs, return_tensors="np", frequency_mask_length=40)
+
+    def test_call_with_all_data_augmentations(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        with self.assertRaises(ImportError) as _:
+            feat_extract(
+                speech_inputs,
+                return_tensors="np",
+                time_mask_length=40,
+                frequency_mask_length=40,
+                add_noise=True,
+                add_temporal_shift=True,
+            )
