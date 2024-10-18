@@ -590,6 +590,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = (
             input_ids is not None

@@ -97,6 +97,7 @@ from . import (
     gemma,
     gemma2,
     git,
+    glm,
     glpn,
     gpt2,
     gpt_bigcode,

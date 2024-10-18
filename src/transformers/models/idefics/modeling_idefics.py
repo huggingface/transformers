@@ -1441,6 +1441,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1674,6 +1675,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         use_cache=None,
         **kwargs,
     ):
+        # Overwritten -- custom processing based on `config.use_resampler`
+
         model_inputs = {}
         if image_hidden_states is not None:
             if self.config.use_resampler:
