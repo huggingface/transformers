@@ -968,6 +968,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         legacy_processing = (
             input_ids is not None
             and (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length

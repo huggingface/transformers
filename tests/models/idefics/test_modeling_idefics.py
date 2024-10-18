@@ -772,6 +772,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_custom_4d_attention_mask(self):
         pass
 
+    @unittest.skip(
+        reason="IDEFICS has specific requirements for working with inputs embeds like passing also the ids and pixels"
+    )
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
+
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
     def test_generate_compile_fullgraph(self):
         pass
