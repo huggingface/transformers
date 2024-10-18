@@ -955,7 +955,7 @@ class WhisperGenerationMixin(GenerationMixin):
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
-        start_idx = decoder_input_ids.shape[-1] if not is_first_segment else torch.tensor(0)
+        start_idx = decoder_input_ids.shape[-1] 
 
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, start_idx:]
