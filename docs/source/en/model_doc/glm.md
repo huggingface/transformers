@@ -76,24 +76,24 @@ In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. N
 
 ## GlmConfig
 
-[[autodoc]] GLMConfig
+[[autodoc]] GlmConfig
 
 ## GlmModel
 
-[[autodoc]] GLMModel
+[[autodoc]] GlmModel
     - forward
 
 ## GlmForCausalLM
 
-[[autodoc]] GLMForCausalLM
+[[autodoc]] GlmForCausalLM
     - forward
 
 ## GlmForSequenceClassification
 
-[[autodoc]] GLMForSequenceClassification
+[[autodoc]] GlmForSequenceClassification
     - forward
 
 ## GlmForTokenClassification
 
-[[autodoc]] GLMForTokenClassification
+[[autodoc]] GlmForTokenClassification
     - forward
