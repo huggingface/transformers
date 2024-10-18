@@ -482,6 +482,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         # TODO: @raushan retain only the new behavior after v4.47
         else:
             if image_features is not None:
+                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+                n_image_features = image_features.shape[0]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 special_image_mask = (
                     (input_ids == self.config.image_token_index)
                     .unsqueeze(-1)
@@ -491,6 +497,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
             if video_features is not None:
+                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_features = video_features.shape[0]
+                if n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
                 special_image_mask = (
                     (input_ids == self.config.video_token_index)
                     .unsqueeze(-1)
@@ -560,6 +572,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- extra custom processing
+
         if input_ids is not None:
             img_token_not_enough = (input_ids == self.config.image_token_index).sum(
                 1

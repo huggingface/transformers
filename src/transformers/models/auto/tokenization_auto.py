@@ -258,9 +258,9 @@ else:
                 ),
             ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-            ("llava-onevision", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next_video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("llava_onevision", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -309,6 +309,7 @@ else:
             ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("moshi", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -412,6 +413,7 @@ else:
                     "Qwen2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("qwen2_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (

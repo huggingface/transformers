@@ -1287,6 +1287,12 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
+            n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum().item()
+            n_image_features = image_tokens.shape[0]
+            if n_image_tokens_in_text != n_image_features:
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens_in_text}, features {n_image_features}"
+                )
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
@@ -1445,6 +1451,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1638,6 +1645,8 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         use_cache=True,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here

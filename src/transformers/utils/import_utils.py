@@ -112,7 +112,6 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
-_decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -1173,10 +1172,6 @@ def is_ccl_available():
     return _is_ccl_available
 
 
-def is_decord_available():
-    return _decord_available
-
-
 def is_sudachi_available():
     return _sudachipy_available
 
@@ -1547,10 +1542,6 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
-DECORD_IMPORT_ERROR = """
-{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
-decord`. Please note that you may need to restart your runtime after installation.
-"""
 
 CYTHON_IMPORT_ERROR = """
 {0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
@@ -1612,7 +1603,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),

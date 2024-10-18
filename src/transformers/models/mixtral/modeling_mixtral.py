@@ -26,7 +26,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
@@ -1327,18 +1326,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size)
 
         aux_loss = None
         if output_router_logits:
@@ -1366,76 +1354,6 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        output_router_logits=False,
-        position_ids=None,
-        use_cache=True,
-        num_logits_to_keep=None,
-        **kwargs,
-    ):
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
-
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                config=self.config,
-                past_key_values=past_key_values,
-            )
-
-        if num_logits_to_keep is not None:
-            model_inputs["num_logits_to_keep"] = num_logits_to_keep
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-                "output_router_logits": output_router_logits,
-            }
-        )
-        return model_inputs
 
 
 @add_start_docstrings(
@@ -1528,27 +1446,8 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1632,8 +1531,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_function(logits, labels, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1686,6 +1584,7 @@ class MixtralForQuestionAnswering(MixtralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1717,29 +1616,16 @@ class MixtralForQuestionAnswering(MixtralPreTrainedModel):
         start_logits = start_logits.squeeze(-1).contiguous()
         end_logits = end_logits.squeeze(-1).contiguous()
 
-        total_loss = None
+        loss = None
         if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1).to(start_logits.device)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1).to(end_logits.device)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
-            loss=total_loss,
+            loss=loss,
             start_logits=start_logits,
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,

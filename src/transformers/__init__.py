@@ -142,7 +142,9 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "loss": [],
     "modelcard": ["ModelCard"],
+    # Losses
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
         "load_pytorch_checkpoint_in_tf2_model",
@@ -590,6 +592,10 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.moshi": [
+        "MoshiConfig",
+        "MoshiDepthConfig",
+    ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -935,7 +941,6 @@ _import_structure = {
         "is_av_available",
         "is_bitsandbytes_available",
         "is_datasets_available",
-        "is_decord_available",
         "is_faiss_available",
         "is_flax_available",
         "is_keras_nlp_available",
@@ -2781,6 +2786,14 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.moshi"].extend(
+        [
+            "MoshiForCausalLM",
+            "MoshiForConditionalGeneration",
+            "MoshiModel",
+            "MoshiPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5448,6 +5461,10 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.moshi import (
+        MoshiConfig,
+        MoshiDepthConfig,
+    )
     from .models.mpnet import (
         MPNetConfig,
         MPNetTokenizer,
@@ -5839,7 +5856,6 @@ if TYPE_CHECKING:
         is_av_available,
         is_bitsandbytes_available,
         is_datasets_available,
-        is_decord_available,
         is_faiss_available,
         is_flax_available,
         is_keras_nlp_available,
@@ -7385,6 +7401,12 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.moshi import (
+            MoshiForCausalLM,
+            MoshiForConditionalGeneration,
+            MoshiModel,
+            MoshiPreTrainedModel,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
