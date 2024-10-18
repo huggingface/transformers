@@ -269,22 +269,65 @@ class PixtralVisionModelIntegrationTest(unittest.TestCase):
         gc.collect()
         torch.cuda.empty_cache()
 
-    @slow
+    # @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = PixtralVisionModel.from_pretrained("hf-internal-testing/pixtral-12b", load_in_4bit=True)
 
         prompt = "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
-        image_file = "https://pixtral-vl.github.io/static/images/view.jpg"
+        image_file = "https://picsum.photos/id/17/150/600"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[    1,     3,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    12,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    12,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    12,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    12,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    12,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    12,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    12,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    12,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            12,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    12,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    12,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    12,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    12,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    12,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    12,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    12,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    12,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    12,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            12,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    12,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    12,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    12,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    12,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    12,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    12,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    12,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    12,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    12,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            12,    10,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    12,    10,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    12,    10,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    12,    10,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    12,    10,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    12,    10,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    12,    10,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    12,    10,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    12,    10,
+            10,    10,    10,    10,    10,    10,    10,    10,    10,    13,
+          1010,  7493,  1584,  1278,  5705,  1362,  2715,  1402, 86994,  2314,
+          2200,  1362,  9206,  1593,  3535,  1063,     4]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        EXPECTED_DECODED_TEXT = '\nWhat are the things I should be cautious about when I visit this place?When visiting a place with a dirt path surrounded by trees and grass, there are several things to be'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
