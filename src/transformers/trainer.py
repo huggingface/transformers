@@ -2403,9 +2403,9 @@ class Trainer:
             steps_skipped = 0
             if steps_trained_in_current_epoch > 0:
                 if self.use_stateful_dataloader:
-                    epoch_iterator.load_state_dict(self.state.train_dataloader_state_dict)
+                    epoch_dataloader.load_state_dict(self.state.train_dataloader_state_dict)
                 else:
-                    epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                    epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
@@ -2540,7 +2540,7 @@ class Trainer:
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         # Maybe we should only update the state dict right before checkpointing?
                         if self.use_stateful_dataloader:
-                            self.state.train_dataloader_state_dict = epoch_iterator.state_dict()
+                            self.state.train_dataloader_state_dict = epoch_dataloader.state_dict()
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
                     else:
