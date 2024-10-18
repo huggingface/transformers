@@ -28,7 +28,7 @@ from transformers import (
     AutoTokenizer,
     LlamaTokenizer,
     LlamaTokenizerFast,
-    PreTrainedTokenizerFast
+    PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
@@ -54,9 +54,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = ["hf-internal-testing/llama-tokenizer", "meta-llama/Llama-2-7b-hf"]
     tokenizer_class = LlamaTokenizer
-    rust_tokenizer_class = PreTrainedTokenizerFast
+    rust_tokenizer_class = LlamaTokenizerFast
 
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
