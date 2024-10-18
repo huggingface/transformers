@@ -21,10 +21,10 @@ import os
 import re
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, split_torch_state_dict_into_shards
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerFast, RwkvConfig
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME
 
 
 NUM_HIDDEN_LAYERS_MAPPING = {
@@ -116,7 +116,7 @@ def convert_rmkv_checkpoint_to_hf_format(
     state_dict = convert_state_dict(state_dict)
 
     # 4. Split in shards and save
-    shards, index = shard_checkpoint(state_dict)
+    shards, index = split_torch_state_dict_into_shards(state_dict)
     for shard_file, shard in shards.items():
         torch.save(shard, os.path.join(output_dir, shard_file))
 
