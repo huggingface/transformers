@@ -42,6 +42,9 @@ class VideoLlavaProcessor(ProcessorMixin):
             The tokenizer is a required input.
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
+        num_additional_image_tokens (`int`, *optional*, defaults to `0`):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Shoudl be same as in model's config
@@ -70,7 +73,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
-        num_additional_image_tokens=None,
+        num_additional_image_tokens=0,
         vision_feature_select_strategy=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         video_token="<video>",
