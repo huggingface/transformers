@@ -1771,18 +1771,14 @@ class Blip2Model(Blip2PreTrainedModel):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
             )
-            if labels is not None:
-                loss = outputs.loss if return_dict else outputs[0]
-                logits = outputs.logits if return_dict else outputs[1]
-            else:
-                loss = None
-                logits = outputs.logits if return_dict else outputs[0]
+            loss = outputs.loss
+            logits = outputs.logits
 
         if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs)
+            output = (logits, vision_outputs, query_outputs, outputs.to_tuple())
             return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
@@ -2250,18 +2246,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
             )
-            if labels is not None:
-                loss = outputs.loss if return_dict else outputs[0]
-                logits = outputs.logits if return_dict else outputs[1]
-            else:
-                loss = None
-                logits = outputs.logits if return_dict else outputs[0]
+            loss = outputs.loss
+            logits = outputs.logits
 
         if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs)
+            output = (logits, vision_outputs, query_outputs, outputs.to_tuple())
             return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
