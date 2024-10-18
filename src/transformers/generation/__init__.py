@@ -43,6 +43,7 @@ else:
     _import_structure["candidate_generator"] = [
         "AssistedCandidateGenerator",
         "CandidateGenerator",
+        "EarlyExitCandidateGenerator",
         "PromptLookupCandidateGenerator",
     ]
     _import_structure["logits_process"] = [
@@ -190,7 +191,12 @@ if TYPE_CHECKING:
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-        from .candidate_generator import AssistedCandidateGenerator, CandidateGenerator, PromptLookupCandidateGenerator
+        from .candidate_generator import (
+            AssistedCandidateGenerator,
+            CandidateGenerator,
+            EarlyExitCandidateGenerator,
+            PromptLookupCandidateGenerator,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
