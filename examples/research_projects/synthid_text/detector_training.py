@@ -20,11 +20,11 @@ import transformers
 from transformers import BayesianDetectorConfig, BayesianDetectorModel, AutoModelForCausalLM
 import utils
 
-NUM_NEGATIVES = 1000
+NUM_NEGATIVES = 10000
 POS_BATCH_SIZE = 32
-NUM_POS_BATCHES = 10
+NUM_POS_BATCHES = 313
 NEG_BATCH_SIZE = 32
-OUTPUTS_LEN = 1024
+OUTPUTS_LEN = 512
 
 # Truncate outputs to this length for training.
 POS_TRUNCATION_LENGTH = 200
@@ -258,7 +258,7 @@ def sample_from_model(model, watermark_config, tokenizer, data_batch, device):
 
 
 if __name__ == "__main__":
-    model_name = "gpt2"
+    model_name = "google/gemma-7b-it"
 
     TEMPERATURE = 0.5
     TOP_K = None
@@ -325,8 +325,10 @@ if __name__ == "__main__":
     )
     tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(NUM_NEGATIVES, NEG_BATCH_SIZE, tokenizer, DEVICE)
     
-    import pdb
-    pdb.set_trace()
+    torch.save(tokenized_wm_outputs, 'tokenized_wm_outputs.pkl')
+    torch.save(tokenized_uwm_outputs, 'tokenized_uwm_outputs.pkl')
+    tokenized_wm_outputs = torch.load('tokenized_wm_outputs.pkl')
+    tokenized_uwm_outputs = torch.load('tokenized_uwm_outputs.pkl')
     best_detector, lowest_loss = train_best_detector(
         tokenized_wm_outputs=tokenized_wm_outputs,
         tokenized_uwm_outputs=tokenized_uwm_outputs,
