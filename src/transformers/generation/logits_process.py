@@ -2594,7 +2594,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         self,
         input_ids: torch.LongTensor,
         scores: torch.FloatTensor,
-    ) -> tuple[torch.FloatTensor, torch.LongTensor, torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor, torch.FloatTensor]:
         """Calls the logits processor statefully.
 
         This function computes top_k internally and returns the indices mapping
@@ -2744,7 +2744,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         self,
         n_minus_1_grams: torch.LongTensor,
         indices: torch.LongTensor,
-    ) -> tuple[torch.LongTensor, torch.LongTensor]:
+    ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """Computes random keys for each ngram and depth.
 
         Args:
