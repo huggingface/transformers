@@ -51,7 +51,7 @@ class LlavaProcessor(ProcessorMixin):
             The tokenizer is a required input.
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
-        num_additional_image_tokens (`int`, *optional*, defaults to `0`):
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
         vision_feature_select_strategy (`str`, *optional*):
