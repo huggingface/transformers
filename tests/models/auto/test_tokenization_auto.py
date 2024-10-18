@@ -201,6 +201,11 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer.padding_side, "right")
         self.assertEqual(tokenizer.truncation_side, "right")
 
+    def test_PreTrainedTokenizerFast_inferred(self):
+        # Model does not have a fast tokenizer or PreTrainedTokenizerFast specified in config but can still load fast
+        tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224", use_fast=True)
+        self.assertEqual(type(tokenizer), PreTrainedTokenizerFast)
+
     def test_auto_tokenizer_from_local_folder(self):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
