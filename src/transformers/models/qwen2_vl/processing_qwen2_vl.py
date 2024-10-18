@@ -61,6 +61,8 @@ class Qwen2VLProcessor(ProcessorMixin):
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not tokenizer.is_multimodal else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not tokenizer.is_multimodal else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -132,23 +134,23 @@ class Qwen2VLProcessor(ProcessorMixin):
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
-                while "<|image_pad|>" in text[i]:
+                while self.image_token in text[i]:
                     text[i] = text[i].replace(
-                        "<|image_pad|>", "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
+                        self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
                     )
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", "<|image_pad|>")
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
-                while "<|video_pad|>" in text[i]:
+                while self.video_token in text[i]:
                     text[i] = text[i].replace(
-                        "<|video_pad|>", "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
+                        self.video_token, "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
                     )
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", "<|video_pad|>")
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

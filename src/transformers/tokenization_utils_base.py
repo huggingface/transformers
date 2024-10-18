@@ -1439,7 +1439,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         super().__init__(**kwargs)
 
         if self.is_multimodal:
-            extra_special_tokens = ["image_token", "boi_token", "eoi_token"]
+            extra_special_tokens = ["image_token", "video_token", "boi_token", "eoi_token", "image_boundary_token"]
             self._set_model_specific_special_tokens(special_tokens=extra_special_tokens)
 
     @property

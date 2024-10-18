@@ -66,9 +66,15 @@ class ChameleonProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
-        self.image_token = image_token
-        self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
-        self.image_end_token = "<eoss>"
+        if not tokenizer.is_multimodal:
+            self.image_token = image_token
+            self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
+            self.image_end_token = "<eoss>"
+        else:
+            self.image_token = tokenizer.image_token
+            self.image_start_token = tokenizer.boi_token
+            self.image_end_token = tokenizer.eoi_token
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
