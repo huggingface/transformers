@@ -344,6 +344,10 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
+        for image in images:
+            if image.dtype == np.uint8:
+                raise ValueError("Aaaaa!")
+
         if do_resize:
             images = [
                 self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format).astype(
