@@ -18,13 +18,13 @@ import argparse
 import os
 
 import numpy as np
+import re
 import torch
 from datasets import load_dataset
 
 from transformers import (
     ProPainterConfig,
     ProPainterModel,
-    ProPainterVideoProcessor,
 )
 from transformers.utils import logging
 
@@ -33,112 +33,67 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def rename_optical_flow(old_key, network_mapping):
-    new_key = ""
-    for old_prefix, new_prefix in network_mapping.items():
-        if old_prefix in old_key:
-            new_key = old_key.replace(f"module.{old_prefix}", f"optical_flow_model.{new_prefix}")
-            # Handle layer & block transformations
-            if "layer" in new_key:
-                parts = new_key.split(".")
-                layer_x = int(parts[2][5])  # Extract the number after 'layer'
-                layer_y = int(parts[3])  # The sub-layer number
+rename_rules_optical_flow = [
+    (r"fnet", r"feature_network"),
+    (r"cnet", r"context_network"),
+    (r"update_block", r"update_block"),
+    (r"module\.(fnet|cnet|update_block)", r"optical_flow_model.\1"),
+    (r'layer(\d+)\.(\d+)', lambda m: f"resblocks.{(int(m.group(1)) - 1) * 2 + int(m.group(2))}"),
+    (r'convc', 'conv_corr'),
+    (r'convf', 'conv_flow')
+]
 
-                # Compute the corresponding resblock number
-                # Example: layer1.0 -> resblock 0, layer1.1 -> resblock 1, etc.
-                resblock_z = (layer_x - 1) * 2 + layer_y
+rename_rules_flow_completion = [
+    (r"downsample", r"flow_completion_net.downsample"),
+    (r"encoder1", r"flow_completion_net.encoder1"),
+    (r"encoder2", r"flow_completion_net.encoder2"),
+    (r"decoder1", r"flow_completion_net.decoder1"),
+    (r"decoder2", r"flow_completion_net.decoder2"),
+    (r"upsample", r"flow_completion_net.upsample"),
+    (r"mid_dilation", r"flow_completion_net.intermediate_dilation"),
+    (r"feat_prop_module\.deform_align\.backward_", r"flow_completion_net.feature_propagation_module.deform_align.backward_"),
+    (r"feat_prop_module\.deform_align\.forward_", r"flow_completion_net.feature_propagation_module.deform_align.forward_"),
+    (r"feat_prop_module\.backbone\.backward_", r"flow_completion_net.feature_propagation_module.backbone.backward_"),
+    (r"feat_prop_module\.backbone\.forward_", r"flow_completion_net.feature_propagation_module.backbone.forward_"),
+    (r"feat_prop_module\.fusion", r"flow_completion_net.feature_propagation_module.fusion"),
+    (r"edgeDetector\.projection", r"flow_completion_net.edgeDetector.projection"),
+    (r"edgeDetector\.mid_layer", r"flow_completion_net.edgeDetector.intermediate_layer"),
+    (r"edgeDetector\.out_layer", r"flow_completion_net.edgeDetector.out_layer")
+]
 
-                # Replace 'layerX.Y' with 'resblocks.Z'
-                new_key = new_key.replace(f"layer{layer_x}.{layer_y}", f"resblocks.{resblock_z}")
-
-            if "convc" in new_key:
-                new_key = new_key.replace("convc", "conv_corr")
-            if "convf" in new_key:
-                new_key = new_key.replace("convf", "conv_flow")
-
-    return new_key
-
-
-def rename_flow_completion(old_key, network_mapping):
-    new_key = ""
-    for old_prefix, new_prefix in network_mapping.items():
-        if old_prefix in old_key:
-            new_key = old_key.replace(f"{old_prefix}", f"{new_prefix}")
-            # Handle specific layer/block transformations
-            if "mid_dilation" in new_key:
-                new_key = new_key.replace("mid_dilation", "intermediate_dilation")
-            if "feat_prop_module" in new_key:
-                new_key = new_key.replace("feat_prop_module", "feature_propagation_module")
-            if "edgeDetector.mid_layer" in new_key:
-                new_key = new_key.replace("edgeDetector.mid_layer", "edgeDetector.intermediate_layer")
-
-    return new_key
+rename_rules_inpaint_generator = [
+    (r"encoder", r"inpaint_generator.encoder"),
+    (r"decoder", r"inpaint_generator.decoder"),
+    (r"ss", r"inpaint_generator.soft_split"),
+    (r"sc", r"inpaint_generator.soft_comp"),
+    (r"feat_prop_module\.", r"inpaint_generator.feature_propagation_module."),
+    (r"transformers\.transformer\.", r"inpaint_generator.transformers.transformer."),
+    (r"norm", r"layer_norm")
+]
 
 
-def rename_inpaint_generator(old_key, network_mapping):
-    new_key = ""
-    for old_prefix, new_prefix in network_mapping.items():
-        if old_prefix in old_key:
-            new_key = old_key.replace(f"{old_prefix}", f"{new_prefix}")
-            if "norm" in new_key:
-                new_key = new_key.replace("norm", "layer_norm")
+def apply_rename_rules(old_key, rules):
+    """Apply rename rules using regex substitutions."""
+    new_key = old_key
+    for pattern, replacement in rules:
+        new_key = re.sub(pattern, replacement, new_key)
     return new_key
 
 
 def map_keys(old_keys, module):
     key_mapping = {}
 
-    # Define network type and layer/block mappings
-    network_mapping_optical_flow = {
-        "fnet": "feature_network",
-        "cnet": "context_network",
-        "update_block": "update_block",
-    }
-
-    network_mapping_flow_completion = {
-        "downsample": "flow_completion_net.downsample",
-        "encoder1": "flow_completion_net.encoder1",
-        "encoder2": "flow_completion_net.encoder2",
-        "decoder1": "flow_completion_net.decoder1",
-        "decoder2": "flow_completion_net.decoder2",
-        "upsample": "flow_completion_net.upsample",
-        "mid_dilation": "flow_completion_net.intermediate_dilation",
-        "feat_prop_module.deform_align.backward_": "flow_completion_net.feature_propagation_module.deform_align.backward_",
-        "feat_prop_module.deform_align.forward_": "flow_completion_net.feature_propagation_module.deform_align.forward_",
-        "feat_prop_module.backbone.backward_": "flow_completion_net.feature_propagation_module.backbone.backward_",
-        "feat_prop_module.backbone.forward_": "flow_completion_net.feature_propagation_module.backbone.forward_",
-        "feat_prop_module.fusion": "flow_completion_net.feature_propagation_module.fusion",
-        "edgeDetector.projection": "flow_completion_net.edgeDetector.projection",
-        "edgeDetector.mid_layer": "flow_completion_net.edgeDetector.intermediate_layer",
-        "edgeDetector.out_layer": "flow_completion_net.edgeDetector.out_layer",
-    }
-
-    network_mapping_inpaint_generator = {
-        "encoder": "inpaint_generator.encoder",
-        "decoder": "inpaint_generator.decoder",
-        "ss": "inpaint_generator.soft_split",
-        "sc": "inpaint_generator.soft_comp",
-        "feat_prop_module.": "inpaint_generator.feature_propagation_module.",
-        "transformers.transformer.": "inpaint_generator.transformers.transformer.",
-    }
-
+    # Apply the appropriate rename rules based on the module type
     if module == "optical_flow":
-        network_mapping = network_mapping_optical_flow
-        for old_key in old_keys:
-            new_key = rename_optical_flow(old_key, network_mapping)
-            key_mapping[new_key] = old_key
-
+        rename_rules = rename_rules_optical_flow
     elif module == "flow_completion":
-        network_mapping = network_mapping_flow_completion
-        for old_key in old_keys:
-            new_key = rename_flow_completion(old_key, network_mapping)
-            key_mapping[new_key] = old_key
-
+        rename_rules = rename_rules_flow_completion
     else:
-        network_mapping = network_mapping_inpaint_generator
-        for old_key in old_keys:
-            new_key = rename_inpaint_generator(old_key, network_mapping)
-            key_mapping[new_key] = old_key
+        rename_rules = rename_rules_inpaint_generator
+
+    for old_key in old_keys:
+        new_key = apply_rename_rules(old_key, rename_rules)
+        key_mapping[new_key] = old_key
 
     return key_mapping
 
