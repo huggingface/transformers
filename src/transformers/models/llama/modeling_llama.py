@@ -41,6 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
@@ -52,6 +53,7 @@ from .configuration_llama import LlamaConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b-hf"
 _CONFIG_FOR_DOC = "LlamaConfig"
 
 
@@ -1446,6 +1448,11 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

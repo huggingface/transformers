@@ -39,12 +39,19 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_persimmon import PersimmonConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "adept/persimmon-8b-base"
 _CONFIG_FOR_DOC = "PersimmonConfig"
 
 
@@ -1120,6 +1127,11 @@ class PersimmonForTokenClassification(PersimmonPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(PERSIMMON_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
