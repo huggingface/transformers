@@ -131,7 +131,9 @@ class InstructBlipProcessor(ProcessorMixin):
             if self.num_query_tokens is not None and images is not None:
                 text_encoding = {}
                 image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                image_token_encoding = self.tokenizer(
+                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
