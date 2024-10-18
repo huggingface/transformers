@@ -56,8 +56,6 @@ _EXPECTED_OUTPUT_SHAPE = ["batch_size", 80, 240, 432, 3]
 
 
 # Adapted from original code at https://github.com/sczhou/ProPainter
-
-
 class ProPainterResidualBlock(nn.Module):
     def __init__(
         self,
