@@ -1776,9 +1776,10 @@ class Blip2Model(Blip2PreTrainedModel):
             )
             loss = outputs.loss
             logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs.to_tuple())
+            output = (logits, vision_outputs, query_outputs, outputs)
             return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
@@ -2251,9 +2252,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             )
             loss = outputs.loss
             logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs.to_tuple())
+            output = (logits, vision_outputs, query_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
