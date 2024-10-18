@@ -1221,7 +1221,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.stride_3d,
                 padding=(0, 3, 3),
                 dilation=(1, 3, 3),
-            ),  # p = d*(k-1)/2
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv3d(
                 self.config.num_channels,
