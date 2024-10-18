@@ -1172,6 +1172,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs=None,
         **kwargs,
     ):
+        # Overwritten -- `do_marginalize` is explicitly set in the output
+
         if past_key_values is not None:
             # if past is defined use only last decoder_input_ids
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1558,7 +1560,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 generation_config=generation_config,
                 synced_gpus=False,
                 streamer=None,
-                logits_warper=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1580,7 +1581,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=False,
-                logits_warper=None,
                 **model_kwargs,
             )
         else:

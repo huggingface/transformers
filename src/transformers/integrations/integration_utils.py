@@ -241,7 +241,8 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                     raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
                 trainer._hp_search_setup(trial)
-                torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                args_main_rank_list = [pickle.dumps(trainer.args)]
+                torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
                 trainer.train(resume_from_checkpoint=checkpoint)
             else:
                 trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
@@ -267,11 +268,11 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     else:
         for i in range(n_trials):
             trainer.objective = None
-            args_main_rank = list(pickle.dumps(trainer.args))
+            args_main_rank_list = [None]
             if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
-            torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            args = pickle.loads(bytes(args_main_rank))
+            torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
+            args = pickle.loads(bytes(args_main_rank_list[0]))
             for key, value in asdict(args).items():
                 if key != "local_rank":
                     setattr(trainer.args, key, value)
@@ -803,6 +804,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         self._initialized = True
+
+        # prepare to handle potential configuration issues during setup
+        from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
+
         if state.is_world_process_zero:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
@@ -852,7 +857,13 @@ class WandbCallback(TrainerCallback):
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                logger.info("Could not log the number of model parameters in Weights & Biases.")
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+            except WandbConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
 
             # log the initial model architecture to an artifact
             if self._log_model.is_enabled:
@@ -905,7 +916,7 @@ class WandbCallback(TrainerCallback):
         if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
             from ..trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
+            fake_trainer = Trainer(args=args, model=model, processing_class=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
@@ -1107,8 +1118,9 @@ class CometCallback(TrainerCallback):
             self.setup(args, state, model)
         if state.is_world_process_zero:
             if self._experiment is not None:
+                rewritten_logs = rewrite_logs(logs)
                 self._experiment.__internal_api__log_metrics__(
-                    logs, step=state.global_step, epoch=state.epoch, framework="transformers"
+                    rewritten_logs, step=state.global_step, epoch=state.epoch, framework="transformers"
                 )
 
     def on_train_end(self, args, state, control, **kwargs):
@@ -1124,6 +1136,15 @@ class CometCallback(TrainerCallback):
             if state.is_hyper_param_search:
                 self._experiment.clean()
                 self._initialized = False
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model=None)
+        if state.is_world_process_zero and self._experiment is not None:
+            rewritten_metrics = rewrite_logs(metrics)
+            self._experiment.__internal_api__log_metrics__(
+                rewritten_metrics, step=state.global_step, epoch=state.epoch, framework="transformers"
+            )
 
 
 class AzureMLCallback(TrainerCallback):
@@ -2092,7 +2113,7 @@ class DVCLiveCallback(TrainerCallback):
             from transformers.trainer import Trainer
 
             if self._log_model is True:
-                fake_trainer = Trainer(args=args, model=kwargs.get("model"), tokenizer=kwargs.get("tokenizer"))
+                fake_trainer = Trainer(args=args, model=kwargs.get("model"), processing_class=kwargs.get("tokenizer"))
                 name = "best" if args.load_best_model_at_end else "last"
                 output_dir = os.path.join(args.output_dir, name)
                 fake_trainer.save_model(output_dir)

@@ -25,6 +25,7 @@ import tempfile
 import time
 import warnings
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -44,6 +45,12 @@ from transformers import (
     is_torch_available,
     logging,
     set_seed,
+)
+from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepspeed import (
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+    unset_hf_deepspeed_config,
 )
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
@@ -75,10 +82,13 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_accelerate,
     require_bitsandbytes,
+    require_deepspeed,
     require_flash_attn,
+    require_non_xpu,
     require_read_token,
     require_safetensors,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
@@ -132,6 +142,9 @@ if is_flax_available():
 if is_torch_fx_available():
     from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
+if is_deepspeed_available():
+    import deepspeed
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -167,6 +180,15 @@ def _mock_all_init_weights(self):
         # Tie weights should be skipped when not initializing all weights
         # since from_pretrained(...) calls tie weights anyways
         self.tie_weights()
+
+
+@contextmanager
+def _deepspeed_zero3(ds_config):
+    dschf = HfDeepSpeedConfig(ds_config)
+    try:
+        yield dschf
+    finally:
+        unset_hf_deepspeed_config()
 
 
 @require_torch
@@ -402,11 +424,49 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    def test_peft_gradient_checkpointing_enable_disable(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            # at init model should have gradient checkpointing disabled
+            model = model_class(config)
+            self.assertFalse(model.is_gradient_checkpointing)
+
+            # check enable works
+            model._hf_peft_config_loaded = True
+            try:
+                model.gradient_checkpointing_enable()
+            except NotImplementedError:
+                continue
+
+            self.assertTrue(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
+
+            # check disable works
+            model.gradient_checkpointing_disable()
+            self.assertFalse(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
+
     @is_flaky(description="low likelihood of failure, reason not yet discovered")
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -540,7 +600,7 @@ class ModelTesterMixin:
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -596,7 +656,7 @@ class ModelTesterMixin:
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -781,15 +841,16 @@ class ModelTesterMixin:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
         for model_class in self.all_model_classes:
-            if (
-                model_class.__name__
-                in [
-                    *get_values(MODEL_MAPPING_NAMES),
-                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
-                ]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
+            with self.subTest(model_class.__name__):
+                if (
+                    model_class.__name__
+                    in [
+                        *get_values(MODEL_MAPPING_NAMES),
+                        *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                    ]
+                    or not model_class.supports_gradient_checkpointing
+                ):
+                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
@@ -1746,51 +1807,62 @@ class ModelTesterMixin:
             self.assertTrue(models_equal)
 
     def test_resize_tokens_embeddings(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
         (
             original_config,
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            self.skipTest(reason="test_resize_embeddings is set to `False`")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
             model_embed_pre_resize = model.get_input_embeddings()
             type_model_embed_pre_resize = type(model_embed_pre_resize)
 
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check to make sure the type of embeddings returned post resizing is same as type of input
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
@@ -1800,9 +1872,12 @@ class ModelTesterMixin:
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
 
             # make sure that decoder_input_ids are resized as well
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
@@ -1812,25 +1887,24 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
+            del model
+            del config
+            # Copy again. config changed with embedding resizing (`vocab_size` changed)
             config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
 
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
@@ -1850,14 +1924,72 @@ class ModelTesterMixin:
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
+            # Test when `vocab_size` is smaller than `hidden_size`.
+            del model
+            del config
+            # Copy again. config changed with embedding resizing (`vocab_size` changed)
+            config = copy.deepcopy(original_config)
+            config.vocab_size = 4
+            config.pad_token_id = 3
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
+            model_vocab_size = config.get_text_config().vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+
+    @require_deepspeed
+    @require_torch_gpu
+    def test_resize_tokens_embeddings_with_deepspeed(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {"device": "cpu", "pin_memory": True},
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_tokens_embeddings()
+
+    @require_deepspeed
+    @require_torch_multi_gpu
+    def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_tokens_embeddings()
+
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
 
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
@@ -1866,20 +1998,20 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
-            model = model_class(config).to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config).to(torch_device)
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
@@ -1887,15 +2019,37 @@ class ModelTesterMixin:
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Test multivariate resizing.
+            model.resize_token_embeddings(model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            # check if the old bias mean close to added bias mean.
+            if output_embeds.bias is not None:
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                        old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                        new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+                else:
+                    old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                    new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+
+                torch.testing.assert_close(old_bias_mean, new_bias_mean, atol=1e-5, rtol=1e-2)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
@@ -1909,7 +2063,32 @@ class ModelTesterMixin:
             if "decoder_input_ids" in inputs_dict:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @require_deepspeed
+    @require_torch_gpu
+    def test_resize_embeddings_untied_with_deepspeed(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {"device": "cpu", "pin_memory": True},
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_embeddings_untied()
+
+    @require_deepspeed
+    @require_torch_multi_gpu
+    def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_embeddings_untied()
 
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1987,7 +2166,7 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            vocab_size = config.get_text_config().vocab_size
             model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
@@ -2822,15 +3001,18 @@ class ModelTesterMixin:
     def test_inputs_embeds_matches_input_ids_with_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+            ]:
                 continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()
 
             model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
+            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
+                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
             has_inputs_embeds_forwarding = "inputs_embeds" in set(
                 inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
             )
@@ -2838,6 +3020,13 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            # VLMs can't generate with embeds and pixels at the same time. We expect the user to pass merged
+            # embeds already
+            if model_class.__name__ in get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES):
+                inputs.pop("pixel_values", None)
+                inputs.pop("pixel_values_videos", None)
+                inputs.pop("pixel_values_images", None)
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
@@ -2868,8 +3057,12 @@ class ModelTesterMixin:
                     **inputs,
                     max_new_tokens=2,
                 )
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            # NOTE: this test changes the order of FP ops, there may be tiny differences in the output
+            number_of_different_tokens = (out_ids != out_embeds).sum()
+            max_differences = int(out_ids.shape[0] * out_ids.shape[1] * 0.1)
+            self.assertTrue(number_of_different_tokens <= max_differences)  # accept up to 10% mismatch
 
+    @require_non_xpu
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4065,6 +4258,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        torch.compiler.reset()
         compute_capability = torch.cuda.get_device_capability()
         major, _ = compute_capability
 
@@ -4104,18 +4298,20 @@ class ModelTesterMixin:
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
+    @require_non_xpu
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
+        torch.compiler.reset()
+        if "cuda" in torch_device:
+            compute_capability = torch.cuda.get_device_capability()
+            major, _ = compute_capability
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
-            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+            if not torch.version.cuda or major < 8:
+                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -4582,7 +4778,7 @@ class ModelTesterMixin:
 
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
-            fa2_model = AutoModelForCausalLM.from_config(
+            fa2_model = model_class._from_config(
                 config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
             ).to(torch_device)
 
@@ -4603,7 +4799,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
 
-                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+                model_from_pretrained = model_class.from_pretrained(tmpdirname)
 
                 self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
 
@@ -4664,7 +4860,7 @@ class ModelTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
@@ -4704,7 +4900,6 @@ class ModelTesterMixin:
             self.skipTest(
                 reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
             )
-
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} does not support static cache")
@@ -4713,7 +4908,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support cache class")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
 
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
@@ -4734,12 +4929,12 @@ class ModelTesterMixin:
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_read_token
     def test_torch_compile(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
+        torch.compiler.reset()
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
@@ -4755,13 +4950,56 @@ class ModelTesterMixin:
         model.generation_config.max_new_tokens = 4
 
         model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        model.forward = torch.compile(model.forward, mode="reduce-overhead")
 
         input_text = "Why dogs are cute?"
         input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
 
         for i in range(n_iter):
             _ = model.generate(**input_ids, do_sample=False)
+
+    @slow
+    @require_torch_gpu
+    def test_torch_compile_for_training(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        if not hasattr(self, "_torch_compile_train_cls"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        cls = self._torch_compile_train_cls
+        model = cls(config).to(torch_device)
+
+        inputs = {
+            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "attention_mask": torch.tensor(
+                [[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+                dtype=torch.int64,
+                device=torch_device,
+            ),
+            "position_ids": torch.arange(0, 10, device=torch_device).unsqueeze(0),
+            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+        }
+
+        # eager backward
+        set_seed(42)
+        loss = model(**inputs).loss
+        loss.backward()
+
+        params = {name: param.grad.clone().detach().cpu() for name, param in model.named_parameters()}
+        model.zero_grad()
+        del loss
+
+        model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+        # forward compilation
+        set_seed(42)
+        loss = model(**inputs).loss
+        # backward compilation
+        loss.backward()
+        # check grad matches
+        for name, param in model._orig_mod.named_parameters():
+            torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
     @slow
     @require_torch_gpu  # Testing cuda graphs.
@@ -4822,6 +5060,29 @@ class ModelTesterMixin:
         # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
         self.assertTrue(record_time < 0.15 * graph_warmup_time)
         self.assertTrue(opt_time < record_time)
+
+    def test_forward_with_num_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            batch_size, sequence_length = inputs["input_ids"].shape
+            vocab_size = config.get_text_config().vocab_size
+            model = model_class(config).to(device=torch_device).eval()
+            # some models have labels but `num_logits_to_keep` should not be used in train mode
+            _ = inputs.pop("labels", None)
+
+            # num_logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, num_logits_to_keep=0).logits
+            last_token_logits = model(**inputs, num_logits_to_keep=1).logits
+
+            # Assert all shapes are correct
+            self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))
+            self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
+
+            # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
+            self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
 
 
 global_rng = random.Random()

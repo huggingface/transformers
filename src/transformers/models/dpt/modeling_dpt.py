@@ -152,7 +152,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = int(math.sqrt(len(posemb_grid)))
+        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -626,7 +626,7 @@ class DPTReassembleStage(nn.Module):
                 if patch_height is not None and patch_width is not None:
                     hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
                 else:
-                    size = int(math.sqrt(sequence_length))
+                    size = torch_int(sequence_length**0.5)
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 

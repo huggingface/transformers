@@ -138,16 +138,16 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
 ## Usage with Kubernetes
 
 The same distributed training job from the previous section can be deployed to a Kubernetes cluster using the
-[Kubeflow PyTorchJob training operator](https://www.kubeflow.org/docs/components/training/pytorch/).
+[Kubeflow PyTorchJob training operator](https://www.kubeflow.org/docs/components/training/user-guides/pytorch).
 
 ### Setup
 
 This example assumes that you have:
-* Access to a Kubernetes cluster with [Kubeflow installed](https://www.kubeflow.org/docs/started/installing-kubeflow/)
-* [`kubectl`](https://kubernetes.io/docs/tasks/tools/) installed and configured to access the Kubernetes cluster
-* A [Persistent Volume Claim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) that can be used
+* Access to a Kubernetes cluster with [Kubeflow installed](https://www.kubeflow.org/docs/started/installing-kubeflow)
+* [`kubectl`](https://kubernetes.io/docs/tasks/tools) installed and configured to access the Kubernetes cluster
+* A [Persistent Volume Claim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes) that can be used
   to store datasets and model files. There are multiple options for setting up the PVC including using an NFS
-  [storage class](https://kubernetes.io/docs/concepts/storage/storage-classes/) or a cloud storage bucket.
+  [storage class](https://kubernetes.io/docs/concepts/storage/storage-classes) or a cloud storage bucket.
 * A Docker container that includes your model training script and all the dependencies needed to run the script. For
   distributed CPU training jobs, this typically includes PyTorch, Transformers, Intel Extension for PyTorch, Intel
   oneCCL Bindings for PyTorch, and OpenSSH to communicate between the containers.
@@ -155,13 +155,20 @@ This example assumes that you have:
 The snippet below is an example of a Dockerfile that uses a base image that supports distributed CPU training and then
 extracts a Transformers release to the `/workspace` directory, so that the example scripts are included in the image:
 ```dockerfile
-FROM intel/ai-workflows:torch-2.0.1-huggingface-multinode-py3.9
+FROM intel/intel-optimized-pytorch:2.3.0-pip-multinode
+
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends --fix-missing \
+    google-perftools \
+    libomp-dev
 
 WORKDIR /workspace
 
 # Download and extract the transformers code
-ARG HF_TRANSFORMERS_VER="4.35.2"
-RUN mkdir transformers && \
+ARG HF_TRANSFORMERS_VER="4.44.0"
+RUN pip install --no-cache-dir \
+    transformers==${HF_TRANSFORMERS_VER} && \
+    mkdir transformers && \
     curl -sSL --retry 5 https://github.com/huggingface/transformers/archive/refs/tags/v${HF_TRANSFORMERS_VER}.tar.gz | tar -C transformers --strip-components=1 -xzf -
 ```
 The image needs to be built and copied to the cluster's nodes or pushed to a container registry prior to deploying the
@@ -169,7 +176,7 @@ PyTorchJob to the cluster.
 
 ### PyTorchJob Specification File
 
-The [Kubeflow PyTorchJob](https://www.kubeflow.org/docs/components/training/pytorch/) is used to run the distributed
+The [Kubeflow PyTorchJob](https://www.kubeflow.org/docs/components/training/user-guides/pytorch) is used to run the distributed
 training job on the cluster. The yaml file for the PyTorchJob defines parameters such as:
  * The name of the PyTorchJob
  * The number of replicas (workers)
@@ -189,7 +196,6 @@ apiVersion: "kubeflow.org/v1"
 kind: PyTorchJob
 metadata:
   name: transformers-pytorchjob
-  namespace: kubeflow
 spec:
   elasticPolicy:
     rdzvBackend: c10d
@@ -206,32 +212,27 @@ spec:
             - name: pytorch
               image: <image name>:<tag>  # Specify the docker image to use for the worker pods
               imagePullPolicy: IfNotPresent
-              command:
-                - torchrun
-                - /workspace/transformers/examples/pytorch/question-answering/run_qa.py
-                - --model_name_or_path
-                - "google-bert/bert-large-uncased"
-                - --dataset_name
-                - "squad"
-                - --do_train
-                - --do_eval
-                - --per_device_train_batch_size
-                - "12"
-                - --learning_rate
-                - "3e-5"
-                - --num_train_epochs
-                - "2"
-                - --max_seq_length
-                - "384"
-                - --doc_stride
-                - "128"
-                - --output_dir
-                - "/tmp/pvc-mount/output"
-                - --no_cuda
-                - --ddp_backend
-                - "ccl"
-                - --use_ipex
-                - --bf16  # Specify --bf16 if your hardware supports bfloat16
+              command: ["/bin/bash", "-c"]
+              args:
+                - >-
+                  cd /workspace/transformers;
+                  pip install -r /workspace/transformers/examples/pytorch/question-answering/requirements.txt;
+                  source /usr/local/lib/python3.10/dist-packages/oneccl_bindings_for_pytorch/env/setvars.sh;
+                  torchrun /workspace/transformers/examples/pytorch/question-answering/run_qa.py \
+                    --model_name_or_path distilbert/distilbert-base-uncased \
+                    --dataset_name squad \
+                    --do_train \
+                    --do_eval \
+                    --per_device_train_batch_size 12 \
+                    --learning_rate 3e-5 \
+                    --num_train_epochs 2 \
+                    --max_seq_length 384 \
+                    --doc_stride 128 \
+                    --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
+                    --no_cuda \
+                    --ddp_backend ccl \
+                    --bf16 \
+                    --use_ipex;
               env:
               - name: LD_PRELOAD
                 value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"
@@ -244,13 +245,13 @@ spec:
               - name: CCL_WORKER_COUNT
                 value: "1"
               - name: OMP_NUM_THREADS  # Can be tuned for optimal performance
--                value: "56"
+                value: "240"
               resources:
                 limits:
-                  cpu: 200  # Update the CPU and memory limit values based on your nodes
+                  cpu: 240  # Update the CPU and memory limit values based on your nodes
                   memory: 128Gi
                 requests:
-                  cpu: 200  # Update the CPU and memory request values based on your nodes
+                  cpu: 240  # Update the CPU and memory request values based on your nodes
                   memory: 128Gi
               volumeMounts:
               - name: pvc-volume
@@ -258,8 +259,8 @@ spec:
               - mountPath: /dev/shm
                 name: dshm
           restartPolicy: Never
-          nodeSelector:  #  Optionally use the node selector to specify what types of nodes to use for the workers
-            node-type: spr
+          nodeSelector:  # Optionally use nodeSelector to match a certain node label for the worker pods
+            node-type: gnr
           volumes:
           - name: pvc-volume
             persistentVolumeClaim:
@@ -272,12 +273,13 @@ To run this example, update the yaml based on your training script and the nodes
 
 <Tip>
 
-The CPU resource limits/requests in the yaml are defined in [cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
+The CPU resource limits/requests in the yaml are defined in 
+[cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
 where 1 CPU unit is equivalent to 1 physical CPU core or 1 virtual core (depending on whether the node is a physical
 host or a VM). The amount of CPU and memory limits/requests defined in the yaml should be less than the amount of
 available CPU/memory capacity on a single machine. It is usually a good idea to not use the entire machine's capacity in
 order to leave some resources for the kubelet and OS. In order to get ["guaranteed"](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#guaranteed)
-[quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) for the worker pods,
+[quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod) for the worker pods,
 set the same CPU and memory amounts for both the resource limits and requests.
 
 </Tip>
@@ -287,10 +289,12 @@ set the same CPU and memory amounts for both the resource limits and requests.
 After the PyTorchJob spec has been updated with values appropriate for your cluster and training job, it can be deployed
 to the cluster using:
 ```bash
-kubectl create -f pytorchjob.yaml
+export NAMESPACE=<specify your namespace>
+
+kubectl create -f pytorchjob.yaml -n ${NAMESPACE}
 ```
 
-The `kubectl get pods -n kubeflow` command can then be used to list the pods in the `kubeflow` namespace. You should see
+The `kubectl get pods -n ${NAMESPACE}` command can then be used to list the pods in your namespace. You should see
 the worker pods for the PyTorchJob that was just deployed. At first, they will probably have a status of "Pending" as
 the containers get pulled and created, then the status should change to "Running".
 ```
@@ -303,13 +307,13 @@ transformers-pytorchjob-worker-3                         1/1     Running        
 ...
 ```
 
-The logs for worker can be viewed using `kubectl logs -n kubeflow <pod name>`. Add `-f` to stream the logs, for example:
+The logs for worker can be viewed using `kubectl logs <pod name> -n ${NAMESPACE}`. Add `-f` to stream the logs, for example:
 ```bash
-kubectl logs -n kubeflow transformers-pytorchjob-worker-0 -f
+kubectl logs transformers-pytorchjob-worker-0 -n ${NAMESPACE} -f
 ```
 
 After the training job completes, the trained model can be copied from the PVC or storage location. When you are done
-with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml`.
+with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml -n ${NAMESPACE}`.
 
 ## Summary
 

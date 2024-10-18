@@ -34,6 +34,7 @@ from transformers.modeling_outputs import (
 )
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -1679,7 +1680,7 @@ class UdopModel(UdopPreTrainedModel):
     This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
     UDOP_START_DOCSTRING,
 )
-class UdopForConditionalGeneration(UdopPreTrainedModel):
+class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
@@ -1790,7 +1791,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> # one can use the various task prefixes (prompts) used during pre-training
         >>> # e.g. the task prefix for DocVQA is "Question answering. "
         >>> question = "Question answering. What is the date on the form?"
-        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
+        >>> encoding = processor(image, question, text_pair=words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
@@ -1867,36 +1868,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-            "bbox": kwargs.get("bbox", None),
-            "pixel_values": kwargs.get("pixel_values", None),
-            "visual_bbox": kwargs.get("visual_bbox", None),
-        }
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
