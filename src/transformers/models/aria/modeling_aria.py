@@ -21,7 +21,6 @@ from ...generation.utils import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...models.llama.modeling_llama import LLAMA_ATTENTION_CLASSES
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -554,13 +553,6 @@ class AriaVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-ARIA_ATTENTION_CLASSES = {
-    "eager": AriaAttention,
-    "flash_attention_2": AriaFlashAttention2,
-    "sdpa": AriaSdpaAttention,
-}
-
-
 class AriaVisionFlashAttention2(AriaVisionAttention):
     """
     AriaVision flash attention module. This module inherits from `AriaVisionAttention` as the weights of the module stays
@@ -658,7 +650,7 @@ class AriaVisionFlashAttention2(AriaVisionAttention):
         return attn_output, attn_weights
 
 
-IDEFICS_VISION_ATTENTION_CLASSES = {
+ARIA_VISION_ATTENTION_CLASSES = {
     "eager": AriaVisionAttention,
     "flash_attention_2": AriaVisionFlashAttention2,
 }
@@ -699,7 +691,7 @@ class AriaEncoderLayer(nn.Module):
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = ARIA_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = AriaVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -1573,7 +1565,7 @@ class AriaDecoderLayer(nn.Module):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = ARIA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

@@ -915,22 +915,6 @@ class ModularConverterTransformer(CSTTransformer):
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
             if len(list_dependencies) == 0:
-                # so, maybe standard renaming did not work (the class name is different)
-                # we try with another renaming pattern
-                potential_given_name = get_new_part(class_name, super_class)
-                del visited_modules[super_file_name]
-                class_finder = find_classes_in_file(
-                    self.transformers_imports[super_file_name],
-                    model_name,
-                    potential_given_name,
-                    self.model_name,
-                    potential_given_name,
-                )
-                list_dependencies = {
-                    dep: class_finder.class_start_line.get(dep, 1000)
-                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
-                }
-            if len(list_dependencies) == 0:
                 # last recourse, if the suffix of the new class is different from the one of the super class
                 # e.g. MyNewClassForSegmentation extends MyOldClassForObjectDetection
                 # we try with another renaming pattern
@@ -943,7 +927,7 @@ class ModularConverterTransformer(CSTTransformer):
                     super_class,
                     class_name,
                 )
-                visited_module[super_file_name] = class_finder
+                visited_modules[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
