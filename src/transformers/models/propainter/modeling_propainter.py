@@ -56,8 +56,6 @@ _EXPECTED_OUTPUT_SHAPE = ["batch_size", 80, 240, 432, 3]
 
 
 # Adapted from original code at https://github.com/sczhou/ProPainter
-
-
 class ProPainterResidualBlock(nn.Module):
     def __init__(
         self,
@@ -1223,7 +1221,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.conv3d_stride,
                 padding=(0, 3, 3),
                 dilation=(1, 3, 3),
-            ),  # p = d*(k-1)/2
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv3d(
                 self.config.num_channels,
