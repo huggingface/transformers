@@ -21,10 +21,11 @@ import sys
 import types
 
 import torch
+from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 
 from transformers import AutoTokenizer, GPT2Config
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 
 
 def add_checkpointing_args(parser):
@@ -571,7 +572,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
     # Store the state_dict to file.
     max_shard_size = int(args.max_shard_size) if args.max_shard_size.isdigit() else args.max_shard_size
-    shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size)
+    shards, index = split_torch_state_dict_into_shards(output_state_dict, max_shard_size=max_shard_size)
 
     # Save the model
     for shard_file, shard in shards.items():
