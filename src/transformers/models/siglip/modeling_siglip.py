@@ -927,7 +927,7 @@ class SiglipTextTransformer(nn.Module):
         self.embeddings = SiglipTextEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
+        #if not (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
         self.head = nn.Linear(embed_dim, embed_dim)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 

@@ -27,6 +27,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
+import re
 
 from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipProcessor, SiglipTokenizer
 from transformers.utils import logging
@@ -49,6 +50,8 @@ model_name_to_checkpoint = {
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
     # so400m checkpoints
     "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    "siglip-so400m-patch14-224": "/Users/mervenoyan/Desktop/siglips/webli_en_so400m_224_57633886.npz",
+    "siglip-so400m-patch16-256-i18n": "/Users/mervenoyan/Desktop/siglip/webli_i18n_so400m_16_256_78061115.npz",
 }
 
 model_name_to_image_size = {
@@ -60,6 +63,8 @@ model_name_to_image_size = {
     "siglip-large-patch16-384": 384,
     "siglip-base-patch16-256-i18n": 256,
     "siglip-so400m-patch14-384": 384,
+    "siglip-so400m-patch14-224": 224,
+    "siglip-so400m-patch16-256-i18n": 256,
 }
 
 
@@ -74,7 +79,7 @@ def get_siglip_config(model_name):
     config.vision_config.image_size = image_size
     config.vision_config.patch_size = patch_size
     config.text_config.vocab_size = vocab_size
-
+    
     if "base" in model_name:
         pass
     elif "large" in model_name:
@@ -97,6 +102,9 @@ def get_siglip_config(model_name):
         config.vision_config.num_attention_heads = 16
     else:
         raise ValueError("Model not supported")
+    
+    if "so400m-patch14-224" in model_name:
+        config.text_config.max_position_embeddings = 16
 
     return config
 
@@ -104,7 +112,8 @@ def get_siglip_config(model_name):
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
-
+    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
+        siglip_sovit_i18_256 = True
     # vision encoder
 
     rename_keys.append(("params/img/embedding/kernel", "vision_model.embeddings.patch_embedding.weight"))
@@ -167,8 +176,9 @@ def create_rename_keys(config):
 
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/scale", "text_model.final_layer_norm.weight"))
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/bias", "text_model.final_layer_norm.bias"))
-    rename_keys.append(("params/txt/head/kernel", "text_model.head.weight"))
-    rename_keys.append(("params/txt/head/bias", "text_model.head.bias"))
+    if not siglip_sovit_i18_256:
+        rename_keys.append(("params/txt/head/kernel", "text_model.head.weight"))
+        rename_keys.append(("params/txt/head/bias", "text_model.head.bias"))
 
     # learned temperature and bias
     rename_keys.append(("params/t", "logit_scale"))
@@ -263,37 +273,54 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
-
+    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
+        siglip_sovit_i18_256 = True
+    
     # get vocab file
     if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+        vocab_file = "/Users/mervenoyan/Desktop/siglips/mc4/sentencepiece.model"
     else:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+        vocab_file = "/Users/mervenoyan/Desktop/siglips/c4_en/sentencepiece.model"
 
     # load original state dict
     data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
 
-    # remove and rename some keys
+    if siglip_sovit_i18_256:  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if "img/Transformer/encoderblock/" in k:
+                original_array = np.array(v)
+                split_arrays = np.array_split(original_array, config.vision_config.num_hidden_layers, axis=0)  # 27
+                for i in range(config.vision_config.num_hidden_layers):
+                    new_key = re.sub(r'(encoderblock)/', rf'\1_{i}/', k)
+                    new_state_dict[f"params/{new_key}"] = split_arrays[i].squeeze()
+            else:
+                new_state_dict[f"params/{k}"] = v
+    
+    state_dict = new_state_dict   
     rename_keys = create_rename_keys(config)
+
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest, config)
 
     # qkv matrices of attention pooling head need special treatment
     read_in_q_k_v_head(state_dict, config)
-
     # load HuggingFace model
     model = SiglipModel(config).eval()
     model.load_state_dict(state_dict)
-
     # create processor
     # important: make tokenizer not return attention_mask since original one doesn't require it
     image_size = config.vision_config.image_size
     size = {"height": image_size, "width": image_size}
     image_processor = SiglipImageProcessor(size=size)
     tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
-    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
+    if model_name == "siglip-so400m-patch14-224":
+        tokenizer.model_max_length = 16
+        
+    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    
     # verify on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
     image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
@@ -318,7 +345,12 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath)
+
+    if model_name=="siglip-so400m-patch14-224":
+        filepath = hf_hub_download(repo_id="merve/model-test-inputs", filename="input_ids.pt", repo_type="dataset")
+        original_input_ids = torch.load(filepath)
+    else:
+        original_input_ids = torch.load(filepath)
 
     if "i18n" not in model_name:
         assert inputs.input_ids.tolist() == original_input_ids.tolist()
@@ -332,8 +364,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # with torch.no_grad():
     #     outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
-
-    print(outputs.logits_per_image[:3, :3])
 
     probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
     print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
@@ -366,9 +396,14 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             )
         elif model_name == "siglip-so400m-patch14-384":
             expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
+
         elif model_name == "siglip-base-patch16-256-i18n":
             expected_slice = torch.tensor(
                 [[-0.9064, 0.1073], [-0.0299, 0.5304]],
+            )
+        elif model_name == "siglip-so400m-patch14-224":
+            expected_slice = torch.tensor(
+                [[-1.0864916 ,  1.1704235 ], [-0.71784306,  1.4354687 ]],
             )
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
