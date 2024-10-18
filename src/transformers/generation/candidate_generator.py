@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
+from sklearn.metrics import roc_curve
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -180,6 +181,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
+            self.probs = []
+            self.matches = []
+
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
@@ -230,6 +235,12 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
+            for i, score in enumerate(assistant_output.scores):
+                id = assistant_output.sequences[-1, i - len(assistant_output.scores)]
+                p = score.softmax(-1)[0, id].item()
+                self.probs.append(p)
+
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
@@ -259,6 +270,31 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+
+        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
+        if self.assistant_model.generation_config.assistant_confidence_threshold:
+            # update self.matches
+            self.matches.extend([1] * num_matches)
+            if len(self.probs) > len(self.matches):
+                self.matches.append(0)
+
+            # update self.probs
+            excess_length = len(self.probs) - len(self.matches)
+            if excess_length > 0:
+                del self.probs[-excess_length:]
+
+            if len(self.probs) > 5:  # require at least 5 samples to calculate the ROC curve
+                fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
+                fnr = 1 - tpr
+
+                # Calculate the cost for each threshold
+                costs = fpr + 3 * fnr
+
+                # Find the threshold that minimizes the cost
+                optimal_threshold_index = np.argmin(costs)
+                best_threshold = thresholds[optimal_threshold_index]
+
+                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
