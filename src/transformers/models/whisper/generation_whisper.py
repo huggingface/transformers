@@ -1761,11 +1761,6 @@ class WhisperGenerationMixin(GenerationMixin):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
-        # if we are on the first segment, we need to remove the decoder_input_ids
-        # this way we ensure scores and tokens are aligned (scores starts with the first generated token)
-        if is_first_segment:
-            tokens = tokens[decoder_input_ids.shape[-1]:]
-
         if scores.shape[0] > tokens.shape[0]:
             scores = scores[: tokens.shape[0]]
         else:
