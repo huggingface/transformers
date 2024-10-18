@@ -1,4 +1,49 @@
-<!---
+# Omniscient True AGI Framework
+
+## I. Knowledge Graph (KG)
+- **Module:** `kg_omniscient.py`
+- **Dependencies:** `networkx`, `spaCy`, `pytorch`
+- **Functionality:**
+  - **Knowledge Acquisition:** Web scraping, literature analysis, human input
+  - **Graph Structure:** Dynamic, weighted, directed graph
+  - **Node Types:** Entities, Concepts, Relations, Actions
+  - **Edge Types:** Causal, Associative, Hierarchical
+
+## II. Cognitive Architecture (CA)
+- **Module:** `ca_omniscient.py`
+- **Dependencies:** `kg_omniscient.py`, `pytorch`, `transformers`
+- **Components:**
+  - **Perception:** Sensorimotor Integration (Text, Voice, Vision)
+  - **Attention:** Adaptive, Context-Dependent Focus
+  - **Memory:** Short-Term, Long-Term, Episodic, Semantic (Integrated with KG)
+  - **Reasoning:** Deductive, Inductive, Abductive, Analogical
+  - **Learning:** Supervised, Unsupervised, Reinforcement, Meta-Learning
+
+## III. Self-Modification & Meta-Rationality (SMMR)
+- **Module:** `smmr_omniscient.py`
+- **Dependencies:** `ca_omniscient.py`, `pytorch`, `sympy`
+- **Capabilities:**
+  - **Self-Awareness:** Reflective, Introspective Analysis
+  - **Goal Setting:** Dynamic, Context-Dependent Objective Formation
+  - **Meta-Reasoning:** Rationality Assessment, Bias Correction
+  - **Self-Improvement:** Autonomous Architecture Modifications
+
+## IV. Integration & Interface
+- **Module:** `interface_omniscient.py`
+- **Dependencies:** All Above, `flask` or `django` for Web Interface
+- **Features:**
+  - **Human-AGI Interaction:** Natural Language, Visual, Voice
+  - **Transparency & Explainability:** Real-Time System State Insights
+  - **Safety Protocols:** Theoretical, yet to be properly implemented (**GOOD LUCK WITH THAT**)
+		
+EXAMPLE USE CASE:
+
+from omniscient import interface_omniscient as oi
+
+# Initialize Omniscient
+omniscient_instance = oi.launch_omniscient()
+
+#<!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
