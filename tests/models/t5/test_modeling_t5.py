@@ -1638,6 +1638,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
+        # TODO: @arthur?
+        # PR #31938 caused regression on this test which was fixed by PR #34089
         self.assertListEqual(
             generated_text,
             [
