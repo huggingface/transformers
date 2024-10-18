@@ -18,7 +18,13 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
+    "configuration_utils": [
+        "GenerationConfig",
+        "GenerationMode",
+        "GreenRedWatermarkingConfig",
+        "SynthIDTextWatermarkingConfig",
+        "WatermarkingConfig",
+    ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -78,6 +84,7 @@ else:
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
         "WatermarkLogitsProcessor",
+        "SynthIDTextWatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -110,6 +117,8 @@ else:
     _import_structure["watermarking"] = [
         "WatermarkDetector",
         "WatermarkDetectorOutput",
+        "BayesianDetectorModel",
+        "BayesianDetectorConfig",
     ]
 
 try:
@@ -179,7 +188,13 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
+    from .configuration_utils import (
+        GenerationConfig,
+        GenerationMode,
+        GreenRedWatermarkingConfig,
+        SynthIDTextWatermarkingConfig,
+        WatermarkingConfig,
+    )
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -217,6 +232,7 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
@@ -254,6 +270,8 @@ if TYPE_CHECKING:
             SampleEncoderDecoderOutput,
         )
         from .watermarking import (
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             WatermarkDetector,
             WatermarkDetectorOutput,
         )

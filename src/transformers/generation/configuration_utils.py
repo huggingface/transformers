@@ -18,8 +18,9 @@ import copy
 import json
 import os
 import warnings
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -34,6 +35,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 if TYPE_CHECKING:
@@ -766,8 +768,16 @@ class GenerationConfig(PushToHubMixin):
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
-            if not isinstance(self.watermarking_config, WatermarkingConfig):
-                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+            if not (
+                isinstance(self.watermarking_config, GreenRedWatermarkingConfig)
+                or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
+            ):
+                warnings.warn(
+                    "`watermarking_config` as a dict is deprecated. Please construct `watermarking_config` object with "
+                    "`GreenRedWatermarkingConfig` or `SynthIDTextWatermarkingConfig` class.",
+                    FutureWarning,
+                )
+                self.watermarking_config = GreenRedWatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 7. other incorrect combinations
@@ -1287,40 +1297,8 @@ class GenerationConfig(PushToHubMixin):
 
 
 @dataclass
-class WatermarkingConfig:
-    """
-    Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
-    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
-
-    Accepts the following keys:
-        - greenlist_ratio (`float`):
-            Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
-        - bias (`float`):
-            Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
-        - hashing_key (`int`):
-            Hashing key used for watermarking. Defaults to 15485863 (the millionth prime).
-        - seeding_scheme (`str`):
-            Algorithm to use for watermarking. Accepts values:
-                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
-                - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
-                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
-        - context_width(`int`):
-            The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
-    """
-
-    def __init__(
-        self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
-    ):
-        self.greenlist_ratio = greenlist_ratio
-        self.bias = bias
-        self.hashing_key = hashing_key
-        self.seeding_scheme = seeding_scheme
-        self.context_width = context_width
+class WatermarkingConfig(ABC):
+    """Generic watermarking config"""
 
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
@@ -1394,6 +1372,49 @@ class WatermarkingConfig:
             if hasattr(self, key):
                 setattr(self, key, value)
 
+    @abstractmethod
+    def validate(self): ...
+
+    @abstractmethod
+    def construct_processor(self, vocab_size): ...
+
+
+@dataclass
+class GreenRedWatermarkingConfig(WatermarkingConfig):
+    """
+    Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
+    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+
+    Accepts the following keys:
+        - greenlist_ratio (`float`):
+            Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+        - bias (`float`):
+            Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
+        - hashing_key (`int`):
+            Hashing key used for watermarking. Defaults to 15485863 (the millionth prime).
+        - seeding_scheme (`str`):
+            Algorithm to use for watermarking. Accepts values:
+                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
+                - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
+                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+        - context_width(`int`):
+            The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
+    """
+
+    def __init__(
+        self,
+        greenlist_ratio: Optional[float] = 0.25,
+        bias: Optional[float] = 2.0,
+        hashing_key: Optional[int] = 15485863,
+        seeding_scheme: Optional[str] = "lefthash",
+        context_width: Optional[int] = 1,
+    ):
+        self.greenlist_ratio = greenlist_ratio
+        self.bias = bias
+        self.hashing_key = hashing_key
+        self.seeding_scheme = seeding_scheme
+        self.context_width = context_width
+
     def validate(self):
         watermark_missing_arg_msg = (
             "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
@@ -1423,3 +1444,61 @@ class WatermarkingConfig:
                     found_value=self.context_width,
                 ),
             )
+
+    def construct_processor(self, vocab_size: int, device) -> WatermarkLogitsProcessor:
+        return WatermarkLogitsProcessor(
+            vocab_size=vocab_size,
+            device=device,
+            greenlist_ratio=self.greenlist_ratio,
+            bias=self.bias,
+            hashing_key=self.hashing_key,
+            seeding_scheme=self.seeding_scheme,
+            context_width=self.context_width,
+        )
+
+
+@dataclass
+class SynthIDTextWatermarkingConfig(WatermarkingConfig):
+    def __init__(
+        self,
+        ngram_len: int,
+        keys: List[int],
+        context_history_size: int = 1024,
+        sampling_table_seed: int = 0,
+        sampling_table_size: int = 2**16,
+        skip_first_ngram_calls: bool = False,
+        debug_mode: bool = False,
+    ):
+        self.ngram_len = ngram_len
+        self.keys = keys
+        self.sampling_table_size = sampling_table_size
+        self.sampling_table_seed = sampling_table_seed
+        self.context_history_size = context_history_size
+        self.skip_first_ngram_calls = skip_first_ngram_calls
+        self.debug_mode = debug_mode
+
+    def validate(self):
+        watermark_missing_arg_msg = (
+            "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+        if self.sampling_table_size > 2**24:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="sampling_table_size",
+                    correct_value="< 2**24",
+                    found_value=self.sampling_table_size,
+                ),
+            )
+
+    def construct_processor(self, vocab_size: int, device) -> WatermarkLogitsProcessor:
+        return SynthIDTextWatermarkLogitsProcessor(
+            ngram_len=self.ngram_len,
+            keys=self.keys,
+            sampling_table_size=self.sampling_table_size,
+            sampling_table_seed=self.sampling_table_seed,
+            context_history_size=self.context_history_size,
+            device=device,
+            skip_first_ngram_calls=self.skip_first_ngram_calls,
+            debug_mode=self.debug_mode,
+        )
