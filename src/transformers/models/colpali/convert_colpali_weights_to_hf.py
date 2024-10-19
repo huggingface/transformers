@@ -38,6 +38,7 @@ print(f"Using device: {device}")
 CONVERSION_PRECISION = torch.float16
 PUBLISH_PRECISION = torch.bfloat16
 TOLERANCE = 2e-3
+CHECKPOINT_SAVEDIR = "checkpoints/colpali"
 
 
 def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -63,7 +64,7 @@ def load_original_colpali(device: str = "auto") -> ColPali:
 
 
 @torch.no_grad()
-def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
+def convert_colpali_checkpoint(push_to_hub: str):
     # Load the original model and state_dict
     model_original = load_original_colpali(device=device)
     state_dict = model_original.state_dict()
@@ -144,19 +145,24 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
             raise ValueError("Output values do not match for query forward pass")
 
     # Save the model in the desired precision
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True, parents=True)
-
     model = model.to(PUBLISH_PRECISION)
-    model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Model saved to `{pytorch_dump_folder_path}`")
+    if push_to_hub:
+        model.push_to_hub("vidore/colpali-v1.2-hf", private=True)
+    else:
+        Path(CHECKPOINT_SAVEDIR).mkdir(exist_ok=True, parents=True)
+        model.save_pretrained(CHECKPOINT_SAVEDIR)
+        print(f"Model saved to `{CHECKPOINT_SAVEDIR}`")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "pytorch_dump_folder_path", default="checkpoints/colpali", type=str, help="Path to the output PyTorch model."
+        "--push_to_hub",
+        help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
-    convert_colpali_checkpoint(args.pytorch_dump_folder_path)
+    convert_colpali_checkpoint(push_to_hub=args.push_to_hub)
