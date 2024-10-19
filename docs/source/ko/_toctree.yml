@@ -320,7 +320,7 @@
         title: (번역중) BART
       - local: in_translation
         title: (번역중) BARThez
-      - local: model_doc/bartpho.md
+      - local: model_doc/bartpho
         title: BARTpho
       - local: in_translation
         title: (번역중) BERT
