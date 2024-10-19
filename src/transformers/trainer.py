@@ -419,6 +419,12 @@ class Trainer:
             raise ValueError(
                 f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
             )
+        if args.save_strategy == SaveStrategy.BEST or args.load_best_model_at_end:
+            if args.metric_for_best_model is None:
+                raise ValueError(
+                    "`args.metric_for_best_model` must be provided when using 'best' save_strategy or if `args.load_best_model_at_end` is set to `True`."
+                )
+
         self.args = args
         self.compute_loss_func = compute_loss_func
         # Seed must be set before instantiating the model when using model
@@ -3103,19 +3109,19 @@ class Trainer:
                 ) from exc
 
             operator = np.greater if self.args.greater_is_better else np.less
-        else:
-            metric_value = metrics["eval_loss"]
-            operator = np.less
 
-        if self.state.best_metric is None or operator(metric_value, self.state.best_metric):
-            run_dir = self._get_output_dir(trial=trial)
-            checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
-            output_dir = os.path.join(run_dir, checkpoint_folder)
+            if self.state.best_metric is None:
+                self.state.best_metric = float("-inf") if self.args.greater_is_better else float("inf")
 
-            self.state.best_metric = metric_value
-            self.state.best_model_checkpoint = output_dir
+            if operator(metric_value, self.state.best_metric):
+                run_dir = self._get_output_dir(trial=trial)
+                checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+                output_dir = os.path.join(run_dir, checkpoint_folder)
 
-            new_best_metric = True
+                self.state.best_metric = metric_value
+                self.state.best_model_checkpoint = output_dir
+
+                new_best_metric = True
 
         return new_best_metric
 
