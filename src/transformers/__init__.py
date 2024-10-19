@@ -6884,10 +6884,10 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encodec import (
+            EncodecDiscriminator,
+            EncodecDiscriminatorConfig,
             EncodecModel,
             EncodecPreTrainedModel,
-            EncodecDiscriminatorConfig,
-            EncodecDiscriminator,
         )
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.ernie import (
