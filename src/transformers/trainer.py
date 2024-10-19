@@ -965,7 +965,7 @@ class Trainer:
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
-        if self.eval_dataset is None or not has_length(self.eval_dataset):
+        if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
 
