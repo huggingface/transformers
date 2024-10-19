@@ -17,7 +17,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -850,7 +850,7 @@ class CLIPSegVisionTransformer(nn.Module):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
