@@ -54,6 +54,7 @@ from PIL import Image
 from transformers import (
     RTDetrForObjectDetection,
     RTDetrImageProcessor,
+    VitPoseConfig,
     VitPoseForPoseEstimation,
     VitPoseImageProcessor,
 )
@@ -100,6 +101,7 @@ boxes = [pascal_voc_to_coco(boxes.cpu().numpy())]
 
 image_processor = VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
 model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+config = VitPoseConfig()
 
 # Stage 2. Run ViTPose
 pixel_values = image_processor(image, boxes=boxes, return_tensors="pt").pixel_values
@@ -213,27 +215,7 @@ def visualize_keypoints(
     return image
 
 # Note: keypoint_connections and color palette are dataset-specific
-keypoint_connections = [
-    [15, 13],
-    [13, 11],
-    [16, 14],
-    [14, 12],
-    [11, 12],
-    [5, 11],
-    [6, 12],
-    [5, 6],
-    [5, 7],
-    [6, 8],
-    [7, 9],
-    [8, 10],
-    [1, 2],
-    [0, 1],
-    [0, 2],
-    [1, 3],
-    [2, 4],
-    [3, 5],
-    [4, 6],
-]
+keypoint_connections = config.skeleton_edges
 
 palette = np.array(
     [

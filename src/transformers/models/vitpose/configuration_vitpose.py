@@ -54,6 +54,11 @@ class VitPoseConfig(PretrainedConfig):
             Factor to upscale the feature maps coming from the ViT backbone.
         use_simple_decoder (`bool`, *optional*, defaults to `True`):
             Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
+        skeleton_edges (`list`, *optional*):
+            List of edges connecting skeleton nodes, each edge represented by two node indices. This edges are based on MSCOCO.
+        skeleton_nodes (`list`, *optional*):
+            List of node names representing different body parts in the skeleton. This edges are based on MSCOCO.
+
 
     Example:
 
@@ -82,7 +87,7 @@ class VitPoseConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
-        skeleton: List = [
+        skeleton_edges: list = [
             [15, 13],
             [13, 11],
             [16, 14],
@@ -103,6 +108,25 @@ class VitPoseConfig(PretrainedConfig):
             [3, 5],
             [4, 6],
         ],
+        skeleton_nodes: list = [
+            "Nose",
+            "L_Eye",
+            "R_Eye",
+            "L_Ear",
+            "R_Ear",
+            "L_Shoulder",
+            "R_Shoulder",
+            "L_Elbow",
+            "R_Elbow",
+            "L_Wrist",
+            "R_Wrist",
+            "L_Hip",
+            "R_Hip",
+            "L_Knee",
+            "R_Knee",
+            "L_Ankle",
+            "R_Ankle",
+        ],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -111,6 +135,8 @@ class VitPoseConfig(PretrainedConfig):
             logger.info(
                 "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
             )
+        if use_timm_backbone:
+            raise ValueError("use_timm_backbone set `True` is not supported at the moment.")
 
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
@@ -137,3 +163,5 @@ class VitPoseConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
+        self.skeleton_edges = skeleton_edges
+        self.skeleton_nodes = skeleton_nodes
