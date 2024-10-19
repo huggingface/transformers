@@ -54,9 +54,9 @@ class VitPoseConfig(PretrainedConfig):
             Factor to upscale the feature maps coming from the ViT backbone.
         use_simple_decoder (`bool`, *optional*, defaults to `True`):
             Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
-        skeleton_edges (`list`, *optional*):
+        skeleton_edges (`list`, *optional*, defaults to `[[15, 13], [13, 11], [16, 14], [14, 12], [11, 12], [5, 11], [6, 12], [5, 6], [5, 7], [6, 8], [7, 9], [8, 10], [1, 2], [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6]]`):
             List of edges connecting skeleton nodes, each edge represented by two node indices. This edges are based on MSCOCO.
-        skeleton_nodes (`list`, *optional*):
+        skeleton_nodes (`list`, *optional*, defaults to `['Nose', 'L_Eye', 'R_Eye', 'L_Ear', 'R_Ear', 'L_Shoulder', 'R_Shoulder', 'L_Elbow', 'R_Elbow', 'L_Wrist', 'R_Wrist', 'L_Hip', 'R_Hip', 'L_Knee', 'R_Knee', 'L_Ankle', 'R_Ankle']`):
             List of node names representing different body parts in the skeleton. This edges are based on MSCOCO.
 
 
