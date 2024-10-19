@@ -57,15 +57,15 @@ class ColPaliImagesKwargs(ImagesKwargs):
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: ColPaliTextKwargs
-    images_kwargs: ColPaliImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": False,
+            "padding": "longest",
         },
         "images_kwargs": {
             "data_format": "channels_first",
+            "do_convert_rgb": True,
         },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
