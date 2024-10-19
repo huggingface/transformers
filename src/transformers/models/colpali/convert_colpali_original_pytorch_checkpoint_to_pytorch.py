@@ -35,6 +35,10 @@ logger = logging.get_logger(__name__)
 device = get_torch_device("auto")
 print(f"Using device: {device}")
 
+CONVERSION_PRECISION = torch.float16
+PUBLISH_PRECISION = torch.bfloat16
+TOLERANCE = 2e-3
+
 
 def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     new_state_dict = {}
@@ -51,7 +55,7 @@ def load_original_colpali(device: str = "auto") -> ColPali:
         ColPali,
         ColPali.from_pretrained(
             "vidore/colpali-v1.2-merged",
-            torch_dtype=torch.bfloat16,
+            torch_dtype=CONVERSION_PRECISION,
             device_map=device,
         ),
     ).eval()
@@ -80,7 +84,7 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(device).to(torch.bfloat16).eval()
+    model = ColPaliForRetrieval(config=config).to(device).to(CONVERSION_PRECISION).eval()
     print("Created model with new config and randomly initialized weights")
 
     # Load the original weights
@@ -108,34 +112,43 @@ def convert_colpali_checkpoint(pytorch_dump_folder_path: str):
         "Are Benjamin, Antoine, Merve, and Jo best friends?",
     ]
 
-    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2"))
+    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-merged"))
 
     batch_queries = processor(text=queries).to(device)
     batch_images = processor(images=images).to(device)
 
     with torch.no_grad():
-        outputs_images_original = model_original(**batch_images)
+        outputs_images_original = model_original(**batch_images.copy())
         outputs_images_new = model(**batch_images, return_dict=True).embeddings
+
         if outputs_images_original.shape != outputs_images_new.shape:
             raise ValueError("Output shapes do not match for images forward pass")
-        # FIXME: doesn't match
-        print("mean error:", torch.mean(torch.abs(outputs_images_original - outputs_images_new)))
-        # if not torch.allclose(outputs_images_original, outputs_images_new, atol=1e-3):
-        #     raise ValueError("Output values do not match for images forward pass")
+
+        mean_average_error = torch.mean(torch.abs(outputs_images_original - outputs_images_new))
+        print("Mean average error (image forward pass): ", mean_average_error)
+
+        if mean_average_error > TOLERANCE:
+            raise ValueError("Output values do not match for query forward pass")
 
     with torch.no_grad():
         outputs_queries_original = model_original(**batch_queries.copy())
         outputs_queries_new = model(**batch_queries.copy(), return_dict=True).embeddings
+
         if outputs_queries_original.shape != outputs_queries_new.shape:
             raise ValueError("Output shapes do not match for query forward pass")
-        # FIXME: doesn't match
-        print("mean error:", torch.mean(torch.abs(outputs_images_original - outputs_images_new)))
-        # if not torch.allclose(outputs_queries_original, outputs_queries_new, atol=1e-3):
-        #     raise ValueError("Output values do not match for query forward pass")
 
-    # Save the model
+        mean_average_error = torch.mean(torch.abs(outputs_queries_original - outputs_queries_new))
+        print("Mean average error (query forward pass): ", mean_average_error)
+
+        if mean_average_error > TOLERANCE:
+            raise ValueError("Output values do not match for query forward pass")
+
+    # Save the model in the desired precision
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True, parents=True)
+
+    model = model.to(PUBLISH_PRECISION)
     model.save_pretrained(pytorch_dump_folder_path)
+
     print(f"Model saved to `{pytorch_dump_folder_path}`")
 
 
