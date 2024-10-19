@@ -101,7 +101,49 @@ boxes = [pascal_voc_to_coco(boxes.cpu().numpy())]
 
 image_processor = VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
 model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
-config = VitPoseConfig()
+
+keypoint_edges = [
+    [15, 13],
+    [13, 11],
+    [16, 14],
+    [14, 12],
+    [11, 12],
+    [5, 11],
+    [6, 12],
+    [5, 6],
+    [5, 7],
+    [6, 8],
+    [7, 9],
+    [8, 10],
+    [1, 2],
+    [0, 1],
+    [0, 2],
+    [1, 3],
+    [2, 4],
+    [3, 5],
+    [4, 6],
+],
+keypoint_nodes = [
+    "Nose",
+    "L_Eye",
+    "R_Eye",
+    "L_Ear",
+    "R_Ear",
+    "L_Shoulder",
+    "R_Shoulder",
+    "L_Elbow",
+    "R_Elbow",
+    "L_Wrist",
+    "R_Wrist",
+    "L_Hip",
+    "R_Hip",
+    "L_Knee",
+    "R_Knee",
+    "L_Ankle",
+    "R_Ankle",
+],
+
+config = VitPoseConfig(keypoint_edges=keypoint_edges, keypoint_nodes=keypoint_nodes)
 
 # Stage 2. Run ViTPose
 pixel_values = image_processor(image, boxes=boxes, return_tensors="pt").pixel_values
@@ -130,11 +172,11 @@ def draw_points(image, keypoints, keypoint_colors, keypoint_score_threshold, rad
             else:
                 cv2.circle(image, (x_coord, y_coord), radius, color, -1)
 
-def draw_links(image, keypoints, keypoint_connections, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight, stick_width = 2):
+def draw_links(image, keypoints, keypoint_edges, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight, stick_width = 2):
     height, width, _ = image.shape
-    if keypoint_connections is not None and link_colors is not None:
-        assert len(link_colors) == len(keypoint_connections)
-        for sk_id, sk in enumerate(keypoint_connections):
+    if keypoint_edges is not None and link_colors is not None:
+        assert len(link_colors) == len(keypoint_edges)
+        for sk_id, sk in enumerate(keypoint_edges):
             x1, y1, score1 = (int(keypoints[sk[0], 0]), int(keypoints[sk[0], 1]), keypoints[sk[0], 2])
             x2, y2, score2 = (int(keypoints[sk[1], 0]), int(keypoints[sk[1], 1]), keypoints[sk[1], 2])
             if (
@@ -169,7 +211,7 @@ def draw_links(image, keypoints, keypoint_connections, link_colors, keypoint_sco
 def visualize_keypoints(
     image,
     pose_result,
-    keypoint_connections=None,
+    keypoint_edges=None,
     keypoint_score_threshold=0.3,
     keypoint_colors=None,
     link_colors=None,
@@ -185,8 +227,8 @@ def visualize_keypoints(
         pose_result (`List[numpy.ndarray]`): 
             The poses to draw. Each element is a set of K keypoints as a Kx3 numpy.ndarray, where each keypoint
             is represented as x, y, score.
-        keypoint_connections (`List[tuple]`, *optional*): 
-            Mapping index of the keypoint_connections links.
+        keypoint_edges (`List[tuple]`, *optional*): 
+            Mapping index of the keypoint_edges links.
         keypoint_score_threshold (`float`, *optional*, defaults to 0.3): 
             Minimum score of keypoints to be shown.
         keypoint_colors (`numpy.ndarray`, *optional*): 
@@ -210,12 +252,12 @@ def visualize_keypoints(
         draw_points(image, keypoints, keypoint_colors, keypoint_score_threshold, radius, show_keypoint_weight)
 
         # draw links
-        draw_links(image, keypoints, keypoint_connections, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight)
+        draw_links(image, keypoints, keypoint_edges, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight)
 
     return image
 
-# Note: keypoint_connections and color palette are dataset-specific
-keypoint_connections = config.skeleton_edges
+# Note: keypoint_edges and color palette are dataset-specific
+keypoint_edges = config.keypoint_edges
 
 palette = np.array(
     [
@@ -250,7 +292,7 @@ pose_results = [result["keypoints"] for result in pose_results]
 result = visualize_keypoints(
     np.array(image),
     pose_result,
-    keypoint_connections=keypoint_connections,
+    keypoint_edges=keypoint_edges,
     keypoint_score_threshold=0.3,
     keypoint_colors=keypoint_colors,
     link_colors=link_colors,
