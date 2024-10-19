@@ -16,15 +16,18 @@
 
 import math
 import typing as tp
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
 
+import einops
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import torchaudio
 from torch import nn
 from torch.nn.utils import spectral_norm, weight_norm
+
+from transformers.configuration_utils import PretrainedConfig
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -920,11 +923,6 @@ class EncodecModel(EncodecPreTrainedModel):
             reconstruction_loss=reconstruction_loss,
             commitment_loss=commitment_loss,
         )
-
-
-from dataclasses import field
-
-from transformers.configuration_utils import PretrainedConfig
 
 
 """

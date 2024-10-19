@@ -1,15 +1,15 @@
+import typing as tp
+from collections import defaultdict
+from typing import List
+
 import torch
 import torch.nn.functional as F
+from torch import autograd
 
 
 """
     Balancer code directly copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py
 """
-import typing as tp
-from collections import defaultdict
-from typing import List
-
-from torch import autograd
 
 
 class Balancer:
