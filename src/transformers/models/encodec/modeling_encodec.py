@@ -15,15 +15,16 @@
 """PyTorch EnCodec model."""
 
 import math
+import typing as tp
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
-import typing as tp
-from torch.nn.utils import weight_norm, spectral_norm
+
 import torch
-import torch.utils.checkpoint
-from torch import nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 import torchaudio
+from torch import nn
+from torch.nn.utils import spectral_norm, weight_norm
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -49,7 +50,9 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all EnCodec models at https://huggingface.co/models?filter=encodec
 ]
 
-scales = [2 ** i for i in range(5, 12)]
+scales = [2**i for i in range(5, 12)]
+
+
 @dataclass
 class EncodecOutput(ModelOutput):
     """
@@ -70,6 +73,7 @@ class EncodecOutput(ModelOutput):
     audio_values: torch.FloatTensor = None
     reconstruction_loss: Optional[torch.FloatTensor] = None
     commitment_loss: Optional[torch.FloatTensor] = None
+
 
 @dataclass
 class EncodecEncoderOutput(ModelOutput):
@@ -101,7 +105,7 @@ class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
     def __init__(
-            self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, dilation: int = 1
+        self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, dilation: int = 1
     ):
         super().__init__()
         self.causal = config.use_causal_conv
@@ -142,8 +146,8 @@ class EncodecConv1d(nn.Module):
         self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
 
     def _get_extra_padding_for_conv1d(
-            self,
-            hidden_states: torch.Tensor,
+        self,
+        hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
@@ -580,7 +584,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         self.quantizer = EncodecResidualVectorQuantizer(config)
 
-        self.commitment_weight = config.__dict__.get('commitment_weight', 1)
+        self.commitment_weight = config.__dict__.get("commitment_weight", 1)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
@@ -596,11 +600,8 @@ class EncodecModel(EncodecPreTrainedModel):
         return self.decoder
 
     def _encode_frame(
-            self, input_values: torch.Tensor, bandwidth: float, padding_mask: int, return_quantization_steps: bool = False
-    ) -> Union[
-        Tuple[torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], List]
-    ]:
+        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int, return_quantization_steps: bool = False
+    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], Tuple[torch.Tensor, Optional[torch.Tensor], List]]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
         normalized. The padding mask is required to compute the correct scale.
@@ -625,11 +626,11 @@ class EncodecModel(EncodecPreTrainedModel):
         return codes, scale, quantization_steps
 
     def encode(
-            self,
-            input_values: torch.Tensor,
-            padding_mask: torch.Tensor = None,
-            bandwidth: Optional[float] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor = None,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
@@ -753,11 +754,11 @@ class EncodecModel(EncodecPreTrainedModel):
         return outputs
 
     def decode(
-            self,
-            audio_codes: torch.Tensor,
-            audio_scales: torch.Tensor,
-            padding_mask: Optional[torch.Tensor] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        audio_codes: torch.Tensor,
+        audio_scales: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
@@ -801,34 +802,34 @@ class EncodecModel(EncodecPreTrainedModel):
         return EncodecDecoderOutput(audio_values)
 
     def compute_mel_spectrogram(self, audio, n_fft, hop_length, n_mels=64):
-            device = audio.device
-            # Adjust n_mels if necessary to avoid warnings
-            n_mels = min(n_mels, n_fft // 2 + 1)
-            # Create the window function on the correct device
-            window = torch.hann_window(n_fft, device=device)
-            mel_spec_transform = torchaudio.transforms.MelSpectrogram(
-                sample_rate=self.config.sampling_rate,
-                n_fft=n_fft,
-                hop_length=hop_length,
-                n_mels=n_mels,
-                window_fn=lambda x: window,
-                normalized=True,
-                center=False,
-                pad_mode=None,
-            ).to(device)
-            return mel_spec_transform(audio)
+        device = audio.device
+        # Adjust n_mels if necessary to avoid warnings
+        n_mels = min(n_mels, n_fft // 2 + 1)
+        # Create the window function on the correct device
+        window = torch.hann_window(n_fft, device=device)
+        mel_spec_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=self.config.sampling_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels,
+            window_fn=lambda x: window,
+            normalized=True,
+            center=False,
+            pad_mode=None,
+        ).to(device)
+        return mel_spec_transform(audio)
 
     @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=EncodecOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_values: torch.Tensor,
-            padding_mask: Optional[torch.Tensor] = None,
-            bandwidth: Optional[float] = None,
-            audio_codes: Optional[torch.Tensor] = None,
-            audio_scales: Optional[torch.Tensor] = None,
-            return_dict: Optional[bool] = None,
-            return_loss: bool = False,
+        self,
+        input_values: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        bandwidth: Optional[float] = None,
+        audio_codes: Optional[torch.Tensor] = None,
+        audio_scales: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        return_loss: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], EncodecOutput]:
         r"""
         Returns:
@@ -885,7 +886,7 @@ class EncodecModel(EncodecPreTrainedModel):
             print(f"Time loss: {time_loss.item()}")
 
             # Frequency domain loss
-            scales = [2 ** i for i in range(5, 12)]
+            scales = [2**i for i in range(5, 12)]
             frequency_loss = 0.0
             for scale in scales:
                 n_fft = scale
@@ -900,7 +901,7 @@ class EncodecModel(EncodecPreTrainedModel):
             print(f"Average frequency loss: {frequency_loss.item()}")
 
             # Combine losses
-            lambda_t = 1.0 # look at this further, not sure why the need for a weight here
+            lambda_t = 1.0  # look at this further, not sure why the need for a weight here
             lambda_f = 1.0
             reconstruction_loss = lambda_t * time_loss + lambda_f * frequency_loss
             print(f"Reconstruction loss: {reconstruction_loss.item()}")
@@ -920,12 +921,17 @@ class EncodecModel(EncodecPreTrainedModel):
             commitment_loss=commitment_loss,
         )
 
-from transformers.configuration_utils import PretrainedConfig
+
 from dataclasses import field
 
-'''
+from transformers.configuration_utils import PretrainedConfig
+
+
+"""
     Discriminator code copied over and refactored from https://github.com/facebookresearch/encodec/blob/main/encodec/msstftd.py#L28
-'''
+"""
+
+
 @dataclass
 class EncodecDiscriminatorConfig(PretrainedConfig):
     model_type: str = "encodec_discriminator"
@@ -941,33 +947,37 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
     max_filters: int = 1024
     filters_scale: int = 2
     normalized: bool = True
-    norm: str = 'weight_norm'
-    activation: str = 'LeakyReLU'
-    activation_params: dict = field(default_factory=lambda: {'negative_slope': 0.2})
+    norm: str = "weight_norm"
+    activation: str = "LeakyReLU"
+    activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
+
 
 class ConvLayerNorm(nn.LayerNorm):
     """
     Convolution-friendly LayerNorm that moves channels to last dimensions
     before running the normalization and moves them back to original position right after.
     """
+
     def __init__(self, normalized_shape: tp.Union[int, tp.List[int], torch.Size], **kwargs):
         super().__init__(normalized_shape, **kwargs)
 
     def forward(self, x):
-        x = einops.rearrange(x, 'b ... t -> b t ...')
+        x = einops.rearrange(x, "b ... t -> b t ...")
         x = super().forward(x)
-        x = einops.rearrange(x, 'b t ... -> b ... t')
+        x = einops.rearrange(x, "b t ... -> b ... t")
         return
 
-CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
-                                 'time_layer_norm', 'layer_norm', 'time_group_norm'])
+
+CONV_NORMALIZATIONS = frozenset(
+    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
+)
 
 
-def apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
+def apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
     assert norm in CONV_NORMALIZATIONS
-    if norm == 'weight_norm':
+    if norm == "weight_norm":
         return weight_norm(module)
-    elif norm == 'spectral_norm':
+    elif norm == "spectral_norm":
         return spectral_norm(module)
     else:
         # We already check was in CONV_NORMALIZATION, so any other choice
@@ -975,15 +985,15 @@ def apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Modu
         return module
 
 
-def get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none', **norm_kwargs) -> nn.Module:
+def get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
     """Return the proper normalization module. If causal is True, this will ensure the returned
     module is causal, or return an error if the normalization doesn't support causal evaluation.
     """
     assert norm in CONV_NORMALIZATIONS
-    if norm == 'layer_norm':
+    if norm == "layer_norm":
         assert isinstance(module, nn.modules.conv._ConvNd)
         return ConvLayerNorm(module.out_channels, **norm_kwargs)
-    elif norm == 'time_group_norm':
+    elif norm == "time_group_norm":
         if causal:
             raise ValueError("GroupNorm doesn't support causal evaluation.")
         assert isinstance(module, nn.modules.conv._ConvNd)
@@ -991,12 +1001,13 @@ def get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none',
     else:
         return nn.Identity()
 
+
 class NormConv2d(nn.Module):
     """Wrapper around Conv2d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
-    def __init__(self, *args, norm: str = 'none',
-                 norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+
+    def __init__(self, *args, norm: str = "none", norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
         super().__init__()
         self.conv = apply_parametrization_norm(nn.Conv2d(*args, **kwargs), norm)
         self.norm = get_norm_module(self.conv, causal=False, norm=norm, **norm_kwargs)
@@ -1007,24 +1018,25 @@ class NormConv2d(nn.Module):
         x = self.norm(x)
         return x
 
+
 class STFTDiscriminator(nn.Module):
     def __init__(
-            self,
-            filters,
-            in_channels,
-            out_channels,
-            n_fft,
-            hop_length,
-            win_length,
-            kernel_size,
-            stride,
-            dilations,
-            max_filters,
-            filters_scale,
-            normalized,
-            norm,
-            activation,
-            activation_params
+        self,
+        filters,
+        in_channels,
+        out_channels,
+        n_fft,
+        hop_length,
+        win_length,
+        kernel_size,
+        stride,
+        dilations,
+        max_filters,
+        filters_scale,
+        normalized,
+        norm,
+        activation,
+        activation_params,
     ):
         super().__init__()
         self.n_fft = n_fft
@@ -1047,28 +1059,13 @@ class STFTDiscriminator(nn.Module):
         self.convs = nn.ModuleList()
         in_ch = 2 * in_channels
         out_ch = filters
-        self.convs.append(
-            NormConv2d(
-                in_ch, out_ch, kernel_size, stride=(1, 1), norm=norm
-            )
-        )
+        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=(1, 1), norm=norm))
         in_ch = out_ch
         for dilation in dilations:
             out_ch = min(in_ch * filters_scale, max_filters)
-            self.convs.append(
-                NormConv2d(
-                    in_ch,
-                    out_ch,
-                    kernel_size,
-                    stride=stride,
-                    dilation=(dilation, 1),
-                    norm=norm
-                )
-            )
+            self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=stride, dilation=(dilation, 1), norm=norm))
             in_ch = out_ch
-        self.convs.append(
-            NormConv2d(in_ch, out_ch, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm)
-        )
+        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm))
         self.conv_post = NormConv2d(out_ch, out_channels, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm)
 
     def forward(self, x: torch.Tensor):
@@ -1085,37 +1082,39 @@ class STFTDiscriminator(nn.Module):
         z = self.conv_post(z)
         return z, feature_maps
 
+
 FeatureMapType = tp.List[torch.Tensor]
 LogitsType = torch.Tensor
 DiscriminatorOutput = tp.Tuple[tp.List[LogitsType], tp.List[FeatureMapType]]
+
 
 class EncodecDiscriminator(PreTrainedModel):
     config_class = EncodecDiscriminatorConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.discriminators = nn.ModuleList([
-            STFTDiscriminator(
-                filters=config.filters,
-                in_channels=config.in_channels,
-                out_channels=config.out_channels,
-                n_fft=n_fft,
-                hop_length=hop_length,
-                win_length=win_length,
-                kernel_size=config.kernel_size,
-                stride=config.stride,
-                dilations=config.dilations,
-                max_filters=config.max_filters,
-                filters_scale=config.filters_scale,
-                normalized=config.normalized,
-                norm=config.norm,
-                activation=config.activation,
-                activation_params=config.activation_params
-            )
-            for n_fft, hop_length, win_length in zip(
-                config.n_ffts, config.hop_lengths, config.win_lengths
-            )
-        ])
+        self.discriminators = nn.ModuleList(
+            [
+                STFTDiscriminator(
+                    filters=config.filters,
+                    in_channels=config.in_channels,
+                    out_channels=config.out_channels,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    win_length=win_length,
+                    kernel_size=config.kernel_size,
+                    stride=config.stride,
+                    dilations=config.dilations,
+                    max_filters=config.max_filters,
+                    filters_scale=config.filters_scale,
+                    normalized=config.normalized,
+                    norm=config.norm,
+                    activation=config.activation,
+                    activation_params=config.activation_params,
+                )
+                for n_fft, hop_length, win_length in zip(config.n_ffts, config.hop_lengths, config.win_lengths)
+            ]
+        )
         self.num_discriminators = len(self.discriminators)
 
     def forward(self, x: torch.Tensor) -> DiscriminatorOutput:

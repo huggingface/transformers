@@ -23,7 +23,12 @@ from ...utils import (
 _import_structure = {
     "configuration_encodec": ["EncodecConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
-    "loss_encodec": ["compute_discriminator_loss", "compute_generator_adv_loss", "compute_feature_matching_loss", "Balancer"],
+    "loss_encodec": [
+        "compute_discriminator_loss",
+        "compute_generator_adv_loss",
+        "compute_feature_matching_loss",
+        "Balancer",
+    ],
 }
 
 try:
@@ -45,10 +50,10 @@ if TYPE_CHECKING:
     )
     from .feature_extraction_encodec import EncodecFeatureExtractor
     from .loss_encodec import (
+        Balancer,
         compute_discriminator_loss,
-        compute_generator_adv_loss,
         compute_feature_matching_loss,
-        Balancer
+        compute_generator_adv_loss,
     )
 
     try:
@@ -58,10 +63,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_encodec import (
+            EncodecDiscriminator,
+            EncodecDiscriminatorConfig,
             EncodecModel,
             EncodecPreTrainedModel,
-            EncodecDiscriminatorConfig,
-            EncodecDiscriminator,
         )
 
 else:

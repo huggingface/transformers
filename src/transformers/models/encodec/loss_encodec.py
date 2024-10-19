@@ -2,15 +2,15 @@ import torch
 import torch.nn.functional as F
 
 
-'''
+"""
     Balancer code directly copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py
-'''
-from collections import defaultdict
+"""
 import typing as tp
+from collections import defaultdict
 from typing import List
+
 from torch import autograd
-from torch.nn.utils import spectral_norm, weight_norm
-import einops
+
 
 class Balancer:
     """Loss balancer.
@@ -48,9 +48,16 @@ class Balancer:
         monitor (bool): Whether to store additional ratio for each loss key in metrics.
     """
 
-    def __init__(self, weights: tp.Dict[str, float], rescale_grads: bool = True, total_norm: float = 1.,
-                 ema_decay: float = 0.999, per_batch_item: bool = True, epsilon: float = 1e-12,
-                 monitor: bool = False):
+    def __init__(
+        self,
+        weights: tp.Dict[str, float],
+        rescale_grads: bool = True,
+        total_norm: float = 1.0,
+        ema_decay: float = 0.999,
+        per_batch_item: bool = True,
+        epsilon: float = 1e-12,
+        monitor: bool = False,
+    ):
         self.weights = weights
         self.per_batch_item = per_batch_item
         self.total_norm = total_norm
@@ -68,7 +75,7 @@ class Balancer:
         norms = {}
         grads = {}
         for name, loss in losses.items():
-            grad, = autograd.grad(loss, [input], retain_graph=True, allow_unused=True)
+            (grad,) = autograd.grad(loss, [input], retain_graph=True, allow_unused=True)
             if grad is not None:
                 if self.per_batch_item:
                     dims = tuple(range(1, grad.dim()))
@@ -87,7 +94,7 @@ class Balancer:
         self._metrics = {}
         if self.monitor:
             for k, v in avg_norms.items():
-                self._metrics[f'ratio_{k}'] = v / total
+                self._metrics[f"ratio_{k}"] = v / total
 
         total_weights = sum([self.weights[k] for k in avg_norms])
         ratios = {k: w / total_weights for k, w in self.weights.items()}
@@ -113,22 +120,26 @@ def world_size():
 def is_distributed():
     return world_size() > 1
 
+
 def all_reduce(tensor: torch.Tensor, op=torch.distributed.ReduceOp.SUM):
     if is_distributed():
         return torch.distributed.all_reduce(tensor, op)
-def average_metrics(metrics: tp.Dict[str, float], count=1.):
+
+
+def average_metrics(metrics: tp.Dict[str, float], count=1.0):
     """Average a dictionary of metrics across all workers, using the optional
     `count` as unnormalized weight.
     """
     if not is_distributed():
         return metrics
     keys, values = zip(*metrics.items())
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     tensor = torch.tensor(list(values) + [1], device=device, dtype=torch.float32)
     tensor *= count
     all_reduce(tensor)
     averaged = (tensor[:-1] / tensor[-1]).cpu().tolist()
     return dict(zip(keys, averaged))
+
 
 def averager(beta: float = 1):
     """
@@ -148,12 +159,12 @@ def averager(beta: float = 1):
             total[key] = total[key] * beta + weight * float(value)
             fix[key] = fix[key] * beta + weight
         return {key: tot / fix[key] for key, tot in total.items()}
+
     return _update
 
+
 def compute_discriminator_loss(
-        real_logits: List[torch.Tensor],
-        fake_logits: List[torch.Tensor],
-        num_discriminators: int
+    real_logits: List[torch.Tensor], fake_logits: List[torch.Tensor], num_discriminators: int
 ) -> torch.Tensor:
     """
     Compute the discriminator loss based on real and fake logits.
@@ -171,10 +182,8 @@ def compute_discriminator_loss(
         loss += torch.mean(F.relu(1 - real_logit)) + torch.mean(F.relu(1 + fake_logit))
     return loss / num_discriminators
 
-def compute_generator_adv_loss(
-        fake_logits: List[torch.Tensor],
-        num_discriminators: int
-) -> torch.Tensor:
+
+def compute_generator_adv_loss(fake_logits: List[torch.Tensor], num_discriminators: int) -> torch.Tensor:
     """
     Compute the generator adversarial loss using fake logits.
 
@@ -190,7 +199,10 @@ def compute_generator_adv_loss(
         loss += torch.mean(F.relu(1 - fake_logit))
     return loss / num_discriminators
 
-def compute_feature_matching_loss(real_features: List[List[torch.Tensor]], fake_features: List[List[torch.Tensor]], num_discriminators: int):
+
+def compute_feature_matching_loss(
+    real_features: List[List[torch.Tensor]], fake_features: List[List[torch.Tensor]], num_discriminators: int
+):
     """
     Compute the feature matching loss between real and fake features.
 
@@ -206,5 +218,5 @@ def compute_feature_matching_loss(real_features: List[List[torch.Tensor]], fake_
     for k in range(num_discriminators):
         for real_feat, fake_feat in zip(real_features[k], fake_features[k]):
             fm_loss += F.l1_loss(fake_feat, real_feat.detach()) / torch.mean(torch.abs(real_feat.detach()))
-    fm_loss /= (num_discriminators * len(real_features[0]))
+    fm_loss /= num_discriminators * len(real_features[0])
     return fm_loss

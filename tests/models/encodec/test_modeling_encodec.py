@@ -17,28 +17,23 @@
 import copy
 import inspect
 import os
+import random
 import tempfile
 import unittest
-import torchaudio
-import random
-import torch.nn.functional as F
+
 import numpy as np
+import torch.nn.functional as F
+import torchaudio
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
 from transformers.models.encodec.loss_encodec import (
     Balancer,
     compute_discriminator_loss,
-    compute_generator_adv_loss,
     compute_feature_matching_loss,
+    compute_generator_adv_loss,
 )
-
-from transformers.testing_utils import (
-    is_torch_available,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -48,7 +43,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EncodecModel, EncodecDiscriminatorConfig, EncodecDiscriminator
+    from transformers import EncodecDiscriminator, EncodecDiscriminatorConfig, EncodecModel
+
 
 def prepare_inputs_dict(
     config,
@@ -161,9 +157,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         y_disc_gen, fmap_gen = disc(y_hat)
         assert len(y_disc_r) == len(y_disc_gen) == len(fmap_r) == len(fmap_gen) == disc.num_discriminators
 
-        assert all([len(fm) == 5 for fm in fmap_r + fmap_gen])
-        assert all([list(f.shape)[:2] == [1, 32] for fm in fmap_r + fmap_gen for f in fm])
-        assert all([len(logits.shape) == 4 for logits in y_disc_r + y_disc_gen])
+        assert all(len(fm) == 5 for fm in fmap_r + fmap_gen)
+        assert all(list(f.shape)[:2] == [1, 32] for fm in fmap_r + fmap_gen for f in fm)
+        assert all(len(logits.shape) == 4 for logits in y_disc_r + y_disc_gen)
 
     # Test copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py#L121
     @slow
@@ -172,21 +168,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         one = torch.ones_like(x)
         loss_1 = F.l1_loss(x, one)
         loss_2 = 100 * F.l1_loss(x, -one)
-        losses = {'1': loss_1, '2': loss_2}
+        losses = {"1": loss_1, "2": loss_2}
 
-        balancer = Balancer(weights={'1': 1, '2': 1}, rescale_grads=False)
+        balancer = Balancer(weights={"1": 1, "2": 1}, rescale_grads=False)
         balancer.backward(losses, x)
-        assert torch.allclose(x.grad, torch.tensor(99.)), x.grad
+        assert torch.allclose(x.grad, torch.tensor(99.0)), x.grad
 
         loss_1 = F.l1_loss(x, one)
         loss_2 = 100 * F.l1_loss(x, -one)
-        losses = {'1': loss_1, '2': loss_2}
+        losses = {"1": loss_1, "2": loss_2}
         x.grad = None
-        balancer = Balancer(weights={'1': 1, '2': 1}, rescale_grads=True)
-        balancer.backward({'1': loss_1, '2': loss_2}, x)
-        assert torch.allclose(x.grad, torch.tensor(0.)), x.grad
+        balancer = Balancer(weights={"1": 1, "2": 1}, rescale_grads=True)
+        balancer.backward({"1": loss_1, "2": loss_2}, x)
+        assert torch.allclose(x.grad, torch.tensor(0.0)), x.grad
 
-
+    @slow
     def test_training_with_discriminator(self):
         model_id = "facebook/encodec_24khz"
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -210,19 +206,14 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
 
         inputs = processor(
-            raw_audio=audio_input.squeeze().cpu().numpy(),
-            sampling_rate=sample_rate,
-            return_tensors="pt"
+            raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt"
         )
         input_values = inputs.input_values.to(torch_device)
 
         num_epochs = 3
 
-        loss_weights = {
-            'reconstruction_loss': 1.0,
-            'g_adv_loss': 1.0,
-            'fm_loss': 1.0
-        }
+        loss_weights = {"reconstruction_loss": 1.0, "g_adv_loss": 3.0, "fm_loss": 3.0}
+
         balancer = Balancer(
             weights=loss_weights,
             rescale_grads=True,
@@ -230,7 +221,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             ema_decay=0.999,
             per_batch_item=True,
             epsilon=1e-12,
-            monitor=False
+            monitor=False,
         )
 
         for epoch in range(num_epochs):
@@ -238,31 +229,28 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             # Update discriminator based on the probability outlined in the paper
             if sample_rate == 24000:
-                update_discriminator = random.random() < (2/3)
+                update_discriminator = random.random() < (2 / 3)
             elif sample_rate == 48000:
                 update_discriminator = random.random() < 0.5
             else:
                 raise ValueError("Unsupported sample rate")
 
             if update_discriminator:
-                # Train Discriminator
                 discriminator_optimizer.zero_grad()
 
                 # Generate fake audio with the generator
                 outputs = model(input_values, return_dict=True, return_loss=True)
                 fake_audio = outputs.audio_values.detach()  # Detach to prevent gradients flowing to the generator
 
-                # Compute discriminator loss on real and fake audio
                 real_logits, _ = discriminator(real_audio)
                 fake_logits, _ = discriminator(fake_audio)
 
                 discriminator_loss = compute_discriminator_loss(
                     real_logits=real_logits,
                     fake_logits=fake_logits,
-                    num_discriminators=discriminator.num_discriminators
+                    num_discriminators=discriminator.num_discriminators,
                 )
 
-                # Backpropagate and update discriminator
                 discriminator_loss.backward()
                 discriminator_optimizer.step()
 
@@ -279,22 +267,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             # Generator adversarial loss
             g_adv_loss = compute_generator_adv_loss(
-                fake_logits=fake_logits,
-                num_discriminators=discriminator.num_discriminators
+                fake_logits=fake_logits, num_discriminators=discriminator.num_discriminators
             )
 
             # Feature matching loss (Equation 2 in paper)
             fm_loss = compute_feature_matching_loss(
                 real_features=real_features,
                 fake_features=fake_features,
-                num_discriminators=discriminator.num_discriminators
+                num_discriminators=discriminator.num_discriminators,
             )
 
             # Combine losses using the Balancer
             losses_to_balance = {
-                'reconstruction_loss': outputs.reconstruction_loss,
-                'g_adv_loss': g_adv_loss,
-                'fm_loss': fm_loss
+                "reconstruction_loss": outputs.reconstruction_loss,
+                "g_adv_loss": g_adv_loss,
+                "fm_loss": fm_loss,
             }
 
             # Model output (the reconstructed audio)
@@ -338,7 +325,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         audio_input = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0).unsqueeze(0)
         audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
 
-        inputs = processor(raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
+        inputs = processor(
+            raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt"
+        )
         input_values = inputs.input_values.to(torch_device)
 
         bandwidths = [1.5, 6.0, 12.0, 24.0]
@@ -380,9 +369,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
 
         inputs = processor(
-            raw_audio=audio_input.squeeze().cpu().numpy(),
-            sampling_rate=sample_rate,
-            return_tensors="pt"
+            raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt"
         )
         input_values = inputs.input_values.to(torch_device)
 
