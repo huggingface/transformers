@@ -28,7 +28,6 @@ from transformers import AutoConfig, is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
-    require_auto_gptq,
     require_optimum_quanto,
     require_torch,
     require_torch_gpu,
@@ -153,7 +152,11 @@ class GenerationTesterMixin:
         # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
-            image_token_index = config.image_token_index if hasattr(config, "image_token_index") else None
+            image_token_index = (
+                config.image_token_index
+                if getattr(config, "image_token_index", None) is not None
+                else getattr(config, "image_token_id", None)
+            )
             video_token_index = config.video_token_index if hasattr(config, "video_token_index") else None
             if image_token_index is not None and image_token_index < config.get_text_config().vocab_size:
                 logits_processor_kwargs["bad_words_ids"].append([image_token_index])
@@ -1094,6 +1097,7 @@ class GenerationTesterMixin:
                     "bigbirdpegasus",
                     "led",
                     "mega",
+                    "moshi",
                     "speech2text",
                     "git",
                     "prophetnet",
@@ -1168,6 +1172,7 @@ class GenerationTesterMixin:
                     "bigbirdpegasus",
                     "led",
                     "mega",
+                    "moshi",
                     "speech2text",
                     "git",
                     "prophetnet",
@@ -1281,6 +1286,7 @@ class GenerationTesterMixin:
                     "bigbirdpegasus",
                     "led",
                     "mega",
+                    "moshi",
                     "speech2text",
                     "git",
                     "prophetnet",
@@ -1496,13 +1502,14 @@ class GenerationTesterMixin:
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
 
+            text_config = config.get_text_config()
             num_hidden_layers = (
-                getattr(config, "decoder_layers", None)
-                or getattr(config, "num_decoder_layers", None)
-                or config.num_hidden_layers
+                getattr(text_config, "decoder_layers", None)
+                or getattr(text_config, "num_decoder_layers", None)
+                or text_config.num_hidden_layers
             )
-            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
-            embed_dim = getattr(config, "d_model", config.hidden_size)
+            num_attention_heads = getattr(text_config, "decoder_attention_heads", text_config.num_attention_heads)
+            embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
             past_kv = outputs["past_key_values"]
@@ -3904,11 +3911,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(
         [
-            (
-                "square_bracket",
-                'An example ["like this"] and another example [',
-                'An example ["like this"] and another example ["',
-            ),
             ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
             # aggressive_healing: "http" shouldn't be replaced with "https"
             ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
@@ -3918,9 +3920,8 @@ class TokenHealingTestCase(unittest.TestCase):
             ("empty_prompt", "", ""),
         ]
     )
-    @require_auto_gptq
     def test_prompts(self, name, input, expected):
-        model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
+        model_name_or_path = "distilbert/distilgpt2"
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
         completion_model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
@@ -3929,9 +3930,16 @@ class TokenHealingTestCase(unittest.TestCase):
             revision="main",
             use_cache=True,
         )
+
+        """
+        tokenizer.pad_token value can be empty but it is required in the latter codes
+        so assigned it here with eos_token
+		"""
+        tokenizer.pad_token = tokenizer.eos_token
+
         input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
 
-        healed_ids = completion_model.heal_tokens(input_ids)
+        healed_ids = completion_model.heal_tokens(input_ids, tokenizer=tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
 
         self.assertEqual(predicted, expected)

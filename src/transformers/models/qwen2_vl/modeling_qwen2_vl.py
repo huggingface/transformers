@@ -1710,6 +1710,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.get_dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+                n_image_features = image_embeds.shape[0]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 image_mask = (
                     (input_ids == self.config.image_token_id)
                     .unsqueeze(-1)
@@ -1722,6 +1728,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                n_video_features = video_embeds.shape[0]
+                if n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
                 video_mask = (
                     (input_ids == self.config.video_token_id)
                     .unsqueeze(-1)
@@ -1748,10 +1760,11 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1791,6 +1804,8 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         video_grid_thw=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here

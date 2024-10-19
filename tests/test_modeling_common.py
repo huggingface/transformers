@@ -3000,8 +3000,11 @@ class ModelTesterMixin:
 
     def test_inputs_embeds_matches_input_ids_with_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_generative_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+            ]:
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -3017,6 +3020,13 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            # VLMs can't generate with embeds and pixels at the same time. We expect the user to pass merged
+            # embeds already
+            if model_class.__name__ in get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES):
+                inputs.pop("pixel_values", None)
+                inputs.pop("pixel_values_videos", None)
+                inputs.pop("pixel_values_images", None)
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
@@ -4768,7 +4778,7 @@ class ModelTesterMixin:
 
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
-            fa2_model = AutoModelForCausalLM.from_config(
+            fa2_model = model_class._from_config(
                 config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
             ).to(torch_device)
 
@@ -4789,7 +4799,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
 
-                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+                model_from_pretrained = model_class.from_pretrained(tmpdirname)
 
                 self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
 
@@ -4928,14 +4938,17 @@ class ModelTesterMixin:
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
+        revision = "main" if not hasattr(self, "_torch_compile_test_revision") else self._torch_compile_test_revision
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
         batch_size = 1
         n_iter = 3
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+            torch_device
+        )
 
         model.generation_config.max_new_tokens = 4
 
@@ -5003,11 +5016,14 @@ class ModelTesterMixin:
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt
+        revision = "main" if not hasattr(self, "_torch_compile_test_revision") else self._torch_compile_test_revision
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+            torch_device
+        )
 
         cache_implementation = "static"
         if model.config.model_type == "gemma2":
