@@ -38,9 +38,9 @@ class ImageQuestionAnsweringTool(PipelineTool):
             "type": "image",
             "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
         },
-        "question": {"type": "text", "description": "The question in English"},
+        "question": {"type": "string", "description": "The question in English"},
     }
-    output_type = "text"
+    output_type = "string"
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

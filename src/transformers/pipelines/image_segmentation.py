@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -90,16 +91,19 @@ class ImageSegmentationPipeline(Pipeline):
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
         if "timeout" in kwargs:
+            warnings.warn(
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
+            )
             preprocess_kwargs["timeout"] = kwargs["timeout"]
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
+    def __call__(self, inputs=None, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -118,9 +122,6 @@ class ImageSegmentationPipeline(Pipeline):
                 Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.5):
                 Mask overlap threshold to eliminate small, disconnected segments.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
@@ -136,7 +137,12 @@ class ImageSegmentationPipeline(Pipeline):
             - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
               "object" described by the label and the mask.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs:
+            inputs = kwargs.pop("images")
+        if inputs is None:
+            raise ValueError("Cannot call the image-classification pipeline without an inputs argument!")
+        return super().__call__(inputs, **kwargs)
 
     def preprocess(self, image, subtask=None, timeout=None):
         image = load_image(image, timeout=timeout)

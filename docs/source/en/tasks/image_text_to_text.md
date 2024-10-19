@@ -27,22 +27,22 @@ To begin with, there are multiple types of VLMs:
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
 
-This guide focuses on inference with an instruction-tuned model. 
+This guide focuses on inference with an instruction-tuned model.
 
 Let's begin installing the dependencies.
 
 ```bash
-pip install -q transformers accelerate flash_attn 
+pip install -q transformers accelerate flash_attn
 ```
 
-Let's initialize the model and the processor. 
+Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, Idefics2ForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
 device = torch.device("cuda")
-model = Idefics2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
     torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
@@ -51,7 +51,7 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
 
-This model has a [chat template](./chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
+This model has a [chat template](./chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs.
 
 The image inputs look like the following.
 
@@ -74,7 +74,7 @@ images = [Image.open(requests.get(img_urls[0], stream=True).raw),
           Image.open(requests.get(img_urls[1], stream=True).raw)]
 ```
 
-Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template. 
+Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template.
 
 
 ```python
@@ -98,7 +98,7 @@ messages = [
             {"type": "image"},
             {"type": "text", "text": "And how about this image?"},
         ]
-    },       
+    },
 ]
 ```
 
@@ -180,11 +180,11 @@ def model_inference(
         if acc_text.endswith("<end_of_utterance>"):
             acc_text = acc_text[:-18]
         yield acc_text
-    
+
     thread.join()
 ```
 
-Now let's call the `model_inference` function we created and stream the values. 
+Now let's call the `model_inference` function we created and stream the values.
 
 ```python
 generator = model_inference(
@@ -204,7 +204,7 @@ for value in generator:
 
 ## Fit models in smaller hardware
 
-VLMs are often large and need to be optimized to fit in smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with [Quanto](./quantization/quanto#quanto). int8 quantization offers memory improvements up to 75 percent (if all weights are quantized). However it is no free lunch, since 8-bit is not a CUDA-native precision, the weights are quantized back and forth on the fly, which adds up to latency. 
+VLMs are often large and need to be optimized to fit on smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with [Quanto](./quantization/quanto#quanto). int8 quantization offers memory improvements up to 75 percent (if all weights are quantized). However it is no free lunch, since 8-bit is not a CUDA-native precision, the weights are quantized back and forth on the fly, which adds up to latency.
 
 First, install dependencies.
 
@@ -215,18 +215,20 @@ pip install -U quanto bitsandbytes
 To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization.
 
 ```python
-from transformers import Idefics2ForConditionalGeneration, AutoTokenizer, QuantoConfig
+from transformers import AutoModelForImageTextToText, QuantoConfig
 
 model_id = "HuggingFaceM4/idefics2-8b"
 quantization_config = QuantoConfig(weights="int8")
-quantized_model = Idefics2ForConditionalGeneration.from_pretrained(model_id, device_map="cuda", quantization_config=quantization_config)
+quantized_model = AutoModelForImageTextToText.from_pretrained(
+    model_id, device_map="cuda", quantization_config=quantization_config
+)
 ```
 
-And that's it, we can use the model the same way with no changes. 
+And that's it, we can use the model the same way with no changes.
 
 ## Further Reading
 
 Here are some more resources for the image-text-to-text task.
 
-- [Image-text-to-text task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets, and more. 
+- [Image-text-to-text task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets, and more.
 - [Vision Language Models Explained](https://huggingface.co/blog/vlms) is a blog post that covers everything about vision language models and supervised fine-tuning using [TRL](https://huggingface.co/docs/trl/en/index).
