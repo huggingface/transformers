@@ -2153,10 +2153,10 @@ else:
     )
     _import_structure["models.encodec"].extend(
         [
+            "EncodecDiscriminator",
+            "EncodecDiscriminatorConfig",
             "EncodecModel",
             "EncodecPreTrainedModel",
-            "EncodecDiscriminatorConfig",
-            "EncodecDiscriminator",
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")

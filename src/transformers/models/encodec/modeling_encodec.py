@@ -1141,7 +1141,7 @@ class EncodecDiscriminator(PreTrainedModel):
             g_adv_loss += -fake_logit.mean()
         g_adv_loss /= self.num_discriminators
 
-        # Feature matching loss
+        # feature matching loss
         fm_loss = 0
         for real_feat, fake_feat in zip(real_features, fake_features):
             for real_f, fake_f in zip(real_feat, fake_feat):

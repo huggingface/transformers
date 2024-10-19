@@ -24,10 +24,10 @@ _import_structure = {
     "configuration_encodec": ["EncodecConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
     "loss_encodec": [
-        "compute_discriminator_loss",
-        "compute_generator_adv_loss",
-        "compute_feature_matching_loss",
         "Balancer",
+        "compute_discriminator_loss",
+        "compute_feature_matching_loss",
+        "compute_generator_adv_loss",
     ],
 }
 

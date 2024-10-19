@@ -14,6 +14,7 @@ deps = {
     "deepspeed": "deepspeed>=0.9.3",
     "diffusers": "diffusers",
     "dill": "dill<0.3.5",
+    "einops": "einops",
     "evaluate": "evaluate>=0.2.0",
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",

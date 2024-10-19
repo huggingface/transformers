@@ -33,7 +33,7 @@ from transformers.models.encodec.loss_encodec import (
     compute_feature_matching_loss,
     compute_generator_adv_loss,
 )
-from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -183,6 +183,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         assert torch.allclose(x.grad, torch.tensor(0.0)), x.grad
 
     @slow
+    @require_torchaudio
     def test_training_with_discriminator(self):
         model_id = "facebook/encodec_24khz"
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -311,6 +312,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             print(f"Total generator loss (before balancing): {total_gen_loss:.4f}\n")
 
     @slow
+    @require_torchaudio
     def test_reconstruction_loss(self):
         model_id = "facebook/encodec_24khz"
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -354,6 +356,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             print(f"Spectrogram MAE: {spec_mae.item()}")
 
     @slow
+    @require_torchaudio
     def test_gradients_exist(self):
         model_id = "facebook/encodec_24khz"
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
