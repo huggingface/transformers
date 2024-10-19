@@ -25,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import warnings
 from functools import partial
 from itertools import product
 from pathlib import Path
