@@ -23,10 +23,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     logging,
@@ -181,6 +182,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
         image_hidden_states (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+
         video_hidden_states (`torch.FloatTensor`, *optional*):
             A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
             video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -358,7 +360,7 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
     """The LLaVA-Onevision model which consists of a vision backbone and a language model.""",
     LLAVA_ONEVISION_START_DOCSTRING,
 )
-class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
+class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
@@ -570,9 +572,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
@@ -619,7 +619,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
                 image_newline=self.image_newline,
                 vision_aspect_ratio=vision_aspect_ratio,
             )
-
+            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_features = image_features.shape[0]
+            if n_image_tokens != n_image_features:
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
             special_image_mask = (
                 (input_ids == self.config.image_token_index)
                 .unsqueeze(-1)
@@ -647,7 +652,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
             image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
-
+            n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+            n_video_features = video_features.shape[0]
+            if n_video_tokens != n_video_features:
+                raise ValueError(
+                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                )
             special_video_mask = (
                 (input_ids == self.config.video_token_index)
                 .unsqueeze(-1)
@@ -676,7 +686,9 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -716,6 +728,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,

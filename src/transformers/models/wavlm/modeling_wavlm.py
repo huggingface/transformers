@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -697,7 +698,7 @@ class WavLMEncoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
         position_bias = None
 
         for i, layer in enumerate(self.layers):
@@ -708,8 +709,8 @@ class WavLMEncoder(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         layer.__call__,
@@ -781,7 +782,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
         position_bias = None
 
         for i, layer in enumerate(self.layers):
@@ -792,8 +793,8 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(

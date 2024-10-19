@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -239,7 +240,7 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
     """The VideoLlava model which consists of a vision backbone and a language model.""",
     VIDEO_LLAVA_START_DOCSTRING,
 )
-class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
+class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
         self.video_tower = AutoModel.from_config(config.vision_config)
@@ -515,9 +516,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if (pixel_values_images is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
@@ -619,15 +618,32 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             # TODO: @raushan retain only the new behavior after v4.47
             else:
                 if image_outputs is not None:
+                    n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                    n_image_features = image_features.shape[1]
+                    if n_image_tokens != n_image_features:
+                        raise ValueError(
+                            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                        )
                     special_image_mask = (
-                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                        (input_ids == self.config.image_token_index)
+                        .unsqueeze(-1)
+                        .expand_as(inputs_embeds)
+                        .to(inputs_embeds.device)
                     )
                     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
                 if video_outputs is not None:
+                    n_video_tokens = (input_ids == self.config.video_token_index).sum(dim=-1)[0].item()
+                    n_video_features = video_features.shape[1]
+                    if n_video_tokens != n_video_features:
+                        raise ValueError(
+                            f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                        )
                     special_image_mask = (
-                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                        (input_ids == self.config.video_token_index)
+                        .unsqueeze(-1)
+                        .expand_as(inputs_embeds)
+                        .to(inputs_embeds.device)
                     )
                     video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
@@ -651,7 +667,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -689,6 +707,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         if input_ids is not None:
             img_token_not_enough = (input_ids == self.config.image_token_index).sum(
                 1

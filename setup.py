@@ -104,7 +104,6 @@ _deps = [
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
-    "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
@@ -181,7 +180,7 @@ _deps = [
     "timeout-decorator",
     "tiktoken",
     "timm<=0.9.16",
-    "tokenizers>=0.19,<0.20",
+    "tokenizers>=0.20,<0.21",
     "torch",
     "torchaudio",
     "torchvision",
@@ -192,6 +191,8 @@ _deps = [
     "urllib3<2.0.0",
     "uvicorn",
     "pytest-rich",
+    "libcst",
+    "rich",
 ]
 
 
@@ -311,7 +312,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord", "av")
+extras["video"] = deps_list("av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -345,7 +346,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["tf"]
@@ -434,7 +435,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.45.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.46.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

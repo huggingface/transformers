@@ -1036,7 +1036,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             trainer = Trainer(
                 model=model,
-                tokenizer=tokenizer,
+                processing_class=tokenizer,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,

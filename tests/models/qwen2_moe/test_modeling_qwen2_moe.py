@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
@@ -64,7 +65,7 @@ class Qwen2MoeModelTester:
         num_hidden_layers=5,
         max_window_layers=3,
         use_sliding_window=True,
-        sliding_window=2,
+        sliding_window=50,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -134,7 +135,7 @@ class Qwen2MoeModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -327,7 +328,13 @@ class Qwen2MoeModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
 class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        (
+            Qwen2MoeModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
+            Qwen2MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -339,6 +346,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
             "zero-shot": Qwen2MoeForSequenceClassification,
+            "question-answering": Qwen2MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -349,7 +357,14 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -573,7 +588,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-4.2125, -3.6416, -4.9136, -4.3005, -4.9938, -3.4393, -3.5195, -4.1621]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)

@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -46,7 +47,8 @@ _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
 
 
-# Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
+# copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
+# TODO @ArthurZucker bring copied from back
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -719,7 +721,7 @@ class BioGptModel(BioGptPreTrainedModel):
 @add_start_docstrings(
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
-class BioGptForCausalLM(BioGptPreTrainedModel):
+class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
@@ -799,37 +801,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask, inputs_embeds=None, past_key_values=None, **kwargs
-    ):
-        # only last tokens for inputs_ids if past is defined in kwargs
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-            }
-        )
-
-        return model_inputs
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

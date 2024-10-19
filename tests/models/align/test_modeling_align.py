@@ -626,7 +626,7 @@ class AlignModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         texts = ["a photo of a cat", "a photo of a dog"]
-        inputs = processor(text=texts, images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=texts, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

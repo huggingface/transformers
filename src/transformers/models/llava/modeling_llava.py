@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -237,7 +238,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel):
+class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -277,6 +278,21 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
+
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+    ):
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        else:
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+        image_features = self.multi_modal_projector(selected_image_feature)
+        return image_features
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
@@ -428,9 +444,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -449,17 +463,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-            # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
-            elif vision_feature_select_strategy == "full":
-                selected_image_feature = selected_image_feature
-            else:
-                raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
-
-            image_features = self.multi_modal_projector(selected_image_feature)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
 
             if legacy_processing:
                 logger.warning_once(
@@ -510,8 +518,17 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
+                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                n_image_features = image_features.shape[1]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -535,7 +552,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -571,6 +590,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = (
             input_ids is not None

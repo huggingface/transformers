@@ -707,6 +707,9 @@ MODEL_FOR_IMAGE_MAPPING = None
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING = None
+
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = None
 
 
@@ -868,6 +871,13 @@ class AutoModelForImageClassification(metaclass=DummyObject):
 
 
 class AutoModelForImageSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForImageTextToText(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4358,6 +4368,41 @@ class GitVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GlmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GlmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GlmForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GlmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GlmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GLPNForDepthEstimation(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4864,6 +4909,34 @@ class Idefics2PreTrainedModel(metaclass=DummyObject):
 
 
 class Idefics2Processor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Idefics3ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Idefics3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Idefics3PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Idefics3Processor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5882,6 +5955,13 @@ class MistralForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MistralForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MistralForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5917,6 +5997,13 @@ class MixtralForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MixtralForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MixtralForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5939,6 +6026,48 @@ class MixtralModel(metaclass=DummyObject):
 
 
 class MixtralPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6119,6 +6248,34 @@ class MobileViTV2Model(metaclass=DummyObject):
 
 
 class MobileViTV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MoshiForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MoshiForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MoshiModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MoshiPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6581,6 +6738,20 @@ class OlmoeModel(metaclass=DummyObject):
 
 
 class OlmoePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OmDetTurboForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OmDetTurboPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7074,6 +7245,34 @@ class Phi3PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PhimoeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PhimoeForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PhimoeModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PhimoePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Pix2StructForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7102,14 +7301,14 @@ class Pix2StructVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class PixtralModel(metaclass=DummyObject):
+class PixtralPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PixtralPreTrainedModel(metaclass=DummyObject):
+class PixtralVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7284,6 +7483,13 @@ class Qwen2ForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Qwen2ForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7334,6 +7540,13 @@ class Qwen2AudioPreTrainedModel(metaclass=DummyObject):
 
 
 class Qwen2MoeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2MoeForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -9885,6 +10098,34 @@ class YosoModel(metaclass=DummyObject):
 
 
 class YosoPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ZambaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ZambaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ZambaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ZambaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

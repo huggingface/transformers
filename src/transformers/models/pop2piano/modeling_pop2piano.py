@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 from transformers.generation import GenerationConfig
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1001,7 +1002,7 @@ Pop2Piano_START_DOCSTRING = r"""
 
 
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
-class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
+class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: Pop2PianoConfig):
@@ -1297,33 +1298,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             generation_config=generation_config,
             **kwargs,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-        }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
