@@ -41,6 +41,18 @@ def get_last_daily_ci_runs(token):
     return workflow_run_id
 
 
+def get_last_daily_ci_run_commit(token):
+    """Get the commit sha of the last completed scheduled daily CI workflow run."""
+    workflow_runs = get_daily_ci_runs(token)
+    head_sha = None
+    for workflow_run in workflow_runs:
+        if workflow_run["status"] == "completed":
+            head_sha = workflow_run["head_sha"]
+            break
+
+    return head_sha
+
+
 def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
     workflow_run_id = get_last_daily_ci_runs(token)
