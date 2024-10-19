@@ -38,7 +38,6 @@ print(f"Using device: {device}")
 CONVERSION_PRECISION = torch.float16
 PUBLISH_PRECISION = torch.bfloat16
 TOLERANCE = 2e-3
-CHECKPOINT_SAVEDIR = "checkpoints/colpali"
 
 
 def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,7 +63,7 @@ def load_original_colpali(device: str = "auto") -> ColPali:
 
 
 @torch.no_grad()
-def convert_colpali_checkpoint(push_to_hub: str):
+def convert_colpali_checkpoint(output_dir: str, push_to_hub: bool):
     # Load the original model and state_dict
     model_original = load_original_colpali(device=device)
     state_dict = model_original.state_dict()
@@ -148,15 +147,26 @@ def convert_colpali_checkpoint(push_to_hub: str):
     model = model.to(PUBLISH_PRECISION)
 
     if push_to_hub:
-        model.push_to_hub("vidore/colpali-v1.2-hf", private=True)
+        model.push_to_hub(output_dir, private=True)
     else:
-        Path(CHECKPOINT_SAVEDIR).mkdir(exist_ok=True, parents=True)
-        model.save_pretrained(CHECKPOINT_SAVEDIR)
-        print(f"Model saved to `{CHECKPOINT_SAVEDIR}`")
+        Path(output_dir).mkdir(exist_ok=True, parents=True)
+        model.save_pretrained(output_dir)
+        print(f"Model saved to `{output_dir}`")
 
+
+CLI_HELP = """
+This script converts the original ColPali model to the HF model format.\n
+
+Example usage: "python src/transformers/models/colpali/convert_colpali_weights_to_hf.py --output_dir vidore/colpali-v1.2-hf --push_to_hub".
+"""
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=CLI_HELP)
+    parser.add_argument(
+        "--output_dir",
+        default="google/gemma-7b",
+        help="Location to write HF model and tokenizer",
+    )
     parser.add_argument(
         "--push_to_hub",
         help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
@@ -165,4 +175,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    convert_colpali_checkpoint(push_to_hub=args.push_to_hub)
+    convert_colpali_checkpoint(output_dir=args.output_dir, push_to_hub=args.push_to_hub)
