@@ -32,11 +32,11 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
     Args:
         d_model (`int`, *optional*, defaults to 256):
             The dimension of the model in the memory attention module.
-        pos_enc_at_input (`bool`, *optional*, defaults to True):
+        pos_enc_at_input (`bool`, *optional*, defaults to `True`):
             Whether to apply positional encoding at the input.
         num_layers (`int`, *optional*, defaults to 4):
             The number of layers in the memory attention module.
-        batch_first (`bool`, *optional*, defaults to True):
+        batch_first (`bool`, *optional*, defaults to `True`):
             Whether the input and output tensors are provided in batch-first format.
 
     """
@@ -104,25 +104,25 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Stochastic depth rate.
         q_pool (`int`, *optional*, defaults to 3):
             Number of q_pool stages.
-        q_stride (`Tuple[int, int]`, *optional*, defaults to (2, 2)):
+        q_stride (`Tuple[int, int]`, *optional*, defaults to `(2, 2)`):
             Downsample stride between stages.
-        stages (`Tuple[int, ...]`, *optional*, defaults to (2, 3, 16, 3)):
+        stages (`Tuple[int, ...]`, *optional*, defaults to `(2, 3, 16, 3)`):
             Number of blocks per stage.
         dim_mul (`float`, *optional*, defaults to 2.0):
             Dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
             Head multiplier factor at stage shift.
-        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to (14, 14)):
+        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to `(14, 14)`):
             Window size per stage when not using global attention.
-        window_spec (`Tuple[int, ...]`, *optional*, defaults to (8, 4, 14, 7)):
+        window_spec (`Tuple[int, ...]`, *optional*, defaults to `(8, 4, 14, 7)`):
             Window specifications for each stage.
-        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to (12, 16, 20)):
+        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to `(12, 16, 20)`):
             Blocks where global attention is used.
-        return_interm_layers (`bool`, *optional*, defaults to True):
+        return_interm_layers (`bool`, *optional*, defaults to `True`):
             Whether to return features from every stage.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model in the neck.
-        backbone_channel_list (`List[int]`, *optional*, defaults to [896, 448, 224, 112]):
+        backbone_channel_list (`List[int]`, *optional*, defaults to `[896, 448, 224, 112]`):
             List of channel dimensions for the backbone.
         kernel_size (`int`, *optional*, defaults to 1):
             Kernel size for convolutions in the neck.
@@ -130,11 +130,11 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Stride for convolutions in the neck.
         padding (`int`, *optional*, defaults to 0):
             Padding for convolutions in the neck.
-        fpn_top_down_levels (`List[int]`, *optional*, defaults to [2, 3]):
+        fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
             Levels for top-down FPN connections.
-        fpn_interp_model (`str`, *optional*, defaults to "nearest"):
+        fpn_interp_model (`str`, *optional*, defaults to `"nearest"`):
             Interpolation model for FPN.
-        fuse_type (`str`, *optional*, defaults to "sum"):
+        fuse_type (`str`, *optional*, defaults to `"sum"`):
             Type of fusion to use in the neck.
 
     """

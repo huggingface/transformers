@@ -64,9 +64,9 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
-class SamImageProcessor(BaseImageProcessor):
+class Sam2ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a SAM image processor.
+    Constructs a SAM2 image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -100,7 +100,7 @@ class SamImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `False`):
             Whether to pad the image to the specified `pad_size`. Can be overridden by the `do_pad` parameter in the
             `preprocess` method.
         pad_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
@@ -126,7 +126,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = True,
+        do_pad: bool = False,
         pad_size: int = None,
         mask_pad_size: int = None,
         do_convert_rgb: bool = True,
@@ -220,17 +220,6 @@ class SamImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int):
-        """
-        Compute the output size given input size and target long side length.
-        """
-        oldh, oldw = old_shape
-        scale = longest_edge * 1.0 / max(oldh, oldw)
-        newh, neww = oldh * scale, oldw * scale
-        newh = int(newh + 0.5)
-        neww = int(neww + 0.5)
-        return (newh, neww)
-
     def resize(
         self,
         image: np.ndarray,
@@ -269,11 +258,9 @@ class SamImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "longest_edge" not in size:
             raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
-        input_size = get_image_size(image, channel_dim=input_data_format)
-        output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
         return resize(
             image,
-            size=(output_height, output_width),
+            size=(size["longest_edge"], size["longest_edge"]),
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,

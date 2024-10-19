@@ -33,7 +33,7 @@ if is_tf_available():
     import tensorflow as tf
 
 
-class SamProcessor(ProcessorMixin):
+class Sam2Processor(ProcessorMixin):
     r"""
     Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
     single processor.
@@ -47,7 +47,7 @@ class SamProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
+    image_processor_class = "Sam2ImageProcessor"
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
