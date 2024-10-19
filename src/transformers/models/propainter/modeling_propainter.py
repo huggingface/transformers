@@ -163,7 +163,9 @@ class ProPainterBasicEncoder(nn.Module):
                 ProPainterResidualBlock(config, in_channel, num_channels, norm_fn, stride),
                 ProPainterResidualBlock(config, num_channels, num_channels, norm_fn, stride=1),
             ]
-            for in_channel, num_channels, stride in zip(config.in_channels, config.channels, config.multi_level_conv_stride)
+            for in_channel, num_channels, stride in zip(
+                config.in_channels, config.channels, config.multi_level_conv_stride
+            )
         ]
         # using itertools makes flattening a little faster :)
         self.resblocks = nn.ModuleList(list(itertools.chain.from_iterable(self.resblocks)))

@@ -16,9 +16,9 @@
 
 import argparse
 import os
+import re
 
 import numpy as np
-import re
 import torch
 from datasets import load_dataset
 
@@ -38,9 +38,9 @@ rename_rules_optical_flow = [
     (r"cnet", r"context_network"),
     (r"update_block", r"update_block"),
     (r"module\.(fnet|cnet|update_block)", r"optical_flow_model.\1"),
-    (r'layer(\d+)\.(\d+)', lambda m: f"resblocks.{(int(m.group(1)) - 1) * 2 + int(m.group(2))}"),
-    (r'convc', 'conv_corr'),
-    (r'convf', 'conv_flow')
+    (r"layer(\d+)\.(\d+)", lambda m: f"resblocks.{(int(m.group(1)) - 1) * 2 + int(m.group(2))}"),
+    (r"convc", "conv_corr"),
+    (r"convf", "conv_flow"),
 ]
 
 rename_rules_flow_completion = [
@@ -51,14 +51,20 @@ rename_rules_flow_completion = [
     (r"decoder2", r"flow_completion_net.decoder2"),
     (r"upsample", r"flow_completion_net.upsample"),
     (r"mid_dilation", r"flow_completion_net.intermediate_dilation"),
-    (r"feat_prop_module\.deform_align\.backward_", r"flow_completion_net.feature_propagation_module.deform_align.backward_"),
-    (r"feat_prop_module\.deform_align\.forward_", r"flow_completion_net.feature_propagation_module.deform_align.forward_"),
+    (
+        r"feat_prop_module\.deform_align\.backward_",
+        r"flow_completion_net.feature_propagation_module.deform_align.backward_",
+    ),
+    (
+        r"feat_prop_module\.deform_align\.forward_",
+        r"flow_completion_net.feature_propagation_module.deform_align.forward_",
+    ),
     (r"feat_prop_module\.backbone\.backward_", r"flow_completion_net.feature_propagation_module.backbone.backward_"),
     (r"feat_prop_module\.backbone\.forward_", r"flow_completion_net.feature_propagation_module.backbone.forward_"),
     (r"feat_prop_module\.fusion", r"flow_completion_net.feature_propagation_module.fusion"),
     (r"edgeDetector\.projection", r"flow_completion_net.edgeDetector.projection"),
     (r"edgeDetector\.mid_layer", r"flow_completion_net.edgeDetector.intermediate_layer"),
-    (r"edgeDetector\.out_layer", r"flow_completion_net.edgeDetector.out_layer")
+    (r"edgeDetector\.out_layer", r"flow_completion_net.edgeDetector.out_layer"),
 ]
 
 rename_rules_inpaint_generator = [
@@ -68,7 +74,7 @@ rename_rules_inpaint_generator = [
     (r"sc", r"inpaint_generator.soft_comp"),
     (r"feat_prop_module\.", r"inpaint_generator.feature_propagation_module."),
     (r"transformers\.transformer\.", r"inpaint_generator.transformers.transformer."),
-    (r"norm", r"layer_norm")
+    (r"norm", r"layer_norm"),
 ]
 
 
