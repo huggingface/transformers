@@ -311,10 +311,10 @@ class DiffLlamaAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
         self.lambda_init = lambda_init_fn(layer_idx)
-        self.lambda_q1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_q2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
+        self.lambda_q1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_k1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_q2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_k2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
 
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = DiffLlamaRotaryEmbedding(config=self.config)
