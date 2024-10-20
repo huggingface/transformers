@@ -295,7 +295,7 @@ class DiffLlamaAttention(nn.Module):
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads // 2
+        self.num_heads = config.num_attention_heads
         self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads // 2)
         self.scaling = self.head_dim ** -0.5
         self.num_key_value_heads = config.num_key_value_heads
