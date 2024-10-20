@@ -453,7 +453,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("levit", "LeViT"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
-        ("diffllama", "DiffDiffLlama"),
+        ("diffllama", "DiffLlama"),
         ("llama2", "Llama2"),
         ("llama3", "Llama3"),
         ("llava", "LLaVa"),
