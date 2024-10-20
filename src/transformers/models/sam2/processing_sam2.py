@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for SAM.
+Processor class for SAM2.
 """
 
 from copy import deepcopy
@@ -35,15 +35,15 @@ if is_tf_available():
 
 class Sam2Processor(ProcessorMixin):
     r"""
-    Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
+    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
     single processor.
 
-    [`SamProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
-    [`~SamImageProcessor.__call__`] for more information.
+    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessor`]. See the docstring of
+    [`~Sam2ImageProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`SamImageProcessor`):
-            An instance of [`SamImageProcessor`]. The image processor is a required input.
+        image_processor (`Sam2ImageProcessor`):
+            An instance of [`Sam2ImageProcessor`]. The image processor is a required input.
     """
 
     attributes = ["image_processor"]

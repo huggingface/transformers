@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for SAM."""
+"""Image processor class for SAM2."""
 
 import math
 from copy import deepcopy
@@ -224,7 +224,7 @@ class Sam2ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -238,7 +238,7 @@ class Sam2ImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`):
                 Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
                 edge of the image will be resized to the specified size, while the other edge will be resized to
-                maintain the aspect ratio.
+                the squared size.
             resample:
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -381,7 +381,7 @@ class Sam2ImageProcessor(BaseImageProcessor):
             image=segmentation_map,
             do_resize=do_resize,
             size=mask_size,
-            resample=PILImageResampling.NEAREST,
+            resample=PILImageResampling.BILINEAR,
             do_rescale=False,
             do_normalize=False,
             do_pad=do_pad,
