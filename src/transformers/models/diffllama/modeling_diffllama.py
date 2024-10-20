@@ -318,6 +318,7 @@ class DiffLlamaAttention(nn.Module):
         self.lambda_k1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
         self.lambda_q2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
         self.lambda_k2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.groupnorm = nn.RMSNorm(self.hidden_size, eps=config.rms_norm_eps, elementwise_affine=False)
 
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = DiffLlamaRotaryEmbedding(config=self.config)
