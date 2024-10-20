@@ -584,9 +584,9 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, 2 * self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, 2 * self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, 2 * self.head_dim).transpose(1, 2)
 
         if position_embeddings is None:
             logger.warning_once(
@@ -625,7 +625,7 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
 
         query_states1, query_states2 = torch.chunk(query_states, 2, dim=1)
         key_states1, key_states2 = torch.chunk(key_states, 2, dim=1)
-        value_states1, value_states2 = torch.chunk(value_states, 2, dim=1)
+        value_states1, value_states2 = torch.chunk(value_states, 2, dim=3)
         attn_output11 = torch.nn.functional.scaled_dot_product_attention(
             query_states1,
             key_states1,
