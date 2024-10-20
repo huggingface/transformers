@@ -320,9 +320,7 @@ def process_raw_model_outputs(
 
 def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
   dataset, info = tfds.load('wikipedia/20230601.en', split='train', with_info=True)
-
-  # take first 1000
-  dataset = dataset.take(10000)
+  dataset = dataset.take(num_negatives)
 
   # Convert the dataset to a DataFrame
   df = tfds.as_dataframe(dataset, info)
@@ -335,7 +333,7 @@ def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
   lengths = []
   batched = []
   # Pad to this length (on the right) for batching.
-  padded_length = 2500
+  padded_length = 1000
   for i, batch in tqdm.tqdm(enumerate(ds)):
     responses = [val.decode() for val in batch['text'].numpy()]
     inputs = tokenizer(
@@ -343,18 +341,14 @@ def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
         return_tensors='pt',
         padding=True,
     ).to(device)
-    line = inputs['input_ids'].cpu().numpy()[0].tolist()
-    if len(line) >= padded_length:
-      line = line[:padded_length]
+    inputs = inputs['input_ids'].cpu().numpy()
+    if inputs.shape[1] >= padded_length:
+      inputs = inputs[:, :padded_length]
     else:
-      line = line + [
-          tokenizer.eos_token_id for _ in range(padded_length - len(line))
-      ]
-    batched.append(torch.tensor(line, dtype=torch.long, device=device)[None, :])
-    if len(batched) == neg_batch_size:
-      tokenized_uwm_outputs.append(torch.cat(batched, dim=0))
-      batched = []
-    if i > num_negatives:
+      inputs = np.concatenate(
+          [inputs, np.ones((neg_batch_size, padded_length - inputs.shape[1])) * tokenizer.eos_token_id], axis=1)
+    tokenized_uwm_outputs.append(inputs)
+    if len(tokenized_uwm_outputs) * neg_batch_size > num_negatives:
       break
   return tokenized_uwm_outputs
 

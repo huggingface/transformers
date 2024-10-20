@@ -20,18 +20,6 @@ import transformers
 from transformers import BayesianDetectorConfig, BayesianDetectorModel, AutoModelForCausalLM
 import utils
 
-NUM_NEGATIVES = 10000
-POS_BATCH_SIZE = 32
-NUM_POS_BATCHES = 313
-NEG_BATCH_SIZE = 32
-OUTPUTS_LEN = 512
-
-# Truncate outputs to this length for training.
-POS_TRUNCATION_LENGTH = 200
-NEG_TRUNCATION_LENGTH = 100
-# Pad trucated outputs to this length for equal shape across all batches.
-MAX_PADDED_LENGTH = 1000
-
 
 @enum.unique
 class ValidationMetric(enum.Enum):
@@ -248,21 +236,93 @@ def train_best_detector(
     return best_detector, lowest_loss
 
 
-def sample_from_model(model, watermark_config, tokenizer, data_batch, device):
-    input_ids = tokenizer(data_batch, return_tensors="pt").to(device)
-    model_inputs = {
-        'input_ids': input_ids,
-        'attention_mask': torch.ones_like(input_ids, device=device),
-    }
-    return model.generate(model_inputs, watermark_config=watermark_config, do_sample=True, max_length=500, top_k=40)
-
-
 if __name__ == "__main__":
-    model_name = "google/gemma-7b-it"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default='google/gemma-7b-it',
+        help=(
+            "LM model to train the detector for."
+        ),
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help=(
+            "Temperature to sample from the model."
+        ),
+    )
+    parser.add_argument(
+        "--top_k",
+        type=int,
+        default=40,
+        help=(
+            "Top K for sampling."
+        ),
+    )
+    parser.add_argument(
+        "--top_p",
+        type=float,
+        default=1.0,
+        help=(
+            "Top P for sampling."
+        ),
+    )
+    parser.add_argument(
+        "--num_negatives",
+        type=int,
+        default=10000,
+        help=(
+            "Number of negatives for detector training."
+        ),
+    )
+    parser.add_argument(
+        "--pos_batch_size",
+        type=int,
+        default=32,
+        help=(
+            "Batch size of watermarked positives while sampling."
+        ),
+    )
+    parser.add_argument(
+        "--num_pos_batch",
+        type=int,
+        default=313,
+        help=(
+            "Number of positive batches for training."
+        ),
+    )
+    parser.add_argument(
+        "--generation_length",
+        type=int,
+        default=512,
+        help=(
+            "Generation length for sampling."
+        ),
+    )
+    
 
-    TEMPERATURE = 0.5
-    TOP_K = None
-    TOP_P = 1.0
+    args = parser.parse_args()
+    model_name = args.model_name
+    temperature = args.temperature
+    top_k = args.top_k
+    top_p = args.top_p
+    num_negatives = args.num_negatives
+    pos_batch_size = args.pos_batch_size
+    num_pos_batch = args.num_pos_batch
+    generation_length = args.generation_length
+
+    
+    NEG_BATCH_SIZE = 32
+
+    # Truncate outputs to this length for training.
+    POS_TRUNCATION_LENGTH = 200
+    NEG_TRUNCATION_LENGTH = 100
+    # Pad trucated outputs to this length for equal shape across all batches.
+    MAX_PADDED_LENGTH = 1000
+
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
     DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
@@ -303,32 +363,30 @@ if __name__ == "__main__":
         "sampling_table_seed": 0,
         "context_history_size": 1024,
     })
-    watermark_config = watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(**DEFAULT_WATERMARKING_CONFIG)
+    watermark_config = watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(
+        **DEFAULT_WATERMARKING_CONFIG)
 
     model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
 
-    logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(**DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+    logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
+        **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
 
     tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
         model, 
         tokenizer, 
         watermark_config, 
-        NUM_POS_BATCHES, 
-        POS_BATCH_SIZE, 
-        TEMPERATURE, 
-        OUTPUTS_LEN, 
-        TOP_K, 
-        TOP_P, 
+        num_pos_batch, 
+        pos_batch_size, 
+        temperature, 
+        generation_length, 
+        top_k, 
+        top_p, 
         DEVICE,
     )
-    tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(NUM_NEGATIVES, NEG_BATCH_SIZE, tokenizer, DEVICE)
-    
-    torch.save(tokenized_wm_outputs, 'tokenized_wm_outputs.pkl')
-    torch.save(tokenized_uwm_outputs, 'tokenized_uwm_outputs.pkl')
-    tokenized_wm_outputs = torch.load('tokenized_wm_outputs.pkl')
-    tokenized_uwm_outputs = torch.load('tokenized_uwm_outputs.pkl')
+    tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
+
     best_detector, lowest_loss = train_best_detector(
         tokenized_wm_outputs=tokenized_wm_outputs,
         tokenized_uwm_outputs=tokenized_uwm_outputs,
@@ -346,4 +404,4 @@ if __name__ == "__main__":
         validation_metric=ValidationMetric.TPR_AT_FPR,
     )
 
-    utils.upload_model_to_hf(best_detector, 'synthid_text_demo')
+

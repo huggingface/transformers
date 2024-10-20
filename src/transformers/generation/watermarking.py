@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team
+# Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -31,7 +31,7 @@ from .configuration_utils import GreenRedWatermarkingConfig, PretrainedConfig
 if is_torch_available():
     import torch
 
-    from .logits_process import WatermarkLogitsProcessor
+    from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -293,7 +293,7 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         self.beta = torch.nn.Parameter(-2.5 + 0.001 * torch.randn(1, 1, watermarking_depth))
         self.delta = torch.nn.Parameter(0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth))
 
-    def _compute_latents(self, g_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _compute_latents(self, g_values: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Computes the unique token probability distribution given g-values.
 
         Args:
@@ -477,40 +477,51 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
             return (out,) if loss is None else (out, loss)
 
         return BayesianWatermarkDetectorModelOutput(loss=loss, posterior_probabilities=out)
+    
+
+SYNTHID_TEXT_DETECTOR_START_DOCSTRING = r"""
+
+    SynthID text watermark detector class.
+
+    Parameters:
+        detector_module ([`BayesianDetectorModel`]): 
+            Bayesian detector module object initialized with parameters. 
+            Check examples/research_projects/synthid_text/detector_training.py for usage.
+        logits_processor: ([`SynthIDTextWatermarkLogitsProcessor`])
+            SynthIDTextWatermarkLogitsProcessor object for watermar detection.
+"""
 
 
-### Temporary, will be replaced by `WatermarkDetector` class in transformers.
-class BayesianDetectorPT:
-    """Outside API class."""
-
+@add_start_docstrings(
+    SYNTHID_TEXT_DETECTOR_START_DOCSTRING,
+)
+class SynthIDTextWatermarkDetector:
     def __init__(
         self,
-        detector_module,
-        logits_processor,
-        tokenizer,
+        detector_module: BayesianDetectorModel,
+        logits_processor: SynthIDTextWatermarkLogitsProcessor,
     ):
         self.detector_module = detector_module
         self.logits_processor = logits_processor
-        self.tokenizer = tokenizer
 
-    def __call__(self, outputs):
+    def __call__(self, tokenized_outputs: torch.Tensor):
         # eos mask is computed, skip first ngram_len - 1 tokens
         # eos_mask will be of shape [batch_size, output_len]
         eos_token_mask = self.logits_processor.compute_eos_token_mask(
-            input_ids=outputs,
+            input_ids=tokenized_outputs,
             eos_token_id=self.tokenizer.eos_token_id,
         )[:, self.logits_processor.ngram_len - 1 :]
 
         # context repetition mask is computed
         context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
-            input_ids=outputs,
+            input_ids=tokenized_outputs,
         )
         # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
 
         combined_mask = context_repetition_mask * eos_token_mask
 
         g_values = self.logits_processor.compute_g_values(
-            input_ids=outputs,
+            input_ids=tokenized_outputs,
         )
         # g values shape [batch_size, output_len - (ngram_len - 1), depth]
         return self.detector_module(g_values, combined_mask)
