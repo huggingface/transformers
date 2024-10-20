@@ -297,7 +297,7 @@ class Owlv2VisionEmbeddings(nn.Module):
 
         if interpolate_pos_encoding:
             if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
-                pixel_values = nn.functional.interpolate(
+                pixel_values = F.interpolate(
                     pixel_values, size=(target_size, target_size), mode="bilinear", align_corners=False
                 )
         else:
@@ -311,21 +311,7 @@ class Owlv2VisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-
-        if interpolate_pos_encoding:
-            pos_embedding = self.position_embedding(self.position_ids)
-            pos_embedding = pos_embedding.unsqueeze(0).expand(batch_size, -1, -1)
-            h = w = int(patch_embeds.shape[1] ** 0.5)
-            pos_embedding = nn.functional.interpolate(
-                pos_embedding.reshape(batch_size, h, w, -1).permute(0, 3, 1, 2),
-                size=(h, w),
-                mode="bilinear",
-                align_corners=False,
-            )
-            pos_embedding = pos_embedding.permute(0, 2, 3, 1).reshape(batch_size, -1, pos_embedding.shape[1])
-            embeddings = embeddings + pos_embedding
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
 
