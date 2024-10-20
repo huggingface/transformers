@@ -1146,6 +1146,8 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
                 relative_path = re.search(
                     rf"(src{sep}transformers{sep}.*|examples{sep}.*)", os.path.abspath(modular_file)
                 ).group(1)
+                if os.sep == "\\":
+                    relative_path = relative_path.replace(os.sep, "/")
 
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
