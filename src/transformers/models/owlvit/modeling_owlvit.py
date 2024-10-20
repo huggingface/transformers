@@ -19,6 +19,7 @@ from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 
@@ -285,8 +286,21 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+        target_size = self.config.image_size
+
+        if interpolate_pos_encoding:
+            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
+                pixel_values = F.interpolate(
+                    pixel_values, size=(target_size, target_size), mode="bilinear", align_corners=False
+                )
+        else:
+            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
+                raise ValueError(
+                    f"Input image size ({pixel_values.shape[2]}*{pixel_values.shape[3]}) doesn't match model ({target_size}*{target_size})."
+                )
+
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 

@@ -291,14 +291,41 @@ class Owlv2VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+        target_size = self.config.image_size
+
+        if interpolate_pos_encoding:
+            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
+                pixel_values = nn.functional.interpolate(
+                    pixel_values, size=(target_size, target_size), mode="bilinear", align_corners=False
+                )
+        else:
+            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
+                raise ValueError(
+                    f"Input image size ({pixel_values.shape[2]}*{pixel_values.shape[3]}) doesn't match model ({target_size}*{target_size})."
+                )
+
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+
+        if interpolate_pos_encoding:
+            pos_embedding = self.position_embedding(self.position_ids)
+            pos_embedding = pos_embedding.unsqueeze(0).expand(batch_size, -1, -1)
+            h = w = int(patch_embeds.shape[1] ** 0.5)
+            pos_embedding = nn.functional.interpolate(
+                pos_embedding.reshape(batch_size, h, w, -1).permute(0, 3, 1, 2),
+                size=(h, w),
+                mode="bilinear",
+                align_corners=False,
+            )
+            pos_embedding = pos_embedding.permute(0, 2, 3, 1).reshape(batch_size, -1, pos_embedding.shape[1])
+            embeddings = embeddings + pos_embedding
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
 
