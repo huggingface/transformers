@@ -295,26 +295,29 @@ class DiffLlamaAttention(nn.Module):
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
+        # num_heads set to half of Transformer's #heads
+        # Differential Transformer's attention is dividing into 2 groups of heads
+        # num_heads of this code means each group's number of heads
         self.num_heads = config.num_attention_heads // 2
         self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads // 2)
-        self.scaling = self.head_dim ** -0.5
-        self.num_key_value_heads = config.num_key_value_heads
+        # num_heads set to half of Transformer's #heads and often num_key_value_heads = num_heads on config
+        self.num_key_value_heads = config.num_key_value_heads // 2
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         # under this are not used
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        self.q_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size // self.num_key_value_groups, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size // self.num_key_value_groups, bias=config.attention_bias)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim * 2, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim * 2, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim * 2, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
         self.lambda_init = lambda_init_fn(layer_idx)
-        self.lambda_q1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_q2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
+        self.lambda_q1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_k1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_q2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        self.lambda_k2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
 
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = DiffLlamaRotaryEmbedding(config=self.config)
@@ -335,9 +338,9 @@ class DiffLlamaAttention(nn.Module):
         q_len = target_len
 
         if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            key_value_slicing = (self.num_key_value_heads * self.head_dim * 2) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
-                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+                (self.num_heads * self.head_dim * 2) // self.config.pretraining_tp, dim=0
             )
             key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
             value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
@@ -379,7 +382,6 @@ class DiffLlamaAttention(nn.Module):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        query_states = query_states * self.scaling
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
@@ -393,7 +395,7 @@ class DiffLlamaAttention(nn.Module):
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn_weights = attn_weights.view(bsz, self.num_heads, 2, target_len, key_states.shape[-2])
+        attn_weights = attn_weights.view(bsz, self.num_heads, 2, q_len, -1)
         attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
         attn_output = torch.matmul(attn_weights, value_states)
 
