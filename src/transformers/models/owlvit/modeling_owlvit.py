@@ -19,7 +19,6 @@ from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 
@@ -292,7 +291,7 @@ class OwlViTVisionEmbeddings(nn.Module):
 
         if interpolate_pos_encoding:
             if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
-                pixel_values = F.interpolate(
+                pixel_values = torch.nn.functional.interpolate(
                     pixel_values, size=(target_size, target_size), mode="bilinear", align_corners=False
                 )
         else:
