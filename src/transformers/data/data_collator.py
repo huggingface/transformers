@@ -1640,7 +1640,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         import torch
 
         features = [
-            {k: v.flatten().tolist() if isinstance(v, torch.Tensor) else v for k, v in feature.items()} 
+            {k: v.flatten().tolist() if isinstance(v, torch.Tensor) else v for k, v in feature.items()}
             for feature in features
         ]
         is_labels_provided = "labels" in features[0]
