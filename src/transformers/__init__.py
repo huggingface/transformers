@@ -724,6 +724,7 @@ _import_structure = {
     "models.sam2": [
         "Sam2Config",
         "Sam2ImageEncoderConfig",
+        "Sam2PromptEncoderConfig",
         "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
         "Sam2Processor",
@@ -5638,6 +5639,7 @@ if TYPE_CHECKING:
         Sam2MemoryAttentionConfig,
         Sam2MemoryEncoderConfig,
         Sam2Processor,
+        Sam2PromptEncoderConfig,
     )
     from .models.seamless_m4t import (
         SeamlessM4TConfig,

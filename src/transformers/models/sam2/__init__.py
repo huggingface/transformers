@@ -26,6 +26,7 @@ _import_structure = {
     "configuration_sam2": [
         "Sam2Config",
         "Sam2ImageEncoderConfig",
+        "Sam2PromptEncoderConfig",
         "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
     ],
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         Sam2ImageEncoderConfig,
         Sam2MemoryAttentionConfig,
         Sam2MemoryEncoderConfig,
+        Sam2PromptEncoderConfig,
     )
     from .processing_sam import Sam2Processor
 

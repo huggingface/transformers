@@ -21,6 +21,52 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+class Sam2PromptEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
+    module is used to encode the input 2D points and bounding boxes.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        image_size (`int`, *optional*, defaults to 1024):
+            The expected output resolution of the image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        mask_input_channels (`int`, *optional*, defaults to 16):
+            The number of channels to be fed to the `MaskDecoder` module.
+        num_point_embeddings (`int`, *optional*, defaults to 4):
+            The number of point embeddings to be used.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the encoder and pooler.
+        layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+    """
+
+    def __init__(
+        self,
+        hidden_size=256,
+        image_size=1024,
+        patch_size=16,
+        mask_input_channels=16,
+        num_point_embeddings=4,
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.image_embedding_size = image_size // patch_size
+        self.mask_input_channels = mask_input_channels
+        self.num_point_embeddings = num_point_embeddings
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+
+
 class Sam2MemoryAttentionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2MemoryAttention`]. It is used to instantiate a SAM 2
@@ -203,6 +249,7 @@ class Sam2Config(PretrainedConfig):
     Args:
         image_encoder_config (Union[`dict`, `Sam2ImageEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2ImageEncoderConfig`].
+        prompt_encoder_config (`<fill_type>`, *optional*): <fill_docstring>
         memory_attention_config (Union[`dict`, `Sam2MemoryAttentionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
@@ -246,6 +293,7 @@ class Sam2Config(PretrainedConfig):
     def __init__(
         self,
         image_encoder_config=None,
+        prompt_encoder_config=None,
         memory_attention_config=None,
         memory_encoder_config=None,
         initializer_range=0.02,
@@ -253,10 +301,12 @@ class Sam2Config(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         image_encoder_config = image_encoder_config if image_encoder_config is not None else {}
+        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
         memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
 
         self.image_encoder_config = Sam2ImageEncoderConfig(**image_encoder_config)
+        self.prompt_encoder_config = Sam2PromptEncoderConfig(**prompt_encoder_config)
         self.memory_attention_config = Sam2MemoryAttentionConfig(**memory_attention_config)
         self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
         self.initializer_range = initializer_range
