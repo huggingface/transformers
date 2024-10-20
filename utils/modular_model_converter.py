@@ -1142,8 +1142,9 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         for file, node in cst_transformers.files.items():
             if node != {}:
                 # Get relative path starting from src/transformers/
+                sep = os.sep * 2 if os.sep == "\\" else os.sep
                 relative_path = re.search(
-                    rf"(src{os.sep}transformers{os.sep}.*|examples{os.sep}.*)", os.path.abspath(modular_file)
+                    rf"(src{sep}transformers{sep}.*|examples{sep}.*)", os.path.abspath(modular_file)
                 ).group(1)
 
                 header = AUTO_GENERATED_MESSAGE.format(
