@@ -354,8 +354,8 @@ class ProPainterCorrBlock:
         # all pairs correlation
         correlation = ProPainterCorrBlock.correlation(feature_map_1, feature_map_2)
 
-        batch_size, height1, width1, dimension, height2, width2 = correlation.shape
-        correlation = correlation.reshape(batch_size * height1 * width1, dimension, height2, width2)
+        batch_size, height_1, width_1, dimension, height_2, width_2 = correlation.shape
+        correlation = correlation.reshape(batch_size * height_1 * width_1, dimension, height_2, width_2)
 
         self.correlation_pyramid.append(correlation)
         for _ in range(self.num_levels - 1):
@@ -365,7 +365,7 @@ class ProPainterCorrBlock:
     def __call__(self, coords):
         radius = self.radius
         coords = coords.permute(0, 2, 3, 1)
-        batch_size, height1, width1, _ = coords.shape
+        batch_size, height_1, width_1, _ = coords.shape
 
         out_pyramid = []
         for i in range(self.num_levels):
@@ -373,11 +373,11 @@ class ProPainterCorrBlock:
             delta_x = torch.linspace(-radius, radius, 2 * radius + 1)
             delta_y = torch.linspace(-radius, radius, 2 * radius + 1)
             delta = torch.stack(torch.meshgrid(delta_y, delta_x), axis=-1).to(coords.device)
-            centroid_lvl = coords.reshape(batch_size * height1 * width1, 1, 1, 2) / 2**i
+            centroid_lvl = coords.reshape(batch_size * height_1 * width_1, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2 * radius + 1, 2 * radius + 1, 2)
             coords_lvl = centroid_lvl + delta_lvl
             correlation = sample_point(correlation, coords_lvl)
-            correlation = correlation.view(batch_size, height1, width1, -1)
+            correlation = correlation.view(batch_size, height_1, width_1, -1)
             out_pyramid.append(correlation)
 
         out = torch.cat(out_pyramid, dim=-1)
@@ -670,23 +670,23 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
         for module_name in ["backward_", "forward_"]:
             features[module_name] = []
 
-            frame_idx = range(0, timesteps)
+            frame_indices = range(0, timesteps)
             mapping_idx = list(range(0, len(features["spatial"])))
             mapping_idx += mapping_idx[::-1]
 
             if "backward" in module_name:
-                frame_idx = frame_idx[::-1]
+                frame_indices = frame_indices[::-1]
 
             feature_propagation = hidden_state.new_zeros(batch_size, self.config.num_channels, height, width)
-            for i, idx in enumerate(frame_idx):
-                feat_current = features["spatial"][mapping_idx[idx]]
-                if i > 0:
+            for frame_count, frame_id in enumerate(frame_indices):
+                feat_current = features["spatial"][mapping_idx[frame_id]]
+                if frame_count > 0:
                     first_order_condition_features = feature_propagation
 
                     # initialize second-order features
                     second_order_propagated_features = torch.zeros_like(feature_propagation)
                     second_order_condition_features = torch.zeros_like(first_order_condition_features)
-                    if i > 1:  # second-order features
+                    if frame_count > 1:  # second-order features
                         second_order_propagated_features = features[module_name][-2]
                         second_order_condition_features = second_order_propagated_features
 
@@ -700,7 +700,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                 # fuse current features
                 feat = (
                     [feat_current]
-                    + [features[k][idx] for k in features if k not in ["spatial", module_name]]
+                    + [features[k][frame_id] for k in features if k not in ["spatial", module_name]]
                     + [feature_propagation]
                 )
 
@@ -765,13 +765,31 @@ def flow_warp(features, flow, interpolation="bilinear", padding_mode="zeros", al
 
 
 def forward_backward_consistency_check(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
+    """
+    Checks the consistency between forward and backward optical flows.
+
+    Args:
+        flow_forward (torch.Tensor): The forward optical flow.
+        flow_backward (torch.Tensor): The backward optical flow.
+        alpha1 (float, optional): Scaling factor for the occlusion threshold. Default is 0.01.
+        alpha2 (float, optional): Constant for the occlusion threshold. Default is 0.5.
+
+    Returns:
+        torch.Tensor: A mask indicating regions where the forward and backward flows are consistent.
+
+    The function warps the backward flow to the forward flow space and computes the difference
+    between the forward flow and the warped backward flow. It also calculates an occlusion threshold
+    using the squared norms of the forward flow and the warped backward flow. The mask identifies
+    regions where the flow difference is below this threshold, indicating consistency.
+    """
+
     flow_backward_warped_to_forward = flow_warp(flow_backward, flow_forward.permute(0, 2, 3, 1))
     flow_diff_forward = flow_forward + flow_backward_warped_to_forward
 
     flow_forward_norm_squared = (
         torch.norm(flow_forward, p=2, dim=1, keepdim=True) ** 2
         + torch.norm(flow_backward_warped_to_forward, p=2, dim=1, keepdim=True) ** 2
-    )  # |wf| + |wb(wf(x))|
+    )
     flow_forward_occlusion_threshold = alpha1 * flow_forward_norm_squared + alpha2
 
     forward_backward_valid_mask = (
@@ -865,23 +883,23 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
             is_backward = "backward" in module_name
 
-            frame_idx = range(0, timesteps)[::-1] if is_backward else range(timesteps)
-            flow_idx = frame_idx if is_backward else range(-1, timesteps - 1)
+            frame_indices = range(0, timesteps)[::-1] if is_backward else range(timesteps)
+            flow_idx = frame_indices if is_backward else range(-1, timesteps - 1)
 
             flows_for_prop, flows_for_check = (
                 (flows_forward, flows_backward) if is_backward else (flows_backward, flows_forward)
             )
 
-            for i, idx in enumerate(frame_idx):
-                feat_current = features[cache_list[propagation_index]][idx]
-                mask_current = masks[cache_list[propagation_index]][idx]
+            for frame_count, frame_id in enumerate(frame_indices):
+                feat_current = features[cache_list[propagation_index]][frame_id]
+                mask_current = masks[cache_list[propagation_index]][frame_id]
 
-                if i == 0:
+                if frame_count == 0:
                     feat_prop = feat_current
                     mask_prop = mask_current
                 else:
-                    flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
-                    flow_check = flows_for_check[:, flow_idx[i], :, :, :]
+                    flow_prop = flows_for_prop[:, flow_idx[frame_count], :, :, :]
+                    flow_check = flows_for_check[:, flow_idx[frame_count], :, :, :]
                     flow_valid_mask = forward_backward_consistency_check(flow_prop, flow_check)
                     feat_warped = flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
 
