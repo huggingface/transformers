@@ -391,7 +391,7 @@ class DiffLlamaAttention(nn.Module):
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn_weights = attn_weights.view(bsz, self.num_heads, 2, target_len, key_states.shape[-2])
+        attn_weights = attn_weights.view(bsz, self.num_heads // 2, 2, q_len, -1)
         attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
         attn_output = torch.matmul(attn_weights, value_states)
 
