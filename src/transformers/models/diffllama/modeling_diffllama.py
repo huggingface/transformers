@@ -403,6 +403,8 @@ class DiffLlamaAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
+        
+        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
 
         if self.config.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
