@@ -1191,7 +1191,7 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
-    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
+    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
@@ -6090,7 +6090,7 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
-        from .models.detr import DetrFeatureExtractor, DetrImageProcessor
+        from .models.detr import DetrFeatureExtractor, DetrImageProcessor, DetrImageProcessorFast
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
