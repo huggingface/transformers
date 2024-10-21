@@ -328,9 +328,9 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
     def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
         # Handle ClassB.call_to_method
         if (
-            isinstance(original_node.value, cst.Name)
+            m.matches(original_node.value, m.Name())
             and original_node.value.value in self.all_bases
-            and isinstance(original_node.attr, cst.Name)
+            and m.matches(original_node.attr, m.Name())
         ):
             # Replace with super().call_to_method
             return updated_node.with_changes(
@@ -338,10 +338,10 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
             )
         # Handle ClassB().call_to_method
         elif (
-            isinstance(original_node.value, cst.Call)
-            and isinstance(original_node.value.func, cst.Name)
+            m.matches(original_node.value, m.Call())
+            and m.matches(original_node.value.func, m.Name())
             and original_node.value.func.value in self.all_bases
-            and isinstance(original_node.attr, cst.Name)
+            and m.matches(original_node.attr, m.Name())
         ):
             # Replace with super().call_to_method
             return updated_node.with_changes(func=cst.Attribute(value=cst.Call(func=cst.Name("super"))))
@@ -349,16 +349,16 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
 
     def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
         # Check if the function being called is of the form ClassB().func_a or ClassB.func_a
-        if isinstance(original_node.func, cst.Attribute) and (
+        if m.matches(original_node.func, m.Attribute()) and (
             # Match ClassB().func_a(...)
             (
-                isinstance(original_node.func.value, cst.Call)
-                and isinstance(original_node.func.value.func, cst.Name)
+                m.matches(original_node.func.value, m.Call())
+                and m.matches(original_node.func.value.func, m.Name())
                 and original_node.func.value.func.value in self.all_bases
             )
             or
             # Match ClassB.func_a(...)
-            (isinstance(original_node.func.value, cst.Name) and original_node.func.value.value in self.all_bases)
+            (m.matches(original_node.func.value, m.Name()) and original_node.func.value.value in self.all_bases)
         ):
             # Check if the first argument is 'self', and remove it
             if len(original_node.args) > 0 and m.matches(original_node.args[0].value, m.Name("self")):
@@ -1050,11 +1050,14 @@ class ModularConverterTransformer(CSTTransformer):
         # Only map function calls if we're inside a class (i.e., current_class is set)
         if self.current_class is not None:
             # Simple function calls such as foo()
-            if isinstance(node.func, cst.Name):
+            if m.matches(node.func, m.Name()):
                 self.function_call_class_mapping[node.func.value].add(self.current_class)
+            if m.matches(node.func, m.Attribute()|m.Subscript()):
+                _code = self.python_module.code_for_node(node.func.value)
+                self.function_call_class_mapping[_code].add(self.current_class)
         elif self.current_top_level_function is not None:
             # Simple function calls such as foo()
-            if isinstance(node.func, cst.Name):
+            if m.matches(node.func, m.Name()):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
 
     def _maybe_add_function_to_body(
@@ -1197,7 +1200,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma2/modular_gemma2.py"],
+        default=["src/transformers/models/llava_next_video/modular_llava_next_video.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
