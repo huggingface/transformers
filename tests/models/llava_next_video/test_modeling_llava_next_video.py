@@ -341,6 +341,16 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):

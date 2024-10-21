@@ -311,7 +311,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
@@ -391,7 +393,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
@@ -453,144 +457,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
-    def test_flash_attn_2_generate_left_padding(self):
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
-                dummy_attention_mask[:, :-1] = 0
-                dummy_attention_mask[:, -1:] = 1
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
-    def test_flash_attn_2_generate_padding_right(self):
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do right padding
-                dummy_attention_mask[:, :-1] = 1
-                dummy_attention_mask[:, -1:] = 0
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_generate_use_cache
-    def test_flash_attn_2_generate_use_cache(self):
-        max_new_tokens = 30
-
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -822,74 +688,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                                         )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
-
-    @require_torch_sdpa
-    @slow
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_eager_matches_sdpa_generate
-    def test_eager_matches_sdpa_generate(self):
-        max_new_tokens = 30
-
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                    attn_implementation="eager",
-                ).to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        has_sdpa = True
-                        break
-                if not has_sdpa:
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
-                # Just test that a large cache works as expected
-                res_eager = model_eager.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                res_sdpa = model_sdpa.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
 
 def prepare_musicgen_melody_inputs_dict(
@@ -1391,7 +1189,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
+    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -1403,7 +1201,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                 )
                 model_fa.to(torch_device)
 
@@ -1476,7 +1276,88 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
+    def test_flash_attn_2_conversion(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
+                ).to(torch_device)
+
+                for _, module in model.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        return
+
+                self.assertTrue(False, "FlashAttention2 modules not found in model")
+
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        torch.compiler.reset()
+        compute_capability = torch.cuda.get_device_capability()
+        major, _ = compute_capability
+
+        if not torch.version.cuda or major < 8:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
+                self.skipTest(
+                    reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
+                )
+            if config.model_type in ["paligemma"]:
+                self.skipTest(
+                    "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
+                )
+            if config.model_type in ["idefics", "idefics2", "idefics3"]:
+                self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation={"decoder": "sdpa", "audio_encoder": None, "text_encoder": None},
+                )
+                model.to(torch_device)
+
+                inputs_dict.pop("attention_mask", None)
+                inputs_dict.pop("decoder_attention_mask", None)
+
+                for name, inp in inputs_dict.items():
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                        inputs_dict[name] = inp.to(torch.float16)
+
+                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                    _ = model(**inputs_dict)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -1488,7 +1369,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                 )
                 model_fa.to(torch_device)
 
@@ -1558,7 +1441,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
+    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
     def test_flash_attn_2_generate_left_padding(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -1593,7 +1476,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -1607,7 +1490,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
+    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
     def test_flash_attn_2_generate_padding_right(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -1641,7 +1524,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -1655,7 +1538,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_use_cache
+    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_use_cache
     def test_flash_attn_2_generate_use_cache(self):
         max_new_tokens = 30
 
@@ -1684,7 +1567,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
+                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 

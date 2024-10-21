@@ -343,6 +343,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def _update_causal_mask(
         self, attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training: bool = False
     ):
+        if self.config.text_config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
         using_static_cache = isinstance(past_key_values, StaticCache)
         dtype = inputs_embeds.dtype
         min_dtype = torch.finfo(dtype).min
