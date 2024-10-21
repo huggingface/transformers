@@ -79,7 +79,7 @@ def get_siglip_config(model_name):
     config.vision_config.image_size = image_size
     config.vision_config.patch_size = patch_size
     config.text_config.vocab_size = vocab_size
-    
+
     if "base" in model_name:
         pass
     elif "large" in model_name:
@@ -100,13 +100,16 @@ def get_siglip_config(model_name):
         config.vision_config.intermediate_size = 4304
         config.vision_config.num_hidden_layers = 27
         config.vision_config.num_attention_heads = 16
-    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
+    if "so400m-patch14-224" in model_name:
+        config.text_config.max_position_embeddings = 16
+    if (
+        config.vision_config.image_size == 256
+        and config.text_config.vocab_size == 250000
+        and config.vision_config.patch_size == 16
+    ):
         config.text_config.no_head = True
     else:
         raise ValueError("Model not supported")
-    
-    if "so400m-patch14-224" in model_name:
-        config.text_config.max_position_embeddings = 16
 
     return config
 
@@ -114,7 +117,7 @@ def get_siglip_config(model_name):
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
-    
+
     # vision encoder
 
     rename_keys.append(("params/img/embedding/kernel", "vision_model.embeddings.patch_embedding.weight"))
@@ -275,9 +278,13 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
-    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
+    if (
+        config.vision_config.image_size == 256
+        and config.text_config.vocab_size == 250000
+        and config.vision_config.patch_size == 16
+    ):
         siglip_sovit_i18_256 = True
-    
+
     # get vocab file
     if "i18n" in model_name:
         vocab_file = "/Users/mervenoyan/Desktop/siglips/mc4/sentencepiece.model"
@@ -288,19 +295,21 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
 
-    if siglip_sovit_i18_256:  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
+    if (
+        siglip_sovit_i18_256
+    ):  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
         new_state_dict = {}
         for k, v in state_dict.items():
             if "img/Transformer/encoderblock/" in k:
                 original_array = np.array(v)
                 split_arrays = np.array_split(original_array, config.vision_config.num_hidden_layers, axis=0)  # 27
                 for i in range(config.vision_config.num_hidden_layers):
-                    new_key = re.sub(r'(encoderblock)/', rf'\1_{i}/', k)
+                    new_key = re.sub(r"(encoderblock)/", rf"\1_{i}/", k)
                     new_state_dict[f"params/{new_key}"] = split_arrays[i].squeeze()
             else:
                 new_state_dict[f"params/{k}"] = v
-    
-    state_dict = new_state_dict   
+
+    state_dict = new_state_dict
     rename_keys = create_rename_keys(config)
 
     for src, dest in rename_keys:
@@ -320,9 +329,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     if model_name == "siglip-so400m-patch14-224":
         tokenizer.model_max_length = 16
-        
+
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    
+
     # verify on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
     image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
@@ -348,7 +357,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
 
-    if model_name=="siglip-so400m-patch14-224":
+    if model_name == "siglip-so400m-patch14-224":
         filepath = hf_hub_download(repo_id="merve/model-test-inputs", filename="input_ids.pt", repo_type="dataset")
         original_input_ids = torch.load(filepath)
     else:
@@ -405,12 +414,12 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             )
         elif model_name == "siglip-so400m-patch14-224":
             expected_slice = torch.tensor(
-                [[-1.0864916 ,  1.1704235 ], [-0.71784306,  1.4354687 ]],
+                [[-1.0864916, 1.1704235], [-0.71784306, 1.4354687]],
             )
-        
+
         elif model_name == "siglip-so400m-patch16-256-i18n":
             expected_slice = torch.tensor(
-                [[-1.9432535 ,  -0.05433846 ], [0.6222029,  2.2883186 ]],
+                [[-1.9432535, -0.05433846], [0.6222029, 2.2883186]],
             )
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
