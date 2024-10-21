@@ -131,7 +131,7 @@ def get_efficientnet_config(model_name):
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
     config.num_labels = 1000
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     config.id2label = id2label

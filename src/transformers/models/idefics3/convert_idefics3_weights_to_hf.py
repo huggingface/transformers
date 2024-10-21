@@ -120,7 +120,7 @@ def get_config(checkpoint):
 
     # download the config file
     filepath = hf_hub_download(repo_id=checkpoint, filename="config.json")
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         config_json = json.load(f)
 
     # Setup the vision config

@@ -72,12 +72,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -336,7 +336,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             if token["content"] == "<reserved08707>":
                 token["content"] = "<image>"
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
 
     vq_keys_to_replace = [

@@ -73,7 +73,7 @@ TOP_LEVEL_KEYS = [
 
 def read_txt_into_dict(filename):
     result = {}
-    with open(filename, "r") as file:
+    with open(filename, "r", encoding="utf-8") as file:
         for line_number, line in enumerate(file):
             line = line.strip()
             if line:

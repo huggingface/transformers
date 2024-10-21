@@ -4493,7 +4493,7 @@ class Trainer:
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(model_card_filepath, "w") as f:
+        with open(model_card_filepath, "w", encoding="utf-8") as f:
             f.write(model_card)
 
         if is_peft_library:
@@ -4854,7 +4854,7 @@ class Trainer:
 
         # Get current .gitignore content
         if os.path.exists(os.path.join(self.repo.local_dir, ".gitignore")):
-            with open(os.path.join(self.repo.local_dir, ".gitignore"), "r") as f:
+            with open(os.path.join(self.repo.local_dir, ".gitignore"), "r", encoding="utf-8") as f:
                 current_content = f.read()
         else:
             current_content = ""
@@ -4870,7 +4870,7 @@ class Trainer:
 
         # Write the .gitignore file if it has changed
         if content != current_content:
-            with open(os.path.join(self.repo.local_dir, ".gitignore"), "w") as f:
+            with open(os.path.join(self.repo.local_dir, ".gitignore"), "w", encoding="utf-8") as f:
                 logger.debug(f"Writing .gitignore file. Content: {content}")
                 f.write(content)
 

@@ -265,7 +265,7 @@ def convert_wav2vec2_checkpoint(
 
     vocab_dict = create_vocab_dict(dict_path)
 
-    with open(os.path.join(pytorch_dump_folder_path, "vocab.json"), "w") as fp:
+    with open(os.path.join(pytorch_dump_folder_path, "vocab.json"), "w", encoding="utf-8") as fp:
         json.dump(vocab_dict, fp)
 
     tokenizer = Speech2Text2Tokenizer(os.path.join(pytorch_dump_folder_path, "vocab.json"))

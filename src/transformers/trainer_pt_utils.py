@@ -1079,19 +1079,19 @@ def save_metrics(self, split, metrics, combined=True):
         return
 
     path = os.path.join(self.args.output_dir, f"{split}_results.json")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4, sort_keys=True)
 
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
 
         all_metrics.update(metrics)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(all_metrics, f, indent=4, sort_keys=True)
 
 

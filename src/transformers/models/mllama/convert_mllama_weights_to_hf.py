@@ -215,7 +215,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
 
-    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+    with open(os.path.join(input_base_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
 
     params = params.get("model", params)
@@ -552,12 +552,12 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     if instruct:
         print("Saving chat template...")
         chat_template_path = os.path.join(save_dir, "chat_template.json")
-        with open(chat_template_path, "w") as f:
+        with open(chat_template_path, "w", encoding="utf-8") as f:
             json.dump({"chat_template": chat_template}, f, indent=2)
 
 
 def write_image_processor(config_path: str, save_dir: str):
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         params = json.load(f)
 
     tile_size = params["vision_chunk_size"]

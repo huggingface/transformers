@@ -366,7 +366,7 @@ def load_metadata(repo_id, class_info_file):
         except RepositoryNotFoundError:
             fname = hf_hub_download(repo_id, class_info_file)
 
-    with open(fname, "r") as f:
+    with open(fname, "r", encoding="utf-8") as f:
         class_info = json.load(f)
 
     return class_info

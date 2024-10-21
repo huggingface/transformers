@@ -1376,7 +1376,7 @@ def create_new_model_like(
         with open(filename) as fp:
             content = fp.read()
         new_content = re.sub(r"fx_compatible\s*=\s*True", "fx_compatible = False", content)
-        with open(filename, "w") as fp:
+        with open(filename, "w", encoding="utf-8") as fp:
             fp.write(new_content)
         return content != new_content
 
@@ -1384,7 +1384,7 @@ def create_new_model_like(
 
     tests_folder = REPO_PATH / "tests" / "models" / new_model_patterns.model_lower_cased
     os.makedirs(tests_folder, exist_ok=True)
-    with open(tests_folder / "__init__.py", "w"):
+    with open(tests_folder / "__init__.py", "w", encoding="utf-8"):
         pass
 
     for test_file in files_to_adapt:

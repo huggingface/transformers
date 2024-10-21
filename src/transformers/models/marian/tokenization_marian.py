@@ -382,10 +382,10 @@ def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.Senten
 
 
 def save_json(data, path: str) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
 def load_json(path: str) -> Union[Dict, List]:
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
