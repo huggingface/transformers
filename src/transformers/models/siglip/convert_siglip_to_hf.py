@@ -310,7 +310,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     read_in_q_k_v_head(state_dict, config)
     # load HuggingFace model
     model = SiglipModel(config).eval()
-    print("config.text_config", config.text_config)
     model.load_state_dict(state_dict)
     # create processor
     # important: make tokenizer not return attention_mask since original one doesn't require it
@@ -407,6 +406,11 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
         elif model_name == "siglip-so400m-patch14-224":
             expected_slice = torch.tensor(
                 [[-1.0864916 ,  1.1704235 ], [-0.71784306,  1.4354687 ]],
+            )
+        
+        elif model_name == "siglip-so400m-patch16-256-i18n":
+            expected_slice = torch.tensor(
+                [[-1.9432535 ,  -0.05433846 ], [0.6222029,  2.2883186 ]],
             )
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
