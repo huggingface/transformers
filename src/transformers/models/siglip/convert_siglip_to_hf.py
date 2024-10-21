@@ -103,7 +103,7 @@ def get_siglip_config(model_name):
     if "so400m-patch14-224" in model_name:
         config.text_config.max_position_embeddings = 16
     if model_name == "siglip-so400m-patch16-256-i18n":
-        config.text_config.no_head = True
+        config.text_config.has_head = False
     else:
         raise ValueError("Model not supported")
 
@@ -177,7 +177,7 @@ def create_rename_keys(config):
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/scale", "text_model.final_layer_norm.weight"))
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/bias", "text_model.final_layer_norm.bias"))
 
-    if not config.text_config.no_head:
+    if config.text_config.has_head:
         rename_keys.append(("params/txt/head/kernel", "text_model.head.weight"))
         rename_keys.append(("params/txt/head/bias", "text_model.head.bias"))
 

@@ -926,7 +926,7 @@ class SiglipTextTransformer(nn.Module):
         self.embeddings = SiglipTextEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        if not hasattr(self.config, "no_head"):
+        if self.config.has_head:
             self.head = nn.Linear(embed_dim, embed_dim)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
@@ -978,7 +978,7 @@ class SiglipTextTransformer(nn.Module):
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
         pooled_output = last_hidden_state[:, -1, :]
-        if not hasattr(self.config, "no_head"):
+        if self.config.has_head:
             pooled_output = self.head(pooled_output)
 
         if not return_dict:
