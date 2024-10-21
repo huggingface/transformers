@@ -102,11 +102,7 @@ def get_siglip_config(model_name):
         config.vision_config.num_attention_heads = 16
     if "so400m-patch14-224" in model_name:
         config.text_config.max_position_embeddings = 16
-    if (
-        config.vision_config.image_size == 256
-        and config.text_config.vocab_size == 250000
-        and config.vision_config.patch_size == 16
-    ):
+    if model_name == "siglip-so400m-patch16-256-i18n":
         config.text_config.no_head = True
     else:
         raise ValueError("Model not supported")
@@ -278,12 +274,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
-    if (
-        config.vision_config.image_size == 256
-        and config.text_config.vocab_size == 250000
-        and config.vision_config.patch_size == 16
-    ):
-        siglip_sovit_i18_256 = True
 
     # get vocab file
     if "i18n" in model_name:
@@ -295,9 +285,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
 
-    if (
-        siglip_sovit_i18_256
-    ):  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
+    if model_name == "siglip-so400m-patch16-256-i18n":  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
         new_state_dict = {}
         for k, v in state_dict.items():
             if "img/Transformer/encoderblock/" in k:
