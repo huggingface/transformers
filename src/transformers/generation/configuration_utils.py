@@ -92,6 +92,7 @@ class GenerationMode(ExplicitEnum):
 
 
 class GenerationConfig(PushToHubMixin):
+    # no-format
     """
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
