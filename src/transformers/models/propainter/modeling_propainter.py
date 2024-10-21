@@ -1389,7 +1389,6 @@ class ProPainterEncoder(nn.Module):
     def __init__(self, config: ProPainterConfig):
         super().__init__()
         self.config = config
-        self.group = [1, 2, 4, 8, 1]
         self.layers = nn.ModuleList(
             [
                 nn.Conv2d(
@@ -1477,13 +1476,15 @@ class ProPainterEncoder(nn.Module):
         features = masked_inputs
         for i, layer in enumerate(self.layers):
             if i == 8:
-                x0 = features
+                x0 = features  # Store the features from layer 8 as a reference point
                 _, _, height, width = x0.size()
             if i > 8 and i % 2 == 0:
-                group = self.group[(i - 8) // 2]
+                # For even layers after 8, group the channels and concatenate the reference features (x0)
+                group = self.config.group[(i - 8) // 2]  # Adjust the grouping based on layer index
                 masked_inputs = x0.view(batch_size, group, -1, height, width)
                 feature = features.view(batch_size, group, -1, height, width)
                 features = torch.cat([masked_inputs, feature], 2).view(batch_size, -1, height, width)
+            # For layers before 8 and odd-numbered layers after 8, features are passed through as-is
             features = layer(features)
 
         return features
@@ -1569,13 +1570,15 @@ def window_partition(input_feature, window_size, num_attention_heads):
     input_feature = input_feature.view(
         batch_size,
         timesteps,
-        height // window_size[0],
-        window_size[0],
-        width // window_size[1],
-        window_size[1],
-        num_attention_heads,
-        num_channels // num_attention_heads,
+        height // window_size[0],  # Reduce height by window_size
+        window_size[0],  # Store windowed height dimension
+        width // window_size[1],  # Reduce width by window_size
+        window_size[1],  # Store windowed width dimension
+        num_attention_heads,  # Split channels across attention heads
+        num_channels // num_attention_heads,  # Channels per head
     )
+
+    # Permute the dimensions to bring attention heads next to the spatial patches, keeping timesteps and the per-head channels intact.
     windows = input_feature.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
     return windows
 

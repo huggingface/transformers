@@ -115,6 +115,8 @@ class ProPainterConfig(PretrainedConfig):
             Controls the slope for negative inputs in LeakyReLU. Used in few certain modules.
         negative_slope_2 (`float`, *optional*, defaults to 0.01):
             Controls the slope for negative inputs in LeakyReLU. Used in few certain modules.
+        group (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 1]`):
+            Specifies the number of groups for feature aggregation at different layers in the ProPainterEncoder.
 
     Example:
 
@@ -173,6 +175,7 @@ class ProPainterConfig(PretrainedConfig):
         negative_slope_default=0.2,
         negative_slope_1=0.1,
         negative_slope_2=0.01,
+        group=[1, 2, 4, 8, 1],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -215,3 +218,4 @@ class ProPainterConfig(PretrainedConfig):
         self.negative_slope_default = negative_slope_default
         self.negative_slope_1 = negative_slope_1
         self.negative_slope_2 = negative_slope_2
+        self.group = group
