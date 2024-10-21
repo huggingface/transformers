@@ -582,6 +582,8 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model.forward).parameters
+
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
@@ -3610,8 +3612,11 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        # if num_items_in_batch is not None:
-        #     inputs["num_items_in_batch"] = num_items_in_batch
+        if self.model_accepts_loss_kwargs:
+            loss_kwargs = {}
+            if num_items_in_batch is not None:
+                loss_kwargs["num_items_in_batch"] = num_items_in_batch
+            inputs = {**inputs, **loss_kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
