@@ -24,6 +24,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+from torch.nn.attention.flex_attention import flex_attention
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
@@ -459,6 +460,27 @@ class Gemma2SdpaAttention(Gemma2Attention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
+
+
+        def tanh_softcap(score, b, h, q_idx, kv_idx):
+            soft_cap = self.config.attn_logit_softcapping
+            return soft_cap * torch.tanh(score / soft_cap)
+
+        # def causal_mask(b, h, q_idx, kv_idx):
+        #     return q_idx >= kv_idx
+
+        attn_output = flex_attention(
+            query_states,
+            key_states,
+            value_states,
+            # attn_mask=causal_mask,
+            block_mask=causal_mask,
+            score_mod=tanh_softcap,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+            scale=self.scaling,
+        )
+
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
