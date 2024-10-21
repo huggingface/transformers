@@ -14,6 +14,7 @@ model = GPT2LMHeadModel.from_pretrained("gpt2")
 inputs = tokenizer("Hello world!", return_tensors="pt")
 outputs = model(**inputs)
 
+print("hello")
 
 ##FROM README FILE
 # from transformers import AutoTokenizer, AutoModel
