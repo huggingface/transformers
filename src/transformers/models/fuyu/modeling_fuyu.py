@@ -344,6 +344,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches_indices=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         if past_key_values:
             input_ids = input_ids[:, -1:]
 

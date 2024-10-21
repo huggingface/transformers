@@ -578,6 +578,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         self.input_embeds_layer = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+        # Overwritten -- bark has a model-specific hack
         input_embeds = kwargs.get("input_embeds", None)
 
         attention_mask = kwargs.get("attention_mask", None)

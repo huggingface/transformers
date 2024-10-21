@@ -1210,10 +1210,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
@@ -1256,6 +1257,9 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
+        # precedence is moved to the model, we can remove this fn)
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
             if inputs_embeds is not None:  # Exception 1

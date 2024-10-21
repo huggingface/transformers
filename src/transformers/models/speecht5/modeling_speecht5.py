@@ -2425,6 +2425,8 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        # Note that this model doesn't inherit from the generation mixin, has unique generate function
+
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]

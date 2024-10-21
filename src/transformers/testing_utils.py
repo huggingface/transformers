@@ -67,7 +67,6 @@ from .utils import (
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
-    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -758,13 +757,6 @@ def require_spacy(test_case):
     return unittest.skipUnless(is_spacy_available(), "test requires spacy")(test_case)
 
 
-def require_decord(test_case):
-    """
-    Decorator marking a test that requires decord. These tests are skipped when decord isn't installed.
-    """
-    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
-
-
 def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
@@ -835,8 +827,9 @@ def require_torch_up_to_2_accelerators(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
-    (test_case)
+    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")(
+        test_case
+    )
 
 
 def require_torch_xla(test_case):
