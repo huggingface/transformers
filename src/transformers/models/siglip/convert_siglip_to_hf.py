@@ -19,6 +19,7 @@ URL: https://github.com/google-research/big_vision/tree/main
 
 import argparse
 import collections
+import re
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +28,6 @@ import torch
 from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
-import re
 
 from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipProcessor, SiglipTokenizer
 from transformers.utils import logging
