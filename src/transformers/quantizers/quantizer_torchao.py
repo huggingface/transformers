@@ -34,9 +34,8 @@ if is_torch_available():
     import torch.nn as nn
 
 if is_torchao_available():
-    from torchao.dtypes import AffineQuantizedTensor
     from torchao.quantization import quantize_
-    from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
+
 
 logger = logging.get_logger(__name__)
 
@@ -51,6 +50,9 @@ def find_parent(model, name):
 
 
 def _quantization_type(weight):
+    from torchao.dtypes import AffineQuantizedTensor
+    from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
+
     if isinstance(weight, AffineQuantizedTensor):
         return f"{weight.__class__.__name__}({weight._quantization_type()})"
 
@@ -59,7 +61,11 @@ def _quantization_type(weight):
 
 
 def _linear_extra_repr(self):
-    return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={_quantization_type(self.weight)}"
+    weight = _quantization_type(self.weight)
+    if weight is None:
+        return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight=None"
+    else:
+        return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={weight}"
 
 
 class TorchAoHfQuantizer(HfQuantizer):
