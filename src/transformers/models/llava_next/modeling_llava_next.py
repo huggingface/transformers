@@ -714,7 +714,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int,
+        vision_feature_select_strategy: str,
+    ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -723,6 +729,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
+            vision_feature_layer (`int`):
+                The index of the layer to select the vision feature.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
@@ -745,10 +756,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.hidden_states[self.vision_feature_layer]
-        if self.vision_feature_select_strategy == "default":
+        selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif self.vision_feature_select_strategy == "full":
+        elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
@@ -845,7 +856,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None and pixel_values.size(0) > 0:
-            image_features = self.get_image_features(pixel_values, image_sizes)
+            image_features = self.get_image_features(
+                pixel_values,
+                image_sizes,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
 
             # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
             image_features, feature_lens = self.pack_image_features(
