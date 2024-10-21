@@ -1,9 +1,8 @@
 import argparse
-from collections.abc import Mapping, Sequence
 import datasets
 import enum
 import gc
-from typing import Any
+from typing import Any, List, Tuple
 
 from huggingface_hub import HfApi, Repository, create_repo
 from huggingface_hub.utils import RepositoryNotFoundError
@@ -67,7 +66,7 @@ def filter_and_truncate(
 
 
 def process_outputs_for_training(
-    all_outputs: Sequence[torch.Tensor],
+    all_outputs: List[torch.Tensor],
     logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     *,
@@ -77,7 +76,7 @@ def process_outputs_for_training(
     is_cv: bool,
     is_pos: bool,
     torch_device: torch.device,
-) -> tuple[Sequence[torch.Tensor], Sequence[torch.Tensor]]:
+) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     """Process raw model outputs into format understandable by the detector.
 
     Args:

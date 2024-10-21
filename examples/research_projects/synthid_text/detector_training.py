@@ -1,11 +1,10 @@
 import argparse
-from collections.abc import Mapping, Sequence
 import dataclasses
 from datasets import load_dataset
 import enum
 import functools
 import gc
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Tuple, Dict, List
 
 from huggingface_hub import HfApi, Repository, create_repo
 from huggingface_hub.utils import RepositoryNotFoundError
@@ -54,7 +53,7 @@ def train_detector(
     watermarked_val: Optional[torch.Tensor] = None,
     verbose: bool = False,
     validation_metric: ValidationMetric = ValidationMetric.TPR_AT_FPR,
-) -> tuple[Mapping, float]:
+) -> Tuple[Dict[str, Any], float]:
     """Trains a Bayesian detector model.
 
     Args:
@@ -173,8 +172,8 @@ def train_detector(
 
 
 def train_best_detector(
-    tokenized_wm_outputs: Union[Sequence[np.ndarray], np.ndarray],
-    tokenized_uwm_outputs: Union[Sequence[np.ndarray], np.ndarray],
+    tokenized_wm_outputs: Union[List[np.ndarray], np.ndarray],
+    tokenized_uwm_outputs: Union[List[np.ndarray], np.ndarray],
     logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     torch_device: torch.device,
@@ -404,4 +403,4 @@ if __name__ == "__main__":
         validation_metric=ValidationMetric.TPR_AT_FPR,
     )
 
-
+    
