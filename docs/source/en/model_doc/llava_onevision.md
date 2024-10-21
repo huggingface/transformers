@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# LLaVA-Onevision
+# LLaVA-OneVision
 
 ## Overview
 
-The LLaVA-Onevision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://arxiv.org/abs/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
+The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://arxiv.org/abs/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
 
-LLaVA-Onevision is a Vision-Language Model that can generate text conditioned on one or several images/videos. The model consists of SigLIP vision encoder and a Qwen2 language backbone. The images are processed with anyres-9 technique where the image is split into 9 patches to better process high resolution images and capture as much details as possible. However, videos are pooled to a total sequence length of 196 tokens each frame for more memory efficient computation. LLaVA-Onevision is available in three sizes: 0.5B, 7B and 72B and achieves remarkable performance on benchmark evaluations.
+LLaVA-OneVision is a Vision-Language Model that can generate text conditioned on one or several images/videos. The model consists of SigLIP vision encoder and a Qwen2 language backbone. The images are processed with anyres-9 technique where the image is split into 9 patches to better process high resolution images and capture as much details as possible. However, videos are pooled to a total sequence length of 196 tokens each frame for more memory efficient computation. LLaVA-OneVision is available in three sizes: 0.5B, 7B and 72B and achieves remarkable performance on benchmark evaluations.
 
 The abstract from the paper is the following:
 
@@ -32,11 +32,10 @@ yielding new emerging capabilities. In particular, strong video understanding an
 cross-scenario capabilities are demonstrated through task transfer from images to
 videos.*
 
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-acrhitecture.png"
 alt="drawing" width="600"/>
 
-<small> LLaVA=Onevision architecture. Taken from the <a href="https://arxiv.org/abs/2408.03326">original paper.</a> </small>
+<small> LLaVA-OneVision architecture. Taken from the <a href="https://arxiv.org/abs/2408.03326">original paper.</a> </small>
 
 Tips:
 
@@ -44,7 +43,7 @@ Tips:
 
 <Tip warning={true}>
 
-- Llava-Onevision uses different number of patches for images and thus has to pad the inputs inside modeling code, aside from the padding done when processing the inputs. The default setting is "left-padding" if model is in `eval()` mode, otherwise "right-padding".
+- Llava-OneVision uses different number of patches for images and thus has to pad the inputs inside modeling code, aside from the padding done when processing the inputs. The default setting is "left-padding" if model is in `eval()` mode, otherwise "right-padding".
 
 </Tip>
 
@@ -129,7 +128,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Multi image inference
 
-LLaVa-Onevision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. Here is how you can do it:
+LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. Here is how you can do it:
 
 ```python
 import requests
@@ -200,7 +199,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Video inference
 
-LLaVa-Onevision also can perform inference with videos as input, where video frames are treated as multiple images. Here is how you can do it:
+LLaVa-OneVision also can perform inference with videos as input, where video frames are treated as multiple images. Here is how you can do it:
 
 ```python
 import av
