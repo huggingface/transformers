@@ -32,6 +32,7 @@ from .utils.import_utils import (
     is_tf_available,
     is_torch_available,
     is_torchvision_available,
+    is_torchvision_v2_available,
     is_vision_available,
     requires_backends,
 )
@@ -51,7 +52,9 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
-if is_torchvision_available():
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
