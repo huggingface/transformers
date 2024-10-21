@@ -21,7 +21,6 @@ import unittest
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
-    AutoTokenizer,
     BatchEncoding,
     PreTrainedTokenizerFast,
     SiglipTokenizer,
@@ -57,7 +56,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = SiglipTokenizer.from_pretrained(self.from_pretrained_id[0])
+        tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_convert_token_and_id with T5->Siglip
@@ -66,10 +65,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "<s>"
         token_id = 1
 
-        tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
-
-        self.assertEqual(tokenizer._convert_token_to_id(token), token_id)
-        self.assertEqual(tokenizer._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
@@ -149,19 +146,18 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
-        return SiglipTokenizer.from_pretrained(self.from_pretrained_id[0], **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_rust_tokenizer with T5->Siglip
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return AutoTokenizer.from_pretrained(self.from_pretrained_id[0], use_fast=True, **kwargs)
+    def get_rust_tokenizer(self, **kwargs):
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
 
-        tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained_id[0])
-        rust_tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained_id[0])
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
 
         sequence = "I was born in 92000, and this is falsé."
 
@@ -255,9 +251,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name,
-                    additional_special_tokens=added_tokens,
-                    **kwargs,
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
