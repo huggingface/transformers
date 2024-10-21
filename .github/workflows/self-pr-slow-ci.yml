@@ -65,8 +65,9 @@ jobs:
         fail-fast: false
         matrix:
           folders: ${{ fromJson(needs.find_models_to_run.outputs.models) }}
-          machine_type: [single-gpu, multi-gpu]
-      runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
+          machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+      runs-on:
+        group: '${{ matrix.machine_type }}'
       container:
         image: huggingface/transformers-all-latest-gpu
         options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -93,11 +94,26 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e . && python3 -m pip install --upgrade torch torchaudio torchvision
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV    
 
       - name: Environment
         working-directory: /transformers
@@ -113,23 +129,23 @@ jobs:
         run: |
           export CUDA_VISIBLE_DEVICES="$(python3 utils/set_cuda_devices_for_ci.py --test_folder ${{ matrix.folders }})"
           echo $CUDA_VISIBLE_DEVICES
-          python3 -m pytest -v -rsfE --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+          python3 -m pytest -v -rsfE --make-reports=${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
 
       - name: Make sure report directory exists
         shell: bash
         run: |
-          mkdir -p /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
+          mkdir -p /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          echo "hello" > /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          name: ${{ env.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports

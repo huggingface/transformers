@@ -291,7 +291,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -1253,16 +1253,17 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             attention_mask=attention_mask,
         )
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation with image->audio
     def prepare_inputs_for_generation(
         self,
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        input_features=None,  # Ignore copy
+        input_features=None,
         attention_mask=None,
         **kwargs,
     ):
+        # Overwritten -- custom processing (note: might not be needed, but there are no generation tests running atm)
+
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -1270,7 +1271,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
 
-            # Ignore copy
             # Here, we get the attention_mask, which was previously stored in the state after _merge_input_ids_with_audio_features.
             if input_features is not None and kwargs.get("attention_mask") is not None:
                 attention_mask = kwargs["attention_mask"]
@@ -1310,7 +1310,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         else:
             model_inputs = {"input_ids": input_ids}
 
-        # Ignore copy
         feature_attention_mask = kwargs.get("feature_attention_mask", None)
         model_inputs.update(
             {

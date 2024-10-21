@@ -422,7 +422,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -1399,7 +1399,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1442,6 +1442,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1817,6 +1818,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         cache_position=None,
         **kwargs,
     ):
+        # Overwritten -- encoder-decoder whisper has custom logic, but it's close to the general function. Next time
+        # this function needs to be touched, let's try to sort out the commonalities between the two and remove the
+        # overwrite.
+
         decoder_position_ids = None
         if decoder_attention_mask is not None:
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
@@ -1867,7 +1872,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_attention_mask = self.get_decoder()._prepare_4d_causal_attention_mask_with_cache_position(
                 decoder_attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.self_attention_cache.get_max_length(),
+                target_length=past_key_values.self_attention_cache.get_max_cache_shape(),
                 dtype=self.proj_out.weight.dtype,
                 device=decoder_input_ids.device,
                 cache_position=cache_position,
@@ -2091,46 +2096,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        use_cache=None,
-        encoder_outputs=None,
-        attention_mask=None,
-        cache_position=None,
-        **kwargs,
-    ):
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            else:
-                past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_ids.shape[1] :]
-
-        return {
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "input_ids": input_ids,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-            "cache_position": cache_position,
-        }
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
