@@ -285,7 +285,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
 
-    if model_name == "siglip-so400m-patch16-256-i18n":  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
+    if (
+        model_name == "siglip-so400m-patch16-256-i18n"
+    ):  # make state dict compatible with rest of the SiglIPs, add param/ prefix and encoderblock index
         new_state_dict = {}
         for k, v in state_dict.items():
             if "img/Transformer/encoderblock/" in k:
