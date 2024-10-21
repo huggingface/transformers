@@ -57,6 +57,9 @@ from ...utils import (
 from .configuration_roberta import RobertaConfig
 
 
+logger = logging.get_logger(__name__)
+
+
 _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
@@ -163,9 +166,6 @@ class RobertaEmbeddings(nn.Module):
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape)
-
-
-logger = logging.get_logger(__name__)
 
 
 class RobertaSelfAttention(nn.Module):

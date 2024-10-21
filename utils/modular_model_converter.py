@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 # The corresponding mapped values are used to define the file targets for the assignment.
 ASSIGNMENTS_TO_KEEP = {
     "_CHECKPOINT_FOR_DOC": ["modeling"],
+    "logger": ["modeling", "configuration", "tokenization", "processing", "image_processing", "feature_extractor"]
 }
 
 AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
@@ -823,6 +824,7 @@ class ModularConverterTransformer(CSTTransformer):
             "image_processing": {},
             "feature_extractor": {},
         }
+        self.expected_body_keys = {file: {k for k, v in ASSIGNMENTS_TO_KEEP.items() if file in v} for file in self.files.keys()}
         self.match_patterns = "|".join(self.files.keys())
         self.all_definitions = {}
         self.class_to_file_type = {}
@@ -833,8 +835,8 @@ class ModularConverterTransformer(CSTTransformer):
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
         self.added_dependencies = set()
-        # Keep track of decorators arguments for top-level functions/classes
-        self.decorator_dependencies = defaultdict(lambda: [])
+        # Keep track of top-level assignments
+        self.top_level_assignments = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -885,6 +887,7 @@ class ModularConverterTransformer(CSTTransformer):
                     self.all_imports.append(updated_node)
                 return updated_node
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
+                # We immediately write the node
                 if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
                     files_ = ASSIGNMENTS_TO_KEEP[original_node.body[0].targets[0].target.value]
                     for file_ in files_:
@@ -892,6 +895,10 @@ class ModularConverterTransformer(CSTTransformer):
                             "node": original_node,
                             "insert_idx": self.global_scope_index,
                         }
+                # We record the node to maybe add it later if not part of the dependencies
+                else:
+                    self.top_level_assignments[original_node.body[0].targets[0].target.value] = (original_node, self.global_scope_index)
+
             self.global_scope_index += 100
         return updated_node
 
@@ -1107,20 +1114,6 @@ class ModularConverterTransformer(CSTTransformer):
             if isinstance(node.func, cst.Name):
                 self.function_call_dependency_mapping[self.current_top_level_function].add(node.func.value)
 
-    def visit_Decorator(self, node):
-        """Keep track of args of decorators for all top-level functions/classes."""
-        parent_node = self.get_metadata(ParentNodeProvider, node)
-        grand_parent_node = self.get_metadata(ParentNodeProvider, parent_node)
-        if m.matches(parent_node, m.ClassDef() | m.FunctionDef()) and m.matches(grand_parent_node, m.Module()):
-            if hasattr(node.decorator, "args"):
-                for arg in node.decorator.args:
-                    # We only look at those categories to get the args dependencies, as the function calls should be
-                    # fairly simple (once again, we assume doctrings helper calls)
-                    if m.matches(arg.value, m.Name()):
-                        self.decorator_dependencies[parent_node.name.value].append(arg.value.value)
-                    elif m.matches(arg.value, m.Call(func=m.Attribute(value=m.Name()))):
-                        self.decorator_dependencies[parent_node.name.value].append(arg.value.func.value.value)
-
     def _insert_node_in_body(
         self, new_node, body: dict, new_body_key: str, body_insert_index: int, add_new_lines: int = 0
     ):
@@ -1184,36 +1177,21 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
-    def _add_all_args_dependencies(
-        self, arg_names: list, file: str, dependency_imports: dict, body_insert_idx: int
-    ) -> None:
-        """Add all the `args_names` elements to the body, if they are not already present in the body or the imports. This is
-        used to add potential arguments of decorators, that were not added through the dependency class graph.
-        IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
-        added previously. This means that only args corresponding to simple assignments such as `XXX_INPUTS_DOCSTRING = ""` will be added.
+    def add_all_new_needed_assignments_in_files(self):
+        """This adds all top-level assignments in the `modular_xxx.py` file in the created files, if not already present
+        due to the dependencies.
+        Since we cannot know in advance which file a top-level assignemnts in `modular_xxx.py` is supposed to
+        be written in, we write it to all non-empty files. If it is not needed, it will be removed later with the
+        `PostModularConverterCleaner()`.
         """
-        body = self.files[file]
-        for arg in arg_names:
-            # If the arg is not one of the imports, and not part of the body -> we need to find it
-            if arg not in dependency_imports[file].keys() and arg not in body.keys():
-                for visited_file, class_finder in self.visited_module.items():
-                    # Check for the dependency in the simple assignments
-                    if arg in class_finder.assignments.keys():
-                        arg_node = class_finder.assignments[arg]
-                        # Insert the dependency
-                        self._insert_node_in_body(arg_node, body, arg, body_insert_idx)
-
-    def add_all_decorator_arguments_to_files(self, dependency_imports: dict) -> None:
-        """This adds all potential arguments of class/functions decorators to the file bodies, in case they were not
-        already added as part of the classes graph dependency.
-        IMPORTANT: We look for the missing arguments in all the `class_finder.assignments`, as they usually are present but were not
-        added previously. This means that only args corresponding to simple assignments such as `XXX_INPUTS_DOCSTRING = ""` will be added.
-        """
-        for decorated_entity, args in self.decorator_dependencies.items():
+        for variable_name, (node, insert_idx) in self.top_level_assignments.items():
+            # Since we cannot know in advance which file a top-level assignemnts in `modular_xxx.py` is supposed to
+            # be written in, write it to all non-empty files. If it is not needed, it will be removed later
             for file, body in self.files.items():
-                if decorated_entity in body.keys():
-                    insert_idx = body[decorated_entity]["insert_idx"]
-                    self._add_all_args_dependencies(args, file, dependency_imports, insert_idx)
+                # Only write the variable to non-empty bodies
+                if len(body) > 0 and body.keys() != self.expected_body_keys[file]:
+                    if variable_name not in body.keys():
+                        self._insert_node_in_body(node, body, variable_name, insert_idx)
 
     def leave_Module(self, original_node: cst.Module, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
@@ -1227,13 +1205,12 @@ class ModularConverterTransformer(CSTTransformer):
         # Check if any new top-level function from the `modular_xxx.py` should be added to the different files
         # (if it is called in a class in the file, then it will be copy pasted from `modular.py` to that file).
         self.recursively_add_all_new_needed_functions_in_files()
-        # Add potential missing arguments of class/function decorators
-        self.add_all_decorator_arguments_to_files(dependency_imports)
+        # Add all potentially missing assignments
+        self.add_all_new_needed_assignments_in_files()
 
         for file, body in self.files.items():
-            expected_body_keys = {k for k, v in ASSIGNMENTS_TO_KEEP.items() if file in v}
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-            if len(new_body) > 0 and body.keys() != expected_body_keys:
+            if len(new_body) > 0 and body.keys() != self.expected_body_keys[file]:
                 if file in dependency_imports.keys():
                     new_body = list(dependency_imports[file].values()) + new_body
                 new_module = cst.Module(body=[*new_body], header=node.header)
