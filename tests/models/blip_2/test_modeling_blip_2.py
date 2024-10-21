@@ -650,7 +650,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             elif use_cache is False:
                 self.assertTrue(output.past_key_values is None)
 
-    # overwrite because BLIP2 cannot generate on;y from input ids, and requires pixel values in all cases to be present
+    # overwrite because BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # NOTE: left-padding results in small numerical differences. This is expected.
@@ -733,7 +733,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
-    @unittest.skip("BLIP2 cannot generate on;y from input ids, and requires pixel values in all cases to be present")
+    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
     def test_generate_from_inputs_embeds_decoder_only(self):
         pass
 

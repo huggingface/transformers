@@ -747,7 +747,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
     @unittest.skip(
-        "InstructBLIP cannot generate on;y from input ids, and requires pixel values in all cases to be present"
+        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
     )
     def test_generate_from_inputs_embeds_decoder_only(self):
         pass
