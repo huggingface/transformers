@@ -760,7 +760,7 @@ class SwinLayer(nn.Module):
 
 
 class SwinStage(nn.Module):
-    def __init__(self, config,grid_size, i_layer, drop_path_rate):
+    def __init__(self, config,grid_size, layer_number, drop_path_rate):
         super().__init__()
         self.config = config
         dim=int(config.embed_dim * 2**i_layer),
@@ -838,7 +838,7 @@ class SwinEncoder(nn.Module):
                 SwinStage(
                     config=config,
                     grid_size=grid_size,
-                    layer_id = i_layer,
+                    layer_number = i_layer,
                     drop_path_rate = dpr
                 )
                 for i_layer in range(self.num_layers)
