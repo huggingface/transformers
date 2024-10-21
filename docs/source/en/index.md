@@ -150,6 +150,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [Gemma](model_doc/gemma)                         |       ✅        |         ❌         |      ✅      |
 |                        [Gemma2](model_doc/gemma2)                        |       ✅        |         ❌         |      ❌      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
+|                           [GLM](model_doc/glm)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
 |                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
@@ -223,6 +224,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [MobileNetV2](model_doc/mobilenet_v2)                   |       ✅        |         ❌         |      ❌      |
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
+|                         [Moshi](model_doc/moshi)                         |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
 |                           [MRA](model_doc/mra)                           |       ✅        |         ❌         |      ❌      |

@@ -1345,6 +1345,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         guidance_scale=None,
         **kwargs,
     ):
+        # Overwritten -- MusicGen has custom processing
         if delay_pattern_mask is None:
             input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
                 input_ids,
@@ -2180,6 +2181,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         guidance_scale=None,
         **kwargs,
     ):
+        # Overwritten -- MusicGen has custom processing
         if decoder_delay_pattern_mask is None:
             decoder_input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
                 decoder_input_ids,
