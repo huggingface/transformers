@@ -1006,7 +1006,6 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(g_values_mean, 0.5, delta=0.01)
 
     """Test SynthID watermarked distribution bias uniformity over voabs of the model."""
-
     @parameterized.expand([(10000, 3), (1000, 20)])
     def test_synthidtext_watermark_processor_bias_uniformity_across_vocab(self, vocab_size, num_layers):
         batch_size = 1000

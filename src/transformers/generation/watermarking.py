@@ -358,15 +358,14 @@ class BayesianDetectorPreTrainedModel(PreTrainedModel):
 
 
 BAYESIAN_DETECTOR_START_DOCSTRING = r"""
-
-    Bayesian classifier for watermark detection.
+Bayesian classifier for watermark detection.
 
     This detector uses Bayes' rule to compute a watermarking score, which is
-    the posterior probability P(watermarked|g_values) that the text is
-    watermarked, given its g_values.
+    the sigmoid of the log of ratio of the posterior probabilities  P(watermarked|g_values)  and P(unwatermarked|g_values). 
+    Please see the section on BayesianScore in the paper for further details. 
+    Paper URL: https://www.nature.com/articles/s41586-024-08025-4
 
-    Note that this detector only works with Tournament-based watermarking using
-    the Bernoulli(0.5) g-value distribution.
+Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5) g-value distribution.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -381,7 +380,6 @@ BAYESIAN_DETECTOR_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-
 
 @add_start_docstrings(
     BAYESIAN_DETECTOR_START_DOCSTRING,
