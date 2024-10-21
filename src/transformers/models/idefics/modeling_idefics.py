@@ -28,12 +28,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PretrainedConfig
+from ...modeling_utils import PretrainedConfig, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -622,11 +622,9 @@ class IdeficsAttention(nn.Module):
             query_states = self.q_layer_norm(query_states)
             key_states = self.k_layer_norm(key_states)
 
+        causal_mask = attention_mask
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -638,13 +636,13 @@ class IdeficsAttention(nn.Module):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+        is_causal = True if self.is_causal and causal_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
         )
@@ -1443,6 +1441,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1490,7 +1489,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return causal_mask
 
 
-class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
+class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
@@ -1665,19 +1664,36 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
         attention_mask=None,
         position_ids=None,
+        inputs_embeds=None,
+        past_key_values=None,
+        cache_position=None,
         pixel_values=None,
         image_hidden_states=None,
+        image_attention_mask=None,
         use_cache=None,
-        cache_position=None,
         **kwargs,
     ):
+        # Overwritten -- custom processing based on `config.use_resampler`
+
+        model_inputs = {}
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                model_inputs["perceiver_embeddings"] = image_hidden_states
+            else:
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        else:
+            model_inputs["pixel_values"] = pixel_values
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
-            if input_ids.shape[1] != cache_position.shape[0]:
+            if inputs_embeds is not None:
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:
                 input_ids = input_ids[:, cache_position]
+                if image_attention_mask is not None:
+                    image_attention_mask = image_attention_mask[:, -input_ids.shape[1] :]
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1689,37 +1705,28 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
                 # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
-        model_inputs = {}
-        image_hidden_states = kwargs.pop("image_hidden_states", None)
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                model_inputs["perceiver_embeddings"] = image_hidden_states
-            else:
-                model_inputs["image_encoder_embeddings"] = image_hidden_states
-            pixel_values = None
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
+        else:
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs.update(
+                {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+            )
 
         model_inputs.update(
             {
-                "input_ids": input_ids,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
                 "position_ids": position_ids,
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-                "image_attention_mask": kwargs.get("image_attention_mask", None),
+                "image_attention_mask": image_attention_mask,
                 "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
             }
         )
 
         return model_inputs
-
-    @staticmethod
-    def _expand_inputs_for_generation(
-        *args,
-        **model_kwargs,
-    ):
-        return expand_inputs_for_generation(*args, **model_kwargs)
 
     def _update_model_kwargs_for_generation(
         self,
@@ -1738,7 +1745,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         if "image_attention_mask" in model_kwargs:
             image_attention_mask = model_kwargs["image_attention_mask"]
             last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
-            model_kwargs["image_attention_mask"] = last_mask
+            if model_kwargs.get("use_cache", True):
+                model_kwargs["image_attention_mask"] = last_mask
+            else:
+                model_kwargs["image_attention_mask"] = torch.cat([image_attention_mask, last_mask], dim=1)
 
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
