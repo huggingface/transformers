@@ -618,14 +618,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_generate_without_input_ids(self):
         pass
 
-    def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
-        # In this model, the index of `batch_size` and `sequence_length`` in `main_input` is different: they are the
-        # first two dimensions of the tensor.
-        main_input = main_input[:, :, 0]
-        super()._check_outputs(
-            output, main_input, config, use_cache=use_cache, num_return_sequences=num_return_sequences
-        )
-
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             self.skipTest(reason="test_torchscript is set to False")
