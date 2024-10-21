@@ -225,6 +225,7 @@ from .import_utils import (
     is_torchdynamo_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
+    is_torchvision_v2_available,
     is_training_run_on_sagemaker,
     is_uroman_available,
     is_vision_available,
