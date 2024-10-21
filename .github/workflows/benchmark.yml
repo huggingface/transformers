@@ -16,8 +16,11 @@ env:
 jobs:
   benchmark:
     name: Benchmark
+    strategy:
+      matrix:
+        group: [aws-g5-4xlarge-cache, aws-p4d-24xlarge-plus]
     runs-on:
-      group: aws-g5-4xlarge-cache
+      group: ${{ matrix.group }}
     if: |
       (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') )||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
