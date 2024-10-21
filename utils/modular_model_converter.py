@@ -1052,7 +1052,7 @@ class ModularConverterTransformer(CSTTransformer):
             # Simple function calls such as foo()
             if m.matches(node.func, m.Name()):
                 self.function_call_class_mapping[node.func.value].add(self.current_class)
-            if m.matches(node.func, m.Attribute()|m.Subscript()):
+            if m.matches(node.func, m.Attribute() | m.Subscript()):
                 _code = self.python_module.code_for_node(node.func.value)
                 self.function_call_class_mapping[_code].add(self.current_class)
         elif self.current_top_level_function is not None:
@@ -1118,12 +1118,14 @@ class ModularConverterTransformer(CSTTransformer):
         for key, value in imports.items():
             if key in self.function_call_class_mapping:
                 node = self.function_call_class_mapping[key]
-                if len(node) == 1 and node.copy().pop() in  self.files[file_name]:
+                if len(node) == 1 and node.copy().pop() in self.files[file_name]:
                     _dict[key] = value
         return _dict
 
     def leave_Module(self, original_node: cst.Module, node):
-        dependency_imports = {file_type: self._filter_imports_for_file(file_type, self.all_imports.copy()) for file_type in self.files}
+        dependency_imports = {
+            file_type: self._filter_imports_for_file(file_type, self.all_imports.copy()) for file_type in self.files
+        }
         for super_file_name, visiter in self.visited_module.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(
