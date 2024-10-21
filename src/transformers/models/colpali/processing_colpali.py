@@ -20,7 +20,6 @@
 # limitations under the License.
 
 
-import logging
 from typing import List, Optional, Union
 
 import torch
@@ -40,9 +39,12 @@ from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
+from ...utils import (
+    logging,
+)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
