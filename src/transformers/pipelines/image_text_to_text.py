@@ -278,7 +278,6 @@ class ImageTextToTextPipeline(Pipeline):
             text[0], (list, tuple, dict)
         ):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
-
             if isinstance(text[0], dict):
                 return super().__call__(Chat(text, images), **kwargs)
             else:
@@ -286,6 +285,13 @@ class ImageTextToTextPipeline(Pipeline):
                     images = [None] * len(text)
                 chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
+
+        # encourage the user to use the chat format if supported
+        if hasattr(self.processor, "chat_template") and self.processor.chat_template is not None:
+            logger.warning_once(
+                "The pipeline detected no chat format in the prompt, but this model supports chat format. "
+                "Consider using the chat format for better results. For more information, see https://huggingface.co/docs/transformers/en/chat_templating"
+            )
 
         # support text only generation
         if images is None:
