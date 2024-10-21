@@ -1346,18 +1346,18 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
 
         return flow, edge
 
-    def forward_bidirect_flow(self, masked_flows_bi, masks):
+    def forward_bidirectional_flow(self, masked_flows_bidirectional, masks):
         """
         Args:
-            masked_flows_bi: [masked_flows_f, masked_flows_b] | (batch_size, timesteps-1, 2, height, width), (batch_size, timesteps-1, 2, height, width)
+            masked_flows_bidirectional: [masked_flows_f, masked_flows_b] | (batch_size, timesteps-1, 2, height, width), (batch_size, timesteps-1, 2, height, width)
             masks: batch_size, timesteps, 1, height, width
         """
         masks_forward = masks[:, :-1, ...].contiguous()
         masks_backward = masks[:, 1:, ...].contiguous()
 
         # mask flow
-        masked_flows_forward = masked_flows_bi[0] * (1 - masks_forward)
-        masked_flows_backward = masked_flows_bi[1] * (1 - masks_backward)
+        masked_flows_forward = masked_flows_bidirectional[0] * (1 - masks_forward)
+        masked_flows_backward = masked_flows_bidirectional[1] * (1 - masks_backward)
 
         # -- completion --
         pred_flows_forward, pred_edges_forward = self.forward(masked_flows_forward, masks_forward)
@@ -1375,12 +1375,16 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
             pred_edges_backward,
         ]
 
-    def combine_flow(self, masked_flows_bi, pred_flows_bi, masks):
+    def combine_flow(self, masked_flows_bidirectional, pred_flows_bidirectional, masks):
         masks_forward = masks[:, :-1, ...].contiguous()
         masks_backward = masks[:, 1:, ...].contiguous()
 
-        pred_flows_forward = pred_flows_bi[0] * masks_forward + masked_flows_bi[0] * (1 - masks_forward)
-        pred_flows_backward = pred_flows_bi[1] * masks_backward + masked_flows_bi[1] * (1 - masks_backward)
+        pred_flows_forward = pred_flows_bidirectional[0] * masks_forward + masked_flows_bidirectional[0] * (
+            1 - masks_forward
+        )
+        pred_flows_backward = pred_flows_bidirectional[1] * masks_backward + masked_flows_bidirectional[1] * (
+            1 - masks_backward
+        )
 
         return pred_flows_forward, pred_flows_backward
 
@@ -3839,16 +3843,16 @@ class ProPainterLosses:
         frames,
         comp_frames,
         discriminator,
-        pred_flows_bi,
-        ground_truth_flows_bi,
+        pred_flows_bidirectional,
+        ground_truth_flows_bidirectional,
         flow_masks,
-        pred_edges_bi,
+        pred_edges_bidirectional,
     ):
         _, _, _, height, width = frames.size()
 
-        gt_edges_forward = self.get_edges(ground_truth_flows_bi[0])
-        gt_edges_backward = self.get_edges(ground_truth_flows_bi[1])
-        gt_edges_bi = [gt_edges_forward, gt_edges_backward]
+        gt_edges_forward = self.get_edges(ground_truth_flows_bidirectional[0])
+        gt_edges_backward = self.get_edges(ground_truth_flows_bidirectional[1])
+        gt_edges_bidirectional = [gt_edges_forward, gt_edges_backward]
 
         gen_loss = 0
         dis_loss = 0
@@ -3890,11 +3894,13 @@ class ProPainterLosses:
 
         # these losses are for training flow completion network
         # compulte flow_loss
-        flow_loss, warp_loss = self.flow_loss(pred_flows_bi, ground_truth_flows_bi, flow_masks, frames)
+        flow_loss, warp_loss = self.flow_loss(
+            pred_flows_bidirectional, ground_truth_flows_bidirectional, flow_masks, frames
+        )
         flow_loss = flow_loss * self.config.flow_weight_flow_complete_net
 
         # compute edge loss
-        edge_loss = self.edge_loss(pred_edges_bi, gt_edges_bi, flow_masks)
+        edge_loss = self.edge_loss(pred_edges_bidirectional, gt_edges_bidirectional, flow_masks)
         edge_loss = edge_loss * 1.0
 
         flow_complete_loss = flow_loss + warp_loss * 0.01 + edge_loss
@@ -4054,13 +4060,15 @@ class ProPainterModel(ProPainterPreTrainedModel):
             ]  # batch_size, temporal_length, num_channels, height, width (before slicing)
             # get gt optical flow
             if self.gradient_checkpointing:
-                ground_truth_flows_bi = self._gradient_checkpointing_func(
+                ground_truth_flows_bidirectional = self._gradient_checkpointing_func(
                     self.optical_flow_model.__call__,
                     ground_truth_local_frames,
                     self.config.raft_iter,
                 )
             else:
-                ground_truth_flows_bi = self.optical_flow_model(ground_truth_local_frames, iters=self.config.raft_iter)
+                ground_truth_flows_bidirectional = self.optical_flow_model(
+                    ground_truth_local_frames, iters=self.config.raft_iter
+                )
         else:
             short_clip_len = self._get_short_clip_len(pixel_values_videos.size(-1))
             if pixel_values_videos.size(1) > short_clip_len:
@@ -4082,31 +4090,35 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
                 ground_truth_flows_forward = torch.cat(ground_truth_flows_forward_list, dim=1)
                 ground_truth_flows_backward = torch.cat(ground_truth_flows_backward_list, dim=1)
-                ground_truth_flows_bi = (ground_truth_flows_forward, ground_truth_flows_backward)
+                ground_truth_flows_bidirectional = (ground_truth_flows_forward, ground_truth_flows_backward)
             else:
-                ground_truth_flows_bi = self.optical_flow_model(pixel_values_videos, iters=self.config.raft_iter)
+                ground_truth_flows_bidirectional = self.optical_flow_model(
+                    pixel_values_videos, iters=self.config.raft_iter
+                )
                 torch.cuda.empty_cache()
-        return ground_truth_flows_bi
+        return ground_truth_flows_bidirectional
 
-    def complete_flow(self, ground_truth_flows_bi, flow_masks):
+    def complete_flow(self, ground_truth_flows_bidirectional, flow_masks):
         if self.training:
             local_masks = flow_masks[:, : self.config.num_local_frames_propainter, ...].contiguous()
             if self.gradient_checkpointing:
-                pred_flows_bi, pred_edges_bi = self._gradient_checkpointing_func(
-                    self.flow_completion_net.forward_bidirect_flow.__call__,
-                    ground_truth_flows_bi,
+                pred_flows_bidirectional, pred_edges_bidirectional = self._gradient_checkpointing_func(
+                    self.flow_completion_net.forward_bidirectional_flow.__call__,
+                    ground_truth_flows_bidirectional,
                     local_masks,
                 )
             else:
-                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
-                    ground_truth_flows_bi, local_masks
+                pred_flows_bidirectional, pred_edges_bidirectional = (
+                    self.flow_completion_net.forward_bidirectional_flow(ground_truth_flows_bidirectional, local_masks)
                 )
-            pred_flows_bi_loss = pred_flows_bi
-            pred_flows_bi = self.flow_completion_net.combine_flow(ground_truth_flows_bi, pred_flows_bi, local_masks)
+            pred_flows_bidirectional_loss = pred_flows_bidirectional
+            pred_flows_bidirectional = self.flow_completion_net.combine_flow(
+                ground_truth_flows_bidirectional, pred_flows_bidirectional, local_masks
+            )
         else:
-            flow_length = ground_truth_flows_bi[0].size(1)
+            flow_length = ground_truth_flows_bidirectional[0].size(1)
             if flow_length > self.config.subvideo_length:
-                pred_flows_f, pred_flows_b, pred_flows_bi_loss, pred_edges_bi_loss = (
+                pred_flows_f, pred_flows_b, pred_flows_bidirectional_loss, pred_edges_bidirectional_loss = (
                     [],
                     [],
                     [],
@@ -4117,48 +4129,56 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     end_frame = min(flow_length, f + self.config.subvideo_length + pad_len)
                     pad_len_s = max(0, f) - start_frame
                     pad_len_e = end_frame - min(flow_length, f + self.config.subvideo_length)
-                    pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
-                        (
-                            ground_truth_flows_bi[0][:, start_frame:end_frame],
-                            ground_truth_flows_bi[1][:, start_frame:end_frame],
-                        ),
-                        flow_masks[:, start_frame : end_frame + 1],
+                    pred_flows_bidirectional_sub, pred_edges_bidirectional = (
+                        self.flow_completion_net.forward_bidirectional_flow(
+                            (
+                                ground_truth_flows_bidirectional[0][:, start_frame:end_frame],
+                                ground_truth_flows_bidirectional[1][:, start_frame:end_frame],
+                            ),
+                            flow_masks[:, start_frame : end_frame + 1],
+                        )
                     )
-                    pred_flows_bi_loss.append(pred_flows_bi_sub)
-                    pred_edges_bi_loss.append(pred_edges_bi)
-                    pred_flows_bi_sub = self.flow_completion_net.combine_flow(
+                    pred_flows_bidirectional_loss.append(pred_flows_bidirectional_sub)
+                    pred_edges_bidirectional_loss.append(pred_edges_bidirectional)
+                    pred_flows_bidirectional_sub = self.flow_completion_net.combine_flow(
                         (
-                            ground_truth_flows_bi[0][:, start_frame:end_frame],
-                            ground_truth_flows_bi[1][:, start_frame:end_frame],
+                            ground_truth_flows_bidirectional[0][:, start_frame:end_frame],
+                            ground_truth_flows_bidirectional[1][:, start_frame:end_frame],
                         ),
-                        pred_flows_bi_sub,
+                        pred_flows_bidirectional_sub,
                         flow_masks[:, start_frame : end_frame + 1],
                     )
 
-                    pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s : end_frame - start_frame - pad_len_e])
-                    pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s : end_frame - start_frame - pad_len_e])
+                    pred_flows_f.append(
+                        pred_flows_bidirectional_sub[0][:, pad_len_s : end_frame - start_frame - pad_len_e]
+                    )
+                    pred_flows_b.append(
+                        pred_flows_bidirectional_sub[1][:, pad_len_s : end_frame - start_frame - pad_len_e]
+                    )
 
                     torch.cuda.empty_cache()
 
                 pred_flows_f = torch.cat(pred_flows_f, dim=1)
                 pred_flows_b = torch.cat(pred_flows_b, dim=1)
-                pred_flows_bi = (pred_flows_f, pred_flows_b)
+                pred_flows_bidirectional = (pred_flows_f, pred_flows_b)
 
-                pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
-                pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
+                pred_flows_bidirectional_loss = torch.cat(pred_flows_bidirectional_loss)
+                pred_edges_bidirectional_loss = torch.cat(pred_edges_bidirectional_loss)
             else:
-                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
-                    ground_truth_flows_bi, flow_masks
+                pred_flows_bidirectional, pred_edges_bidirectional = (
+                    self.flow_completion_net.forward_bidirectional_flow(ground_truth_flows_bidirectional, flow_masks)
                 )
-                pred_flows_bi_loss = pred_flows_bi
+                pred_flows_bidirectional_loss = pred_flows_bidirectional
 
-                pred_flows_bi = self.flow_completion_net.combine_flow(ground_truth_flows_bi, pred_flows_bi, flow_masks)
+                pred_flows_bidirectional = self.flow_completion_net.combine_flow(
+                    ground_truth_flows_bidirectional, pred_flows_bidirectional, flow_masks
+                )
 
                 torch.cuda.empty_cache()
 
-        return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi
+        return pred_flows_bidirectional, pred_flows_bidirectional_loss, pred_edges_bidirectional
 
-    def image_propagation(self, pixel_values_videos, masks_dilated, pred_flows_bi):
+    def image_propagation(self, pixel_values_videos, masks_dilated, pred_flows_bidirectional):
         if self.training:
             batch_size, height, width = self.size[0], self.size[3], self.size[4]
             ground_truth_local_frames = pixel_values_videos[:, : self.config.num_local_frames_propainter, ...]
@@ -4170,14 +4190,14 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 prop_imgs, updated_local_masks = self._gradient_checkpointing_func(
                     self.inpaint_generator.img_propagation.__call__,
                     masked_local_frames,
-                    pred_flows_bi,
+                    pred_flows_bidirectional,
                     local_masks,
                     self.config.interp_mode,
                 )
             else:
                 prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(
                     masked_local_frames,
-                    pred_flows_bi,
+                    pred_flows_bidirectional,
                     local_masks,
                     interpolation=self.config.interp_mode,
                 )
@@ -4220,13 +4240,13 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     pad_len_e = end_frame - min(self.video_length, f + subvideo_length_img_prop)
 
                     batch_size, timesteps, _, _, _ = masks_dilated[:, start_frame:end_frame].size()
-                    pred_flows_bi_sub = (
-                        pred_flows_bi[0][:, start_frame : end_frame - 1],
-                        pred_flows_bi[1][:, start_frame : end_frame - 1],
+                    pred_flows_bidirectional_sub = (
+                        pred_flows_bidirectional[0][:, start_frame : end_frame - 1],
+                        pred_flows_bidirectional[1][:, start_frame : end_frame - 1],
                     )
                     prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(
                         masked_frames[:, start_frame:end_frame],
-                        pred_flows_bi_sub,
+                        pred_flows_bidirectional_sub,
                         masks_dilated[:, start_frame:end_frame],
                         "nearest",
                     )
@@ -4246,7 +4266,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             else:
                 batch_size, timesteps, _, _, _ = masks_dilated.size()
                 prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(
-                    masked_frames, pred_flows_bi, masks_dilated, "nearest"
+                    masked_frames, pred_flows_bidirectional, masks_dilated, "nearest"
                 )
                 updated_frames = (
                     pixel_values_videos * (1 - masks_dilated)
@@ -4263,7 +4283,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         updated_frames,
         updated_masks,
         masks_dilated,
-        pred_flows_bi,
+        pred_flows_bidirectional,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -4278,7 +4298,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 inpaint_generator_outputs = self._gradient_checkpointing_func(
                     self.inpaint_generator.__call__,
                     updated_frames,
-                    pred_flows_bi,
+                    pred_flows_bidirectional,
                     masks_dilated,
                     updated_masks,
                     self.config.num_local_frames_propainter,
@@ -4289,7 +4309,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             else:
                 inpaint_generator_outputs = self.inpaint_generator(
                     updated_frames,
-                    pred_flows_bi,
+                    pred_flows_bidirectional,
                     masks_dilated,
                     updated_masks,
                     self.config.num_local_frames_propainter,
@@ -4339,9 +4359,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
                 selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
                 selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
-                selected_pred_flows_bi = (
-                    pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :],
-                    pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :],
+                selected_pred_flows_bidirectional = (
+                    pred_flows_bidirectional[0][:, neighbor_ids[:-1], :, :, :],
+                    pred_flows_bidirectional[1][:, neighbor_ids[:-1], :, :, :],
                 )
 
                 # 1.0 indicates mask
@@ -4350,7 +4370,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 # pred_img = selected_imgs # results of image propagation
                 inpaint_generator_outputs = self.inpaint_generator(
                     selected_imgs,
-                    selected_pred_flows_bi,
+                    selected_pred_flows_bidirectional,
                     selected_masks,
                     selected_update_masks,
                     num_neighbor_frames,
@@ -4595,11 +4615,15 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.size = pixel_values_videos.size()
         self.video_length = pixel_values_videos.size(1)
 
-        ground_truth_flows_bi = self.compute_flow(pixel_values_videos)
+        ground_truth_flows_bidirectional = self.compute_flow(pixel_values_videos)
 
-        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(ground_truth_flows_bi, flow_masks)
+        pred_flows_bidirectional, pred_flows_bidirectional_loss, pred_edges_bidirectional = self.complete_flow(
+            ground_truth_flows_bidirectional, flow_masks
+        )
 
-        updated_frames, updated_masks = self.image_propagation(pixel_values_videos, masks_dilated, pred_flows_bi)
+        updated_frames, updated_masks = self.image_propagation(
+            pixel_values_videos, masks_dilated, pred_flows_bidirectional
+        )
 
         comp_frames, pred_imgs_loss, comp_frames_loss, all_hidden_states, all_self_attentions = (
             self.feature_propagation(
@@ -4607,7 +4631,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 updated_frames,
                 updated_masks,
                 masks_dilated,
-                pred_flows_bi,
+                pred_flows_bidirectional,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -4620,10 +4644,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
             pixel_values_videos,
             comp_frames_loss,
             self.discriminator,
-            pred_flows_bi_loss,
-            ground_truth_flows_bi,
+            pred_flows_bidirectional_loss,
+            ground_truth_flows_bidirectional,
             flow_masks,
-            pred_edges_bi,
+            pred_edges_bidirectional,
         )
 
         if not return_dict:
