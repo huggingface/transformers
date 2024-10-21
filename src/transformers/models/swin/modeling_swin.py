@@ -635,7 +635,7 @@ class SwinOutput(nn.Module):
 
 
 class SwinLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, drop_path_probability=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
@@ -643,7 +643,7 @@ class SwinLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = SwinDropPath(drop_prob=drop_path_probability) if drop_path_probability > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
@@ -760,9 +760,17 @@ class SwinLayer(nn.Module):
 
 
 class SwinStage(nn.Module):
-    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
+    def __init__(self, config,grid_size, i_layer, drop_path_rate):
         super().__init__()
         self.config = config
+        dim=int(config.embed_dim * 2**i_layer),
+        
+        input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+        depth=config.depths[i_layer],
+        num_heads=config.num_heads[i_layer],
+        drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+        downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+        
         self.dim = dim
         self.blocks = nn.ModuleList(
             [
@@ -772,6 +780,7 @@ class SwinStage(nn.Module):
                     input_resolution=input_resolution,
                     num_heads=num_heads,
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    drop_path_probability=drop_path[i],
                 )
                 for i in range(depth)
             ]
@@ -828,12 +837,9 @@ class SwinEncoder(nn.Module):
             [
                 SwinStage(
                     config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+                    grid_size=grid_size,
+                    layer_id = i_layer,
+                    drop_path_rate = dpr
                 )
                 for i_layer in range(self.num_layers)
             ]
