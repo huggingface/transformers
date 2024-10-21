@@ -663,8 +663,10 @@ def get_new_part(class_name, base_class):
 def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
     """Return all the dependencies of the given top-level function. Given the following structure in the `modular_xxx.py` file:
     ```
+    from time import now
+
     def foo1():
-        pass
+        return now()
 
     def foo2():
         pass
@@ -682,12 +684,12 @@ def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
     ```
     and the `dependency_mapping` created when visiting the `modular_xxx.py` file, we get:
     ```
-    dependency_mapping = {'bar': {'foo1'}, 'foobar': {'bar', 'foo2'}}
+    dependency_mapping = {'foo1': {'now'}, 'bar': {'foo1'}, 'foobar': {'bar', 'foo2'}}
     find_all_dependencies('foobar', dependency_mapping)
     >>> [('bar', 'foobar'), ('foo2', 'foobar'), ('foo1', 'bar')]
     ```
     That is, all the functions needed (and their immediate parent) so that the function to be added in MyLayer (`foobar`) can
-    work correctly.
+    work correctly. Plus the nodes that import the dependencies.
     """
     all_dependencies = deque(dependency_mapping[function])
     all_dependencies_with_parent = [(dep, function) for dep in dependency_mapping[function]]
@@ -707,8 +709,8 @@ def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
 
 
 class PostModularConverterCleaner(CSTTransformer):
-    """Allow simple cleaning after conversion. Remove top-level functions/classes without any calls (they may arise due
-    to dependency mapping, even if code parts with those functions/classes were overwritten)"""
+    """Allow simple cleaning after conversion. Removes top-level functions/classes that are defined, but not called.
+    (this may happen due to dependency mapping, even if code parts with those functions/classes were overwritten)"""
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
@@ -769,8 +771,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
         self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
         self.inserted_deps = []             # nodes inserted via super dependency
-        self.all_imports = []               # just stores all of the imports
-        self.all_safe_imports = []          # stores the import under simple statements
+        self.all_imports = {}               # just stores all of the imports
         self.global_scope_index = 0
         # fmt: on
         self.files = {  # mapping for different component bodies
@@ -828,8 +829,10 @@ class ModularConverterTransformer(CSTTransformer):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import()])):
-                if updated_node not in self.all_imports:
-                    self.all_imports.append(updated_node)
+                for k in updated_node.body[0].names:
+                    if k not in self.all_imports:
+                        import_name = self.python_module.code_for_node(k.name)
+                        self.all_imports[import_name] = updated_node
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
@@ -837,8 +840,10 @@ class ModularConverterTransformer(CSTTransformer):
                     rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement
                 ):  # OR MATCH ..llama.modeling_llama
                     return cst.RemoveFromParent()
-                if updated_node not in self.all_imports:
-                    self.all_imports.append(updated_node)
+                for k in updated_node.body[0].names:
+                    if k not in self.all_imports:
+                        import_name = self.python_module.code_for_node(k.name)
+                        self.all_imports[import_name] = updated_node
                 return updated_node
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
                 if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
@@ -853,6 +858,9 @@ class ModularConverterTransformer(CSTTransformer):
     def visit_ClassDef(self, node: cst.ClassDef):
         """Used to keep track of current class"""
         self.current_class = node.name.value
+        for k in node.bases:
+            if isinstance(k.value, cst.Name):
+                self.function_call_class_mapping[k.value.value].add(self.current_class)
 
     def leave_ClassDef(self, original_node, updated_node):
         """
@@ -1030,12 +1038,9 @@ class ModularConverterTransformer(CSTTransformer):
     def leave_If(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
-            full_statement = self.python_module.code_for_node(original_node.test)
-            if re.search(r"[\s\S]*is_.*available", full_statement):
-                self.all_safe_imports.append(node)
-            elif full_statement not in self.all_imports:
-                self.all_safe_imports.append(node)
-                logger.warning(f"one import is protected with `if`. Hard guess where it's used {full_statement}")
+            for k in node.body.body[0].body[0].names:
+                import_name = self.python_module.code_for_node(k.name)
+                self.all_imports[import_name] = node
         return node
 
     def visit_Call(self, node: cst.Call):
@@ -1081,9 +1086,12 @@ class ModularConverterTransformer(CSTTransformer):
         return False
 
     def _recursively_add_all_new_needed_functions_in_files(self):
-        """For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
+        r"""For all top-level functions which were newly defined in the `modular_xxx.py`, check if they are used in a class in
         the different files, and add them to the file if it is the case (also recursively adding all other functions that
-        may be needed in that function body)."""
+        may be needed in that function body).
+
+        Also takes care of sorting which imports are needed for this file.
+        """
         # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modualr_xxx.py`
         for top_level_function, function_node in self.all_definitions.items():
             calling_entities = self.function_call_class_mapping[top_level_function]
@@ -1102,10 +1110,17 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
+    def _filter_imports_for_file(self, file_name, imports):
+        _dict = {}
+        for key, value in imports.items():
+            if key in self.function_call_class_mapping:
+                node = self.function_call_class_mapping[key]
+                if len(node) == 1 and node.copy().pop() in  self.files[file_name]:
+                    _dict[key] = value
+        return _dict
+
     def leave_Module(self, original_node: cst.Module, node):
-        self.all_imports.extend(self.all_safe_imports)
-        imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
-        dependency_imports = {file_type: imports.copy() for file_type in self.files}
+        dependency_imports = {file_type: self._filter_imports_for_file(file_type, self.all_imports.copy()) for file_type in self.files}
         for super_file_name, visiter in self.visited_module.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(

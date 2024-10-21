@@ -19,20 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 from ...configuration_utils import PretrainedConfig
-from ...utils import (
-    is_flash_attn_2_available,
-    is_torch_greater_or_equal,
-)
-
-
-if is_flash_attn_2_available():
-    pass
-
-if is_torch_greater_or_equal("2.5"):
-    pass
 
 
 class Gemma2Config(PretrainedConfig):

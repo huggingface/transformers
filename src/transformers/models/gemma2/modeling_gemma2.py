@@ -19,13 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple, Union
-
-import torch
-import torch.nn as nn
-import torch.utils.checkpoint
-
-from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -45,8 +38,13 @@ if is_flash_attn_2_available():
 
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
-from typing import List
+from typing import List, Optional, Tuple, Union
 
+import torch
+import torch.utils.checkpoint
+from torch import nn
+
+from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
