@@ -286,3 +286,11 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):
         pass
+
+    @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
+    def test_sdpa_can_compile_dynamic(self):
+        pass

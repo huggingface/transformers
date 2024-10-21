@@ -250,6 +250,28 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             return batch_query
 
+    def process_images(
+        self,
+        images: ImageInput = None,
+        **kwargs: Unpack[ColPaliProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Process images for indexing.
+        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        """
+        return self.__call__(images=images, **kwargs)
+
+    def process_queries(
+        self,
+        text: Union[TextInput, List[TextInput]],
+        **kwargs: Unpack[ColPaliProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Process queries for indexing.
+        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        """
+        return self.__call__(text=text, **kwargs)
+
     def post_process_retrieval(
         self,
         qs: List[torch.Tensor],
