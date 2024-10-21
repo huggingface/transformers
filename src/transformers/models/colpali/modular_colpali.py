@@ -350,8 +350,6 @@ class ColPaliForRetrievalOutput(ModelOutput):
     - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
     - The code for training ColPali and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
     - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
-
-    Adapted from [`colpali-engine==0.3.0`](https://github.com/illuin-tech/colpali/releases/tag/v0.3.0).
     """
 )
 class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
