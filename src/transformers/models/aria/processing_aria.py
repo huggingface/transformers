@@ -253,9 +253,7 @@ class AriaProcessor(ProcessorMixin):
     # Copied from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
         self,
-        text: Union[
-            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
-        ],
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -327,8 +325,8 @@ class AriaProcessor(ProcessorMixin):
             prompt_strings = []
             num_crops = image_inputs.pop("num_crops") * 256
             for sample in text:
-                    sample = sample.replace(self.image_token, self.image_token * num_crops)
-                    prompt_strings.append(sample)
+                sample = sample.replace(self.image_token, self.image_token * num_crops)
+                prompt_strings.append(sample)
 
         else:
             image_inputs = {}

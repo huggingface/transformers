@@ -16,7 +16,7 @@ from torch.nn.init import trunc_normal_
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
+from ...generation.utils import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -53,10 +53,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils import (
-    ModelOutput,  # noqa: F811
-    is_flash_attn_2_available,
-)
+from ...utils import is_flash_attn_2_available
 from .configuration_aria import AriaTextConfig
 
 
@@ -608,16 +605,12 @@ class AriaFlashAttention2(AriaAttention):
 
         return attn_output, attn_weights
 
-ARIA_VISION_ATTENTION_CLASSES = {
-    "eager": AriaVisionAttention,
-    "flash_attention_2": AriaVisionFlashAttention2,
-}
 
 class AriaEncoderLayer(nn.Module):
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = ARIA_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = AriaVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -2831,10 +2824,6 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-@add_start_docstrings(
-    """The ARIA model which consists of a vision backbone and a language model.""",
-    ARIA_START_DOCSTRING,
-)
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
@@ -2870,17 +2859,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
 
     def get_decoder(self):
         return self.language_model.get_decoder()
@@ -2958,8 +2939,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         vision_feature_layer = -1
 
         if inputs_embeds is None:
+            # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+            # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 ### NEW PROCESSING
                 image_features = self.get_image_features(

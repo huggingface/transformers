@@ -10,7 +10,6 @@ from torch.nn.init import trunc_normal_
 from torchvision import transforms
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -18,7 +17,6 @@ from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...models.llava.modeling_llava import LlavaForConditionalGeneration
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
     PaddingStrategy,
@@ -27,7 +25,11 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import logging
+from ...utils import (
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..idefics3.modeling_idefics3 import Idefics3VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
@@ -39,7 +41,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
 )
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
+from ..llava.modeling_llava import LLAVA_INPUTS_DOCSTRING, LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionModel
 from .processing_utils import (
@@ -62,7 +64,7 @@ class AriaVisionConfig(SiglipVisionConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self._attn_implementation = "flash_attention_2"
+        self._attn_implementation = "eager"
 
 
 class IdentityOp(torch.nn.Module):
@@ -453,11 +455,11 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         pixel_values = []
         pixel_masks = []
-        num_crops = []
+        num_crops = None
 
         for image in images:
             crop_images = get_split_image(image, split_image, split_ratio, max_size)
-            num_crops.append(torch.tensor(len(crop_images)))
+            num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
                 img_padded = self.transform(img_padded)
@@ -468,7 +470,7 @@ class AriaVisionProcessor(BaseImageProcessor):
             data={
                 "pixel_values": torch.stack(pixel_values),
                 "pixel_mask": torch.stack(pixel_masks),
-                "num_crops": torch.stack(num_crops),
+                "num_crops": num_crops,
             },
             tensor_type=return_tensors,
         )
@@ -560,7 +562,7 @@ class AriaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = "left",
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         max_image_size: Optional[int] = 980,
@@ -628,15 +630,10 @@ class AriaProcessor(ProcessorMixin):
             )
             # expand the image_token according to the num_crops of image
             prompt_strings = []
-            crop_iter = iter(image_inputs.pop("num_crops"))
-            for prompt in text:
-                prompt_strings.append(
-                    re.sub(
-                        re.escape(self.image_token),
-                        lambda _: next(crop_iter) * self.image_token,
-                        prompt,
-                    )
-                )
+            num_crops = image_inputs.pop("num_crops") * 256
+            for sample in text:
+                    sample = sample.replace(self.image_token, self.image_token * num_crops)
+                    prompt_strings.append(sample)
 
         else:
             image_inputs = {}
@@ -772,6 +769,7 @@ class AriaTextConfig(LlamaConfig):
         self.moe_z_loss_coeff = moe_z_loss_coeff
         self.moe_aux_loss_coeff = moe_aux_loss_coeff
         self.moe_num_shared_experts = moe_num_shared_experts
+        self._attn_implementation = "eager"
 
 
 class AriaConfig(PretrainedConfig):
@@ -837,6 +835,7 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig(**text_config)
 
         self.text_config = text_config
+        self._attn_implementation = "eager"
 
 
 class AriaPreTrainedModel(PreTrainedModel):
@@ -1122,7 +1121,10 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaForConditionalGeneration):
+_CONFIG_FOR_DOC = "AriaConfig"
+
+
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 
@@ -1150,6 +1152,45 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
+    def tie_weights(self):
+        return self.language_model.tie_weights()
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # update vocab size
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+        return model_embeds
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: int,
+    ):
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        image_features = self.multi_modal_projector(selected_image_feature)
+        return image_features
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1164,6 +1205,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position = None,
+        num_logits_to_keep = None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.
@@ -1299,12 +1342,3 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layer: int,
-    ):
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
