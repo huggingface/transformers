@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import logging
 from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple, Union
 
@@ -47,6 +46,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    logging,
     replace_return_docstrings,
 )
 
