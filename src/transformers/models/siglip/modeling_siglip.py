@@ -978,7 +978,7 @@ class SiglipTextTransformer(nn.Module):
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
         pooled_output = last_hidden_state[:, -1, :]
-        if self.config.has_head:
+        if self.head is not None:
             pooled_output = self.head(pooled_output)
 
         if not return_dict:
