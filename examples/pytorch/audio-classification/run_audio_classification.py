@@ -394,7 +394,7 @@ def main():
         train_dataset=raw_datasets["train"] if training_args.do_train else None,
         eval_dataset=raw_datasets["eval"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=feature_extractor,
+        processing_class=feature_extractor,
     )
 
     # Training
