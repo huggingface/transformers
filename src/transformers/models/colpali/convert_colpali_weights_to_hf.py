@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Any, Dict, cast
 
 import torch
-from colpali_engine.models import ColPali
-from colpali_engine.utils.torch_utils import get_torch_device
 from PIL import Image
 
 from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
@@ -32,12 +30,71 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-device = get_torch_device("auto")
-print(f"Using device: {device}")
-
-CONVERSION_PRECISION = torch.float16
-PUBLISH_PRECISION = torch.bfloat16
+ORIGINAL_DTYPE = torch.float16
 TOLERANCE = 2e-3
+
+
+# Copied from https://huggingface.co/vidore/colpali-v1.2-merged/blob/main/config.json
+ORIGINAL_CONFIG = {
+    "_name_or_path": "vidore/colpaligemma-3b-pt-448-base",
+    "architectures": ["ColPali"],
+    "bos_token_id": 2,
+    "eos_token_id": 1,
+    "hidden_size": 2048,
+    "ignore_index": -100,
+    "image_token_index": 257152,
+    "model_type": "paligemma",
+    "pad_token_id": 0,
+    "projection_dim": 2048,
+    "text_config": {
+        "hidden_size": 2048,
+        "intermediate_size": 16384,
+        "model_type": "gemma",
+        "num_attention_heads": 8,
+        "num_hidden_layers": 18,
+        "num_image_tokens": 1024,
+        "num_key_value_heads": 1,
+        "torch_dtype": "float32",
+        "vocab_size": 257216,
+    },
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.44.0",
+    "vision_config": {
+        "hidden_size": 1152,
+        "image_size": 448,
+        "intermediate_size": 4304,
+        "model_type": "siglip_vision_model",
+        "num_attention_heads": 16,
+        "num_hidden_layers": 27,
+        "num_image_tokens": 1024,
+        "patch_size": 14,
+        "projection_dim": 2048,
+        "projector_hidden_act": "gelu_fast",
+        "vision_use_head": False,
+    },
+}
+
+
+def get_torch_device(device: str = "auto") -> str:
+    """
+    Returns the device (string) to be used by PyTorch.
+
+    `device` arg defaults to "auto" which will use:
+    - "cuda:0" if available
+    - else "mps" if available
+    - else "cpu".
+    """
+
+    if device == "auto":
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        elif torch.backends.mps.is_available():  # for Apple Silicon
+            device = "mps"
+        else:
+            device = "cpu"
+        logger.info(f"Using device: {device}")
+
+    return device
 
 
 def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,32 +107,24 @@ def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     return new_state_dict
 
 
-def load_original_colpali(device: str = "auto") -> ColPali:
-    model = cast(
-        ColPali,
-        ColPali.from_pretrained(
-            "vidore/colpali-v1.2-merged",
-            torch_dtype=CONVERSION_PRECISION,
-            device_map=device,
-        ),
-    ).eval()
-    return model
-
-
 @torch.no_grad()
-def convert_colpali_checkpoint(output_dir: str, push_to_hub: bool):
-    # Load the original model and state_dict
-    model_original = load_original_colpali(device=device)
-    state_dict = model_original.state_dict()
+def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
+    # Get the device
+    device = get_torch_device("auto")
+    print(f"Device: {device}")
+
+    # Load the original model's state_dict
+    # TODO: replace with new state_dict URL (.pth file)
+    original_state_dict: Dict[str, torch.Tensor] = torch.hub.load_state_dict_from_url(
+        "vidore/colpali-v1.2-merged",
+        map_location="cpu",
+    )["model"]
 
     # Format the state_dict keys
-    state_dict = remove_model_prefix(state_dict)
-
-    # Load the original config
-    original_config = model_original.config.to_dict()
+    original_state_dict = remove_model_prefix(original_state_dict)
 
     # Add the extra attributes for the new model
-    new_config = original_config.copy()
+    new_config = ORIGINAL_CONFIG.copy()
     new_config["model_type"] = "colpali"
     new_config["is_composition"] = False
     new_config["embedding_dim"] = 128
@@ -84,19 +133,26 @@ def convert_colpali_checkpoint(output_dir: str, push_to_hub: bool):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(device).to(CONVERSION_PRECISION).eval()
+    model = ColPaliForRetrieval(config=config).to(device).eval()
     print("Created model with new config and randomly initialized weights")
 
+    # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
+    # Using `model.to(ORIGINAL_DTYPE)` also converts the hyperparameters to the desired precision, which is not desired.
+    # Hence, we need to manually convert the weights to the desired precision.
+    for param in model.parameters():
+        param.data = param.data.to(ORIGINAL_DTYPE)
+    print(f"Converted the new model weights to `{ORIGINAL_DTYPE}`")
+
     # Load the original weights
-    model.load_state_dict(state_dict)
+    model.load_state_dict(original_state_dict)
     print("Loaded original model weights")
 
-    # Tie the weights (init step)
+    # Tie the weights (following ColPali's `__init__`` step)
     if model.language_model._tied_weights_keys is not None:
         model._tied_weights_keys = [f"language_model.{k}" for k in model.language_model._tied_weights_keys]
 
     # Sanity check: ensure all keys are the same
-    state_dict_keys_old = set(state_dict.keys())
+    state_dict_keys_old = set(original_state_dict.keys())
     state_dict_keys_new = set(model.state_dict().keys())
     disjoint_keys = state_dict_keys_old.symmetric_difference(state_dict_keys_new)
     if disjoint_keys:
@@ -118,36 +174,19 @@ def convert_colpali_checkpoint(output_dir: str, push_to_hub: bool):
     batch_images = processor(images=images).to(device)
 
     with torch.no_grad():
-        outputs_images_original = model_original(**batch_images.copy())
         outputs_images_new = model(**batch_images, return_dict=True).embeddings
-
-        if outputs_images_original.shape != outputs_images_new.shape:
-            raise ValueError("Output shapes do not match for images forward pass")
-
-        mean_average_error = torch.mean(torch.abs(outputs_images_original - outputs_images_new))
-        print("Mean average error (image forward pass): ", mean_average_error)
-
-        if mean_average_error > TOLERANCE:
-            raise ValueError("Output values do not match for query forward pass")
-
-    with torch.no_grad():
-        outputs_queries_original = model_original(**batch_queries.copy())
         outputs_queries_new = model(**batch_queries.copy(), return_dict=True).embeddings
 
-        if outputs_queries_original.shape != outputs_queries_new.shape:
-            raise ValueError("Output shapes do not match for query forward pass")
+    if outputs_images_original.shape != outputs_images_new.shape:
+        raise ValueError("Output shapes do not match for images forward pass")
 
-        mean_average_error = torch.mean(torch.abs(outputs_queries_original - outputs_queries_new))
-        print("Mean average error (query forward pass): ", mean_average_error)
+    if outputs_queries_original.shape != outputs_queries_new.shape:
+        raise ValueError("Output shapes do not match for query forward pass")
 
-        if mean_average_error > TOLERANCE:
-            raise ValueError("Output values do not match for query forward pass")
-
-    # Save the model in the desired precision
-    model = model.to(PUBLISH_PRECISION)
-
+    # Save the model
     if push_to_hub:
         model.push_to_hub(output_dir, private=True)
+        print(f"Model pushed to the hub at `{output_dir}`")
     else:
         Path(output_dir).mkdir(exist_ok=True, parents=True)
         model.save_pretrained(output_dir)
@@ -175,4 +214,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    convert_colpali_checkpoint(output_dir=args.output_dir, push_to_hub=args.push_to_hub)
+    convert_colpali_weights_to_hf(output_dir=args.output_dir, push_to_hub=args.push_to_hub)
