@@ -412,7 +412,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelDecoderOnlyTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
+        self.seq_length = self.text_model_tester.seq_length + num_query_tokens  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
         self.image_token_index = image_token_index
@@ -545,7 +545,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         use_cache = True  # force this to be True in case False is passed
 
         batch_size = main_input.shape[0]
-        seq_length = main_input.shape[-1]
+
+        seq_length = getattr(self.model_tester, "seq_length", None)
+        seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
+        seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
+
         config = config.text_config if hasattr(config, "text_config") else config
         num_sequences_in_output = batch_size * num_return_sequences
 
