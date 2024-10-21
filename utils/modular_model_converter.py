@@ -788,9 +788,9 @@ class ModularConverterTransformer(CSTTransformer):
         self.current_class = None  # keep track of current top-level class during visit
         self.current_top_level_function = None  # keep track of current top-level function during visit
         # Mapping from top-level functions to classes using them
-        self.function_call_class_mapping = defaultdict(lambda: set())
+        self.function_call_class_mapping = defaultdict(set)
         # Mapping from top-level functions to other top-level functions dependencies
-        self.function_call_dependency_mapping = defaultdict(lambda: set())
+        self.function_call_dependency_mapping = defaultdict(set)
         self.added_dependencies = set()
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
@@ -1113,19 +1113,18 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
-    def _filter_imports_for_file(self, file_name, imports):
-        _dict = {}
+    def _filter_imports_for_file(self, imports):
+        _dict = defaultdict(dict)
         for key, value in imports.items():
             if key in self.function_call_class_mapping:
                 node = self.function_call_class_mapping[key]
-                if len(node) == 1 and node.copy().pop() in self.files[file_name]:
-                    _dict[key] = value
+                if len(node) == 1:
+                    file_name = self.class_to_file_type[node.copy().pop()]
+                    _dict[file_name][key] = value
         return _dict
 
     def leave_Module(self, original_node: cst.Module, node):
-        dependency_imports = {
-            file_type: self._filter_imports_for_file(file_type, self.all_imports.copy()) for file_type in self.files
-        }
+        dependency_imports = self._filter_imports_for_file(self.all_imports.copy())
         for super_file_name, visiter in self.visited_module.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(
