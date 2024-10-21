@@ -511,25 +511,25 @@ class ProPainterRaftOpticalFlow(nn.Module):
 class ProPainterP3DBlock(nn.Module):
     def __init__(
         self,
+        config: ProPainterConfig,
         in_channels: int,
         out_channels: int,
-        kernel_size: int,
         stride: int,
-        padding: int,
         use_residual: bool = False,
         bias=True,
     ):
         super().__init__()
+        self.config = config
         self.conv1 = nn.Sequential(
             nn.Conv3d(
                 in_channels,
                 out_channels,
-                kernel_size=(1, kernel_size, kernel_size),
+                kernel_size=(1, config.patch_size, config.patch_size),
                 stride=(1, stride, stride),
-                padding=(0, padding, padding),
+                padding=(0, config.padding, config.padding),
                 bias=bias,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
         self.conv2 = nn.Sequential(
             nn.Conv3d(
@@ -573,7 +573,7 @@ class ProPainterEdgeDetection(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
 
         self.intermediate_layer_1 = nn.Sequential(
@@ -584,7 +584,7 @@ class ProPainterEdgeDetection(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
 
         self.intermediate_layer_2 = nn.Sequential(
@@ -597,7 +597,7 @@ class ProPainterEdgeDetection(nn.Module):
             )
         )
 
-        self.relu = nn.LeakyReLU(0.01, inplace=True)
+        self.relu = nn.LeakyReLU(config.negative_slope_2, inplace=True)
 
         self.out_layer = nn.Conv2d(intermediate_channel, out_channel, 1, config.multi_level_conv_stride[0], 0)
 
@@ -639,7 +639,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                     config.multi_level_conv_stride[0],
                     config.padding,
                 ),
-                nn.LeakyReLU(negative_slope=0.1, inplace=True),
+                nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
                 nn.Conv2d(
                     config.num_channels,
                     config.num_channels,
@@ -827,7 +827,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                         config.multi_level_conv_stride[0],
                         config.padding,
                     ),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.LeakyReLU(negative_slope=config.negative_slope_default, inplace=True),
                     nn.Conv2d(
                         num_channels,
                         num_channels,
@@ -845,7 +845,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                     config.multi_level_conv_stride[0],
                     config.padding,
                 ),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.LeakyReLU(negative_slope=config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     num_channels,
                     num_channels,
@@ -1030,7 +1030,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 self.out_channels,
@@ -1038,7 +1038,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 self.out_channels,
@@ -1046,7 +1046,7 @@ class ProPainterDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 27 * self.deform_groups,
@@ -1127,7 +1127,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 self.out_channels,
@@ -1135,7 +1135,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 self.out_channels,
@@ -1143,7 +1143,7 @@ class ProPainterSecondOrderDeformableAlignment(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=config.negative_slope_1, inplace=True),
             nn.Conv2d(
                 self.out_channels,
                 27 * self.deform_groups,
@@ -1192,45 +1192,41 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 padding=(0, 2, 2),
                 padding_mode="replicate",
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
 
         self.encoder1 = nn.Sequential(
             ProPainterP3DBlock(
+                config,
                 config.num_channels // 4,
                 config.num_channels // 4,
-                config.patch_size,
                 config.multi_level_conv_stride[0],
-                config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterP3DBlock(
+                config,
                 config.num_channels // 4,
                 config.in_channels[0],
-                config.patch_size,
                 config.multi_level_conv_stride[1],
-                config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )  # 4x
 
         self.encoder2 = nn.Sequential(
             ProPainterP3DBlock(
+                config,
                 config.in_channels[0],
                 config.in_channels[0],
-                config.patch_size,
                 config.multi_level_conv_stride[0],
-                config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterP3DBlock(
+                config,
                 config.in_channels[0],
                 self.config.num_channels,
-                config.patch_size,
                 config.multi_level_conv_stride[1],
-                config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )  # 8x
 
         self.intermediate_dilation = nn.Sequential(
@@ -1242,7 +1238,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 padding=(0, 3, 3),
                 dilation=(1, 3, 3),
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv3d(
                 self.config.num_channels,
                 self.config.num_channels,
@@ -1251,7 +1247,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 padding=(0, 2, 2),
                 dilation=(1, 2, 2),
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv3d(
                 self.config.num_channels,
                 self.config.num_channels,
@@ -1260,7 +1256,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 padding=(0, 1, 1),
                 dilation=(1, 1, 1),
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
 
         # feature propagation module
@@ -1274,9 +1270,9 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterDeconv(self.config.num_channels, config.in_channels[0], config.patch_size, 1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )  # 4x
 
         self.decoder1 = nn.Sequential(
@@ -1287,9 +1283,9 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.multi_level_conv_stride[0],
                 config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterDeconv(config.in_channels[0], config.num_channels // 4, config.patch_size, 1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )  # 2x
 
         self.upsample = nn.Sequential(
@@ -1299,7 +1295,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 config.patch_size,
                 padding=config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterDeconv(config.num_channels // 4, 2, config.patch_size, 1),
         )
 
@@ -1394,7 +1390,6 @@ class ProPainterEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.group = [1, 2, 4, 8, 1]
-        negative_slope = 0.2
         self.layers = nn.ModuleList(
             [
                 nn.Conv2d(
@@ -1404,7 +1399,7 @@ class ProPainterEncoder(nn.Module):
                     stride=config.multi_level_conv_stride[1],
                     padding=config.padding,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.in_channels[0],
                     config.in_channels[0],
@@ -1412,7 +1407,7 @@ class ProPainterEncoder(nn.Module):
                     stride=1,
                     padding=config.padding,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.in_channels[0],
                     config.num_channels,
@@ -1420,7 +1415,7 @@ class ProPainterEncoder(nn.Module):
                     stride=config.multi_level_conv_stride[1],
                     padding=config.padding,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.num_channels,
                     config.num_channels * 2,
@@ -1428,7 +1423,7 @@ class ProPainterEncoder(nn.Module):
                     stride=1,
                     padding=config.padding,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.num_channels * 2,
                     config.hidden_size - config.num_channels,
@@ -1437,7 +1432,7 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                     groups=1,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.hidden_size + config.num_channels,
                     config.hidden_size,
@@ -1446,7 +1441,7 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                     groups=2,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.hidden_size + config.num_channels * 2,
                     config.hidden_size - config.num_channels,
@@ -1455,7 +1450,7 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                     groups=4,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.hidden_size + config.num_channels,
                     config.num_channels * 2,
@@ -1464,7 +1459,7 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                     groups=8,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
                 nn.Conv2d(
                     config.hidden_size,
                     config.num_channels,
@@ -1473,7 +1468,7 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                     groups=1,
                 ),
-                nn.LeakyReLU(negative_slope, inplace=True),
+                nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ]
         )
 
@@ -1530,7 +1525,7 @@ class ProPainterSoftComp(nn.Module):
     def __init__(self, config: ProPainterConfig):
         super().__init__()
         self.config = config
-        self.relu = nn.LeakyReLU(0.2, inplace=True)
+        self.relu = nn.LeakyReLU(config.negative_slope_default, inplace=True)
         output_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
         self.embedding = nn.Linear(config.hidden_size, output_features)
         self.kernel_size = config.kernel_size
@@ -2156,7 +2151,7 @@ class ProPainterInpaintGenerator(nn.Module):
                 kernel_size=config.patch_size,
                 padding=config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv2d(
                 config.num_channels,
                 config.in_channels[0],
@@ -2164,14 +2159,14 @@ class ProPainterInpaintGenerator(nn.Module):
                 stride=1,
                 padding=config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             ProPainterDeconv(
                 config.in_channels[0],
                 config.in_channels[0],
                 kernel_size=config.patch_size,
                 padding=config.padding,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv2d(
                 config.in_channels[0],
                 out_channels=3,
@@ -2612,7 +2607,7 @@ class ProPainterDiscriminator(nn.Module):
                     bias=not use_spectral_norm,
                 )
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             spectral_norm(
                 nn.Conv3d(
                     num_features * 1,
@@ -2623,7 +2618,7 @@ class ProPainterDiscriminator(nn.Module):
                     bias=not use_spectral_norm,
                 )
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             spectral_norm(
                 nn.Conv3d(
                     num_features * 2,
@@ -2634,7 +2629,7 @@ class ProPainterDiscriminator(nn.Module):
                     bias=not use_spectral_norm,
                 )
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             spectral_norm(
                 nn.Conv3d(
                     num_features * 4,
@@ -2645,7 +2640,7 @@ class ProPainterDiscriminator(nn.Module):
                     bias=not use_spectral_norm,
                 )
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             spectral_norm(
                 nn.Conv3d(
                     num_features * 4,
@@ -2656,7 +2651,7 @@ class ProPainterDiscriminator(nn.Module):
                     bias=not use_spectral_norm,
                 )
             ),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv3d(
                 num_features * 4,
                 num_features * 4,

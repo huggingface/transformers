@@ -109,6 +109,12 @@ class ProPainterConfig(PretrainedConfig):
             - `"none"`: No normalization will be applied.
         patch_size (`int`, *optional*, defaults to 3):
             The kernel size of the 2D convolution layer.
+        negative_slope_default (`float`, *optional*, defaults to 0.2):
+            Controls the slope for negative inputs in LeakyReLU. This is  the oneused at most of the places in different module classes
+        negative_slope_1 (`float`, *optional*, defaults to 0.1):
+            Controls the slope for negative inputs in LeakyReLU. Used in few certain modules.
+        negative_slope_2 (`float`, *optional*, defaults to 0.01):
+            Controls the slope for negative inputs in LeakyReLU. Used in few certain modules.
 
     Example:
 
@@ -164,6 +170,9 @@ class ProPainterConfig(PretrainedConfig):
         multi_level_conv_stride=[1, 2, 2],
         norm_fn=["batch", "group", "instance", "none"],
         patch_size=3,
+        negative_slope_default=0.2,
+        negative_slope_1=0.1,
+        negative_slope_2=0.01,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -203,3 +212,6 @@ class ProPainterConfig(PretrainedConfig):
         self.multi_level_conv_stride = multi_level_conv_stride
         self.norm_fn = norm_fn
         self.patch_size = patch_size
+        self.negative_slope_default = negative_slope_default
+        self.negative_slope_1 = negative_slope_1
+        self.negative_slope_2 = negative_slope_2
