@@ -301,6 +301,30 @@ if __name__ == "__main__":
             "Generation length for sampling."
         ),
     )
+    parser.add_argument(
+        "--save_model_to_hf_hub",
+        type=bool,
+        default=False,
+        help=(
+            "Whether to save the trained model HF hub. By default it will be a private repo."
+        ),
+    )
+    parser.add_argument(
+        "--load_from_hf_hub",
+        type=bool,
+        default=False,
+        help=(
+            "Whether to load trained detector model from HF Hub, make sure its the model trained on the same model we are loading in the script."
+        ),
+    )
+    parser.add_argument(
+        "--hf_hub_model_name",
+        type=str,
+        default=None,
+        help=(
+            "HF hub model name for loading of saving the model."
+        ),
+    )
     
 
     args = parser.parse_args()
@@ -312,7 +336,9 @@ if __name__ == "__main__":
     pos_batch_size = args.pos_batch_size
     num_pos_batch = args.num_pos_batch
     generation_length = args.generation_length
-
+    save_model_to_hf_hub = args.save_model_to_hf_hub
+    load_from_hf_hub = args.load_from_hf_hub
+    repo_name = args.hf_hub_model_name
     
     NEG_BATCH_SIZE = 32
 
@@ -372,35 +398,44 @@ if __name__ == "__main__":
     logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
         **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
 
-    tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
-        model, 
-        tokenizer, 
-        watermark_config, 
-        num_pos_batch, 
-        pos_batch_size, 
-        temperature, 
-        generation_length, 
-        top_k, 
-        top_p, 
-        DEVICE,
-    )
-    tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
+    if not load_from_hf_hub:
+        tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
+            model, 
+            tokenizer, 
+            watermark_config, 
+            num_pos_batch, 
+            pos_batch_size, 
+            temperature, 
+            generation_length, 
+            top_k, 
+            top_p, 
+            DEVICE,
+        )
+        tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
 
-    best_detector, lowest_loss = train_best_detector(
-        tokenized_wm_outputs=tokenized_wm_outputs,
-        tokenized_uwm_outputs=tokenized_uwm_outputs,
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        torch_device=DEVICE,
-        test_size=0.3,
-        pos_truncation_length=POS_TRUNCATION_LENGTH,
-        neg_truncation_length=NEG_TRUNCATION_LENGTH,
-        max_padded_length=MAX_PADDED_LENGTH,
-        n_epochs=100,
-        learning_rate=3e-3,
-        l2_weights=np.zeros((1,)),
-        verbose=True,
-        validation_metric=ValidationMetric.TPR_AT_FPR,
-    )
+        best_detector, lowest_loss = train_best_detector(
+            tokenized_wm_outputs=tokenized_wm_outputs,
+            tokenized_uwm_outputs=tokenized_uwm_outputs,
+            logits_processor=logits_processor,
+            tokenizer=tokenizer,
+            torch_device=DEVICE,
+            test_size=0.3,
+            pos_truncation_length=POS_TRUNCATION_LENGTH,
+            neg_truncation_length=NEG_TRUNCATION_LENGTH,
+            max_padded_length=MAX_PADDED_LENGTH,
+            n_epochs=100,
+            learning_rate=3e-3,
+            l2_weights=np.zeros((1,)),
+            verbose=True,
+            validation_metric=ValidationMetric.TPR_AT_FPR,
+        )
+    else:
+        if repo_name is None:
+            raise ValueError('When loading from pretrained detector model name cannot be None.')
+        best_detector = BayesianDetectorModel.from_pretrained(repo_name)
 
-    
+    if save_model_to_hf_hub:
+        utils.upload_model_to_hf(best_detector, repo_name)
+
+
+
