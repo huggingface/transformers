@@ -100,7 +100,7 @@ def get_siglip_config(model_name):
         config.vision_config.intermediate_size = 4304
         config.vision_config.num_hidden_layers = 27
         config.vision_config.num_attention_heads = 16
-    if "so400m-patch14-224" in model_name:
+    if model_name == "siglip-so400m-patch14-224":
         config.text_config.max_position_embeddings = 16
     if model_name == "siglip-so400m-patch16-256-i18n":
         config.text_config.has_head = False
