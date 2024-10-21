@@ -943,6 +943,35 @@ all implementations of Jinja:
 - Directly rendering a dict or list may give different results in other implementations (for example, string entries
   might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.
 
+### Writing generation prompts
+
+We mentioned above that `add_generation_prompt` is a special variable that will be accessible inside your template,
+and is controlled by the user setting the `add_generation_prompt` flag. If your model expects a header for
+assistant messages, then your template must support adding the header when `add_generation_prompt` is set.
+
+Here is an example of a template that formats messages ChatML-style, with generation prompt support:
+
+```text
+{{- bos_token }}
+{%- for message in messages %}
+    {{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n' }}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}
+```
+
+The exact content of the assistant header will depend on your specific model, but it should always be **the string
+that represents the start of an assistant message**, so that if the user applies your template with 
+`add_generation_prompt=True` and then generates text, the model will write an assistant response. Also note that some
+models do not need a generation prompt, because assistant messages always begin immediately after user messages. 
+This is particularly common for LLaMA and Mistral models, where assistant messages begin immediately after the `[/INST]`
+token that ends user messages. In these cases, the template can ignore the `add_generation_prompt` flag.
+
+Generation prompts are important! If your model requires a generation prompt but it is not set in the template, then
+model generations will likely be severely degraded, or the model may display unusual behaviour like continuing 
+the final user message! 
+
 ### Writing and debugging larger templates
 
 When this feature was introduced, most templates were quite small, the Jinja equivalent of a "one-liner" script. 
