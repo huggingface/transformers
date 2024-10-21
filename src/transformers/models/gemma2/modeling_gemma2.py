@@ -443,52 +443,21 @@ class Gemma2SdpaAttention(Gemma2Attention):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
-
 
         def tanh_softcap(score, b, h, q_idx, kv_idx):
             soft_cap = self.config.attn_logit_softcapping
             return soft_cap * torch.tanh(score / soft_cap)
 
-        # def causal_mask(b, h, q_idx, kv_idx):
-        #     return q_idx >= kv_idx
-
         attn_output = flex_attention(
             query_states,
             key_states,
             value_states,
-            # attn_mask=causal_mask,
             block_mask=causal_mask,
             score_mod=tanh_softcap,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-            scale=self.scaling,
-        )
-
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
+            enable_gqa=True,
             scale=self.scaling,
         )
 
