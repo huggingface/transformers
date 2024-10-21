@@ -100,6 +100,8 @@ def get_siglip_config(model_name):
         config.vision_config.intermediate_size = 4304
         config.vision_config.num_hidden_layers = 27
         config.vision_config.num_attention_heads = 16
+    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
+        config.text_config.no_head = True
     else:
         raise ValueError("Model not supported")
     
@@ -112,8 +114,7 @@ def get_siglip_config(model_name):
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
-    if (config.vision_config.image_size==256 and config.text_config.vocab_size==250000 and config.vision_config.patch_size==16):
-        siglip_sovit_i18_256 = True
+    
     # vision encoder
 
     rename_keys.append(("params/img/embedding/kernel", "vision_model.embeddings.patch_embedding.weight"))
@@ -176,7 +177,8 @@ def create_rename_keys(config):
 
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/scale", "text_model.final_layer_norm.weight"))
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/bias", "text_model.final_layer_norm.bias"))
-    if not siglip_sovit_i18_256:
+
+    if not config.text_config.no_head:
         rename_keys.append(("params/txt/head/kernel", "text_model.head.weight"))
         rename_keys.append(("params/txt/head/bias", "text_model.head.bias"))
 
@@ -308,6 +310,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     read_in_q_k_v_head(state_dict, config)
     # load HuggingFace model
     model = SiglipModel(config).eval()
+    print("config.text_config", config.text_config)
     model.load_state_dict(state_dict)
     # create processor
     # important: make tokenizer not return attention_mask since original one doesn't require it
