@@ -419,7 +419,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
         self.qformer_model_tester = InstructBlipVideoQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = InstructBlipVideoTextModelDecoderOnlyTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length + num_query_tokens  # need seq_length for common tests
+        self.frames = self.vision_model_tester.frames
+        # need seq_length for common tests
+        self.seq_length = self.text_model_tester.seq_length + (num_query_tokens * self.frames)
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
         self.video_token_index = video_token_index
@@ -428,13 +430,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
         _, _, _, qformer_input_ids, qformer_attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        frames = self.vision_model_tester.frames
         _, c, h, w = pixel_values.shape
-        pixel_values = pixel_values.reshape(-1, frames, c, h, w)
+        pixel_values = pixel_values.reshape(-1, self.frames, c, h, w)
 
         vision_tokens = (
             torch.ones(
-                (input_ids.shape[0], self.num_query_tokens * frames), device=torch_device, dtype=input_ids.dtype
+                (input_ids.shape[0], self.num_query_tokens * self.frames), device=torch_device, dtype=input_ids.dtype
             )
             * self.video_token_index
         )
