@@ -273,23 +273,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
         Returns:
-            image_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
+            video_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
         """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.hidden_states[self.vision_feature_layer]
+        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        selected_video_features = video_features.hidden_states[self.vision_feature_layer]
         if self.vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
+            selected_video_features = selected_video_features[:, 1:]
         elif self.vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
+            selected_video_features = selected_video_features
 
         # Same as image features except that video has pooling layer
-        image_features = self.vision_resampler(selected_image_feature)
-        image_features = self.multi_modal_projector(image_features)
-        image_features = torch.split(image_features, frames, dim=0)
-        return image_features
+        video_features = self.vision_resampler(selected_video_features)
+        video_features = self.multi_modal_projector(video_features)
+        video_features = torch.split(video_features, frames, dim=0)
+        return video_features
 
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class="LlavaNextVideoConfig")
     def forward(
@@ -429,7 +429,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         image_features = feature_lens = None
         if pixel_values is not None and pixel_values.size(0) > 0:
-            image_features = self._get_image_features(pixel_values, image_sizes)
+            image_features = self.get_image_features(pixel_values, image_sizes)
             image_features, feature_lens = self.pack_image_features(
                 image_features,
                 image_sizes,
@@ -439,7 +439,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         video_features = video_feature_lens = None
         if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
-            video_features = self._get_video_features(pixel_values_videos)
+            video_features = self.get_video_features(pixel_values_videos)
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
