@@ -454,6 +454,7 @@ _import_structure = {
         "GitProcessor",
         "GitVisionConfig",
     ],
+    "models.glm": ["GlmConfig"],
     "models.glpn": ["GLPNConfig"],
     "models.gpt2": [
         "GPT2Config",
@@ -1190,7 +1191,7 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
-    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
+    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
@@ -2292,6 +2293,15 @@ else:
             "GitModel",
             "GitPreTrainedModel",
             "GitVisionModel",
+        ]
+    )
+    _import_structure["models.glm"].extend(
+        [
+            "GlmForCausalLM",
+            "GlmForSequenceClassification",
+            "GlmForTokenClassification",
+            "GlmModel",
+            "GlmPreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -5304,6 +5314,7 @@ if TYPE_CHECKING:
         GitProcessor,
         GitVisionConfig,
     )
+    from .models.glm import GlmConfig
     from .models.glpn import GLPNConfig
     from .models.gpt2 import (
         GPT2Config,
@@ -6079,7 +6090,7 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
-        from .models.detr import DetrFeatureExtractor, DetrImageProcessor
+        from .models.detr import DetrFeatureExtractor, DetrImageProcessor, DetrImageProcessorFast
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
@@ -7023,6 +7034,13 @@ if TYPE_CHECKING:
             GitModel,
             GitPreTrainedModel,
             GitVisionModel,
+        )
+        from .models.glm import (
+            GlmForCausalLM,
+            GlmForSequenceClassification,
+            GlmForTokenClassification,
+            GlmModel,
+            GlmPreTrainedModel,
         )
         from .models.glpn import (
             GLPNForDepthEstimation,

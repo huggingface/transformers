@@ -1210,10 +1210,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
