@@ -651,12 +651,12 @@ class GGUFT5Converter(T5Converter):
     def converted(self) -> Tokenizer:
         vocab_scores = self.vocab(self.proto)
         tokenizer = Tokenizer(
-                        Unigram(
-                            vocab_scores,
-                            unk_id=self.proto.unk_token_id,
-                            byte_fallback=False,
-                        )
-                    )
+            Unigram(
+                vocab_scores,
+                unk_id=self.proto.unk_token_id,
+                byte_fallback=False,
+            )
+        )
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)

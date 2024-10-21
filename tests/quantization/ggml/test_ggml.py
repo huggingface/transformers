@@ -502,10 +502,7 @@ class GgufIntegrationTests(unittest.TestCase):
         for (quantized_name, quantized_param), (original_name, original_param) in zip(
             quantized_state_dict.items(), original_state_dict.items()
         ):
-            if (
-                "SelfAttention" in quantized_name
-                and "SelfAttention" in original_name
-            ):
+            if "SelfAttention" in quantized_name and "SelfAttention" in original_name:
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
 
