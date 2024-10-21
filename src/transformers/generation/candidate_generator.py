@@ -694,12 +694,34 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
             The model input tensor. In encoder-decoder models, this is the encoder input.
     """
 
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: Dict,
+        inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
+    ):
+        super().__init__(
+            input_ids=input_ids,
+            assistant_model=assistant_model,
+            generation_config=generation_config,
+            model_kwargs=model_kwargs,
+            inputs_tensor=inputs_tensor,
+            logits_processor=logits_processor,
+        )
+        # We have to move early exit out of the generation config, otherwise the assistant will also call `generate`
+        # with early exit
+        self.early_exit = self.generation_config.early_exit
+        self.generation_config.early_exit = None
+
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
-        # Temporarily set the number of hidden layers to the early exit value
-        base_model = getattr(self.assistant_model, "base_model_prefix")
-        base_model.num_hidden_layers = self.generation_config.early_exit
+        # Temporarily sets the number of hidden layers to the early exit value
+        base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
+        base_model.num_hidden_layers = self.early_exit
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
-        base_model.num_hidden_layers = self.config.num_hidden_layers
+        base_model.num_hidden_layers = base_model.config.num_hidden_layers
         return candidate_ids, candidate_logits
 
 

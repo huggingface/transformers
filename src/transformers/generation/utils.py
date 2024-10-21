@@ -822,7 +822,7 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
             )
-        if generation_config.prompt_lookup_num_tokens is not None:
+        elif generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,

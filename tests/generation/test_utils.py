@@ -3917,9 +3917,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         checkpoint = "facebook/layerskip-llama3.2-1B"
 
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        inputs = tokenizer(prompt, return_tensors="pt")
+        inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
-        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+        model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
         original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
         self.assertEqual(original_decoded, [expected_output])

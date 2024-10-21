@@ -444,8 +444,14 @@ class DynamicCache(Cache):
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            previous_length = self.key_cache[layer_idx].shape[-2]
+            cache_position = cache_kwargs.get("cache_position")
+            new_positions = cache_position >= previous_length
+            if torch.any(new_positions):  # Otherwise we only want to access existing cache items
+                key_states = key_states[:, :, new_positions, :]
+                value_states = value_states[:, :, new_positions, :]
+                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
