@@ -3906,6 +3906,28 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
+    def test_assisted_generation_early_exit(self):
+        """
+        Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
+        manipulation, which will cause the test to fail if something goes wrong there.
+        """
+        expected_output = [""]
+
+        prompt = "Alice and Bob"
+        checkpoint = "facebook/layerskip-llama3.2-1B"
+
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+        original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
+        self.assertEqual(original_decoded, [expected_output])
+
+        early_exit_outputs = model.generate(**inputs, early_exit=4, do_sample=False, max_new_tokens=20)
+        early_exit_decoded = tokenizer.batch_decode(early_exit_outputs, skip_special_tokens=True)
+        self.assertEqual(early_exit_decoded, [expected_output])
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
