@@ -628,12 +628,18 @@ class AriaProcessor(ProcessorMixin):
                 max_image_size=max_image_size,
                 split_image=split_image,
             )
-            # expand the image_token according to the num_crops of image
+            # expand the image_token according to the num_crops and tokens per image
+            size_conversion = {
+                490: 128,
+                980: 256
+            }
+            tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
+
             prompt_strings = []
-            num_crops = image_inputs.pop("num_crops") * 256
+            num_crops = image_inputs.pop("num_crops") * tokens_per_image
             for sample in text:
-                    sample = sample.replace(self.image_token, self.image_token * num_crops)
-                    prompt_strings.append(sample)
+                sample = sample.replace(self.image_token, self.image_token * num_crops)
+                prompt_strings.append(sample)
 
         else:
             image_inputs = {}

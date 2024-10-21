@@ -152,7 +152,8 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         for image in images:
             crop_images = get_split_image(image, split_image, split_ratio, max_size)
-            num_crops = len(crop_images)
+            if num_crops is None or len(crop_images) > num_crops:
+                num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
                 img_padded = self.transform(img_padded)
@@ -321,9 +322,15 @@ class AriaProcessor(ProcessorMixin):
                 max_image_size=max_image_size,
                 split_image=split_image,
             )
-            # expand the image_token according to the num_crops of image
+            # expand the image_token according to the num_crops and tokens per image
+            size_conversion = {
+                490: 128,
+                980: 256
+            }
+            tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
+
             prompt_strings = []
-            num_crops = image_inputs.pop("num_crops") * 256
+            num_crops = image_inputs.pop("num_crops") * tokens_per_image
             for sample in text:
                 sample = sample.replace(self.image_token, self.image_token * num_crops)
                 prompt_strings.append(sample)
