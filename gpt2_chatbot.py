@@ -9,11 +9,17 @@
 print("starting imports")
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
+print("Finished imports")
+
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+print("Got GPT2Tokenizer")
 model = GPT2LMHeadModel.from_pretrained("gpt2")
+print("Got GPT2LMHeadModel")
 
 inputs = tokenizer("Hello world!", return_tensors="pt")
+print("inputs")
 outputs = model(**inputs)
+print("outputs")
 
 print("hello")
 
