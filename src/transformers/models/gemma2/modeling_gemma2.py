@@ -19,20 +19,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-from torch.nn.attention.flex_attention import flex_attention
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
-from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
+)
+from ...utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
+    is_torch_greater_or_equal,
+    logging,
+)
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+
+if is_torch_greater_or_equal("2.5"):
+    from torch.nn.attention.flex_attention import flex_attention
+from typing import List
+
+from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
@@ -40,9 +57,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
     replace_return_docstrings,
 )
 from .configuration_gemma2 import Gemma2Config
@@ -244,7 +258,6 @@ class Gemma2Attention(nn.Module):
             attn_weights = attn_weights / self.config.attn_logit_softcapping
             attn_weights = torch.tanh(attn_weights)
             attn_weights = attn_weights * self.config.attn_logit_softcapping
-
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
@@ -404,22 +417,6 @@ class Gemma2SdpaAttention(Gemma2Attention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Gemma2Model is using Gemma2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-            )
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -459,14 +456,17 @@ class Gemma2SdpaAttention(Gemma2Attention):
             score_mod=tanh_softcap,
             enable_gqa=True,
             scale=self.scaling,
+            return_lse=output_attentions,
         )
+        if output_attentions:
+            attn_output, attention_scores = attn_output
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, attention_scores, past_key_value
 
 
 GEMMA2_ATTENTION_CLASSES = {

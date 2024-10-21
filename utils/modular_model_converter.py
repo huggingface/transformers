@@ -1034,6 +1034,7 @@ class ModularConverterTransformer(CSTTransformer):
             if re.search(r"[\s\S]*is_.*available", full_statement):
                 self.all_safe_imports.append(node)
             elif full_statement not in self.all_imports:
+                self.all_safe_imports.append(node)
                 logger.warning(f"one import is protected with `if`. Hard guess where it's used {full_statement}")
         return node
 
@@ -1102,6 +1103,7 @@ class ModularConverterTransformer(CSTTransformer):
                         )
 
     def leave_Module(self, original_node: cst.Module, node):
+        self.all_imports.extend(self.all_safe_imports)
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {file_type: imports.copy() for file_type in self.files}
         for super_file_name, visiter in self.visited_module.items():
@@ -1180,7 +1182,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/roberta/modular_roberta.py"],
+        default=["src/transformers/models/gemma2/modular_gemma2.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
