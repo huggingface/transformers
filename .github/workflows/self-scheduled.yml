@@ -562,3 +562,13 @@ jobs:
       ci_event: ${{ inputs.ci_event }}
 
     secrets: inherit
+
+  check_new_model_failures:
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job == 'run_models_gpu' && needs.send_results.result == 'success' }}
+    name: Check new model failures
+    needs: send_results
+    uses: ./.github/workflows/check_failed_model_tests.yml
+    with:
+      docker: ${{ inputs.docker }}
+      start_sha: ${{ github.sha }}
+    secrets: inherit
