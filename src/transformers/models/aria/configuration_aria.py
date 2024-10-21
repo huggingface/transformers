@@ -91,7 +91,7 @@ class AriaVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self._attn_implementation = "flash_attention_2"
+        self._attn_implementation = "eager"
         self.hidden_act = hidden_act
 
     @classmethod
@@ -198,6 +198,7 @@ class AriaTextConfig(PretrainedConfig):
         self.moe_z_loss_coeff = moe_z_loss_coeff
         self.moe_aux_loss_coeff = moe_aux_loss_coeff
         self.moe_num_shared_experts = moe_num_shared_experts
+        self._attn_implementation = "eager"
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -248,6 +249,8 @@ class AriaConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self._attn_implementation = "eager"
+
 
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings

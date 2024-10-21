@@ -5,7 +5,6 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import inspect
-import re
 from typing import List, Optional, Union
 
 import torch
@@ -149,11 +148,11 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         pixel_values = []
         pixel_masks = []
-        num_crops = []
+        num_crops = None
 
         for image in images:
             crop_images = get_split_image(image, split_image, split_ratio, max_size)
-            num_crops.append(torch.tensor(len(crop_images)))
+            num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
                 img_padded = self.transform(img_padded)
@@ -164,7 +163,7 @@ class AriaVisionProcessor(BaseImageProcessor):
             data={
                 "pixel_values": torch.stack(pixel_values),
                 "pixel_mask": torch.stack(pixel_masks),
-                "num_crops": torch.stack(num_crops),
+                "num_crops": num_crops,
             },
             tensor_type=return_tensors,
         )
@@ -254,7 +253,9 @@ class AriaProcessor(ProcessorMixin):
     # Copied from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -324,15 +325,10 @@ class AriaProcessor(ProcessorMixin):
             )
             # expand the image_token according to the num_crops of image
             prompt_strings = []
-            crop_iter = iter(image_inputs.pop("num_crops"))
-            for prompt in text:
-                prompt_strings.append(
-                    re.sub(
-                        re.escape(self.image_token),
-                        lambda _: next(crop_iter) * self.image_token,
-                        prompt,
-                    )
-                )
+            num_crops = image_inputs.pop("num_crops") * 256
+            for sample in text:
+                    sample = sample.replace(self.image_token, self.image_token * num_crops)
+                    prompt_strings.append(sample)
 
         else:
             image_inputs = {}

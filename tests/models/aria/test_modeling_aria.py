@@ -62,40 +62,68 @@ class AriaVisionText2TextModelTester:
         seq_length=7,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
+            # model_type = "aria_moe_lm",
+            # seq_length = 7,
+            # is_training = True,
+            # use_input_mask = True,
+            # use_token_type_ids = False,
+            # use_labels = True,
+            # vocab_size = 99,
+            # hidden_size = 40,
+            # num_hidden_layers = 3,
+            # num_attention_heads = 20,
+            # intermediate_size = 37,
+            # hidden_act = "gelu",
+            # hidden_dropout_prob = 0.1,
+            # attention_probs_dropout_prob = 0.1,
+            # max_position_embeddings = 512,
+            # type_vocab_size = 16,
+            # type_sequence_label_size = 2,
+            # initializer_range = 0.02,
+            # num_labels = 3,
+            # num_choices = 4,
+            # pad_token_id = 1,
+
         text_config=AriaTextConfig(
-            model_type = "llama",
             seq_length = 7,
             is_training = True,
             use_input_mask = True,
             use_token_type_ids = False,
             use_labels = True,
-            vocab_size = 99,
-            hidden_size = 32,
-            num_hidden_layers = 2,
-            num_attention_heads = 4,
-            intermediate_size = 37,
             hidden_act = "gelu",
             hidden_dropout_prob = 0.1,
             attention_probs_dropout_prob = 0.1,
-            max_position_embeddings = 512,
             type_vocab_size = 16,
             type_sequence_label_size = 2,
             initializer_range = 0.02,
             num_labels = 3,
             num_choices = 4,
             pad_token_id = 1,
+            hidden_size=32,
+            intermediate_size=64,
+            max_position_embeddings=60,
+            model_type="aria_moe_lm",
+            moe_intermediate_size=4,
+            moe_num_experts=4,
+            moe_topk=2,
+            num_attention_heads=20,
+            num_experts_per_tok=3,
+            num_hidden_layers=28,
+            num_key_value_heads=20,
+            rope_theta=5000000,
+            vocab_size=99,
         ),
         is_training=True,
         vision_config=AriaVisionConfig(
-            image_size = 30,
-            patch_size = 2,
+            image_size = 358,
+            patch_size = 10,
             num_channels = 3,
             is_training = True,
             hidden_size = 32,
-            projection_dim = 32,
-            num_hidden_layers = 2,
-            num_attention_heads = 4,
-            intermediate_size = 37,
+            projection_dim = 40,
+            num_hidden_layers = 3,
+            num_attention_heads = 16,
+            intermediate_size = 10,
             dropout = 0.1,
             attention_dropout = 0.1,
             initializer_range = 0.02,
@@ -109,19 +137,18 @@ class AriaVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
+        self.pad_token_id = text_config.pad_token_id
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+        self.num_hidden_layers = text_config.num_hidden_layers
+        self.vocab_size = text_config.vocab_size
+        self.hidden_size = text_config.hidden_size
+        self.num_attention_heads = text_config.num_attention_heads
         self.is_training = is_training
 
-        self.batch_size = 3
+        self.batch_size = 10
         self.num_channels = 3
-        self.image_size = 336
-        self.encoder_seq_length = 231
-        self.num_image_tokens = 224
+        self.image_size = 358
+        self.num_image_tokens = 128 # fix pour attention size
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
@@ -133,16 +160,15 @@ class AriaVisionText2TextModelTester:
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
-            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.vision_config.num_channels,
+                self.vision_config.image_size,
+                self.vision_config.image_size,
             ]
         )
         config = self.get_config()
@@ -265,7 +291,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("aria-hf/bakAria-v1-hf")
+        self.processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
     def tearDown(self):
         gc.collect()
@@ -275,7 +301,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("aria-hf/bakAria-v1-hf", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://aria-vl.github.io/static/images/view.jpg"
@@ -342,11 +368,12 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("aria-hf/bakAria-v1-hf", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -491,11 +518,11 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         loss.backward()
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/aria-v1.6-34b", use_fast=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained("rhymes-ai/Aria", use_fast=False)
         slow_tokenizer.add_tokens("<image>", True)
 
         fast_tokenizer = AutoTokenizer.from_pretrained(
-            "liuhaotian/aria-v1.6-34b",
+            "rhymes-ai/Aria",
             bos_token="<|startoftext|>",
             eos_token="<|endoftext|>",
             from_slow=True,
@@ -524,7 +551,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
-        model_id = "aria-hf/aria-interleave-qwen-0.5b-hf"
+        model_id = "rhymes-ai/Aria"
         model = AriaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -579,7 +606,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_pixtral(self):
-        model_id = "hf-internal-testing/pixtral-12b"
+        model_id = "rhymes-ai/Aria"
         model = AriaForConditionalGeneration.from_pretrained(model_id)
         processor = AutoProcessor.from_pretrained(model_id)
 

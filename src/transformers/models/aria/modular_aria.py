@@ -29,7 +29,7 @@ from ...tokenization_utils import (
 )
 from ...utils import logging
 from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
-from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
+from ..idefics3.modeling_idefics3 import Idefics3VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
@@ -80,11 +80,11 @@ class IdentityOp(torch.nn.Module):
         return x
 
 
-class AriaVisionTransformer(Idefics2VisionTransformer):
+class AriaVisionTransformer(Idefics3VisionTransformer):
     """
-    Aria Vision Transformer model based on Idefics2VisionTransformer.
+    Aria Vision Transformer model based on Idefics3VisionTransformer.
 
-    This class extends the original Idefics2VisionTransformer by removing the post-layernorm operation.
+    This class extends the original Idefics3VisionTransformer by removing the post-layernorm operation.
     """
 
     def __init__(self, config: AriaVisionConfig):
@@ -153,11 +153,11 @@ class AriaVisionModel(SiglipVisionModel):
 
         image_attentions = self._create_image_attention_mask(patch_attention_mask)
 
-        if return_dict:
+        if not return_dict:
             return vision_output, image_attentions
 
         return BaseModelOutput(
-            vision_output.last_hidden_states,
+            vision_output.last_hidden_state,
             vision_output.hidden_states,
             image_attentions,
         )
@@ -560,7 +560,7 @@ class AriaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: Union[bool, str, PaddingStrategy] = "left",
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         max_image_size: Optional[int] = 980,
@@ -938,7 +938,7 @@ class AriaGroupedGEMM(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features, dtype=torch.bfloat16))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -957,6 +957,7 @@ class AriaGroupedGEMM(nn.Module):
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
         torch.cuda.set_device(input.device)
+        input = input.to(torch.bfloat16)
         return experts_gemm(input, self.weight, tokens_per_expert)
 
 
@@ -1135,7 +1136,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
     def __init__(self, config: AriaConfig):
         super().__init__(config)
 
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
         self.multi_modal_projector = AriaProjector(
             patch_to_query_dict=config.projector_patch_to_query_dict,
             embed_dim=config.vision_config.hidden_size,
@@ -1145,7 +1146,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
             output_dim=config.text_config.hidden_size,
         )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config, attn_implementation=config._attn_implementation)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -1193,30 +1194,35 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        vision_feature_layer = -1
+
         if inputs_embeds is None:
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs, image_attentions = self.vision_tower(
-                    pixel_values,
-                    pixel_mask=pixel_mask,
+                ### NEW PROCESSING
+                image_features = self.get_image_features(
+                    pixel_values=pixel_values,
+                    vision_feature_layer=vision_feature_layer,
                 )
-
-                selected_image_feature = image_outputs.last_hidden_state
-
-                image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attentions)
-
-                inputs_embeds = inputs_embeds.to(image_features.dtype)
-                (
-                    inputs_embeds,
-                    attention_mask,
-                    labels,
-                    position_ids,
-                ) = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                n_image_features = image_features.shape[1]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
+                special_image_mask = (
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
+                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+
 
             # In case input_ids.shape[1] == 1 & pixel_values != None & past_key_values != None, we are in the case of
             # generation with cache
@@ -1294,81 +1300,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin, LlavaFo
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_mask=None,
-        attention_mask=None,
-        **kwargs,
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layer: int,
     ):
-        """
-        Prepare inputs for generation step.
-
-        This method prepares the inputs for the generation step, handling both
-        text and image inputs, and managing the model's cache mechanism.
-
-        Args:
-            input_ids (torch.LongTensor): Input token ids.
-            past_key_values (Cache or List[torch.FloatTensor], optional): Past key values for efficient processing.
-            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
-            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
-            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
-            attention_mask (torch.Tensor, optional): Attention mask.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            dict: A dictionary containing the prepared inputs for the generation step.
-        """
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-            elif self.config.image_token_index in input_ids:
-                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
-            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
-            # older attention values, as their corresponding values are not part of the input.
-            if cache_length < past_length and attention_mask is not None:
-                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-                "pixel_mask": pixel_mask,
-            }
-        )
-        return model_inputs
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        image_features = self.multi_modal_projector(selected_image_feature)
+        return image_features
