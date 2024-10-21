@@ -1014,18 +1014,6 @@ class ModularConverterTransformer(CSTTransformer):
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
                         start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
-                        if (
-                            dependency in file_to_update.keys()
-                            and dependency in class_finder.first_lvl_dependency_mapping[class_name]
-                        ):
-                            # If dependency is defined, but not used, raise error
-                            calls = m.findall(original_node, m.Name(dependency))
-                            if not calls and not is_empty_node and dependency not in all_bases:
-                                raise ValueError(
-                                    f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
-                                    when you define `{class_name}`, as it is one of it's direct dependencies. Make sure
-                                    you use it in the `__init__` function."""
-                                )
                     self.inserted_deps.append(dependency)
 
             if len(list_dependencies) > 0:

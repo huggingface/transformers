@@ -171,9 +171,7 @@ ROBERTA_SELF_ATTENTION_CLASSES = {
 
 
 class RobertaAttention(BertAttention):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__(config, position_embedding_type)
-        self.output = RobertaSelfOutput(config)
+    pass
 
 
 class RobertaIntermediate(BertIntermediate):
@@ -185,17 +183,11 @@ class RobertaOutput(BertOutput):
 
 
 class RobertaLayer(BertLayer):
-    def __init__(self, config):
-        super().__init__(config)
-        self.attention = RobertaAttention(config)
-        self.intermediate = RobertaIntermediate(config)
-        self.output = RobertaOutput(config)
+    pass
 
 
 class RobertaEncoder(BertEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-        self.layer = nn.ModuleList([RobertaLayer(config) for _ in range(config.num_hidden_layers)])
+    pass
 
 
 class RobertaPooler(BertPooler):
@@ -232,11 +224,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(RobertaPreTrainedModel, BertModel):
-    def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
-        self.embeddings = RobertaEmbeddings(config)
-        self.encoder = RobertaEncoder(config)
-        self.pooler = RobertaPooler(config) if add_pooling_layer else None
+    pass
 
 
 ROBERTA_INPUTS_DOCSTRING = None  # To use value from modeling_bert
