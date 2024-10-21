@@ -113,7 +113,7 @@ class StableLmModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -482,7 +482,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t").to(torch_device)
         model.eval()
 
-        output = model(**input_ids).logits
+        output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.7146, 2.4245, 1.5616, 1.4424, 2.6790]]).to(torch_device)
@@ -515,7 +515,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         model = StableLmForCausalLM.from_pretrained("stabilityai/tiny-random-stablelm-2").to(torch_device)
         model.eval()
 
-        output = model(**input_ids).logits
+        output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.7196, -3.6099, -2.6877, -3.1973, -3.9344]]).to(torch_device)
