@@ -6,6 +6,7 @@
 # print(res)
 
 ## FROM CHAT GPT
+print("starting imports")
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
