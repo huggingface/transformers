@@ -509,6 +509,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
+                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                n_image_features = image_features.shape[1]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 special_image_mask = (
                     (input_ids == self.config.image_token_index)
                     .unsqueeze(-1)
@@ -537,7 +543,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -573,6 +581,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = (
             input_ids is not None

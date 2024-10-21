@@ -28,7 +28,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import partial, wraps
+from functools import lru_cache, partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
@@ -45,6 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -5010,6 +5011,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
 
         return self.hf_quantizer.is_trainable
+
+    @property
+    @lru_cache
+    def loss_function(self):
+        if getattr(self.config, "loss_type", None) is not None:
+            loss_type = self.config.loss_type
+        else:
+            loss_type = self.__class__.__name__
+            if loss_type not in LOSS_MAPPING:
+                loss_groups = f"({'|'.join(LOSS_MAPPING)})"
+                loss_type = re.findall(loss_groups, self.__class__.__name__)
+                if len(loss_type) > 0:
+                    loss_type = loss_type[0]
+                else:
+                    loss_type = None
+        if loss_type is None or loss_type not in LOSS_MAPPING and getattr(self.config, "loss_type", None) is not None:
+            logger.warning_once(
+                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"Using the default loss: `ForCausalLMLoss`."
+            )
+            loss_type = "ForCausalLM"
+        return LOSS_MAPPING[loss_type]
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

@@ -238,6 +238,9 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(
+        reason="After #33533, this still passes, but many subsequential tests fail with `device-side assert triggered`"
+    )
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
