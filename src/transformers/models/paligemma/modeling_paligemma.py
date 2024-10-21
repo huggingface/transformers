@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 
-# Adapted from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
+# Adapted from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
 # But Paligemma has no causal mask on prefix
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
@@ -57,8 +57,9 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
-    is_training: bool,
-    token_type_ids: torch.Tensor,
+    is_training: bool = False,
+    token_type_ids: torch.Tensor = None,
+    **kwargs,
 ):
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -94,7 +95,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             if is_training:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             else:
-                causal_mask = torch.zeros_like(causal_mask)
+                causal_mask[:, :sequence_length] = 0.0
 
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
@@ -378,7 +379,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             if is_training:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             else:
-                causal_mask = torch.zeros_like(causal_mask)
+                causal_mask[:, :sequence_length] = 0.0
 
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
@@ -453,9 +454,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -527,14 +526,16 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         )
 
         logits = outputs.logits
-        logits = logits.float()
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
-                shift_attention_mask = attention_mask[..., 1:]
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
                 shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
             else:
@@ -573,6 +574,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -582,35 +584,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             cache_position=cache_position,
             use_cache=use_cache,
             num_logits_to_keep=num_logits_to_keep,
+            token_type_ids=token_type_ids,
             **kwargs,
         )
-
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            dtype = self.get_output_embeddings().weight.dtype
-            min_dtype = torch.finfo(dtype).min
-            is_training = token_type_ids is not None and kwargs.get("labels", None) is not None
-
-            model_inputs["attention_mask"] = _prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
-                dtype=dtype,
-                device=device,
-                min_dtype=min_dtype,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                is_training=is_training,
-                token_type_ids=token_type_ids,
-            )
-
-        model_inputs["token_type_ids"] = token_type_ids
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:

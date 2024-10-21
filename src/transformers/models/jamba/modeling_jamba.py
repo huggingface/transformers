@@ -26,7 +26,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache  # we need __iter__ and __len__ of pkv
@@ -51,7 +50,6 @@ from ...utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
-    is_torchdynamo_compiling,
 )
 from .configuration_jamba import JambaConfig
 
@@ -713,11 +711,14 @@ class JambaMambaMixer(nn.Module):
         # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
         # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
         # linear layers, and requires to call the forward pass directly.
-        # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-        time_proj_bias = self.dt_proj.bias
-        self.dt_proj.bias = None
+        # Quantized model can't work with the original code:
+        # ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
+        time_proj_bias = self.dt_proj.bias.data
+        with torch.no_grad():
+            self.dt_proj.bias.data = torch.zeros_like(self.dt_proj.bias.data)
         discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-        self.dt_proj.bias = time_proj_bias
+        with torch.no_grad():
+            self.dt_proj.bias.data = time_proj_bias
 
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
@@ -1280,9 +1281,7 @@ class JambaModel(JambaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1540,27 +1539,10 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        if labels is None and not is_torchdynamo_compiling:
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
-        # TODO: remove the float() operations in v4.46
-        logits = logits.float()
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size)
 
         aux_loss = None
         if output_router_logits:
@@ -1601,6 +1583,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
+        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+
         empty_past_kv = past_key_values is None
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1733,27 +1717,8 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
