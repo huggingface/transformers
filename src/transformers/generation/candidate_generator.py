@@ -694,25 +694,6 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
             The model input tensor. In encoder-decoder models, this is the encoder input.
     """
 
-    def __init__(
-        self,
-        input_ids: torch.LongTensor,
-        assistant_model: "PreTrainedModel",
-        generation_config: "GenerationConfig",
-        model_kwargs: Dict,
-        inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
-    ):
-        # TODO(joao): somehow check whether the model supports early exit
-        super().__init__(
-            input_ids=input_ids,
-            assistant_model=assistant_model,
-            generation_config=generation_config,
-            model_kwargs=model_kwargs,
-            inputs_tensor=inputs_tensor,
-            logits_processor=logits_processor,
-        )
-
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         # Temporarily set the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, "base_model_prefix")
