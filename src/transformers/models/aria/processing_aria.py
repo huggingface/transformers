@@ -323,10 +323,7 @@ class AriaProcessor(ProcessorMixin):
                 split_image=split_image,
             )
             # expand the image_token according to the num_crops and tokens per image
-            size_conversion = {
-                490: 128,
-                980: 256
-            }
+            size_conversion = {490: 128, 980: 256}
             tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
 
             prompt_strings = []

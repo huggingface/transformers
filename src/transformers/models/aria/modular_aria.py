@@ -1,5 +1,4 @@
 import inspect
-import re
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -26,9 +25,7 @@ from ...tokenization_utils import (
     TruncationStrategy,
 )
 from ...utils import (
-    add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..idefics3.modeling_idefics3 import Idefics3VisionTransformer
@@ -41,7 +38,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
 )
-from ..llava.modeling_llava import LLAVA_INPUTS_DOCSTRING, LlavaCausalLMOutputWithPast
+from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionModel
 from .processing_utils import (
@@ -629,10 +626,7 @@ class AriaProcessor(ProcessorMixin):
                 split_image=split_image,
             )
             # expand the image_token according to the num_crops and tokens per image
-            size_conversion = {
-                490: 128,
-                980: 256
-            }
+            size_conversion = {490: 128, 980: 256}
             tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
 
             prompt_strings = []
@@ -1127,9 +1121,6 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-_CONFIG_FOR_DOC = "AriaConfig"
-
-
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
@@ -1144,7 +1135,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def __init__(self, config: AriaConfig):
         super().__init__(config)
 
-        self.vision_tower = AutoModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
         self.multi_modal_projector = AriaProjector(
             patch_to_query_dict=config.projector_patch_to_query_dict,
             embed_dim=config.vision_config.hidden_size,
@@ -1154,7 +1147,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_dim=config.text_config.hidden_size,
         )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.language_model = AutoModelForCausalLM.from_config(
+            config.text_config, attn_implementation=config._attn_implementation
+        )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -1211,8 +1206,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position = None,
-        num_logits_to_keep = None,
+        cache_position=None,
+        num_logits_to_keep=None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.
@@ -1270,8 +1265,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-
 
             # In case input_ids.shape[1] == 1 & pixel_values != None & past_key_values != None, we are in the case of
             # generation with cache

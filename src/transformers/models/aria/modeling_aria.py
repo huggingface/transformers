@@ -610,7 +610,7 @@ class AriaEncoderLayer(nn.Module):
     def __init__(self, config: AriaVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = ARIA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = AriaVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -2895,7 +2895,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -2912,8 +2911,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position = None,
-        num_logits_to_keep = None,
+        cache_position=None,
+        num_logits_to_keep=None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.

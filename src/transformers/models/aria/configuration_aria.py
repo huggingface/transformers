@@ -251,7 +251,6 @@ class AriaConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self._attn_implementation = "eager"
 
-
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings
         if projector_patch_to_query_dict is None:
