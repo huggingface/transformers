@@ -285,7 +285,7 @@ def _flash_attention_forward(
                 prepare_fa2_from_position_ids(query_states, key_states, value_states, position_ids)
             )
 
-            cu_seq_lens_q, cu_seq_lens_q = cu_seq_lens
+            cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens
             max_length_q, max_length_k = max_seq_lens
 
         else:
