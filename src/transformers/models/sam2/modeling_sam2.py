@@ -106,12 +106,11 @@ def get_sdpa_settings():
 OLD_GPU, USE_FLASH_ATTN, MATH_KERNEL_ON = get_sdpa_settings()
 
 
-# Copied from transformers.models.sam.modeling_sam.SamPositionalEmbedding with Sam->Sam2
-class SamPositionalEmbedding(nn.Module):
+class Sam2PositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.scale = config.scale
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.hidden_size // 2)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1059,17 +1058,33 @@ class Sam2MLP(nn.Module):
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->Sam2
 class Sam2LayerNorm(nn.Module):
-    def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(num_channels))
-        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
         self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
+        self.normalized_shape = (normalized_shape,)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        u = x.mean(1, keepdim=True)
-        s = (x - u).pow(2).mean(1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.eps)
-        x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        if self.data_format == "channels_last":
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
 
@@ -1954,77 +1969,12 @@ SAM2_INPUTS_DOCSTRING = r"""
 class Sam2Model(Sam2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
+
         self.image_encoder = Sam2ImageEncoder(config.image_encoder_config)
+        self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
         self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
-
-        self.hidden_dim = self.config.image_encoder_config.d_model
-        self._build_sam_heads()
-
-        # Use level 0, 1, 2 for high-res setting, or just level 2 for the default setting
-        self.use_high_res_features_in_sam = config.use_high_res_features_in_sam
-        self.num_feature_levels = 3 if config.use_high_res_features_in_sam else 1
-        self.use_obj_ptrs_in_encoder = config.use_obj_ptrs_in_encoder
-        self.max_obj_ptrs_in_encoder = config.max_obj_ptrs_in_encoder
-        if config.use_obj_ptrs_in_encoder:
-            # A conv layer to downsample the mask prompt to stride 4 (the same stride as
-            # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
-            # so that it can be fed into the SAM mask decoder to generate a pointer.
-            self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
-        self.add_tpos_enc_to_obj_ptrs = config.add_tpos_enc_to_obj_ptrs
-        if config.proj_tpos_enc_in_obj_ptrs:
-            assert config.add_tpos_enc_to_obj_ptrs  # these options need to be used together
-        self.proj_tpos_enc_in_obj_ptrs = config.proj_tpos_enc_in_obj_ptrs
-        self.only_obj_ptrs_in_the_past_for_eval = config.only_obj_ptrs_in_the_past_for_eval
-
-        # Part 3: memory encoder for the previous frame's outputs
-        self.mem_dim = self.hidden_dim
-        if hasattr(self.memory_encoder, "out_proj") and hasattr(self.memory_encoder.out_proj, "weight"):
-            # if there is compression of memories along channel dim
-            self.mem_dim = self.memory_encoder.out_proj.weight.shape[0]
-        self.num_maskmem = config.num_maskmem  # Number of memories accessible
-        # Temporal encoding of the memories
-        self.maskmem_tpos_enc = torch.nn.Parameter(torch.zeros(config.num_maskmem, 1, 1, self.mem_dim))
-        # a single token to indicate no memory embedding from previous frames
-        self.no_mem_embed = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
-        self.no_mem_pos_enc = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
-        self.directly_add_no_mem_embed = config.directly_add_no_mem_embed
-        # Apply sigmoid to the output raw mask logits (to turn them from
-        # range (-inf, +inf) to range (0, 1)) before feeding them into the memory encoder
-        self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
-        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
-        self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
-        self.memory_temporal_stride_for_eval = config.memory_temporal_stride_for_eval
-        # On frames with mask input, whether to directly output the input mask without
-        # using a SAM prompt encoder + mask decoder
-        self.use_mask_input_as_output_without_sam = config.use_mask_input_as_output_without_sam
-        self.multimask_output_in_sam = config.multimask_output_in_sam
-        self.multimask_min_pt_num = config.multimask_min_pt_num
-        self.multimask_max_pt_num = config.multimask_max_pt_num
-        self.multimask_output_for_tracking = config.multimask_output_for_tracking
-        self.use_multimask_token_for_obj_ptr = config.use_multimask_token_for_obj_ptr
-        self.iou_prediction_use_sigmoid = config.iou_prediction_use_sigmoid
-
-        # Part 4: SAM-style prompt encoder (for both mask and point inputs)
-        # and SAM-style mask decoder for the final mask output
-        self.image_size = config.image_size
-        self.backbone_stride = config.backbone_stride
-        self.sam_mask_decoder_extra_args = config.sam_mask_decoder_extra_args
-        self.pred_obj_scores = config.pred_obj_scores
-        self.pred_obj_scores_mlp = config.pred_obj_scores_mlp
-        self.fixed_no_obj_ptr = config.fixed_no_obj_ptr
-        self.soft_no_obj_ptr = config.soft_no_obj_ptr
-        if self.fixed_no_obj_ptr:
-            assert self.pred_obj_scores
-            assert self.use_obj_ptrs_in_encoder
-        if self.pred_obj_scores and self.use_obj_ptrs_in_encoder:
-            self.no_obj_ptr = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
-        self.use_mlp_for_obj_ptr_proj = config.use_mlp_for_obj_ptr_proj
-
-        self._build_sam_heads()
-        self.add_all_frames_to_correct_as_cond = config.add_all_frames_to_correct_as_cond
-        self.max_cond_frames_in_attn = config.max_cond_frames_in_attn
 
         if torch.cuda.is_available():
             try:

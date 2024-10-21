@@ -54,6 +54,7 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
         num_point_embeddings=4,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
+        scale=1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -65,6 +66,7 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
+        self.scale = scale
 
 
 class Sam2MemoryAttentionConfig(PretrainedConfig):
