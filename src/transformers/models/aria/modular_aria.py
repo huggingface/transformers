@@ -887,7 +887,7 @@ class AriaTopKRouter(nn.Module):
         scores = F.softmax(top_logits, dim=-1)
 
         tokens_per_expert = torch.histc(
-            top_indices.flatten(),
+            top_indices.flatten().to(torch.float32),
             bins=self.config.moe_num_experts,
             min=0,
             max=self.config.moe_num_experts - 1,
@@ -937,7 +937,7 @@ class AriaGroupedGEMM(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features, dtype=torch.bfloat16))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -956,7 +956,6 @@ class AriaGroupedGEMM(nn.Module):
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
         torch.cuda.set_device(input.device)
-        input = input.to(torch.bfloat16)
         return experts_gemm(input, self.weight, tokens_per_expert)
 
 
