@@ -379,8 +379,8 @@ class DiffLlamaAttention(nn.Module):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        value_states1, value_states2 = torch.chunk(value_states, 2, dim=1)
-        value_states = torch.cat([value_states1, value_states2], dim=-1)
+        value_states = torch.cat(torch.chunk(value_states, 2, dim=1), dim=-1)
+        value_states = value_states.repeat(1, 2, 1, 1)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -395,9 +395,8 @@ class DiffLlamaAttention(nn.Module):
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
-        attn_weights1, attn_weights2 = torch.chunk(attn_weights, 2, dim=1)
-        attn_output1 = torch.matmul(attn_weights1, value_states)
-        attn_output2 = torch.matmul(attn_weights2, value_states)
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
         
         attn_output = attn_output1 - lambda_full * attn_output2
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
