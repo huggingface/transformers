@@ -245,6 +245,37 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape, (2, 2, 3, 767, 980))
         self.assertEqual(inputs["pixel_attention_mask"].shape, (2, 2, 767, 980))
 
+    def test_process_interleaved_images_prompts_image_error(self):
+        processor = self.get_processor()
+
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things",
+        ]
+        images = [[self.image1], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[self.image1], []]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.<image>",
+            "In this other sentence we try some good things<image>",
+        ]
+        images = [[self.image1], [self.image2, self.image3]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2, self.image3]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
@@ -280,6 +311,48 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
+
+    def test_process_interleaved_images_prompts_image_error(self):
+        processor = self.get_processor()
+
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things",
+        ]
+        inputs = processor(text=text, images=None, padding=True)
+        self.assertIsNotNone(inputs["input_ids"])
+
+        images = [[self.image1], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.<image>",
+            "In this other sentence we try some good things<image>",
+        ]
+        inputs = processor(text=text, images=images, padding=True)
+        self.assertIsNotNone(inputs["input_ids"])
+        images = [self.image1, self.image2]
+        inputs = processor(text=text, images=images, padding=True)
+        self.assertIsNotNone(inputs["input_ids"])
+
+        images = [[self.image1], [self.image2, self.image3]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2, self.image3]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.<image>",
+            "In this other sentence we try some good things<image><image>",
+        ]
+        images = [[self.image1], [self.image2, self.image3]]
+        inputs = processor(text=text, images=images, padding=True)
+        self.assertIsNotNone(inputs["input_ids"])
+        images = [self.image1, self.image2, self.image3]
+        inputs = processor(text=text, images=images, padding=True)
+        self.assertIsNotNone(inputs["input_ids"])
 
     # Override as Idefics2Processor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):

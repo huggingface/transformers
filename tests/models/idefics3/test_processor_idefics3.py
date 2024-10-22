@@ -269,6 +269,37 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 2, 3, 364, 364))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (2, 2, 364, 364))
 
+    def test_process_interleaved_images_prompts_image_error(self):
+        processor = self.get_processor()
+
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things",
+        ]
+        images = [[self.image1], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[self.image1], []]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.<image>",
+            "In this other sentence we try some good things<image>",
+        ]
+        images = [[self.image1], [self.image2, self.image3]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2, self.image3]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [

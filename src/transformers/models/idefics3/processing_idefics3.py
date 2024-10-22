@@ -17,6 +17,7 @@ Processor class for Idefics3.
 """
 
 import re
+from itertools import accumulate
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -258,8 +259,10 @@ class Idefics3Processor(ProcessorMixin):
                             f"The total number of {self.image_token.content} tokens in the prompts should be the same as the number of images passed."
                             f" Found {sum(n_images_in_text)} {self.image_token.content} tokens and {len(images)} images."
                         )
+                    # Reorganize the images to match the prompts
+                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
                     images = [
-                        images[sum(n_images_in_text[:i]) : sum(n_images_in_text[: i + 1])]
+                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
                         for i in range(len(n_images_in_text))
                     ]
                 else:
