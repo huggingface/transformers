@@ -117,6 +117,16 @@ class ProPainterConfig(PretrainedConfig):
             Controls the slope for negative inputs in LeakyReLU. Used in few certain modules.
         group (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 1]`):
             Specifies the number of groups for feature aggregation at different layers in the ProPainterEncoder.
+        kernel_size_3d_downsample (`List[int]`, *optional*, defaults to `[1, 5, 5]`):
+            Kernel size for 3D downsampling layers along depth, height, and width.
+        intermediate_dilation_padding (`List[Tuple[int, int, int]]`, *optional*, defaults to `[(0, 3, 3), (0, 2, 2), (0, 1, 1)]`):
+            Padding values for intermediate dilation layers (depth, height, width).
+        padding_downsample (`List[int]`, *optional*, defaults to `[0, 2, 2]`):
+            Padding for downsampling layers along depth, height, and width.
+        padding_mode (`str`, *optional*, defaults to `"replicate"`):
+            Padding mode for convolution layers (default: "replicate").
+        intermediate_dilation_levels (`List[Tuple[int, int, int]]`, *optional*, defaults to `[(1, 3, 3), (1, 2, 2), (1, 1, 1)]`):
+            Dilation rates for intermediate layers (depth, height, width).
 
     Example:
 
@@ -176,6 +186,11 @@ class ProPainterConfig(PretrainedConfig):
         negative_slope_1=0.1,
         negative_slope_2=0.01,
         group=[1, 2, 4, 8, 1],
+        kernel_size_3d_downsample=[1, 5, 5],
+        intermediate_dilation_padding=[(0, 3, 3), (0, 2, 2), (0, 1, 1)],
+        padding_downsample=[0, 2, 2],
+        padding_mode="replicate",
+        intermediate_dilation_levels=[(1, 3, 3), (1, 2, 2), (1, 1, 1)],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -219,3 +234,8 @@ class ProPainterConfig(PretrainedConfig):
         self.negative_slope_1 = negative_slope_1
         self.negative_slope_2 = negative_slope_2
         self.group = group
+        self.kernel_size_3d_downsample = kernel_size_3d_downsample
+        self.intermediate_dilation_padding = intermediate_dilation_padding
+        self.padding_downsample = padding_downsample
+        self.padding_mode = padding_mode
+        self.intermediate_dilation_levels = intermediate_dilation_levels

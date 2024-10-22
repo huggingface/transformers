@@ -1164,10 +1164,10 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
             nn.Conv3d(
                 3,
                 config.num_channels // 4,
-                kernel_size=(1, 5, 5),
+                kernel_size=config.kernel_size_3d_downsample,
                 stride=config.multi_level_conv_stride,
-                padding=(0, 2, 2),
-                padding_mode="replicate",
+                padding=config.padding_downsample,
+                padding_mode=config.padding_mode,
             ),
             nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
@@ -1212,8 +1212,8 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 config.kernel_size_3d,
                 config.conv3d_stride,
-                padding=(0, 3, 3),
-                dilation=(1, 3, 3),
+                padding=config.intermediate_dilation_padding[0],
+                dilation=config.intermediate_dilation_levels[0],
             ),
             nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv3d(
@@ -1221,8 +1221,8 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 config.kernel_size_3d,
                 config.conv3d_stride,
-                padding=(0, 2, 2),
-                dilation=(1, 2, 2),
+                padding=config.intermediate_dilation_padding[1],
+                dilation=config.intermediate_dilation_levels[1],
             ),
             nn.LeakyReLU(config.negative_slope_default, inplace=True),
             nn.Conv3d(
@@ -1230,8 +1230,8 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
                 self.config.num_channels,
                 config.kernel_size_3d,
                 config.conv3d_stride,
-                padding=(0, 1, 1),
-                dilation=(1, 1, 1),
+                padding=config.intermediate_dilation_padding[2],
+                dilation=config.intermediate_dilation_levels[2],
             ),
             nn.LeakyReLU(config.negative_slope_default, inplace=True),
         )
