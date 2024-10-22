@@ -668,29 +668,6 @@ class GenerationTesterMixin:
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
 
-            # for VLMs inputs embeds won't match input ids unless images are encoded and merged with ids properly
-            # no quick fix available, since obtaining image embeddings step is very model-specific
-            if any(name in model.__class__.__name__.lower() for name in ("blip", "llava", "paligemma")):
-                prepare_inputs_for_generation_args = set(
-                    inspect.signature(model.prepare_inputs_for_generation).parameters
-                )
-                # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
-                # code is up to date with our most recent standards
-                if (
-                    "inputs_embeds" in prepare_inputs_for_generation_args
-                    and "cache_positions" in prepare_inputs_for_generation_args
-                ):
-                    input_embeds = model.get_input_embeddings()(inputs_dict["input_ids"])
-                    beam_kwargs.update({"inputs_embeds": input_embeds})
-                    output_generate2 = self._beam_sample_generate(
-                        model=model,
-                        input_ids=None,
-                        inputs_dict={},
-                        beam_kwargs=beam_kwargs,
-                    )
-
-                    torch.testing.assert_close(output_generate[:, input_embeds.shape[1] :], output_generate2)
-
     @pytest.mark.generate
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
@@ -1567,7 +1544,8 @@ class GenerationTesterMixin:
                     )
 
     @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([(1,), (2,)])
+    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
@@ -1594,11 +1572,15 @@ class GenerationTesterMixin:
                 continue
 
             input_ids = inputs_dict.pop("input_ids")
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+            }
 
             # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
-            )
+            outputs_from_ids = model.generate(input_ids, max_new_tokens=5, **generation_kwargs)
             self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
@@ -1607,8 +1589,7 @@ class GenerationTesterMixin:
                 input_ids,
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
             )
             self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
 
@@ -1619,15 +1600,14 @@ class GenerationTesterMixin:
                 input_ids,
                 inputs_embeds=random_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
             )
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
             # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
             outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
+                inputs_embeds=inputs_embeds, max_new_tokens=5, **generation_kwargs
             )
             self.assertListEqual(
                 outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
