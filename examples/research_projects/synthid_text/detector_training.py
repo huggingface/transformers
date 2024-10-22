@@ -325,6 +325,14 @@ if __name__ == "__main__":
             "HF hub model name for loading of saving the model."
         ),
     )
+    parser.add_argument(
+        "--eval_detector_on_prompts",
+        type=bool,
+        default=True,
+        help=(
+            "Evaluate detector on a prompt and print probability of watermark."
+        ),
+    )
     
 
     args = parser.parse_args()
@@ -339,6 +347,7 @@ if __name__ == "__main__":
     save_model_to_hf_hub = args.save_model_to_hf_hub
     load_from_hf_hub = args.load_from_hf_hub
     repo_name = args.hf_hub_model_name
+    eval_detector_on_prompts = args.eval_detector_on_prompts
     
     NEG_BATCH_SIZE = 32
 
@@ -349,56 +358,62 @@ if __name__ == "__main__":
     MAX_PADDED_LENGTH = 1000
 
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-
-    DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
-        "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
-        "keys": [
-            654,
-            400,
-            836,
-            123,
-            340,
-            443,
-            597,
-            160,
-            57,
-            29,
-            590,
-            639,
-            13,
-            715,
-            468,
-            990,
-            966,
-            226,
-            324,
-            585,
-            118,
-            504,
-            421,
-            521,
-            129,
-            669,
-            732,
-            225,
-            90,
-            960,
-        ],
-        "sampling_table_size": 2**16,
-        "sampling_table_seed": 0,
-        "context_history_size": 1024,
-    })
-    watermark_config = watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(
-        **DEFAULT_WATERMARKING_CONFIG)
-
-    model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
-
-    logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
-        **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+    if DEVICE.type in ("cuda", "tpu"):
+      raise ValueError(
+          "We have found the training stable on GPU and TPU, we are working on"
+          " a fix for CPUs"
+      )
 
     if not load_from_hf_hub:
+        # Change this to make your watermark unique. Check documentation in the paper to understand the
+        # impact of these parameters.
+        DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
+            "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
+            "keys": [
+                654,
+                400,
+                836,
+                123,
+                340,
+                443,
+                597,
+                160,
+                57,
+                29,
+                590,
+                639,
+                13,
+                715,
+                468,
+                990,
+                966,
+                226,
+                324,
+                585,
+                118,
+                504,
+                421,
+                521,
+                129,
+                669,
+                732,
+                225,
+                90,
+                960,
+            ],
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 1024,
+        })
+        watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(
+            **DEFAULT_WATERMARKING_CONFIG)
+
+        model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
+        **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
         tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
             model, 
             tokenizer, 
@@ -425,7 +440,7 @@ if __name__ == "__main__":
             max_padded_length=MAX_PADDED_LENGTH,
             n_epochs=100,
             learning_rate=3e-3,
-            l2_weights=np.zeros((1,)),
+            l2_weights=[0, ],
             verbose=True,
             validation_metric=ValidationMetric.TPR_AT_FPR,
         )
@@ -435,7 +450,52 @@ if __name__ == "__main__":
         best_detector = BayesianDetectorModel.from_pretrained(repo_name)
 
     if save_model_to_hf_hub:
+        best_detector.config.set_detector_information(
+            model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG)
         utils.upload_model_to_hf(best_detector, repo_name)
+
+
+    # Evaluate model response with the detector
+    if eval_detector_on_prompts:
+        model_name = best_detector.config.model_name
+        watermark_config_dict = best_detector.config.watermarking_config
+        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
+            **watermark_config_dict, device=DEVICE)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+        synthid_text_detector = transformers.generation.SynthIDTextWatermarkDetector(
+            best_detector, logits_processor, tokenizer)
+
+        model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(
+            watermark_config_dict)
+        
+        prompts = ['Write a essay on cats.']
+        inputs = tokenizer(
+            prompts,
+            return_tensors='pt',
+            padding=True,
+        ).to(DEVICE)
+
+        _, inputs_len = inputs['input_ids'].shape
+
+        outputs = model.generate(
+            **inputs,
+            watermarking_config=watermarking_config,
+            do_sample=True,
+            max_length=inputs_len + generation_length,
+            temperature=temperature,
+            top_k=40,
+            top_p=1.0,
+        )
+        outputs = outputs[inputs_len:]
+        result = synthid_text_detector(outputs)
+        print(result)
+    
+    
+
+
 
 
 

@@ -260,8 +260,15 @@ class BayesianDetectorConfig(PretrainedConfig):
     def __init__(self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs):
         self.watermarking_depth = watermarking_depth
         self.base_rate = base_rate
+        # These can be set later to store information about this detector.
+        self.model_name = None
+        self.watermarking_config = None
 
         super().__init__(**kwargs)
+
+    def set_detector_information(self, model_name, watermarking_config):
+        self.model_name = model_name
+        self.watermarking_config = watermarking_config
 
 
 @dataclass
