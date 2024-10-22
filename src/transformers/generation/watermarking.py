@@ -481,6 +481,10 @@ SYNTHID_TEXT_DETECTOR_START_DOCSTRING = r"""
 
     SynthID text watermark detector class.
 
+    This class has to be initialized with the trained bayesian detector module check script 
+    in examples/synthid_text/detector_training.py for example in training/saving/loading this
+    detector module. The folder also showcases example use case of this detector.
+
     Parameters:
         detector_module ([`BayesianDetectorModel`]): 
             Bayesian detector module object initialized with parameters. 

@@ -119,6 +119,7 @@ else:
         "WatermarkDetectorOutput",
         "BayesianDetectorModel",
         "BayesianDetectorConfig",
+        "SynthIDTextWatermarkDetector",
     ]
 
 try:
