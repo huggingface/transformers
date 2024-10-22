@@ -93,3 +93,53 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
+
+    def test_chat_template_dict(self):
+        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+
+        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        expected_output = [
+            [
+                1,
+                3148,
+                1001,
+                29901,
+                29871,
+                32000,
+                29871,
+                13,
+                5618,
+                338,
+                4318,
+                297,
+                445,
+                1967,
+                29973,
+                319,
+                1799,
+                9047,
+                13566,
+                29901,
+            ]
+        ]
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+
+        # add image URL for return dict
+        messages[0]["content"][0] = {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        out_dict_with_image = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True
+        )
+        self.assertListEqual(list(out_dict_with_image.keys()), ["input_ids", "attention_mask", "pixel_values"])

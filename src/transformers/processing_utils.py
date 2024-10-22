@@ -30,7 +30,7 @@ import numpy as np
 import typing_extensions
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image, load_video
 
 
 if is_vision_available():
@@ -1071,11 +1071,28 @@ class ProcessorMixin(PushToHubMixin):
         conversation: Union[List[Dict[str, str]]],
         chat_template: Optional[str] = None,
         tokenize: bool = False,
+        return_dict: bool = False,
+        processor_kwargs: Dict = {},
         **kwargs,
     ) -> str:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
         conversations to turn them into a single tokenizable string.
+
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+
+        conversation = [
+            {
+
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Please describe this image in detail."},
+                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    ],
+            },
+        ]
 
         Args:
             conversation (`List[Dict, str, str]`):
@@ -1085,8 +1102,13 @@ class ProcessorMixin(PushToHubMixin):
                 chat template is used.
             tokenize (`bool`, *optional*, defaults to `False`):
                 Whether to tokenize the output or not.
+            return_dict (`bool`, defaults to `False`):
+                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+            processor_kwargs (`Dict[str: Any]`, *optional*):
+                Additional kwargs to pass to the processor. Used when `return_dict=True` and `tokenize=True`.
             **kwargs:
-                Additional keyword arguments
+                Additional keyword arguments passed to the chat template, such as `tools` or `documents` depending
+                on whether it is supported by the current template.
         """
 
         if chat_template is None:
@@ -1098,9 +1120,39 @@ class ProcessorMixin(PushToHubMixin):
                     "or provide a chat template as an argument. See "
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
-        return self.tokenizer.apply_chat_template(
-            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
+
+        prompt = self.tokenizer.apply_chat_template(
+            conversation, chat_template=chat_template, tokenize=False, return_dict=False, **kwargs
         )
+
+        def parse_conversation(conversation: Union[List[Dict[str, str]]]):
+            images, videos = [], []
+            for message in conversation:
+                visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                for vision_info in visuals:
+                    if vision_info["type"] == "image" and "image" in vision_info:
+                        images.append(load_image(vision_info["image"]))
+                    elif vision_info["type"] == "video" and "video" in vision_info:
+                        videos.append(load_video(vision_info["video"]))
+            return images, videos
+
+        # we will have to return all processed inputs in a dict
+        if tokenize:
+            images, videos = parse_conversation(conversation)
+            out = self(
+                text=prompt,
+                images=images if images else None,
+                videos=videos if videos else None,
+                padding=kwargs.get("padding", False),
+                truncation=kwargs.get("truncation", False),
+                max_length=kwargs.get("max_length", None),
+                return_tensors=kwargs.get("return_tensors", None),
+            )
+            if return_dict:
+                return out
+            else:
+                return out["input_ids"]
+        return prompt
 
 
 def _validate_images_text_input_order(images, text):
