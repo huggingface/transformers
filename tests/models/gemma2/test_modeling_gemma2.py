@@ -88,6 +88,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
+    @unittest.skip("Gemma2's forcefully disables sdpa due to softcapping")
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_inference(self):
