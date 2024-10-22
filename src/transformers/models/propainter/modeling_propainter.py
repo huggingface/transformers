@@ -799,9 +799,6 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                     config,
                     num_channels,
                     num_channels,
-                    config.patch_size,
-                    padding=config.padding,
-                    deform_groups=16,
                 )
 
                 self.backbone[module] = nn.Sequential(
@@ -972,12 +969,9 @@ class ProPainterDeformableAlignment(nn.Module):
         config: ProPainterConfig,
         in_channels: int,
         out_channels: int,
-        kernel_size: int,
         stride: int = 1,
-        padding: int = 0,
         dilation: int = 1,
         groups: int = 1,
-        deform_groups: int = 1,
         bias: bool = True,
         **kwargs,
     ):
@@ -989,12 +983,12 @@ class ProPainterDeformableAlignment(nn.Module):
 
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.kernel_size = _pair(kernel_size)
+        self.kernel_size = _pair(config.patch_size)
         self.stride = stride
-        self.padding = padding
+        self.padding = config.padding
         self.dilation = dilation
         self.groups = groups
-        self.deform_groups = deform_groups
+        self.deform_groups = config.deform_groups
         self.with_bias = bias
 
         self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
@@ -2153,7 +2147,9 @@ class ProPainterInpaintGenerator(nn.Module):
         self.max_pool = nn.MaxPool2d(config.kernel_size, config.conv2d_stride, config.padding_inpaint_generator)
 
         # feature propagation module
-        self.img_prop_module = ProPainterBidirectionalPropagationInPaint(config, num_channels=3, learnable=False)
+        self.img_prop_module = ProPainterBidirectionalPropagationInPaint(
+            config, num_channels=config.num_channels_img_prop_module, learnable=False
+        )
         self.feature_propagation_module = ProPainterBidirectionalPropagationInPaint(
             config, config.num_channels, learnable=True
         )

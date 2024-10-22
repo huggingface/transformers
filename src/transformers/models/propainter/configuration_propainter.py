@@ -127,6 +127,10 @@ class ProPainterConfig(PretrainedConfig):
             Padding mode for convolution layers (default: "replicate").
         intermediate_dilation_levels (`List[Tuple[int, int, int]]`, *optional*, defaults to `[(1, 3, 3), (1, 2, 2), (1, 1, 1)]`):
             Dilation rates for intermediate layers (depth, height, width).
+        num_channels_img_prop_module (`int`, *optional*, defaults to 3):
+            The number of channels for image propagation module in ProPainterBidirectionalPropagationInPaint module.
+        deform_groups (`int`, *optional*, defaults to `16`):
+            Specifies the number of deformable group partitions in the deformable convolution layer.
 
     Example:
 
@@ -191,6 +195,8 @@ class ProPainterConfig(PretrainedConfig):
         padding_downsample=[0, 2, 2],
         padding_mode="replicate",
         intermediate_dilation_levels=[(1, 3, 3), (1, 2, 2), (1, 1, 1)],
+        num_channels_img_prop_module=3,
+        deform_groups=16,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -239,3 +245,5 @@ class ProPainterConfig(PretrainedConfig):
         self.padding_downsample = padding_downsample
         self.padding_mode = padding_mode
         self.intermediate_dilation_levels = intermediate_dilation_levels
+        self.num_channels_img_prop_module = num_channels_img_prop_module
+        self.deform_groups = deform_groups
