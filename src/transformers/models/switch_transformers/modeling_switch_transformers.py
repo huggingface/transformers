@@ -1004,9 +1004,23 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if past_key_values is not None and not past_key_values.is_updated.get(0, False):
+                past_seen_tokens_cross_attn = past_key_values.cross_attention_cache.get_seq_length()
+                encoder_sequence_length += past_seen_tokens_cross_attn
+
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
+                encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+                encoder_attention_mask = torch.ones(
+                    encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
+                )
+            # Edge case for PEFT tuning when several virtual tokens are added. We'll need to create attn mask
+            # of shape current/actual `encoder_hidden_states` + vitual token `encoder_hidden_states`
+            elif encoder_attention_mask is not None and encoder_attention_mask.shape[1] < encoder_sequence_length:
+                encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length - encoder_attention_mask.shape[1])
+                new_encoder_attention_mask = torch.ones(
+                    encoder_hidden_shape, device=encoder_attention_mask.device, dtype=torch.long
+                )
+                encoder_attention_mask = torch.cat([new_encoder_attention_mask, encoder_attention_mask], dim=-1)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
