@@ -342,7 +342,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
         filename = "siglip_pixel_values_512.pt"
     else:
         raise ValueError("Image size not supported")
-
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
@@ -365,7 +364,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # with torch.no_grad():
     #     outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
-
     probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
     print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
     print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
@@ -411,7 +409,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             expected_slice = torch.tensor(
                 [[-1.9432535, -0.05433846], [0.6222029, 2.2883186]],
             )
-
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
 
