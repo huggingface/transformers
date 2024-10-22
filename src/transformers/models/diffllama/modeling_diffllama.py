@@ -515,13 +515,13 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        query_states1, query_states2 = torch.chunk(query_states, 2, dim=2)
-        key_states1, key_states2 = torch.chunk(key_states, 2, dim=2)
         value_states1, value_states2 = torch.chunk(value_states, 2, dim=2)
+        value_states1 = value_states1.repeat(1, 1, 2, 1)
+        value_states2 = value_states2.repeat(1, 1, 2, 1)
 
-        attn_output11 = _flash_attention_forward(
-            query_states1,
-            key_states1,
+        attn_output1 = _flash_attention_forward(
+            query_states,
+            key_states,
             value_states1,
             attention_mask,
             q_len,
@@ -531,35 +531,10 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
-        attn_output12 = _flash_attention_forward(
-            query_states1,
-            key_states1,
-            value_states2,
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
-        )
-        attn_output1 = torch.cat([attn_output11, attn_output12], dim=-1)
 
-        attn_output21 = _flash_attention_forward(
-            query_states2,
-            key_states2,
-            value_states1,
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
-        )
-        attn_output22 = _flash_attention_forward(
-            query_states2,
-            key_states2,
+        attn_output2 = _flash_attention_forward(
+            query_states,
+            key_states,
             value_states2,
             attention_mask,
             q_len,
@@ -569,7 +544,9 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
-        attn_output2 = torch.cat([attn_output21, attn_output22], dim=-1)
+
+        attn_output = torch.cat([attn_output1, attn_output2], dim=-1)
+        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=2)
 
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
