@@ -50,8 +50,8 @@ from .configuration_glm import GlmConfig
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
-from ...processing_utils import Unpack
+
+from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 class GlmRMSNorm(nn.Module):
@@ -736,7 +736,6 @@ class GlmModel(GlmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -818,7 +817,6 @@ class GlmModel(GlmPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
