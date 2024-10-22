@@ -673,7 +673,7 @@
       - local: in_translation
         title: (번역중) XLSR-Wav2Vec2
       title: (번역중) 오디오 모델
-      - isExpanded: false
+    - isExpanded: false
       sections:
       - local: model_doc/vivit
         title: ViViT
