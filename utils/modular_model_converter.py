@@ -18,7 +18,7 @@ import importlib
 import os
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -708,17 +708,18 @@ def find_all_dependencies(function: str, dependency_mapping: Dict[str, set]):
     return all_dependencies_with_parent
 
 
-class PostModularConverterCleaner(CSTTransformer):
+class PostModularConverterCleaner(m.MatcherDecoratableTransformer):
     """Allow simple cleaning after conversion. Removes top-level functions/classes that are defined, but not called.
     (this may happen due to dependency mapping, even if code parts with those functions/classes were overwritten)"""
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self, added_dependencies: set):
+    def __init__(self, added_dependencies: set, unused_imports:Dict[Union[cst.Import, cst.ImportFrom], Set[str]]):
         super().__init__()
         self.top_level_functions_or_classes = {}
         self.all_used_functions_or_classes = set()
         self.added_dependencies = added_dependencies
+        self.unused_imports = unused_imports
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -750,9 +751,50 @@ class PostModularConverterCleaner(CSTTransformer):
         nodes_to_remove = [
             self.top_level_functions_or_classes[name] for name in unused if name in self.top_level_functions_or_classes
         ]
-        new_body = [node_ for node_ in original_node.body if node_ not in nodes_to_remove]
+        new_body = [node_ for node_ in node.body if node_ not in nodes_to_remove]
         # Return a new module with the updated body
         return node.with_changes(body=new_body)
+
+
+    def leave_If(self,original_node: cst.If,updated_node: cst.If):
+        for stmt in original_node.body.body:
+            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                if len(updated_node.body.body) == 0:
+                    return cst.RemoveFromParent()
+        return updated_node
+
+    @m.leave(m.Import() | m.ImportFrom())
+    def leave_import_alike(self, original_node, updated_node):
+        names_to_keep = []
+        for name in updated_node.names:
+            name_value = name.evaluated_name
+            if name_value not in self.unused_imports:
+                names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
+        if len(names_to_keep) == 0:
+            return cst.RemoveFromParent()
+        else:
+            return updated_node.with_changes(names=names_to_keep)
+
+
+
+def get_unused_imports(source):
+    wrapper = cst.metadata.MetadataWrapper(source)
+    scopes = set(wrapper.resolve(cst.metadata.ScopeProvider).values())
+    unused_imports: Dict[Union[cst.Import, cst.ImportFrom], Set[str]] = defaultdict(set)
+    ranges = wrapper.resolve(cst.metadata.PositionProvider)
+    for scope in scopes:
+        for assignment in scope.assignments:
+            node = assignment.node
+            if isinstance(assignment, cst.metadata.Assignment) and isinstance(
+                node, (cst.Import, cst.ImportFrom)
+            ):
+                if len(assignment.references) == 0:
+                    unused_imports[assignment.name].add(node)
+                    location = ranges[node].start
+                    print(
+                        f"Warning on line {location.line:2d}, column {location.column:2d}: Imported name `{assignment.name}` is unused."
+                    )
+    return unused_imports
 
 
 class ModularConverterTransformer(CSTTransformer):
@@ -788,7 +830,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.current_class = None  # keep track of current top-level class during visit
         self.current_top_level_function = None  # keep track of current top-level function during visit
         # Mapping from top-level functions to classes using them
-        self.function_call_class_mapping = defaultdict(set)
+        self.callable_dependency_mapping = defaultdict(set)
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(set)
         self.added_dependencies = set()
@@ -830,9 +872,8 @@ class ModularConverterTransformer(CSTTransformer):
         if m.matches(parent_node, m.Module()):
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import()])):
                 for k in updated_node.body[0].names:
-                    if k not in self.all_imports:
-                        import_name = self.python_module.code_for_node(k.name)
-                        self.all_imports[import_name] = updated_node
+                    import_name = self.python_module.code_for_node(k.name)
+                    self.all_imports[import_name] = updated_node
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
@@ -841,9 +882,8 @@ class ModularConverterTransformer(CSTTransformer):
                 ):  # OR MATCH ..llama.modeling_llama
                     return cst.RemoveFromParent()
                 for k in updated_node.body[0].names:
-                    if k not in self.all_imports:
-                        import_name = self.python_module.code_for_node(k.name)
-                        self.all_imports[import_name] = updated_node
+                    import_name = self.python_module.code_for_node(k.name)
+                    self.all_imports[import_name] = updated_node
                 return updated_node
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
                 if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
@@ -860,7 +900,7 @@ class ModularConverterTransformer(CSTTransformer):
         self.current_class = node.name.value
         for k in node.bases:
             if isinstance(k.value, cst.Name):
-                self.function_call_class_mapping[k.value.value].add(self.current_class)
+                self.callable_dependency_mapping[k.value.value].add(self.current_class)
 
     def leave_ClassDef(self, original_node, updated_node):
         """
@@ -1051,10 +1091,10 @@ class ModularConverterTransformer(CSTTransformer):
         if self.current_class is not None:
             # Simple function calls such as foo()
             if m.matches(node.func, m.Name()):
-                self.function_call_class_mapping[node.func.value].add(self.current_class)
+                self.callable_dependency_mapping[node.func.value].add(self.current_class)
             if m.matches(node.func, m.Attribute() | m.Subscript()):
                 _code = self.python_module.code_for_node(node.func.value)
-                self.function_call_class_mapping[_code].add(self.current_class)
+                self.callable_dependency_mapping[_code].add(self.current_class)
         elif self.current_top_level_function is not None:
             # Simple function calls such as foo()
             if m.matches(node.func, m.Name()):
@@ -1097,7 +1137,7 @@ class ModularConverterTransformer(CSTTransformer):
         """
         # At this point, `self.all_definitions` only contains newly defined top-level functions in the `modualr_xxx.py`
         for top_level_function, function_node in self.all_definitions.items():
-            calling_entities = self.function_call_class_mapping[top_level_function]
+            calling_entities = self.callable_dependency_mapping[top_level_function]
             # The function may be needed in different files, we need to iterate on them
             for file, body in self.files.items():
                 file_elements = set(body.keys())
@@ -1113,18 +1153,9 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency, body, self.all_definitions[dependency], parent=parent
                         )
 
-    def _filter_imports_for_file(self, imports):
-        _dict = defaultdict(dict)
-        for key, value in imports.items():
-            if key in self.function_call_class_mapping:
-                node = self.function_call_class_mapping[key]
-                if len(node) == 1:
-                    file_name = self.class_to_file_type[node.copy().pop()]
-                    _dict[file_name][key] = value
-        return _dict
-
     def leave_Module(self, original_node: cst.Module, node):
-        dependency_imports = self._filter_imports_for_file(self.all_imports.copy())
+        imports = {self.python_module.code_for_node(k): k for k in self.all_imports.values()}
+        dependency_imports = {file_type: imports.copy() for file_type in self.files}
         for super_file_name, visiter in self.visited_module.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             dependency_imports[file_type].update(
@@ -1142,7 +1173,9 @@ class ModularConverterTransformer(CSTTransformer):
                     new_body = list(dependency_imports[file].values()) + new_body
                 new_module = cst.Module(body=[*new_body], header=node.header)
                 # Final cleanup
-                new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner(self.added_dependencies))
+                unused_imports = get_unused_imports(new_module)
+                cleaner = PostModularConverterCleaner(self.added_dependencies, unused_imports)
+                new_module = MetadataWrapper(new_module).visit(cleaner)
                 self.files[file] = new_module
         return node
 
@@ -1201,7 +1234,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/llava_next_video/modular_llava_next_video.py"],
+        default=["src/transformers/models/gemma2/modular_gemma2.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
