@@ -582,7 +582,15 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
-        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model.forward).parameters
+        # Just in case the model was wrapped outside of the `Trainer`
+        unwrapped_model = self.accelerator.unwrap_model(model)
+        model_forward = (
+            unwrapped_model.forward
+            if not _is_peft_model(unwrapped_model)
+            else unwrapped_model.get_base_model().forward
+        )
+
+        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
