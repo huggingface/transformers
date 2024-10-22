@@ -1874,7 +1874,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     **template_kwargs,
                 )
             if continue_final_message:
-                final_message = chat[-1]["content"].strip()
+                final_message = chat[-1]["content"]
+                if isinstance(final_message, (list, tuple)):
+                    final_message = final_message[-1]["text"]
+                final_message = final_message.strip()
                 rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
             rendered.append(rendered_chat)
 
