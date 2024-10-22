@@ -2501,7 +2501,9 @@ class Trainer:
                         else 1
                     )
 
-                    self.optimizer.multiply_grads(numerator / (num_items_in_batch or 1.0))
+                    # Only valid in accelerate >= 1.1.0
+                    if hasattr(self.optimizer, "multiply_grads"):
+                        self.optimizer.multiply_grads(numerator / (num_items_in_batch or 1.0))
 
                     if (
                         (total_batched_samples) % args.gradient_accumulation_steps == 0
