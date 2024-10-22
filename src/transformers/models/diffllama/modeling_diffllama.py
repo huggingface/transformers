@@ -658,7 +658,7 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
             is_causal=is_causal,
         )
 
-        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)```
+        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
 
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
