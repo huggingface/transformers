@@ -965,7 +965,7 @@ class Trainer:
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
-        if self.eval_dataset is None or not has_length(self.eval_dataset):
+        if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
 
@@ -986,10 +986,10 @@ class Trainer:
                 return SequentialSampler(eval_dataset)
 
         if self.args.group_by_length:
-            if is_datasets_available() and isinstance(self.eval_dataset, datasets.Dataset):
+            if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
                 lengths = (
-                    self.eval_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in self.eval_dataset.column_names
+                    eval_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in eval_dataset.column_names
                     else None
                 )
             else:
@@ -997,7 +997,7 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
-                dataset=self.eval_dataset,
+                dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
