@@ -57,7 +57,7 @@ class Idefics2VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        intializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation for initializing all weight matrices in the model.
 
     Example:
@@ -134,6 +134,10 @@ class Idefics2PerceiverConfig(PretrainedConfig):
     Args:
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the perceiver block.
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
         resampler_n_latents (`int`, *optional*, defaults to 64):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         resampler_depth (`int`, *optional*, defaults to 3):
@@ -153,6 +157,8 @@ class Idefics2PerceiverConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_act="silu",
+        hidden_size=4096,
+        rms_norm_eps=1e-06,
         resampler_n_latents=64,
         resampler_depth=3,
         resampler_n_heads=16,
@@ -162,6 +168,8 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         **kwargs,
     ):
         self.hidden_act = hidden_act
+        self.hidden_size = hidden_size
+        self.rms_norm_eps = rms_norm_eps
         self.resampler_n_latents = resampler_n_latents
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
@@ -258,5 +266,12 @@ class Idefics2Config(PretrainedConfig):
             )
 
         self.text_config = text_config
+        if self.text_config.hidden_size != self.perceiver_config.hidden_size:
+            self.perceiver_config.hidden_size = self.text_config.hidden_size
+            self.perceiver_config.rms_norm_eps = self.text_config.rms_norm_eps
+            logger.warning_once(
+                "Perceiver config has a different `hidden_size` than text config, which means default values were used. "
+                "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
+            )
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
