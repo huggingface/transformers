@@ -653,6 +653,8 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
+        value_states = torch.cat(torch.chunk(value_states, 2, dim=1), dim=-1)
+        value_states = value_states.repeat(1, 2, 1, 1)
 
         causal_mask = attention_mask
         if attention_mask is not None:
@@ -669,45 +671,17 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        query_states1, query_states2 = torch.chunk(query_states, 2, dim=1)
-        key_states1, key_states2 = torch.chunk(key_states, 2, dim=1)
-        value_states1, value_states2 = torch.chunk(value_states, 2, dim=1)
 
-        attn_output11 = torch.nn.functional.scaled_dot_product_attention(
-            query_states1,
-            key_states1,
-            value_states1,
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
         )
-        attn_output12 = torch.nn.functional.scaled_dot_product_attention(
-            query_states1,
-            key_states1,
-            value_states2,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-        attn_output1 = torch.cat([attn_output11, attn_output12], dim=-1)
 
-        attn_output21 = torch.nn.functional.scaled_dot_product_attention(
-            query_states2,
-            key_states2,
-            value_states1,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-        attn_output22 = torch.nn.functional.scaled_dot_product_attention(
-            query_states2,
-            key_states2,
-            value_states2,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-        attn_output2 = torch.cat([attn_output21, attn_output22], dim=-1)
+        attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)```
 
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
