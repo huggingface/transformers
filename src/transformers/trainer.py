@@ -3435,13 +3435,18 @@ class Trainer:
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
             kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
-                information see:
+                Additional keyword arguments passed along to the respective methods depending on the chosen backend:
 
-                - the documentation of
-                  [optuna.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
-                - the documentation of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run)
-                - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
+                - If you use `optuna`, those will be the `kwargs` of
+                  [optuna.study.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
+                  and also the parameters `timeout`, `n_jobs` and `gc_after_trial` correspondign to
+                  [optuna.study.Study.optimize](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.Study.html#optuna.study.Study.optimize)
+                - If you use `ray`, those will be the `kwargs` of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run).
+                  If `resources_per_trial` is not set in the `kwargs` it will default to 1 CPU core and 1 GPU (if available).
+                  If `progress_reporter` is not set in the `kwargs`,
+                  [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html)will be used.
+                - If you use `sigopt`, you can use the parameter `proxies` for
+                  [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
 
         Returns:
             [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
