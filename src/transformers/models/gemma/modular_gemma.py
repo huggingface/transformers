@@ -49,6 +49,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
 
+_CHECKPOINT_FOR_DOC = "google/gemma-7b"
 
 logger = logging.get_logger(__name__)
 
