@@ -517,10 +517,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained(
-            "rhymes-ai/Aria",
-            bos_token="<|startoftext|>",
-            eos_token="<|endoftext|>",
-            use_fast=False
+            "rhymes-ai/Aria", bos_token="<|startoftext|>", eos_token="<|endoftext|>", use_fast=False
         )
         slow_tokenizer.add_tokens("<image>", True)
 

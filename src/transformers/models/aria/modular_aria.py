@@ -11,7 +11,7 @@ from torchvision import transforms
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation.utils import GenerationMixin
+from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutput
@@ -85,6 +85,7 @@ class AriaVisionTransformer(Idefics3VisionTransformer):
 
     This class extends the original Idefics3VisionTransformer by removing the post-layernorm operation.
     """
+
     _supports_sdpa = False
 
     def __init__(self, config: AriaVisionConfig):
@@ -888,6 +889,8 @@ class AriaTopKRouter(nn.Module):
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
         scores = F.softmax(top_logits, dim=-1)
 
+        original_dtype = top_indices.dtype
+
         tokens_per_expert = torch.histc(
             top_indices.flatten().to(torch.float32),
             bins=self.config.moe_num_experts,
@@ -895,7 +898,7 @@ class AriaTopKRouter(nn.Module):
             max=self.config.moe_num_experts - 1,
         )
 
-        return scores, top_indices, tokens_per_expert
+        return scores, top_indices, tokens_per_expert.to(original_dtype)
 
 
 class AriaMLP(LlamaMLP):
@@ -1132,6 +1135,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     Args:
         config (AriaConfig): Configuration object for the model.
     """
+
     _supports_sdpa = False
 
     def __init__(self, config: AriaConfig):
