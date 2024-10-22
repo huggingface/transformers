@@ -1768,11 +1768,12 @@ class Blip2Model(Blip2PreTrainedModel):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            loss = outputs.loss
+            logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
@@ -1809,6 +1810,12 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(BLIP_2_TEXT_WITH_PROJECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2TextModelOutput, config_class=Blip2Config)
@@ -2233,11 +2240,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            loss = outputs.loss
+            logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
@@ -2388,6 +2396,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ImageTextMatchingModelOutput, config_class=Blip2Config)
