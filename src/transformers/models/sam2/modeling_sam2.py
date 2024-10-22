@@ -188,9 +188,6 @@ class Sam2PromptEncoder(nn.Module):
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
-        # torch.where and expanding the labels tensor is required by the ONNX export
-        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
-
         # This is required for the ONNX export. The dtype, device need to be explicitely
         # specificed as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
@@ -198,6 +195,9 @@ class Sam2PromptEncoder(nn.Module):
             point_embedding,
             torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
         )
+
+        # torch.where and expanding the labels tensor is required by the ONNX export
+        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
         point_embedding = torch.where(
             (labels == 0)[:, :, :, None],
@@ -1995,53 +1995,6 @@ class Sam2Model(Sam2PreTrainedModel):
 
         self.post_init()
 
-    def _build_sam_heads(self):
-        """Build SAM-style prompt encoder and mask decoder."""
-        self.sam_prompt_embed_dim = self.config.image_encoder_config.d_model
-        self.sam_image_embedding_size = self.config.image_size // self.config.backbone_stride
-
-        # build PromptEncoder and MaskDecoder from SAM
-        # (their hyperparameters like `mask_in_chans=16` are from SAM code)
-        self.sam_prompt_encoder = Sam2PromptEncoder(
-            embed_dim=self.sam_prompt_embed_dim,
-            image_embedding_size=(
-                self.sam_image_embedding_size,
-                self.sam_image_embedding_size,
-            ),
-            input_image_size=(self.config.image_size, self.config.image_size),
-            mask_in_chans=16,
-        )
-        self.sam_mask_decoder = Sam2MaskDecoder(
-            num_multimask_outputs=3,
-            transformer=Sam2TwoWayTransformer(
-                depth=2,
-                embedding_dim=self.sam_prompt_embed_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            ),
-            transformer_dim=self.sam_prompt_embed_dim,
-            iou_head_depth=3,
-            iou_head_hidden_dim=256,
-            use_high_res_features=self.config.use_high_res_features_in_sam,
-            iou_prediction_use_sigmoid=self.config.iou_prediction_use_sigmoid,
-            pred_obj_scores=self.config.pred_obj_scores,
-            pred_obj_scores_mlp=self.config.pred_obj_scores_mlp,
-            use_multimask_token_for_obj_ptr=self.config.use_multimask_token_for_obj_ptr,
-            **(self.config.sam_mask_decoder_extra_args or {}),
-        )
-        if self.config.use_obj_ptrs_in_encoder:
-            # a linear projection on SAM output tokens to turn them into object pointers
-            self.obj_ptr_proj = torch.nn.Linear(self.hidden_dim, self.hidden_dim)
-            if self.config.use_mlp_for_obj_ptr_proj:
-                self.obj_ptr_proj = Sam2MLP(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
-        else:
-            self.obj_ptr_proj = torch.nn.Identity()
-        if self.config.proj_tpos_enc_in_obj_ptrs:
-            # a linear projection on temporal positional encoding in object pointers to
-            # avoid potential interference with spatial positional encoding
-            self.obj_ptr_tpos_proj = torch.nn.Linear(self.hidden_dim, self.mem_dim)
-        else:
-            self.obj_ptr_tpos_proj = torch.nn.Identity()
 
     @property
     def device(self):

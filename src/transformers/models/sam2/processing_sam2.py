@@ -197,7 +197,7 @@ class Sam2Processor(ProcessorMixin):
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = self.image_processor._get_preprocess_shape(original_size, longest_edge=target_size)
+        new_h, new_w = target_size, target_size
         coords = deepcopy(coords).astype(float)
 
         if is_bounding_box:

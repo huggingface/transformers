@@ -32,13 +32,19 @@ from transformers import (
     Sam2ImageProcessor,
     Sam2Model,
     Sam2Processor,
-    Sam2VisionConfig,
+    Sam2ImageEncoderConfig,
+    Sam2PromptEncoderConfig,
+    Sam2MemoryAttentionConfig,
+    Sam2MemoryEncoderConfig,
 )
 
 
 def get_config(model_name):
     if "sam2_hiera_tiny" in model_name:
-        vision_config = Sam2VisionConfig()
+        image_encoder_config = Sam2ImageEncoderConfig()
+        prompt_encoder_config = Sam2PromptEncoderConfig()
+        memory_attention_config = Sam2MemoryAttentionConfig()
+        memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2_hiera_small" in model_name:
         # TO DO
         pass
@@ -50,14 +56,37 @@ def get_config(model_name):
         pass
 
     config = Sam2Config(
-        vision_config=vision_config,
+        image_encoder_config=image_encoder_config,
+        prompt_encoder_config=prompt_encoder_config,
+        memory_attention_config=memory_attention_config,
+        memory_encoder_config=memory_encoder_config,
     )
 
     return config
 
 
 KEYS_TO_MODIFY_MAPPING = {
-    # TO DO
+    "iou_prediction_head.layers.0": "iou_prediction_head.proj_in",
+    "iou_prediction_head.layers.1": "iou_prediction_head.layers.0",
+    "iou_prediction_head.layers.2": "iou_prediction_head.proj_out",
+    "mask_decoder.output_upscaling.0": "mask_decoder.upscale_conv1",
+    "mask_decoder.output_upscaling.1": "mask_decoder.upscale_layer_norm",
+    "mask_decoder.output_upscaling.3": "mask_decoder.upscale_conv2",
+    "mask_downscaling.0": "mask_embed.conv1",
+    "mask_downscaling.1": "mask_embed.layer_norm1",
+    "mask_downscaling.3": "mask_embed.conv2",
+    "mask_downscaling.4": "mask_embed.layer_norm2",
+    "mask_downscaling.6": "mask_embed.conv3",
+    "point_embeddings": "point_embed",
+    "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
+    "image_encoder": "vision_encoder",
+    "neck.0": "neck.conv1",
+    "neck.1": "neck.layer_norm1",
+    "neck.2": "neck.conv2",
+    "neck.3": "neck.layer_norm2",
+    "patch_embed.proj": "patch_embed.projection",
+    ".norm": ".layer_norm",
+    "blocks": "layers",
 }
 
 
