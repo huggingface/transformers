@@ -781,7 +781,7 @@ def get_unused_imports(source):
     """
     wrapper = cst.metadata.MetadataWrapper(source)
     scopes = set(wrapper.resolve(cst.metadata.ScopeProvider).values())
-    unused_imports: Dict[Union[cst.Import, cst.ImportFrom], Set[str]] = defaultdict(set)
+    unused_imports: Dict[ Set[str], Union[cst.Import, cst.ImportFrom]] = defaultdict(set)
     ranges = wrapper.resolve(cst.metadata.PositionProvider)
     for scope in scopes:
         for assignment in scope.assignments:

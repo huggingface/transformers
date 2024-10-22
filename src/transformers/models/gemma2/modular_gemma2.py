@@ -18,6 +18,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+import math
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
@@ -33,8 +34,7 @@ from ...utils import (
     logging,
 )
 from ..gemma.modeling_gemma import (
-    GemmaAttention,
-    GemmaDecoderLayer,
+    GemmaRotaryEmbedding,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
@@ -320,13 +320,15 @@ def sdpa_attention_forward(config, query, key, value, mask, output_attentions=Fa
     return attn_output
 
 
-GEMMA_ATTENTION_FUNCTION = {
+GEMMA2_ATTENTION_FUNCTION = {
     "flash_attention": flash_attention_forward,
     "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
 
+class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
+    pass
 
 class Gemma2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -350,7 +352,7 @@ class Gemma2Attention(nn.Module):
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
         self.attention_type = config.attn_implementation
-        self.attention_function = GEMMA_ATTENTION_FUNCTION[config.attn_implementation]
+        self.attention_function = GEMMA2_ATTENTION_FUNCTION[config.attn_implementation]
 
 
         if self.hidden_size % self.num_heads != 0:
