@@ -36,3 +36,24 @@ from transformers import AutoTokenizer
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id, subfolder="original") 
 ```
+
+The `tokenizer.model` file can be generated with `dump_tiktoken_bpe` function from `tiktoken.load`.
+
+However, keep in mind that `tokenizer.model` file contains no information about additional tokens or a pattern string. 
+If these are important for you, consider converting the tokenizer to HF format and saving it on disk using the utility 
+function:
+
+```py
+from transformers.tokenization_utils_fast import convert_tiktoken_to_fast
+from tiktoken import get_encoding
+
+# You can load your custom encoding or the one provided by OpenAI
+encoding = get_encoding("gpt2")
+convert_tiktoken_to_fast(encoding, "config/save/dir")
+```
+
+This will convert tiktoken tokenizer to `PretrainedTokenizerFast` and save its configuration file, `tokenizer.json`, to
+provided directory.
+
+You can load this tokenizer with `PretrainedTokenizerFast.from_pretrained("config/save/dir")`.
+
