@@ -178,8 +178,8 @@ def train_best_detector(
     tokenizer: Any,
     torch_device: torch.device,
     test_size: float = 0.3,
-    pos_truncation_length: int = 200,
-    neg_truncation_length: int = 100,
+    pos_truncation_length: Optional[int] = 200,
+    neg_truncation_length: Optional[int] = 100,
     max_padded_length: int = 2300,
     n_epochs: int = 50,
     learning_rate: float = 2.1e-2,
@@ -187,6 +187,13 @@ def train_best_detector(
     verbose: bool = False,
     validation_metric: ValidationMetric = ValidationMetric.TPR_AT_FPR,
 ):
+    """ Train and return the best detector given range of hyperparameters.
+
+    In practice, we have found that tuning pos_truncation_length,
+    neg_truncation_length, n_epochs, learning_rate and l2_weights can help
+    improve the performance of the detector. We reccommend tuning these
+    parameters for your data.
+    """
     l2_weights = list(l2_weights)
 
     (

@@ -2,7 +2,7 @@ import argparse
 import datasets
 import enum
 import gc
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 
 from huggingface_hub import HfApi, Repository, create_repo
 from huggingface_hub.utils import RepositoryNotFoundError
@@ -47,7 +47,7 @@ def pad_to_len(
 
 def filter_and_truncate(
     outputs: torch.Tensor,
-    truncation_length: int,
+    truncation_length: Optional[int],
     eos_token_mask: torch.Tensor,
 ) -> torch.Tensor:
     """Filter and truncate outputs to given length.
@@ -60,9 +60,11 @@ def filter_and_truncate(
     Returns:
     output tensor of shape [batch_size, truncation_length].
     """
-    outputs = outputs[:, :truncation_length]
-    truncation_mask = torch.sum(eos_token_mask, dim=1) >= truncation_length
-    return outputs[truncation_mask, :]
+    if truncation_length:
+        outputs = outputs[:, :truncation_length]
+        truncation_mask = torch.sum(eos_token_mask, dim=1) >= truncation_length
+        return outputs[truncation_mask, :]
+    return outputs
 
 
 def process_outputs_for_training(
@@ -70,8 +72,8 @@ def process_outputs_for_training(
     logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     *,
-    pos_truncation_length: int,
-    neg_truncation_length: int,
+    pos_truncation_length: Optional[int],
+    neg_truncation_length: Optional[int],
     max_length: int,
     is_cv: bool,
     is_pos: bool,
