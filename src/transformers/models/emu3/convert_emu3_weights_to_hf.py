@@ -247,40 +247,41 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
     model.load_state_dict(state_dict, assign=True, strict=True)
     model.save_pretrained(output_dir, safe_serialization=True)
 
-    # Short inference on a few examples to check if generation makes sense
-    print("Loading the checkpoint in a Emu3 model...")
-    print("*" * 100)
-    model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
-    processor = Emu3Processor.from_pretrained(output_dir)
+    if test_inference:
+        # Short inference on a few examples to check if generation makes sense
+        print("Loading the checkpoint in a Emu3 model...")
+        print("*" * 100)
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        processor = Emu3Processor.from_pretrained(output_dir)
 
-    prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
-    image = Image.open(
-        requests.get(
-            "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-        ).raw
-    )
-    inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
-    length = inputs.input_ids.shape[1]
+        prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
+        image = Image.open(
+            requests.get(
+                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
+            ).raw
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+        length = inputs.input_ids.shape[1]
 
-    out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-    generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+        out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
 
-    print(f"Generation for single-image: {generated_text}")
-    print("*" * 100)
+        print(f"Generation for single-image: {generated_text}")
+        print("*" * 100)
 
-    # Multi-image example
-    # prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    # image = Image.open(
-    #     requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-    # )
-    # image_2 = Image.open(
-    #     requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-    # )
-    # inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
-    # length = inputs.input_ids.shape[1]
-    # out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
-    # generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
-    # print(f"Generation for multi-image: {generated_text}")
+        # Multi-image example
+        # prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
+        # image = Image.open(
+        #     requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+        # )
+        # image_2 = Image.open(
+        #     requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+        # )
+        # inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+        # length = inputs.input_ids.shape[1]
+        # out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
+        # generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+        # print(f"Generation for multi-image: {generated_text}")
 
 
 def main():

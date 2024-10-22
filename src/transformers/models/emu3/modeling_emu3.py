@@ -1308,7 +1308,7 @@ class Emu3VQVAEDecoder(nn.Module):
                 hidden_states = self.up[i_level].upsample(hidden_states)
 
         hidden_states = self.norm_out(hidden_states, quant_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
         hidden_states = self.conv_out(hidden_states)
 
         return hidden_states
@@ -1456,11 +1456,14 @@ class Emu3ImageVocabularyMapping:
 
     @cached_property
     def bpe2img(self):
-        return {v: k for k, v in self.bpe2img.items()}
+        return {v: k for k, v in self.img2bpe.items()}
 
     @cached_property
-    def bpe2img_search_tensors(self):
-        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
+    def bpe2img_mapping_tensor(self):
+        mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
+        for k, v in self.bpe2img.items():
+            mapping[k] = v
+        return mapping
 
     @cached_property
     def img2bpe_mapping_tensor(self):
@@ -1474,6 +1477,12 @@ class Emu3ImageVocabularyMapping:
         eol_row = torch.ones((img_batch.shape[0], img_batch.shape[1], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
         img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
+        return img_tokens.to(device)
+
+    def convert_bpe2img(self, img_batch: torch.Tensor) -> torch.Tensor:
+        device = img_batch.device
+        img_batch = img_batch[..., :-1]  # remove last row of EOL tokens
+        img_tokens = self.bpe2img_mapping_tensor[img_batch.to("cpu")]
         return img_tokens.to(device)
 
 
@@ -1647,6 +1656,14 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_toks = bpe_toks.view(batch_size, -1)
 
         return bpe_toks
+
+    @torch.no_grad
+    def decode_image_tokens(self, logits: torch.Tensor, height: int, width: int):
+        sequences = logits[:, :-3].view(-1, height, width + 1)
+        image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
+        print(image_tokens.shape)
+        image = self.vqmodel.decode(image_tokens)
+        return image
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
     def forward(
@@ -1943,10 +1960,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
-
-        # Disallow image tokens which does not include special begin-image and end-image tokens
-        image_tokens = self.model.vocabulary_mapping.image_tokens
-        logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
 
         loss = None
         if labels is not None:

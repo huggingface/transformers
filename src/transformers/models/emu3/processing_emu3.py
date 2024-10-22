@@ -35,6 +35,7 @@ class Emu3ImageKwargs(TextKwargs, total=False):
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
+    images_kwargs: Emu3ImageKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -82,7 +83,6 @@ class Emu3Processor(ProcessorMixin):
         self.image_start_token = "<|image start|>"  # fixed tokens for start and end
         self.image_end_token = "<|image end|>"
         self.fake_token_around_image = "<|image token|>"  # another token indicating start of image?
-        self.eol_token = "<|extra_200|>"
         self.eof_token = "<|extra_201|>"
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -151,7 +151,7 @@ class Emu3Processor(ProcessorMixin):
 
         image_features = {}
         image_start_tokens = f"{self.image_start_token}"
-        image_end_tokens = f"{self.eol_token}{self.eof_token}{self.image_end_token}"
+        image_end_tokens = f"{self.eof_token}{self.image_end_token}"
 
         # generate text from image + text input, so we add placeholders for image tokens
         if not return_for_image_generation and images is not None:
@@ -165,22 +165,27 @@ class Emu3Processor(ProcessorMixin):
                     height, width = get_image_size(to_numpy_array(curr_image))
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
-                    image_seq_length = height * width
+                    image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
+                    sample = f"<|extra_203|>{sample}"  # add BOS
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            image_sizes = None
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
         else:
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
             image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
-            text = [f"{sample}{image_prompt}" for sample in text]
+            text = [f"<|extra_203|>{sample}{image_prompt}" for sample in text]
+            image_sizes = [height, width]
 
         # else just generate from text-only input, and we do no special treatment for text
         data = self.tokenizer(text, **output_kwargs["text_kwargs"])
         data.update(**image_features)
+        if image_sizes is not None:
+            data["image_sizes"] = image_sizes
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
 
@@ -194,7 +199,7 @@ class Emu3Processor(ProcessorMixin):
         return token_height, token_width
 
     def postprocess(self, images: ImageInput, **kwargs):
-        self.image_processor.postprocess(images, **kwargs)
+        return self.image_processor.postprocess(images, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """

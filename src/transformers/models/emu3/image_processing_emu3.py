@@ -459,7 +459,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         return rev_image_mean, rev_image_std
 
     def to_tuple(self, value, dim=3):
-        if isinstance(value, int | float):
+        if isinstance(value, (int, float)):
             return (value,) * dim
 
         return tuple(value)
