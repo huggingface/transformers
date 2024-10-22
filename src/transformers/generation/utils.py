@@ -4258,11 +4258,6 @@ class GenerationMixin:
             if "num_logits_to_keep" in model_inputs:
                 model_inputs["num_logits_to_keep"] = candidate_length + 1
 
-            # With early exit, we can reuse the cached values from the assistant. This copy must be done after
-            # `prepare_inputs_for_generation`, otherwise the current sequence length will be incorrectly infered.
-            if isinstance(candidate_generator, EarlyExitCandidateGenerator):
-                model_inputs["past_key_values"] = candidate_generator.assistant_kwargs["past_key_values"]
-
             # 2.2. Run a forward pass on the candidate sequence
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
