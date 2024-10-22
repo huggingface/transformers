@@ -308,6 +308,8 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 특성 추출기
     - local: in_translation
