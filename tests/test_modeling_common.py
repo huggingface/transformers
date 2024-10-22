@@ -37,6 +37,7 @@ import transformers
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     GenerationConfig,
@@ -5109,10 +5110,15 @@ class ModelTesterMixin:
         batch_size = 1
         n_iter = 3
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
-            torch_device
-        )
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        if self.is_encoder_decoder:
+            model = AutoModelForSeq2SeqLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+                torch_device
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+                torch_device
+            )
 
         model.generation_config.max_new_tokens = 4
 
@@ -5184,10 +5190,15 @@ class ModelTesterMixin:
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt, revision=revision)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
-            torch_device
-        )
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        if self.is_encoder_decoder:
+            model = AutoModelForSeq2SeqLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+                torch_device
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, revision=revision).to(
+                torch_device
+            )
 
         cache_implementation = "static"
         if model.config.model_type == "gemma2":
