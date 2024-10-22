@@ -304,28 +304,25 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_normalize:
-            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
-
-        # convert to torch tensor and permute
-        flattened_patches, width, height, rows, cols = [], [], [], [], []
+        flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
         for image in images:
-            f, w, h, r, c = self.extract_flattened_patches(
-                image=image,
-                max_patches=max_patches,
-                patch_size=patch_size,
-                input_data_format=input_data_format,
-            )
-            flattened_patches.append(f)
-            width.append(w)
-            height.append(h)
-            rows.append(r)
-            cols.append(c)
+            if do_normalize:
+                image = self.normalize(image=image, input_data_format=input_data_format)
 
-        # create attention mask in numpy
-        attention_masks = [
-            (flattened_patch.sum(axis=-1) != 0).astype(np.float32) for flattened_patch in flattened_patches
-        ]
+                # convert to torch tensor and permute
+                f, w, h, r, c = self.extract_flattened_patches(
+                    image=image,
+                    max_patches=max_patches,
+                    patch_size=patch_size,
+                    input_data_format=input_data_format,
+                )
+                flattened_patches.append(f)
+                width.append(w)
+                height.append(h)
+                rows.append(r)
+                cols.append(c)
+                # create attention mask in numpy
+                attention_masks.append((f.sum(axis=-1) != 0).astype(np.float32))
 
         encoded_outputs = BatchFeature(
             data={
