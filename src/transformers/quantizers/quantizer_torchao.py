@@ -33,10 +33,6 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-if is_torchao_available():
-    from torchao.quantization import quantize_
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -174,6 +170,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         Each nn.Linear layer that needs to be quantized is processsed here.
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
+        from torchao.quantization import quantize_
 
         module, tensor_name = get_module_from_name(model, param_name)
 
