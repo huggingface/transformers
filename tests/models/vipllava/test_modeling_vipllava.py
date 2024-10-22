@@ -168,6 +168,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
@@ -240,6 +241,16 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 

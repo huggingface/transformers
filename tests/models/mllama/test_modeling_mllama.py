@@ -274,6 +274,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)

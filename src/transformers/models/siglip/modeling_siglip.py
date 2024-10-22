@@ -669,6 +669,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+
     _no_split_modules = [
         "SiglipTextEmbeddings",
         "SiglipEncoderLayer",
@@ -1218,8 +1219,8 @@ class SiglipModel(SiglipPreTrainedModel):
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
-        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        text_model = SiglipTextModel._from_config(text_config)
+        vision_model = SiglipVisionModel._from_config(vision_config)
 
         # Second, get the text and vision submodules (for backward compatibility)
         self.text_model = text_model.text_model
@@ -1454,9 +1455,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         # Create the vision model with proper attention
         # and take only vision_model submodule (for backward compatibility)
-        vision_model = SiglipVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        vision_model = SiglipVisionModel._from_config(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         # Classifier head

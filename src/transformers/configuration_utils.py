@@ -296,6 +296,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+        self._attn_implementation_autoset = False
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -775,6 +776,10 @@ class PretrainedConfig(PushToHubMixin):
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def __iter__(self):
+        for attr in self.__dict__:
+            yield attr
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
