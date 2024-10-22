@@ -41,6 +41,7 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
+        MixtralForQuestionAnswering,
         MixtralForSequenceClassification,
         MixtralForTokenClassification,
         MixtralModel,
@@ -291,7 +292,13 @@ class MixtralModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
 class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification, MixtralForTokenClassification)
+        (
+            MixtralModel,
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralForTokenClassification,
+            MixtralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -303,6 +310,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "token-classification": MixtralForTokenClassification,
             "text-generation": MixtralForCausalLM,
             "zero-shot": MixtralForSequenceClassification,
+            "question-answering": MixtralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -313,7 +321,14 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 

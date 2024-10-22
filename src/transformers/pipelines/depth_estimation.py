@@ -1,8 +1,13 @@
+import warnings
 from typing import List, Union
 
-import numpy as np
-
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -12,8 +17,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
-
     from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -50,12 +53,12 @@ class DepthEstimationPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Predict the depth(s) of the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -65,9 +68,10 @@ class DepthEstimationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
+            parameters (`Dict`, *optional*):
+                A dictionary of argument names to parameter values, to control pipeline behaviour.
+                The only parameter available right now is `timeout`, which is the length of time, in seconds,
+                that the pipeline should wait before giving up on trying to download an image.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -79,12 +83,22 @@ class DepthEstimationPipeline(Pipeline):
             - **predicted_depth** (`torch.Tensor`) -- The predicted depth by the model as a `torch.Tensor`.
             - **depth** (`PIL.Image`) -- The predicted depth by the model as a `PIL.Image`.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs:
+            inputs = kwargs.pop("images")
+        if inputs is None:
+            raise ValueError("Cannot call the depth-estimation pipeline without an inputs argument!")
+        return super().__call__(inputs, **kwargs)
 
-    def _sanitize_parameters(self, timeout=None, **kwargs):
+    def _sanitize_parameters(self, timeout=None, parameters=None, **kwargs):
         preprocess_params = {}
         if timeout is not None:
+            warnings.warn(
+                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
+            )
             preprocess_params["timeout"] = timeout
+        if isinstance(parameters, dict) and "timeout" in parameters:
+            preprocess_params["timeout"] = parameters["timeout"]
         return preprocess_params, {}, {}
 
     def preprocess(self, image, timeout=None):
@@ -102,14 +116,19 @@ class DepthEstimationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs):
-        predicted_depth = model_outputs.predicted_depth
-        prediction = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(1), size=model_outputs["target_size"], mode="bicubic", align_corners=False
+        outputs = self.image_processor.post_process_depth_estimation(
+            model_outputs,
+            # this acts as `source_sizes` for ZoeDepth and as `target_sizes` for the rest of the models so do *not*
+            # replace with `target_sizes = [model_outputs["target_size"]]`
+            [model_outputs["target_size"]],
         )
-        output = prediction.squeeze().cpu().numpy()
-        formatted = (output * 255 / np.max(output)).astype("uint8")
-        depth = Image.fromarray(formatted)
-        output_dict = {}
-        output_dict["predicted_depth"] = predicted_depth
-        output_dict["depth"] = depth
-        return output_dict
+
+        formatted_outputs = []
+        for output in outputs:
+            depth = output["predicted_depth"].detach().cpu().numpy()
+            depth = (depth - depth.min()) / (depth.max() - depth.min())
+            depth = Image.fromarray((depth * 255).astype("uint8"))
+
+            formatted_outputs.append({"predicted_depth": output["predicted_depth"], "depth": depth})
+
+        return formatted_outputs[0] if len(outputs) == 1 else formatted_outputs
