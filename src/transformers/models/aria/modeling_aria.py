@@ -878,6 +878,7 @@ class AriaVisionTransformer(AriaPreTrainedModel):
     """
 
     config_class = AriaVisionConfig
+    _supports_sdpa = False
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__(config)
@@ -992,6 +993,7 @@ class AriaVisionModel(AriaPreTrainedModel):
 
     config_class = AriaVisionConfig
     main_input_name = "pixel_values"
+    _supports_sdpa = False
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__(config)
@@ -2836,6 +2838,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     Args:
         config (AriaConfig): Configuration object for the model.
     """
+    _supports_sdpa = False
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)

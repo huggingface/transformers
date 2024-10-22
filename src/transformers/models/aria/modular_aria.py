@@ -85,6 +85,7 @@ class AriaVisionTransformer(Idefics3VisionTransformer):
 
     This class extends the original Idefics3VisionTransformer by removing the post-layernorm operation.
     """
+    _supports_sdpa = False
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__(config)
@@ -110,6 +111,7 @@ class AriaVisionModel(SiglipVisionModel):
 
     config_class = AriaVisionConfig
     main_input_name = "pixel_values"
+    _supports_sdpa = False
 
     def __init__(self, config: AriaVisionConfig):
         super().__init__(config)
@@ -1130,6 +1132,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     Args:
         config (AriaConfig): Configuration object for the model.
     """
+    _supports_sdpa = False
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1150,6 +1153,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             config.text_config, attn_implementation=config._attn_implementation
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
         self.post_init()
 
     def get_input_embeddings(self):
