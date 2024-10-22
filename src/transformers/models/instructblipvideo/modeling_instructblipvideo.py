@@ -19,13 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 

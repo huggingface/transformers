@@ -19,21 +19,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_greater_or_equal,
     logging,
+    replace_return_docstrings,
 )
+from .configuration_gemma2 import Gemma2Config
 
 
 if is_flash_attn_2_available():
@@ -41,14 +53,6 @@ if is_flash_attn_2_available():
 
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
-from typing import List
-
-from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import SequenceClassifierOutputWithPast, TokenClassifierOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from .configuration_gemma2 import Gemma2Config
 
 
 class Gemma2RMSNorm(nn.Module):
