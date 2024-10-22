@@ -30,7 +30,12 @@ logger = logging.get_logger(__name__)
 
 TOKENIZER_CLASSES = {
     # Phi3 uses Llama tokenizer
-    name: getattr(transformers, "LlamaTokenizerFast" if name == "Phi3Tokenizer" else name + "Fast")
+    name: getattr(
+        transformers,
+        "LlamaTokenizerFast"
+        if name == "Phi3Tokenizer"
+        else ("PreTrainedTokenizerFast" if name == "SiglipTokenizer" else name + "Fast"),
+    )
     for name in SLOW_TO_FAST_CONVERTERS
 }
 
