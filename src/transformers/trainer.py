@@ -2487,12 +2487,18 @@ class Trainer:
                         steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
                     )
 
-                    performing_optimizer_step = is_last_step_and_steps_less_than_grad_acc or (total_batched_samples) % args.gradient_accumulation_steps == 0
+                    performing_optimizer_step = (
+                        is_last_step_and_steps_less_than_grad_acc
+                        or (total_batched_samples) % args.gradient_accumulation_steps == 0
+                    )
 
-                    # During DDP we always multiply gradients by data_parallel_size / sample size since 
+                    # During DDP we always multiply gradients by data_parallel_size / sample size since
                     # DDP normalizes by the number of data parallel workers
                     numerator = (
-                        self.accelerator.state.num_processes if not performing_optimizer_step and self.accelerator.state.distributed_type == DistributedType.MULTI_GPU else 1
+                        self.accelerator.state.num_processes
+                        if not performing_optimizer_step
+                        and self.accelerator.state.distributed_type == DistributedType.MULTI_GPU
+                        else 1
                     )
 
                     self.optimizer.multiply_grads(numerator / (num_items_in_batch or 1.0))
