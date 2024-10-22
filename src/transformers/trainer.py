@@ -2492,7 +2492,7 @@ class Trainer:
                     # During DDP we always multiply gradients by data_parallel_size / sample size since 
                     # DDP normalizes by the number of data parallel workers
                     numerator = (
-                        self.accelerator.state.num_processes if not performing_optimizer_step and self.distributed_state.distributed_type == DistributedType.MULTI_GPU else 1
+                        self.accelerator.state.num_processes if not performing_optimizer_step and self.accelerator.state.distributed_type == DistributedType.MULTI_GPU else 1
                     )
 
                     self.optimizer.multiply_grads(numerator / (num_items_in_batch or 1.0))
