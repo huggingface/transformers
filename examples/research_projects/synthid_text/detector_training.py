@@ -514,7 +514,7 @@ if __name__ == "__main__":
         outputs = outputs[:, inputs_len:]
         result = synthid_text_detector(outputs)
 
-        # You should set this based on expected fpr and tpr
+        # You should set this based on expected fpr and tpr. Check our demo at HF Spaces for more info.
         upper_threshold = 0.95
         lower_threshold = 0.12
         if result[0][0] > upper_threshold:
