@@ -32,6 +32,7 @@ from ...utils import logging
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}

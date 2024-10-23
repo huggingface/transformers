@@ -324,7 +324,7 @@ class ClassFinder(CSTVisitor):
         new_dependencies = dependencies.copy()
         # Go through the set of dependencies
         for dep in tuple(dependencies):
-            if dep in self.function_def.keys():
+            if dep in self.function_call_recursive_dependency_mapping.keys():
                 new_dependencies.update(self.function_call_recursive_dependency_mapping[dep])
         return new_dependencies
 
@@ -1050,7 +1050,7 @@ class ModularConverterTransformer(CSTTransformer):
             class_finder = self.visited_module_without_rename[file]
         else:
             wrapper = MetadataWrapper(self.transformers_imports[file])
-            class_finder = ClassFinder(self.transformers_imports[file], only_function_mapping=True)
+            class_finder = ClassFinder(self.transformers_imports[file], only_for_function_mapping=True)
             wrapper.visit(class_finder)
             self.visited_module_without_rename[file] = class_finder
         return class_finder

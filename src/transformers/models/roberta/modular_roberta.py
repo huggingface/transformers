@@ -761,5 +761,17 @@ class RobertaForQuestionAnswering(BertForQuestionAnswering):
         expected_output="' puppet'",
         expected_loss=0.86,
     )
-    def forward(**super_kwargs) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    def forward(
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         super().forward()

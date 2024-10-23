@@ -45,6 +45,87 @@ from .configuration_llava_next_video import LlavaNextVideoConfig
 
 logger = logging.get_logger(__name__)
 
+
+@dataclass
+class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for LlavaNextVideo causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+
+        video_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
+
+    video_hidden_states: Optional[torch.FloatTensor] = None
+
+
+class LlavaNextVideoPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        mode = config.spatial_pool_mode
+        stride = config.spatial_pool_stride
+        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
+        self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
+
+        if mode == "average":
+            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
+        elif mode == "max":
+            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
+        elif mode == "conv":
+            self.pool = nn.Conv2d(
+                in_channels=config.vision_config.hidden_size,
+                out_channels=out_channels,
+                kernel_size=stride,
+                stride=stride,
+            )
+        else:
+            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+
+    def forward(self, image_features):
+        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
+        ori_height = int(ori_width * self.image_size // self.image_size)
+
+        batch_size, _, dim = image_features.shape
+        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
+        image_features_spatial_pool = self.pool(image_features_spatial)
+
+        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
+
+
 _CONFIG_FOR_DOC = "LlavaNextVideoConfig"
 
 
@@ -153,86 +234,6 @@ def unpad_image(tensor, original_size):
         unpadded_tensor = tensor[:, :, padding : current_width - padding]
 
     return unpadded_tensor
-
-
-@dataclass
-class LlavaNextVideoCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for LlavaNextVideo causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-
-        video_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-            video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-
-    video_hidden_states: Optional[torch.FloatTensor] = None
-
-
-class LlavaNextVideoPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        mode = config.spatial_pool_mode
-        stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
-
-        if mode == "average":
-            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        elif mode == "max":
-            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
-        elif mode == "conv":
-            self.pool = nn.Conv2d(
-                in_channels=config.vision_config.hidden_size,
-                out_channels=out_channels,
-                kernel_size=stride,
-                stride=stride,
-            )
-        else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
-
-    def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
-        ori_height = int(ori_width * self.image_size // self.image_size)
-
-        batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
-        image_features_spatial_pool = self.pool(image_features_spatial)
-
-        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
 
 
 class LlavaNextVideoMultiModalProjector(nn.Module):

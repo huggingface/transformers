@@ -72,9 +72,6 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-logger = logging.get_logger(__name__)
-
-
 class GemmaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -624,9 +621,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-_CONFIG_FOR_DOC = "GemmaConfig"
-
-
 GEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -982,6 +976,9 @@ class GemmaModel(GemmaPreTrainedModel):
                 )
 
         return causal_mask
+
+
+_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):

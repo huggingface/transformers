@@ -86,9 +86,6 @@ class Gemma2MLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-logger = logging.get_logger(__name__)
-
-
 class Gemma2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -638,9 +635,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
         return config
 
 
-_CONFIG_FOR_DOC = "Gemma2Config"
-
-
 GEMMA2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -955,6 +949,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
                 )
 
         return causal_mask
+
+
+_CONFIG_FOR_DOC = "Gemma2Config"
 
 
 class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):

@@ -61,7 +61,6 @@ logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
-_CONFIG_FOR_DOC = "RobertaConfig"
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
@@ -724,6 +723,9 @@ class RobertaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+
+_CONFIG_FOR_DOC = "RobertaConfig"
 
 
 ROBERTA_START_DOCSTRING = r"""
@@ -1600,15 +1602,14 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         expected_loss=0.86,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
