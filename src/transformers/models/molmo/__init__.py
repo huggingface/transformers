@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available 
 
 
 _import_structure = {
@@ -21,6 +21,13 @@ _import_structure = {
     "processing_molmo": ["MolmoProcessor"],
 }
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_molmo"] = ["MolmoImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -37,6 +44,13 @@ else:
 if TYPE_CHECKING:
     from .configuration_molmo import MolmoConfig
     from .processing_molmo import MolmoProcessor
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_molmo import MolmoImageProcessor
 
     try:
         if not is_torch_available():

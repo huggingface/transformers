@@ -590,7 +590,11 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.molmo": ["MolmoConfig"],
+    "models.molmo": [
+        "MolmoConfig",
+        "MolmoProcessor",
+        "MolmoImageProcessor"
+        ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -1213,6 +1217,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.molmo"].append("MolmoImageProcessor")
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
@@ -5454,6 +5459,8 @@ if TYPE_CHECKING:
     )
     from .models.molmo import (
         MolmoConfig,
+        MolmoProcessor,
+        MolmoImageProcessor,
     )
     from .models.mpnet import (
         MPNetConfig,
@@ -6114,6 +6121,7 @@ if TYPE_CHECKING:
             MobileNetV2ImageProcessor,
         )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.molmo import MolmoImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
