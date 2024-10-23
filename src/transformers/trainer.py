@@ -2465,7 +2465,7 @@ class Trainer:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                     with self.accelerator.accumulate(model):
-                        tr_loss_step = self.training_step(model, inputs)
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                     if (
                         args.logging_nan_inf_filter
@@ -2486,24 +2486,6 @@ class Trainer:
                     is_last_step_and_steps_less_than_grad_acc = (
                         steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
                     )
-
-                    performing_optimizer_step = (
-                        is_last_step_and_steps_less_than_grad_acc
-                        or (total_batched_samples) % args.gradient_accumulation_steps == 0
-                    )
-
-                    # During DDP we always multiply gradients by data_parallel_size / sample size since
-                    # DDP normalizes by the number of data parallel workers
-                    numerator = (
-                        self.accelerator.state.num_processes
-                        if not performing_optimizer_step
-                        and self.accelerator.state.distributed_type == DistributedType.MULTI_GPU
-                        else 1
-                    )
-
-                    # Only valid in accelerate >= 1.1.0
-                    if hasattr(self.optimizer, "multiply_grads"):
-                        self.optimizer.multiply_grads(numerator / (num_items_in_batch or 1.0))
 
                     if (
                         (total_batched_samples) % args.gradient_accumulation_steps == 0
