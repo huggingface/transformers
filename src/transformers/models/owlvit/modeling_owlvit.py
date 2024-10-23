@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
+import math
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -33,6 +34,7 @@ from ...utils import (
     is_vision_available,
     logging,
     replace_return_docstrings,
+    torch_int
 )
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
@@ -271,6 +273,8 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.class_embedding = nn.Parameter(torch.randn(config.hidden_size))
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
@@ -285,28 +289,65 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_size = self.config.image_size
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
 
-        if interpolate_pos_encoding:
-            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
-                pixel_values = torch.nn.functional.interpolate(
-                    pixel_values, size=(target_size, target_size), mode="bilinear", align_corners=False
-                )
-        else:
-            if pixel_values.shape[2] != target_size or pixel_values.shape[3] != target_size:
-                raise ValueError(
-                    f"Input image size ({pixel_values.shape[2]}*{pixel_values.shape[3]}) doesn't match model ({target_size}*{target_size})."
-                )
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
 
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+            )
+        
+
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -326,6 +367,7 @@ class OwlViTTextEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
@@ -602,6 +644,8 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether or not to interpolate the pre-trained position embeddings to the input size.
 """
 
 OWLVIT_VISION_INPUTS_DOCSTRING = r"""
@@ -616,6 +660,8 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether or not to interpolate the pre-trained position embeddings to the input size.
 """
 
 OWLVIT_INPUTS_DOCSTRING = r"""
@@ -641,6 +687,8 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether or not to interpolate the pre-trained position embeddings to the input size.
 """
 
 OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
@@ -661,6 +709,8 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
             `vision_model_last_hidden_state` under returned tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether or not to interpolate the pre-trained position embeddings to the input size.
 """
 
 OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
@@ -677,6 +727,8 @@ OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether or not to interpolate the pre-trained position embeddings to the input size.
 """
 
 
@@ -905,6 +957,7 @@ class OwlViTVisionTransformer(nn.Module):
         self.encoder = OwlViTEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
@@ -913,6 +966,7 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -927,7 +981,7 @@ class OwlViTVisionTransformer(nn.Module):
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -974,6 +1028,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -1000,6 +1055,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -1081,6 +1137,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1112,6 +1169,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]
@@ -1131,6 +1189,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns:
@@ -1162,6 +1221,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         # Get embeddings for all text queries in all batch samples
@@ -1377,6 +1437,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         # Encode text and image
         outputs = self.owlvit(
@@ -1386,6 +1447,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         # Get image embeddings
@@ -1416,9 +1478,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         # Get OwlViTModel vision embeddings (same as CLIP)
-        vision_outputs = self.owlvit.vision_model(pixel_values=pixel_values, return_dict=True)
+        vision_outputs = self.owlvit.vision_model(
+            pixel_values=pixel_values,
+            return_dict=True,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
@@ -1492,6 +1559,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
         Returns:
@@ -1538,6 +1606,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
@@ -1588,6 +1657,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> OwlViTObjectDetectionOutput:
         r"""
         Returns:
@@ -1638,6 +1708,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         # Text and vision model outputs

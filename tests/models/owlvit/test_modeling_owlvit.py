@@ -894,3 +894,40 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         # No need to check the logits, we just check inference runs fine.
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # CLIP models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = OwlViTModel.from_pretrained("google/owlvit-base-patch32").to(torch_device)
+
+        processor = OwlViTProcessor.from_pretrained(
+            "google/owlvit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 26, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )
