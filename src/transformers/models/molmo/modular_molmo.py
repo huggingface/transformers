@@ -227,7 +227,7 @@ class MolmoConfig(PretrainedConfig):
         image_seq_length=576,
         initializer_range=0.02,
         vision_feature_select_strategy="full",
-        vision_feature_layers=[-2, -9],
+        vision_feature_layers=(-2, -9),
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -236,7 +236,7 @@ class MolmoConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layers = vision_feature_layers
+        self.vision_feature_layers = list(vision_feature_layers)
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the MolmoVisionConfig with default values.")
@@ -267,9 +267,8 @@ class MolmoSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, gate = x.chunk(2, dim=-1)
         return nn.functional.silu(gate) * x
-    
-# text modules inherited from Qwen2
 
+# text modules inherited from Qwen2
 
 class MolmoMLP(CLIPMLP):
     def __init__(self, config):
@@ -282,10 +281,8 @@ class MolmoMLP(CLIPMLP):
 class MolmoTextAttention(Qwen2Attention):
     pass
 
-
 class MolmoTextSdpaAttention(MolmoTextAttention, Qwen2SdpaAttention):
     pass
-
 
 class MolmoTextFlashAttention2(MolmoTextAttention, Qwen2FlashAttention2):
     pass

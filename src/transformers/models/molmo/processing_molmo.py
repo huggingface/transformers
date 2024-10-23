@@ -16,26 +16,55 @@
 Processor class for Molmo.
 """
 
-from typing import List, Union
+from typing import List, Union, Optional
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order, ImagesKwargs, TextKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-
+import numpy as np
 
 logger = logging.get_logger(__name__)
 
+class MolmoImagesKwargs(ImagesKwargs, total=False):
+    max_crops: Optional[int]
+    overlap_margins: Optional[List[int]]
+    base_image_input_size: Optional[List[int]]
+    image_token_length_w: Optional[int]
+    image_token_length_h: Optional[int]
+    image_patch_size: Optional[int]
+    image_padding_mask: Optional[bool]
+
+class MolmoTextKwargs(TextKwargs, total=False):
+    style: Optional[str]
+    system_prompt: Optional[str]
+    message_format: Optional[str]
+    always_start_with_space: Optional[bool]
+    sequence_length: Optional[int]
+
 
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: MolmoTextKwargs
+    images_kwargs: MolmoImagesKwargs
     _defaults = {
+        "images_kwargs": {
+            "max_crops": 12,
+            "overlap_margins": (4, 4),
+            "tokens_per_image_width": 12,
+            "tokens_per_image_height": 12,
+            "image_patch_size": 14,
+            "image_padding_mask": True,
+        },
         "text_kwargs": {
             "padding": False,
         },
-        "images_kwargs": {},
     }
 
+DEFAULT_IMAGE_PATCH_TOKEN = f"<im_patch>"
+DEFAULT_IM_START_TOKEN = f"<im_start>"
+DEFAULT_IM_END_TOKEN = f"<im_end>"
+DEFAULT_IM_COL_TOKEN = f"<im_col>"
 
 class MolmoProcessor(ProcessorMixin):
     r"""
@@ -72,7 +101,7 @@ class MolmoProcessor(ProcessorMixin):
         patch_size=None,
         vision_feature_select_strategy=None,
         chat_template=None,
-        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_token="<|image|>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
         self.patch_size = patch_size
@@ -142,25 +171,72 @@ class MolmoProcessor(ProcessorMixin):
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
-        if image_inputs.get("pixel_values") is not None:
-            if self.patch_size is not None and self.vision_feature_select_strategy is not None:
-                # Replace the image token with the expanded image token sequence
-                pixel_values = image_inputs["pixel_values"]
-                height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
+        # TODO should be vectorizable
+        if image_inputs.get("pixel_values") is not None and image_inputs.get("crop_grids") is not None:
+            if self.patch_size is not None:
+                for crop_grid, patch_ordering in zip(image_inputs.get("crop_grids"), image_inputs.get("patch_orderings")):
+                    overlap_margins = self.image_processor.overlap_margins
+                    crop_window_patches = self.image_processor.crop_window_patches
 
-                prompt_strings = []
-                for sample in text:
-                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                    prompt_strings.append(sample)
+
+                    full_height = crop_grid[0] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
+                    full_width = crop_grid[1] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
+                    tokens_per_row = np.full(( (full_width + 1) // 2,), DEFAULT_IMAGE_PATCH_TOKEN, )
+                    tokens_per_row = np.concatenate([tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
+
+                    crop_tokens = np.tile(tokens_per_row, [(full_height + 1) // 2])
+                    crop_tokens = [
+                        [DEFAULT_IM_START_TOKEN],
+                        crop_tokens,
+                        [DEFAULT_IM_END_TOKEN]
+                    ]
+
+                    # for the global image
+
+                    global_tokens_per_row = np.full(
+                        (self.image_processor.tokens_per_image_width,),
+                        DEFAULT_IMAGE_PATCH_TOKEN,
+                    )
+                    global_tokens_per_row = np.concatenate([global_tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
+                    extra_tokens = np.tile(global_tokens_per_row, [self.image_processor.tokens_per_image_height])
+                    all_image_tokens = [
+                                [DEFAULT_IM_START_TOKEN],
+                                extra_tokens,
+                                [DEFAULT_IM_END_TOKEN],
+                            ] + crop_tokens
+
+                    all_image_tokens = np.concatenate(all_image_tokens, 0)
+
+                    # then build the image token indices with the patch ordering baked in
+
+                    image_token_mask = np.nonzero(all_image_tokens == DEFAULT_IMAGE_PATCH_TOKEN)[0].astype(np.int32)
+                    number_of_tokens = image_token_mask.shape[0]
+                    patch_ordering = np.reshape(patch_ordering, [-1])
+                    valid = patch_ordering >= 0
+                    number_of_valid_patches = valid.sum()
+
+                    sorted_patch_ixs = np.zeros([number_of_tokens], np.int32)
+                    sorted_patch_ixs[patch_ordering[valid]] = np.arange(number_of_valid_patches, dtype=np.int32)
+
+                    # Project the inverted mapping into same sparse structure
+                    sorted_patch_ixs_ex = np.full(np.shape(patch_ordering), -1)
+                    sorted_patch_ixs_ex[valid] = sorted_patch_ixs
+
+                    # Do the gather and then re-masked outputs that were masked in `sorted_patch_ixs`
+                    valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
+                    image_token_mask = image_token_mask[sorted_patch_ixs_ex * valid]
+                    image_token_mask = image_token_mask * valid - 100 * (1 - valid)
+                    image_token_mask = np.reshape(image_token_mask, [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height])
+                    # Replace the image token with the expanded image token sequence
+                    prompt_strings = []
+                    for sample in text:
+                        sample = sample.replace(self.image_token, "".join(all_image_tokens))
+                        prompt_strings.append(sample)
             else:
                 logger.warning_once(
                     "Expanding inputs for image tokens in Molmo should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                    "Please add `patch_size` and to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}`. "
                 )
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
