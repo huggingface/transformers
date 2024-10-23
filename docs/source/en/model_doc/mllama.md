@@ -30,6 +30,32 @@ The Llama 3.2-Vision collection of multimodal large language models (LLMs) is a 
 - The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted.
 - The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor.
 
+
+<Tip warning={true}>
+
+Mllama has an extra token used as a placeholder for image positions in the text. It means that input ids and an input embedding layer will have an extra token. But since the weights for input and output embeddings are not tied, the `lm_head` layer has one less token and will fail if you want to calculate loss on image tokens or apply some logit processors. In case you are training, make sure to mask out special `"<|image|>"` tokens as the model should not be trained on predicting them.
+
+Otherwise if you see CUDA-side index erros when generating, use the below code to expand the `lm_head` by one more token. 
+
+
+```python
+pre_expansion_embeddings = model.language_model.lm_head.weight.data
+mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+n = pre_expansion_embeddings.size()[0]
+sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+
+num_new_tokens = 1 # 1 for the `"<|image|>"` token
+lm_head_weights = model.language_model.lm_head.weight
+
+new_token_embedding = torch.stack(tuple(dist.sample() for _ in range(num_new_tokens)), dim=0).to(device=lm_head_weights.device, dtype=lm_head_weights.dtype)
+lm_head_weights.data = torch.cat([lm_head_weights.data, new_token_embedding], dim=0)
+lm_head_weights.num_embeddings = lm_head_weights.data.shape[0]
+```
+</Tip>
+
+
 ## Usage Example
 
 #### Instruct model
