@@ -349,22 +349,7 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         return 0.5 * ((g_values + 0.5) * p_two_unique_tokens + p_one_unique_token)
 
 
-class BayesianDetectorPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = BayesianDetectorConfig
-    base_model_prefix = "model"
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, nn.Parameter):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-
-
-class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
+class BayesianDetectorModel(PreTrainedModel):
     r"""
     Bayesian classifier for watermark detection.
 
@@ -395,6 +380,9 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
     ```
     """
 
+    config_class = BayesianDetectorConfig
+    base_model_prefix = "model"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -404,6 +392,11 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
             watermarking_depth=self.watermarking_depth
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, nn.Parameter):
+            module.weight.data.normal_(mean=0.0, std=0.02)
 
     def _compute_posterior(
         self,

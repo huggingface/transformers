@@ -1455,12 +1455,12 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             Ngram length.
         keys (`List[int]`):
             A sequence of watermarking keys, one for each depth.
-        sampling_table_size (`int`):
-            Size of the sampling table.
-        sampling_table_seed (`int`):
-            Random seed to generate the sampling table.
-        context_history_size (`int`):
+        context_history_size (`int`, *optional*, defaults to 1024):
             Size of the tensor to keep track of seen contexts.
+        sampling_table_seed (`int`, *optional*, defaults to 0):
+            Random seed to generate the sampling table.
+        sampling_table_size (`int`, *optional*, defaults to 65536):
+            Size of the sampling table.
         skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
         debug_mode (`bool`, optional, *optional*, defaults to `False`):
@@ -1488,6 +1488,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     >>> watermarked_text = tokenizer.batch_decode(output_sequences)
     ```
     """
+
     def __init__(
         self,
         ngram_len: int,
