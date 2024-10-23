@@ -62,6 +62,7 @@ class AriaVisionConfig(SiglipVisionConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self._supports_sdpa = False
 
 
 class IdentityOp(torch.nn.Module):
@@ -861,6 +862,25 @@ class AriaPreTrainedModel(PreTrainedModel):
         """
         return self.language_model._supports_sdpa
 
+    def _init_weights(self, module):
+        std = self.config.text_config.initializer_range
+        if hasattr(self.config, 'initializer_range'):
+            std = self.config.initializer_range
+        elif hasattr(self.config, 'text_config'):
+            std = self.config.text_config.initializer_range
+        else:
+            std = 0.02
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
+
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
 class AriaTopKRouter(nn.Module):
@@ -961,7 +981,12 @@ class AriaGroupedGEMM(nn.Module):
         # with `device_map="auto"` on a multi-GPU setup.
         if torch.cuda.is_available():
             torch.cuda.set_device(input.device)
-        return experts_gemm(input, self.weight, tokens_per_expert)
+        original_dtype = input.dtype
+        return experts_gemm(
+            input.to(torch.bfloat16),
+            self.weight.to(torch.bfloat16),
+            tokens_per_expert
+        ).to(original_dtype)
 
 
 class AriaGroupedMLP(nn.Module):
@@ -1084,21 +1109,6 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-
-class AriaTextPreTrainedModel(LlamaPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedGEMM):
-            module.weight.data.normal_(mean=0.0, std=std)
 
 
 class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):

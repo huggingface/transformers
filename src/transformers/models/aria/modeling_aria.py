@@ -81,7 +81,6 @@ class AriaPreTrainedModel(PreTrainedModel):
         """
         return self.language_model._supports_sdpa
 
-
     def _init_weights(self, module):
         if hasattr(self.config, 'initializer_range'):
             std = self.config.initializer_range
