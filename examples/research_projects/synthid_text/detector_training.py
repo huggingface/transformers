@@ -1,185 +1,38 @@
-import enum
-import gc
-from collections.abc import Mapping, Sequence
-from typing import Any
+# coding=utf-8
+# Copyright 2024 Google DeepMind.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+import argparse
+import dataclasses
+from datasets import load_dataset
+import enum
+import functools
+import gc
+from typing import Any, Optional, Union, Tuple, Dict, List
+
+from huggingface_hub import HfApi, Repository, create_repo
+from huggingface_hub.utils import RepositoryNotFoundError
+import immutabledict
 import numpy as np
+from sklearn import model_selection
+import tensorflow as tf
+import tensorflow_datasets as tfds
 import torch
 import tqdm
-from sklearn import model_selection
-from synthid_text import logits_processing, synthid_mixin
-
 import transformers
-from transformers import BayesianDetectorConfig, BayesianDetectorModel
-
-
-def pad_to_len(
-    arr: torch.Tensor,
-    target_len: int,
-    left_pad: bool,
-    eos_token: int,
-    device: torch.device,
-) -> torch.Tensor:
-    """Pad or truncate array to given length."""
-    if arr.shape[1] < target_len:
-        shape_for_ones = list(arr.shape)
-        shape_for_ones[1] = target_len - shape_for_ones[1]
-        padded = (
-            torch.ones(
-                shape_for_ones,
-                device=device,
-                dtype=torch.long,
-            )
-            * eos_token
-        )
-        if not left_pad:
-            arr = torch.concatenate((arr, padded), dim=1)
-        else:
-            arr = torch.concatenate((padded, arr), dim=1)
-    else:
-        arr = arr[:, :target_len]
-    return arr
-
-
-def filter_and_truncate(
-    outputs: torch.Tensor,
-    truncation_length: int,
-    eos_token_mask: torch.Tensor,
-) -> torch.Tensor:
-    """Filter and truncate outputs to given length.
-
-    Args:
-    outputs: output tensor of shape [batch_size, output_len]
-    truncation_length: Length to truncate the final output.
-    eos_token_mask: EOS token mask of shape [batch_size, output_len]
-
-    Returns:
-    output tensor of shape [batch_size, truncation_length].
-    """
-    outputs = outputs[:, :truncation_length]
-    truncation_mask = torch.sum(eos_token_mask, dim=1) >= truncation_length
-    return outputs[truncation_mask, :]
-
-
-def process_outputs_for_training(
-    all_outputs: Sequence[torch.Tensor],
-    logits_processor: logits_processing.SynthIDLogitsProcessor,
-    tokenizer: Any,
-    *,
-    truncation_length: int,
-    max_length: int,
-    is_cv: bool,
-    is_pos: bool,
-    torch_device: torch.device,
-) -> tuple[Sequence[torch.Tensor], Sequence[torch.Tensor]]:
-    """Process raw model outputs into format understandable by the detector.
-
-    Args:
-    all_outputs: sequence of outputs of shape [batch_size, output_len].
-    logits_processor: logits processor used for watermarking.
-    tokenizer: tokenizer used for the model.
-    truncation_length: Length to truncate the outputs.
-    max_length: Length to pad truncated outputs so that all processed entries.
-        have same shape.
-    is_cv: Process given outputs for cross validation.
-    is_pos: Process given outputs for positives.
-    torch_device: torch device to use.
-
-    Returns:
-    Tuple of
-        all_masks: list of masks of shape [batch_size, max_length].
-        all_g_values: list of g_values of shape [batch_size, max_length, depth].
-    """
-    all_masks = []
-    all_g_values = []
-    for outputs in tqdm.tqdm(all_outputs):
-        # outputs is of shape [batch_size, output_len].
-        # output_len can differ from batch to batch.
-        eos_token_mask = logits_processor.compute_eos_token_mask(
-            input_ids=outputs,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-        if is_pos or is_cv:
-            # filter with length for positives for both train and CV.
-            # We also filter for length when CV negatives are processed.
-            outputs = filter_and_truncate(outputs, truncation_length, eos_token_mask)
-
-        # If no filtered outputs skip this batch.
-        if outputs.shape[0] == 0:
-            continue
-
-        # All outputs are padded to max-length with eos-tokens.
-        outputs = pad_to_len(outputs, max_length, False, tokenizer.eos_token_id, torch_device)
-        # outputs shape [num_filtered_entries, max_length]
-
-        eos_token_mask = logits_processor.compute_eos_token_mask(
-            input_ids=outputs,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-
-        context_repetition_mask = logits_processor.compute_context_repetition_mask(
-            input_ids=outputs,
-        )
-
-        # context_repetition_mask of shape [num_filtered_entries, max_length -
-        # (ngram_len - 1)].
-        context_repetition_mask = pad_to_len(context_repetition_mask, max_length, True, 0, torch_device)
-        # We pad on left to get same max_length shape.
-        # context_repetition_mask of shape [num_filtered_entries, max_length].
-        combined_mask = context_repetition_mask * eos_token_mask
-
-        g_values = logits_processor.compute_g_values(
-            input_ids=outputs,
-        )
-
-        # g_values of shape [num_filtered_entries, max_length - (ngram_len - 1),
-        # depth].
-        g_values = pad_to_len(g_values, max_length, True, 0, torch_device)
-
-        # We pad on left to get same max_length shape.
-        # g_values of shape [num_filtered_entries, max_length, depth].
-        all_masks.append(combined_mask)
-        all_g_values.append(g_values)
-    return all_masks, all_g_values
-
-
-def tpr_at_fpr(detector, detector_inputs, w_true, minibatch_size, target_fpr=0.01) -> torch.Tensor:
-    """Calculates TPR at FPR=target_fpr."""
-    positive_idxs = w_true == 1
-    negative_idxs = w_true == 0
-    num_samples = detector_inputs[0].size(0)
-
-    w_preds = []
-    for start in range(0, num_samples, minibatch_size):
-        end = start + minibatch_size
-        detector_inputs_ = (
-            detector_inputs[0][start:end],
-            detector_inputs[1][start:end],
-        )
-        with torch.no_grad():
-            w_pred = detector(*detector_inputs_)[0]
-        w_preds.append(w_pred)
-
-    w_pred = torch.cat(w_preds, dim=0)  # Concatenate predictions
-    positive_scores = w_pred[positive_idxs]
-    negative_scores = w_pred[negative_idxs]
-
-    # Calculate the FPR threshold
-    # Note: percentile -> quantile
-    fpr_threshold = torch.quantile(negative_scores, 1 - target_fpr)
-    # Note: need to switch to FP32 since torch.mean doesn't work with torch.bool
-    return torch.mean((positive_scores >= fpr_threshold).to(dtype=torch.float32)).item()  # TPR
-
-
-def update_fn_if_fpr_tpr(detector, g_values_val, mask_val, watermarked_val, minibatch_size):
-    """Loss function for negative TPR@FPR=1% as the validation loss."""
-    tpr_ = tpr_at_fpr(
-        detector=detector,
-        detector_inputs=(g_values_val, mask_val),
-        w_true=watermarked_val,
-        minibatch_size=minibatch_size,
-    )
-    return -tpr_
+from transformers import BayesianDetectorConfig, BayesianDetectorModel, AutoModelForCausalLM
+import utils
 
 
 @enum.unique
@@ -188,6 +41,15 @@ class ValidationMetric(enum.Enum):
 
     TPR_AT_FPR = "tpr_at_fpr"
     CROSS_ENTROPY = "cross_entropy"
+
+
+@dataclasses.dataclass
+class TrainingArguments:
+    """Training arguments pertaining to the training loop itself."""
+
+    eval_metric: Optional[str] = dataclasses.field(
+        default=ValidationMetric.TPR_AT_FPR, metadata={"help": "The evaluation metric used."}
+    )
 
 
 def train_detector(
@@ -201,12 +63,12 @@ def train_detector(
     seed: int = 0,
     l2_weight: float = 0.0,
     shuffle: bool = True,
-    g_values_val: torch.Tensor | None = None,
-    mask_val: torch.Tensor | None = None,
-    watermarked_val: torch.Tensor | None = None,
+    g_values_val: Optional[torch.Tensor] = None,
+    mask_val: Optional[torch.Tensor] = None,
+    watermarked_val: Optional[torch.Tensor] = None,
     verbose: bool = False,
     validation_metric: ValidationMetric = ValidationMetric.TPR_AT_FPR,
-) -> tuple[Mapping, float]:
+) -> Tuple[Dict[str, Any], float]:
     """Trains a Bayesian detector model.
 
     Args:
@@ -284,7 +146,7 @@ def train_detector(
         if g_values_val is not None:
             detector.eval()
             if validation_metric == ValidationMetric.TPR_AT_FPR:
-                val_loss = update_fn_if_fpr_tpr(
+                val_loss = utils.update_fn_if_fpr_tpr(
                     detector,
                     g_values_val,
                     mask_val,
@@ -324,134 +186,15 @@ def train_detector(
     return history, min_val_loss
 
 
-def process_raw_model_outputs(
-    logits_processor,
-    tokenizer,
-    truncation_length,
-    max_padded_length,
-    tokenized_wm_outputs,
-    test_size,
-    tokenized_uwm_outputs,
-    torch_device,
-):
-    # Split data into train and CV
-    train_wm_outputs, cv_wm_outputs = model_selection.train_test_split(tokenized_wm_outputs, test_size=test_size)
-
-    train_uwm_outputs, cv_uwm_outputs = model_selection.train_test_split(tokenized_uwm_outputs, test_size=test_size)
-
-    # Process both train and CV data for training
-    wm_masks_train, wm_g_values_train = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_wm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        truncation_length=truncation_length,
-        max_length=max_padded_length,
-        is_pos=True,
-        is_cv=False,
-        torch_device=torch_device,
-    )
-    wm_masks_cv, wm_g_values_cv = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_wm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        truncation_length=truncation_length,
-        max_length=max_padded_length,
-        is_pos=True,
-        is_cv=True,
-        torch_device=torch_device,
-    )
-    uwm_masks_train, uwm_g_values_train = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_uwm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        truncation_length=truncation_length,
-        max_length=max_padded_length,
-        is_pos=False,
-        is_cv=False,
-        torch_device=torch_device,
-    )
-    uwm_masks_cv, uwm_g_values_cv = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_uwm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        truncation_length=truncation_length,
-        max_length=max_padded_length,
-        is_pos=False,
-        is_cv=True,
-        torch_device=torch_device,
-    )
-
-    # We get list of data; here we concat all together to be passed to the
-    # detector.
-    wm_masks_train = torch.cat(wm_masks_train, dim=0)
-    wm_g_values_train = torch.cat(wm_g_values_train, dim=0)
-    # Note: Use float instead of bool. Otherwise, the entropy calculation doesn't work
-    wm_labels_train = torch.ones((wm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
-
-    wm_masks_cv = torch.cat(wm_masks_cv, dim=0)
-    wm_g_values_cv = torch.cat(wm_g_values_cv, dim=0)
-    wm_labels_cv = torch.ones((wm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
-
-    uwm_masks_train = torch.cat(uwm_masks_train, dim=0)
-    uwm_g_values_train = torch.cat(uwm_g_values_train, dim=0)
-    uwm_labels_train = torch.zeros((uwm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
-    uwm_masks_cv = torch.cat(uwm_masks_cv, dim=0)
-    uwm_g_values_cv = torch.cat(uwm_g_values_cv, dim=0)
-    uwm_labels_cv = torch.zeros((uwm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
-
-    # Concat pos and negatives data together.
-    train_g_values = torch.cat((wm_g_values_train, uwm_g_values_train), dim=0)
-    train_labels = torch.cat((wm_labels_train, uwm_labels_train), axis=0)
-    train_masks = torch.cat((wm_masks_train, uwm_masks_train), axis=0)
-
-    cv_g_values = torch.cat((wm_g_values_cv, uwm_g_values_cv), axis=0)
-    cv_labels = torch.cat((wm_labels_cv, uwm_labels_cv), axis=0)
-    cv_masks = torch.cat((wm_masks_cv, uwm_masks_cv), axis=0)
-
-    # Shuffle data.
-    train_g_values = train_g_values.squeeze()
-    train_labels = train_labels.squeeze()
-    train_masks = train_masks.squeeze()
-
-    cv_g_values = cv_g_values.squeeze()
-    cv_labels = cv_labels.squeeze()
-    cv_masks = cv_masks.squeeze()
-
-    shuffled_idx = torch.randperm(train_g_values.shape[0])  # Use torch for GPU compatibility
-
-    train_g_values = train_g_values[shuffled_idx]
-    train_labels = train_labels[shuffled_idx]
-    train_masks = train_masks[shuffled_idx]
-
-    # Shuffle the cross-validation data
-    shuffled_idx_cv = torch.randperm(cv_g_values.shape[0])  # Use torch for GPU compatibility
-    cv_g_values = cv_g_values[shuffled_idx_cv]
-    cv_labels = cv_labels[shuffled_idx_cv]
-    cv_masks = cv_masks[shuffled_idx_cv]
-
-    # Del some variables so we free up GPU memory.
-    del (
-        wm_g_values_train,
-        wm_labels_train,
-        wm_masks_train,
-        wm_g_values_cv,
-        wm_labels_cv,
-        wm_masks_cv,
-    )
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    return train_g_values, train_masks, train_labels, cv_g_values, cv_masks, cv_labels
-
-
 def train_best_detector(
-    tokenized_wm_outputs: Sequence[np.ndarray] | np.ndarray,
-    tokenized_uwm_outputs: Sequence[np.ndarray] | np.ndarray,
-    logits_processor: logits_processing.SynthIDLogitsProcessor,
+    tokenized_wm_outputs: Union[List[np.ndarray], np.ndarray],
+    tokenized_uwm_outputs: Union[List[np.ndarray], np.ndarray],
+    logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     torch_device: torch.device,
     test_size: float = 0.3,
-    truncation_length: int = 200,
+    pos_truncation_length: Optional[int] = 200,
+    neg_truncation_length: Optional[int] = 100,
     max_padded_length: int = 2300,
     n_epochs: int = 50,
     learning_rate: float = 2.1e-2,
@@ -459,6 +202,13 @@ def train_best_detector(
     verbose: bool = False,
     validation_metric: ValidationMetric = ValidationMetric.TPR_AT_FPR,
 ):
+    """ Train and return the best detector given range of hyperparameters.
+
+    In practice, we have found that tuning pos_truncation_length,
+    neg_truncation_length, n_epochs, learning_rate and l2_weights can help
+    improve the performance of the detector. We reccommend tuning these
+    parameters for your data.
+    """
     l2_weights = list(l2_weights)
 
     (
@@ -468,10 +218,11 @@ def train_best_detector(
         cv_g_values,
         cv_masks,
         cv_labels,
-    ) = process_raw_model_outputs(
+    ) = utils.process_raw_model_outputs(
         logits_processor,
         tokenizer,
-        truncation_length,
+        pos_truncation_length,
+        neg_truncation_length,
         max_padded_length,
         tokenized_wm_outputs,
         test_size,
@@ -507,51 +258,272 @@ def train_best_detector(
 
 
 if __name__ == "__main__":
-    model_name = "google/gemma-7b-it"  # @param ['gpt2', 'google/gemma-2b-it', 'google/gemma-7b-it']
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default='google/gemma-2b-it',
+        help=(
+            "LM model to train the detector for."
+        ),
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help=(
+            "Temperature to sample from the model."
+        ),
+    )
+    parser.add_argument(
+        "--top_k",
+        type=int,
+        default=40,
+        help=(
+            "Top K for sampling."
+        ),
+    )
+    parser.add_argument(
+        "--top_p",
+        type=float,
+        default=1.0,
+        help=(
+            "Top P for sampling."
+        ),
+    )
+    parser.add_argument(
+        "--num_negatives",
+        type=int,
+        default=10000,
+        help=(
+            "Number of negatives for detector training."
+        ),
+    )
+    parser.add_argument(
+        "--pos_batch_size",
+        type=int,
+        default=32,
+        help=(
+            "Batch size of watermarked positives while sampling."
+        ),
+    )
+    parser.add_argument(
+        "--num_pos_batch",
+        type=int,
+        default=313,
+        help=(
+            "Number of positive batches for training."
+        ),
+    )
+    parser.add_argument(
+        "--generation_length",
+        type=int,
+        default=512,
+        help=(
+            "Generation length for sampling."
+        ),
+    )
+    parser.add_argument(
+        "--save_model_to_hf_hub",
+        type=bool,
+        default=False,
+        help=(
+            "Whether to save the trained model HF hub. By default it will be a private repo."
+        ),
+    )
+    parser.add_argument(
+        "--load_from_hf_hub",
+        type=bool,
+        default=False,
+        help=(
+            "Whether to load trained detector model from HF Hub, make sure its the model trained on the same model we are loading in the script."
+        ),
+    )
+    parser.add_argument(
+        "--hf_hub_model_name",
+        type=str,
+        default=None,
+        help=(
+            "HF hub model name for loading of saving the model."
+        ),
+    )
+    parser.add_argument(
+        "--eval_detector_on_prompts",
+        type=bool,
+        default=True,
+        help=(
+            "Evaluate detector on a prompt and print probability of watermark."
+        ),
+    )
 
-    CONFIG = synthid_mixin.DEFAULT_WATERMARKING_CONFIG
-    TEMPERATURE = 0.5
-    TOP_K = 40
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    args = parser.parse_args()
+    model_name = args.model_name
+    temperature = args.temperature
+    top_k = args.top_k
+    top_p = args.top_p
+    num_negatives = args.num_negatives
+    pos_batch_size = args.pos_batch_size
+    num_pos_batch = args.num_pos_batch
+    if num_pos_batch < 10:
+        raise ValueError("--num_pos_batch should be greater than 10.")
+    generation_length = args.generation_length
+    save_model_to_hf_hub = args.save_model_to_hf_hub
+    load_from_hf_hub = args.load_from_hf_hub
+    repo_name = args.hf_hub_model_name
+    eval_detector_on_prompts = args.eval_detector_on_prompts
 
-    logits_processor = logits_processing.SynthIDLogitsProcessor(**CONFIG, top_k=TOP_K, temperature=TEMPERATURE)
-
-    DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-
-    NUM_NEGATIVES = 10000
-    POS_BATCH_SIZE = 32
-    NUM_POS_BATCHES = 313
     NEG_BATCH_SIZE = 32
 
     # Truncate outputs to this length for training.
-    TRUNCATION_LENGTH = 200
+    POS_TRUNCATION_LENGTH = 200
+    NEG_TRUNCATION_LENGTH = 100
     # Pad trucated outputs to this length for equal shape across all batches.
-    MAX_PADDED_LENGTH = 2300
+    MAX_PADDED_LENGTH = 1000
 
-    ### CHANGE PATH
-    tokenized_wm_outputs = torch.load("/home/marc/local_test/synthia_test/watermarked_outputs_7B_0.7_20k.pkl")
-    tokenized_wm_outputs = tokenized_wm_outputs[:10]
+    DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    if DEVICE.type not in ("cuda", "tpu"):
+      raise ValueError(
+          "We have found the training stable on GPU and TPU, we are working on"
+          " a fix for CPUs"
+      )
 
-    tokenized_uwm_outputs = torch.load("/home/marc/local_test/synthia_test/unwatermarked_human_text.pkl")
-    tokenized_uwm_outputs = tokenized_uwm_outputs[:10]
+    model = None
+    if not load_from_hf_hub:
+        # Change this to make your watermark unique. Check documentation in the paper to understand the
+        # impact of these parameters.
+        DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
+            "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
+            "keys": [
+                654,
+                400,
+                836,
+                123,
+                340,
+                443,
+                597,
+                160,
+                57,
+                29,
+                590,
+                639,
+                13,
+                715,
+                468,
+                990,
+                966,
+                226,
+                324,
+                585,
+                118,
+                504,
+                421,
+                521,
+                129,
+                669,
+                732,
+                225,
+                90,
+                960,
+            ],
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 1024,
+        })
+        watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(
+            **DEFAULT_WATERMARKING_CONFIG)
 
-    best_detector, lowest_loss = train_best_detector(
-        tokenized_wm_outputs=tokenized_wm_outputs,
-        tokenized_uwm_outputs=tokenized_uwm_outputs,
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        torch_device=DEVICE,
-        test_size=0.3,
-        truncation_length=TRUNCATION_LENGTH,
-        max_padded_length=MAX_PADDED_LENGTH,
-        n_epochs=50,
-        learning_rate=2.1e-2,
-        l2_weights=np.logspace(-3, -2, num=4),
-        verbose=True,
-        validation_metric=ValidationMetric.TPR_AT_FPR,
-    )
+        model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+        tokenizer.pad_token = tokenizer.eos_token
 
-    best_detector.save_pretrained("bayesian_detector")
+        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
+        **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+        tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
+            model,
+            tokenizer,
+            watermark_config,
+            num_pos_batch,
+            pos_batch_size,
+            temperature,
+            generation_length,
+            top_k,
+            top_p,
+            DEVICE,
+        )
+        tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
+
+        best_detector, lowest_loss = train_best_detector(
+            tokenized_wm_outputs=tokenized_wm_outputs,
+            tokenized_uwm_outputs=tokenized_uwm_outputs,
+            logits_processor=logits_processor,
+            tokenizer=tokenizer,
+            torch_device=DEVICE,
+            test_size=0.3,
+            pos_truncation_length=POS_TRUNCATION_LENGTH,
+            neg_truncation_length=NEG_TRUNCATION_LENGTH,
+            max_padded_length=MAX_PADDED_LENGTH,
+            n_epochs=100,
+            learning_rate=3e-3,
+            l2_weights=[0, ],
+            verbose=True,
+            validation_metric=ValidationMetric.TPR_AT_FPR,
+        )
+    else:
+        if repo_name is None:
+            raise ValueError('When loading from pretrained detector model name cannot be None.')
+        best_detector = BayesianDetectorModel.from_pretrained(repo_name).to(DEVICE)
+
+    best_detector.config.set_detector_information(
+        model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG)
+    if save_model_to_hf_hub:
+        utils.upload_model_to_hf(best_detector, repo_name)
+
+
+    # Evaluate model response with the detector
+    if eval_detector_on_prompts:
+        model_name = best_detector.config.model_name
+        watermark_config_dict = best_detector.config.watermarking_config
+        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
+            **watermark_config_dict, device=DEVICE)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+        synthid_text_detector = transformers.generation.SynthIDTextWatermarkDetector(
+            best_detector, logits_processor, tokenizer)
+
+        if model is None:
+            model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(
+            **watermark_config_dict)
+
+        prompts = ['Write a essay on cats.']
+        inputs = tokenizer(
+            prompts,
+            return_tensors='pt',
+            padding=True,
+        ).to(DEVICE)
+
+        _, inputs_len = inputs['input_ids'].shape
+
+        outputs = model.generate(
+            **inputs,
+            watermarking_config=watermarking_config,
+            do_sample=True,
+            max_length=inputs_len + generation_length,
+            temperature=temperature,
+            top_k=40,
+            top_p=1.0,
+        )
+        outputs = outputs[:, inputs_len:]
+        result = synthid_text_detector(outputs)
+
+        # You should set this based on expected fpr and tpr. Check our demo at HF Spaces for more info.
+        upper_threshold = 0.95
+        lower_threshold = 0.12
+        if result[0][0] > upper_threshold:
+            print("The text is watermarked.")
+        elif lower_threshold < result[0][0] < upper_threshold:
+            print("It is hard to determine if the text is watermarked or not.")
+        else:
+            print("The text is not watermarked.")
