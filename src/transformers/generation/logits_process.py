@@ -2673,7 +2673,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             )
             self.state.context = self.state.context[:, 1:]
 
-        assert self.state is not None
+        if self.state is None:
+            raise ValueError("self.state can't be None! Call `self._init_state` to initialize the state.")
 
         self.state.num_calls += 1
 
