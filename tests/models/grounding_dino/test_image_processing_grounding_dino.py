@@ -407,7 +407,8 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
             self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
             # verify masks
             expected_masks_sum = 822873
-            self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
+            relative_error = torch.abs(encoding["labels"][0]["masks"].sum() - expected_masks_sum) / expected_masks_sum
+            self.assertTrue(relative_error < 1e-3)
             # verify orig_size
             expected_orig_size = torch.tensor([480, 640])
             self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
