@@ -65,7 +65,29 @@ def get_module_source_from_name(module_name: str) -> str:
 def find_all_dependencies(dependency_mapping: Dict[str, set], start_entity: str | None = None,
                           initial_dependencies: set | None = None, initial_checked_dependencies: set | None = None,
                           return_parent: bool = False) -> list | set:
-    """Return all the dependencies of the given entity. Given the following structure in the `modular_xxx.py` file:
+    """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
+    BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
+
+    Args:
+        dependency_mapping (`Dict[str, set]`):
+            A mapping from entities (usually function names), to immediate dependencies. That is, for function names,
+            a mapping {"foo": {"bar", "test"}} would indicate that functions `bar` and `test` are immediately called
+            in `foo`'s definition.
+        start_entity (str | None, *optional*):
+            A key of `dependency_mapping`, indicating from which entity to start the search.
+        initial_dependencies (set | None, *optional*):
+            If `start_entity` is not provided, this can be used as an alternative. In this case, `initial_dependencies`
+            the search will continue from all the entities in `initial_dependencies`, if they are in `dependency_mapping`.
+        initial_checked_dependencies (set | None, *optional*):
+            If provided, entities already present in `initial_checked_dependencies` will not be part of the returned dependencies.
+        return_parent (bool, *optional*):
+            If `True`, will return a list consisting of tuples (dependency, parent) instead of a simple set of dependencies. Note
+            that the order of the items in the list reflects the traversal order. Thus, no parent can ever appear before childs.
+    Returns:
+        A set of all the dependencies, or a list containing parents as well if `return_parent=True`.
+    
+    Example:
+    Given the following structure in the `modular_xxx.py` file:
     ```
     def foo1():
         pass
@@ -87,11 +109,11 @@ def find_all_dependencies(dependency_mapping: Dict[str, set], start_entity: str 
     and the `dependency_mapping` created when visiting the `modular_xxx.py` file, we get:
     ```
     dependency_mapping = {'bar': {'foo1'}, 'foobar': {'bar', 'foo2'}}
-    find_all_dependencies('foobar', dependency_mapping)
+    find_all_dependencies(dependency_mapping, start_entity='foobar', return_parent=True)
     >>> [('bar', 'foobar'), ('foo2', 'foobar'), ('foo1', 'bar')]
     ```
-    That is, all the functions needed (and their immediate parent) so that the function to be added in MyLayer (`foobar`) can
-    work correctly.
+    That is, all the functions needed (and potentially their immediate parent) so that the function to be added
+    in MyLayer (`foobar`) can work correctly.
     """
     if initial_dependencies is None and start_entity is not None:
         initial_dependencies = dependency_mapping[start_entity]
@@ -778,7 +800,7 @@ class PostModularConverterCleaner(CSTTransformer):
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self, added_dependencies: set):
+    def __init__(self):
         super().__init__()
         self.top_level_assignments = {}
         self.all_used_assignments = set()
@@ -821,14 +843,14 @@ class ModularConverterTransformer(CSTTransformer):
         self.given_old_name = given_old_name
         self.given_new_name = given_new_name
         # fmt: off
-        self.python_module = python_module  # we store the original module to use `code_for_node`
-        self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
-        self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
-        self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
-        self.visited_module_without_rename = {}
-        self.inserted_deps = []             # nodes inserted via super dependency
-        self.all_imports = []               # just stores all of the imports
-        self.all_safe_imports = []          # stores the import under simple statements
+        self.python_module = python_module       # we store the original module to use `code_for_node`
+        self.transformers_imports = {}           # maps the imports name like "from transformers.models.xxx" to the parsed AST module
+        self.imported_mapping = {}               # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
+        self.visited_module = {}                 # modules visited like "transformers.models.llama.modeling_llama"
+        self.visited_module_without_rename = {}  # same as above, but without renaming in the file
+        self.inserted_deps = []                  # nodes inserted via super dependency
+        self.all_imports = []                    # just stores all of the imports
+        self.all_safe_imports = []               # stores the import under simple statements
         self.global_scope_index = 0
         # fmt: on
         self.files = {  # mapping for different component bodies
@@ -849,7 +871,6 @@ class ModularConverterTransformer(CSTTransformer):
         self.function_call_class_mapping = defaultdict(lambda: set())
         # Mapping from top-level functions to other top-level functions dependencies
         self.function_call_dependency_mapping = defaultdict(lambda: set())
-        self.added_dependencies = set()
         # Keep track of top-level assignments
         self.top_level_assignments = {}
 
@@ -869,6 +890,8 @@ class ModularConverterTransformer(CSTTransformer):
                         raise ValueError(
                             f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead"
                         )
+                    if "auto.modeling_auto" in import_statement:
+                        break
                     if import_statement not in self.transformers_imports:
                         if "models" not in import_statement:
                             import_statement = "models." + import_statement
@@ -897,9 +920,11 @@ class ModularConverterTransformer(CSTTransformer):
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-                if re.search(
-                    rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement
-                ):  # OR MATCH ..llama.modeling_llama
+                if (
+                    # OR MATCH ..llama.modeling_llama
+                    re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement)
+                    and not "auto.modeling_auto" in full_statement
+                ):
                     return cst.RemoveFromParent()
                 if updated_node not in self.all_imports:
                     self.all_imports.append(updated_node)
@@ -1012,16 +1037,20 @@ class ModularConverterTransformer(CSTTransformer):
         """
         class_name = original_node.name.value
         bases = [k.value.value for k in original_node.bases if k.value.value in self.imported_mapping]
+        if len(bases) > 1:
+            raise ValueError(
+                f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*bases,}."
+            )
         all_bases = [k.value.value for k in original_node.bases]
         self.global_scope_index += 100
-        class_finder = None
-        file_to_update = None
-        for super_class in bases:
+
+        # We need to replace the class node with the super class node
+        if len(bases) == 1:
+            super_class = bases[0]
             if super_class not in self.imported_mapping:
                 raise ImportError(
                     f"{super_class} was not imported using `from transformers.models.xxxxx.modeling_xxxx import {super_class}"
                 )
-
             super_file_name = self.imported_mapping[super_class]  # we need to get the parsed tree
             model_name = re.search(r"models\.\w*?\.\w*?_(\S*)", super_file_name)
             if model_name:
@@ -1031,12 +1060,12 @@ class ModularConverterTransformer(CSTTransformer):
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
             
-            # Get the class finder corresponding to the inherited class
-            class_finder = self._get_class_finder(super_file_name, model_name, class_name, super_class)
-            
             # Find correct file where to write the class node
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             file_to_update = self.files[file_type]
+            
+            # Get the class finder corresponding to the inherited class
+            class_finder = self._get_class_finder(super_file_name, model_name, class_name, super_class)
 
             # Create the new class node
             updated_node = replace_call_to_super(class_finder, updated_node, class_name, all_bases)
@@ -1044,60 +1073,60 @@ class ModularConverterTransformer(CSTTransformer):
             if len(original_node.decorators) > 0:
                 updated_node = updated_node.with_changes(decorators=original_node.decorators)
 
-        # That is, we had at least one super class
-        if class_finder is not None:
-            # Look for all dependencies (recursively) of the new node
+            # The node was modified -> only look for all dependencies (recursively) of the new node
             new_node_dependencies = ClassDependenciesFinder.dependencies_for_new_node(updated_node, class_finder)
             all_dependencies_to_add = find_all_dependencies(dependency_mapping=class_finder.class_dependency_mapping,
-                                                            initial_dependencies=new_node_dependencies, initial_checked_dependencies=set(file_to_update.keys()))
-        # No super class, just check functions and assignments dependency in the imports
+                                                            initial_dependencies=new_node_dependencies,
+                                                            initial_checked_dependencies=set(file_to_update.keys()))
+            # We can easily get the correct order of dependencies from the class_finder of the parent
+            dependencies = {
+                dep: (class_finder.class_start_line[dep], class_finder.global_nodes[dep])
+                for dep in all_dependencies_to_add
+            }
+            
+        # No super class, just check functions and assignments dependency in the imports from other model-specific files
         else:
             match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
             match = re.search(rf"({match_pattern})$", class_name)
             if match:
-                key = TYPE_TO_FILE_TYPE[match.group(1)]
+                file_type = TYPE_TO_FILE_TYPE[match.group(1)]
             else:
-                key = "modeling"
-            file_to_update = self.files[key]
+                file_type = "modeling"
+            file_to_update = self.files[file_type]
 
+            # Find the node dependencies, without relying on a parent
             new_node_dependencies = ClassDependenciesFinder.dependencies_for_new_node_without_parents(updated_node)
+            # Match the dependencies against the imports
             mutual_dependencies = new_node_dependencies & self.imported_mapping.keys()
+            # Get the files where we matched imports and visit them to get all dependencies
             files_to_visit = {self.imported_mapping[dep] for dep in mutual_dependencies}
-            all_dependencies_to_add = set()
-            for file in files_to_visit:
+            dependencies = {}
+            for i, file in enumerate(files_to_visit):
+                # This class finder is only used to find function dependency graphs
                 class_finder = self._get_class_finder_without_rename(file)
-                all_dependencies_to_add.update(
-                    find_all_dependencies(dependency_mapping=class_finder.function_call_dependency_mapping,
-                                          initial_dependencies=mutual_dependencies,
-                                          initial_checked_dependencies=set(file_to_update.keys()))
+                all_dependencies_to_add = find_all_dependencies(dependency_mapping=class_finder.function_call_dependency_mapping,
+                                                                initial_dependencies=mutual_dependencies,
+                                                                initial_checked_dependencies=set(file_to_update.keys()))
+                # Here we can only know the relative order of dependencies within a single file -> add them in the file order
+                dependencies.update(
+                    {
+                        dep: (class_finder.class_start_line[dep] + i*100000, class_finder.global_nodes[dep])
+                        for dep in all_dependencies_to_add
+                    }
                 )
-
-        # Write dependencies
-        list_dependencies = {
-            dep: class_finder.class_start_line.get(dep, 1000)
-            for dep in all_dependencies_to_add
-        }
-        list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
+                
+        # Write dependencies to file
+        dependencies = sorted(dependencies.items(), key=lambda x: x[1][0], reverse=True)
         start_insert_idx = self.global_scope_index
-        for dependency, _ in list_dependencies:
+        for dependency, (_, node) in dependencies:
             # we can write to the correct body, using the source of the parent class
-            node = class_finder.global_nodes.get(dependency, None)
-            if node is not None:
-                node = self.all_definitions.pop(dependency, node)
-                start_insert_idx -= 1
-                file_to_update[dependency] = {"insert_idx": start_insert_idx, "node": node}
-                self.added_dependencies.add(dependency)
+            node = self.all_definitions.pop(dependency, node)
+            start_insert_idx -= 1
+            file_to_update[dependency] = {"insert_idx": start_insert_idx, "node": node}
 
-        # Now, if a class was defined without parents, we look for the name
-        match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
-        match = re.search(rf"({match_pattern})$", class_name)
-        if match:
-            key = TYPE_TO_FILE_TYPE[match.group(1)]
-            self.class_to_file_type[class_name] = key
-            self.files[key][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
-        else:
-            self.class_to_file_type[class_name] = "modeling"
-            self.files["modeling"][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
+        # Write the class node to file
+        self.class_to_file_type[class_name] = file_type
+        file_to_update[class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
 
         self.current_class = None
         return updated_node
@@ -1263,7 +1292,7 @@ class ModularConverterTransformer(CSTTransformer):
                     new_body = list(dependency_imports[file].values()) + new_body
                 new_module = cst.Module(body=[*new_body], header=node.header)
                 # Final cleanup
-                new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner(self.added_dependencies))
+                new_module = MetadataWrapper(new_module).visit(PostModularConverterCleaner())
                 self.files[file] = new_module
             # In this case, only the nodes corresponding to ASSIGNMENTS_TO_KEEP are present -> we don't want to create the file
             else:
@@ -1325,7 +1354,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/modular_gemma.py"],
+        default=["src/transformers/models/instructblipvideo/modular_instructblipvideo.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
