@@ -1088,7 +1088,7 @@ class LogitsProcessorTest(unittest.TestCase):
         updated_softmaxes = np.mean(updated_softmaxes, axis=0) / num_keys
         is_close = torch.all(
             torch.isclose(
-                torch.tensor(updated_softmaxes),
+                torch.tensor(updated_softmaxes, device=torch_device),
                 torch.nn.Softmax()(fixed_logits[0]),  # Take any batch entry, all are same.
                 atol=1e-3,
                 rtol=0,
