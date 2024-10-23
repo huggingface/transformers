@@ -355,7 +355,7 @@ if __name__ == "__main__":
             "Evaluate detector on a prompt and print probability of watermark."
         ),
     )
-    
+
 
     args = parser.parse_args()
     model_name = args.model_name
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     load_from_hf_hub = args.load_from_hf_hub
     repo_name = args.hf_hub_model_name
     eval_detector_on_prompts = args.eval_detector_on_prompts
-    
+
     NEG_BATCH_SIZE = 32
 
     # Truncate outputs to this length for training.
@@ -437,15 +437,15 @@ if __name__ == "__main__":
         logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
         **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
         tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
-            model, 
-            tokenizer, 
-            watermark_config, 
-            num_pos_batch, 
-            pos_batch_size, 
-            temperature, 
-            generation_length, 
-            top_k, 
-            top_p, 
+            model,
+            tokenizer,
+            watermark_config,
+            num_pos_batch,
+            pos_batch_size,
+            temperature,
+            generation_length,
+            top_k,
+            top_p,
             DEVICE,
         )
         tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
@@ -469,7 +469,7 @@ if __name__ == "__main__":
     else:
         if repo_name is None:
             raise ValueError('When loading from pretrained detector model name cannot be None.')
-        best_detector = BayesianDetectorModel.from_pretrained(repo_name)
+        best_detector = BayesianDetectorModel.from_pretrained(repo_name).to(DEVICE)
 
     if save_model_to_hf_hub:
         best_detector.config.set_detector_information(
@@ -491,8 +491,8 @@ if __name__ == "__main__":
 
         model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
         watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(
-            watermark_config_dict)
-        
+            **watermark_config_dict)
+
         prompts = ['Write a essay on cats.']
         inputs = tokenizer(
             prompts,
@@ -511,13 +511,15 @@ if __name__ == "__main__":
             top_k=40,
             top_p=1.0,
         )
-        outputs = outputs[inputs_len:]
+        outputs = outputs[:, inputs_len:]
         result = synthid_text_detector(outputs)
-        print(result)
-    
-    
 
-
-
-
-
+        # You should set this based on expected fpr and tpr
+        upper_threshold = 0.95
+        lower_threshold = 0.12
+        if result[0][0] > upper_threshold:
+            print("The text is watermarked.")
+        elif lower_threshold < result[0][0] < upper_threshold:
+            print("It is hard to determine if the text is watermarked or not.")
+        else:
+            print("The text is not watermarked.")
