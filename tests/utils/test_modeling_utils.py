@@ -2556,9 +2556,7 @@ class TestTensorSharing(TestCasePlus):
 @require_read_token
 @require_torch
 class TestFromPretrained(unittest.TestCase):
-    def test_tie_word_embeddings_false_load_weights_as_untied(
-        self,
-    ):
+    def test_tie_word_embeddings_false_load_weights_as_untied(self):
         with tempfile.TemporaryDirectory() as tempdir:
             checkpoint = "meta-llama/Llama-2-7b-hf"
             config = AutoConfig.from_pretrained(checkpoint)
