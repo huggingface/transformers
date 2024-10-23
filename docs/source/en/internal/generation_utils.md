@@ -185,6 +185,9 @@ generation.
 [[autodoc]] SuppressTokensLogitsProcessor
     - __call__
 
+[[autodoc]] SynthIDTextWatermarkLogitsProcessor
+    - __call__
+
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 
@@ -418,5 +421,20 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 ## Watermark Utils
 
+[[autodoc]] WatermarkingConfig
+    - __call__
+
 [[autodoc]] WatermarkDetector
+    - __call__
+
+[[autodoc]] BayesianDetectorConfig
+    - __call__
+
+[[autodoc]] BayesianDetectorModel
+    - __call__
+
+[[autodoc]] SynthIDTextWatermarkingConfig
+    - __call__
+
+[[autodoc]] SynthIDTextWatermarkDetector
     - __call__
