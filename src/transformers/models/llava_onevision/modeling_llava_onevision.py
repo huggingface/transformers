@@ -620,7 +620,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 vision_aspect_ratio=vision_aspect_ratio,
             )
             n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
+            n_image_features = image_features.shape[0]
 
             if n_image_tokens != n_image_features:
                 raise ValueError(
@@ -655,7 +655,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             video_features = video_features.flatten(0, 1)
 
             n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
-            n_video_features = video_features.shape[0] * video_features.shape[1]
+            n_video_features = video_features.shape[0]
             if n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"

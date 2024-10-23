@@ -116,9 +116,9 @@ class VideoLlavaVisionText2TextModelTester:
         self.batch_size = 5
         self.num_channels = 3
         self.image_size = 224
-        self.encoder_seq_length = 64
+        self.encoder_seq_length = 246
         self.num_image_tokens = 25
-        self.num_video_tokens = 26
+        self.num_video_tokens = 26 * self.num_frames
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):

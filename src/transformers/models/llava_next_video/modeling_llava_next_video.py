@@ -968,7 +968,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         else:
             if image_features is not None:
                 n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
-                n_image_features = image_features.shape[0] * image_features.shape[1]
+                n_image_features = image_features.shape[0]
 
                 if n_image_tokens != n_image_features:
                     raise ValueError(
@@ -984,7 +984,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
             if video_features is not None:
                 n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
-                n_video_features = video_features.shape[0] * video_features.shape[1]
+                n_video_features = video_features.shape[0]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
