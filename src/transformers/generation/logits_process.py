@@ -2510,34 +2510,55 @@ class SynthIDTextWatermarkState:
         self.num_calls = 0
 
 
-SYNTHID_LOGITS_PROCESS_DOC_STRING = r"""
-Logits processor that implements watermarking techniques for text generation models. 
-This class facilitates the application of SynthID text watermarking, a method for embedding imperceptible signals into generated text to aid in detecting synthetic content. 
-It operates by subtly manipulating the probabilities of token selection during text generation in a manner that can be reliably recovered later for verification. 
-
-Key Features: 
-* **State Management:** Maintains internal state to track token sequences and generate watermarking keys dynamically. 
-
-* **Key Generation:** Computes hashes based on token sequences and watermarking parameters to create unique keys for each position. 
-
-* **G-Value Sampling:** Employs a pre-computed sampling table to sample watermarking values (g-values) based on the generated keys (similar to . 
-
-* **Score Adjustment:** Applies calculated g-values to modify token probabilities during generation, embedding the watermark. 
-
-* **Context Repetition Handling:** Incorporates logic to avoid watermarking tokens in repeated contexts, preserving naturalness.
-
-* **EOS Token Masking:** Supports masking end-of-sentence tokens to prevent their inclusion in watermarking calculations. 
-
-* **Utility Functions:** Provides functions to compute g-values directly, check for context repetition, create EOS token masks, and estimate expected mean g-values. 
-
-Refer to paper url: https://www.nature.com/articles/s41586-024-08025-4 for more details around this.
-"""
-
-
-@add_start_docstrings(
-    SYNTHID_LOGITS_PROCESS_DOC_STRING,
-)
 class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
+    r"""
+    Logits processor that implements watermarking techniques for text generation models.
+    This class facilitates the application of SynthID text watermarking, a method for embedding imperceptible signals
+    into generated text to aid in detecting synthetic content. It operates by subtly manipulating the probabilities of
+    token selection during text generation in a manner that can be reliably recovered later for verification.
+
+    Key Features:
+    * **State Management:** Maintains internal state to track token sequences and generate watermarking keys
+    dynamically.
+
+    * **Key Generation:** Computes hashes based on token sequences and watermarking parameters to create unique keys
+    for each position.
+
+    * **G-Value Sampling:** Employs a pre-computed sampling table to sample watermarking values (g-values) based on
+    the generated keys.
+
+    * **Score Adjustment:** Applies calculated g-values to modify token probabilities during generation, embedding the
+    watermark.
+
+    * **Context Repetition Handling:** Incorporates logic to avoid watermarking tokens in repeated contexts,
+    preserving naturalness.
+
+    * **EOS Token Masking:** Supports masking end-of-sentence tokens to prevent their inclusion in watermarking
+    calculations.
+
+    * **Utility Functions:** Provides functions to compute g-values directly, check for context repetition, create
+    EOS token masks, and estimate expected mean g-values.
+
+    Refer to paper url: https://www.nature.com/articles/s41586-024-08025-4 for more details around this.
+
+    Args:
+        ngram_len (`int`):
+            Ngram length.
+        keys (`List[int]`):
+            A sequence of watermarking keys, one for each depth.
+        sampling_table_size (`int`):
+            Size of the sampling table.
+        sampling_table_seed (`int`):
+            Random seed to generate the sampling table.
+        context_history_size (`int`):
+            Size of the tensor to keep track of seen contexts.
+        device (`torch.device`):
+            Device to use.
+        skip_first_ngram_calls hashing_key (`bool`, optional, *optional*, defaults to False):
+            Whether to skip first ngram calls.
+        debug_mode (`bool`, optional, *optional*, defaults to False):
+            Logits are modified to uniform one got before watermarking modification is applied. This is to test the implementation.
+    """
 
     def __init__(
         self,
@@ -2550,18 +2571,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         skip_first_ngram_calls: bool = False,
         debug_mode: bool = False,
     ):
-        """Initializes the logits processor.
-
-        Args:
-            ngram_len (`int`): Ngram length.
-            keys (`List[int]`): A sequence of watermarking keys, one for each depth.
-            sampling_table_size (`int`): Size of the sampling table.
-            sampling_table_seed (`int`): Random seed to generate the sampling table.
-            context_history_size (`int`): Size of the tensor to keep track of seen contexts.
-            device (`torch.device`): Device to use.
-            skip_first_ngram_calls hashing_key (`bool`, optional, *optional*, defaults to False): Whether to skip first ngram calls.
-            debug_mode (`bool`, optional, *optional*, defaults to False): Logits are modified to uniform one got before watermarking modification is applied. This is to test the implementation.
-        """
         self.ngram_len = ngram_len
         self.keys = torch.tensor(keys, device=device)
 

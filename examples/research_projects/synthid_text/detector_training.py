@@ -15,24 +15,16 @@
 
 import argparse
 import dataclasses
-from datasets import load_dataset
 import enum
-import functools
-import gc
-from typing import Any, Optional, Union, Tuple, Dict, List
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from huggingface_hub import HfApi, Repository, create_repo
-from huggingface_hub.utils import RepositoryNotFoundError
 import immutabledict
 import numpy as np
-from sklearn import model_selection
-import tensorflow as tf
-import tensorflow_datasets as tfds
 import torch
-import tqdm
+
 import transformers
-from transformers import BayesianDetectorConfig, BayesianDetectorModel, AutoModelForCausalLM
 import utils
+from transformers import AutoModelForCausalLM, BayesianDetectorConfig, BayesianDetectorModel
 
 
 @enum.unique
@@ -202,7 +194,7 @@ def train_best_detector(
     verbose: bool = False,
     validation_metric: ValidationMetric = ValidationMetric.TPR_AT_FPR,
 ):
-    """ Train and return the best detector given range of hyperparameters.
+    """Train and return the best detector given range of hyperparameters.
 
     In practice, we have found that tuning pos_truncation_length,
     neg_truncation_length, n_epochs, learning_rate and l2_weights can help
@@ -262,74 +254,56 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default='google/gemma-2b-it',
-        help=(
-            "LM model to train the detector for."
-        ),
+        default="google/gemma-2b-it",
+        help=("LM model to train the detector for."),
     )
     parser.add_argument(
         "--temperature",
         type=float,
         default=1.0,
-        help=(
-            "Temperature to sample from the model."
-        ),
+        help=("Temperature to sample from the model."),
     )
     parser.add_argument(
         "--top_k",
         type=int,
         default=40,
-        help=(
-            "Top K for sampling."
-        ),
+        help=("Top K for sampling."),
     )
     parser.add_argument(
         "--top_p",
         type=float,
         default=1.0,
-        help=(
-            "Top P for sampling."
-        ),
+        help=("Top P for sampling."),
     )
     parser.add_argument(
         "--num_negatives",
         type=int,
         default=10000,
-        help=(
-            "Number of negatives for detector training."
-        ),
+        help=("Number of negatives for detector training."),
     )
     parser.add_argument(
         "--pos_batch_size",
         type=int,
         default=32,
-        help=(
-            "Batch size of watermarked positives while sampling."
-        ),
+        help=("Batch size of watermarked positives while sampling."),
     )
     parser.add_argument(
         "--num_pos_batch",
         type=int,
         default=313,
-        help=(
-            "Number of positive batches for training."
-        ),
+        help=("Number of positive batches for training."),
     )
     parser.add_argument(
         "--generation_length",
         type=int,
         default=512,
-        help=(
-            "Generation length for sampling."
-        ),
+        help=("Generation length for sampling."),
     )
     parser.add_argument(
         "--save_model_to_hf_hub",
         type=bool,
         default=False,
-        help=(
-            "Whether to save the trained model HF hub. By default it will be a private repo."
-        ),
+        help=("Whether to save the trained model HF hub. By default it will be a private repo."),
     )
     parser.add_argument(
         "--load_from_hf_hub",
@@ -343,19 +317,14 @@ if __name__ == "__main__":
         "--hf_hub_model_name",
         type=str,
         default=None,
-        help=(
-            "HF hub model name for loading of saving the model."
-        ),
+        help=("HF hub model name for loading of saving the model."),
     )
     parser.add_argument(
         "--eval_detector_on_prompts",
         type=bool,
         default=True,
-        help=(
-            "Evaluate detector on a prompt and print probability of watermark."
-        ),
+        help=("Evaluate detector on a prompt and print probability of watermark."),
     )
-
 
     args = parser.parse_args()
     model_name = args.model_name
@@ -383,62 +352,61 @@ if __name__ == "__main__":
 
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     if DEVICE.type not in ("cuda", "tpu"):
-      raise ValueError(
-          "We have found the training stable on GPU and TPU, we are working on"
-          " a fix for CPUs"
-      )
+        raise ValueError("We have found the training stable on GPU and TPU, we are working on" " a fix for CPUs")
 
     model = None
     if not load_from_hf_hub:
         # Change this to make your watermark unique. Check documentation in the paper to understand the
         # impact of these parameters.
-        DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict({
-            "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
-            "keys": [
-                654,
-                400,
-                836,
-                123,
-                340,
-                443,
-                597,
-                160,
-                57,
-                29,
-                590,
-                639,
-                13,
-                715,
-                468,
-                990,
-                966,
-                226,
-                324,
-                585,
-                118,
-                504,
-                421,
-                521,
-                129,
-                669,
-                732,
-                225,
-                90,
-                960,
-            ],
-            "sampling_table_size": 2**16,
-            "sampling_table_seed": 0,
-            "context_history_size": 1024,
-        })
-        watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(
-            **DEFAULT_WATERMARKING_CONFIG)
+        DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict(
+            {
+                "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
+                "keys": [
+                    654,
+                    400,
+                    836,
+                    123,
+                    340,
+                    443,
+                    597,
+                    160,
+                    57,
+                    29,
+                    590,
+                    639,
+                    13,
+                    715,
+                    468,
+                    990,
+                    966,
+                    226,
+                    324,
+                    585,
+                    118,
+                    504,
+                    421,
+                    521,
+                    129,
+                    669,
+                    732,
+                    225,
+                    90,
+                    960,
+                ],
+                "sampling_table_size": 2**16,
+                "sampling_table_seed": 0,
+                "context_history_size": 1024,
+            }
+        )
+        watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(**DEFAULT_WATERMARKING_CONFIG)
 
         model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
         tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
 
         logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
-        **DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+            **DEFAULT_WATERMARKING_CONFIG, device=DEVICE
+        )
         tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
             model,
             tokenizer,
@@ -465,46 +433,48 @@ if __name__ == "__main__":
             max_padded_length=MAX_PADDED_LENGTH,
             n_epochs=100,
             learning_rate=3e-3,
-            l2_weights=[0, ],
+            l2_weights=[
+                0,
+            ],
             verbose=True,
             validation_metric=ValidationMetric.TPR_AT_FPR,
         )
     else:
         if repo_name is None:
-            raise ValueError('When loading from pretrained detector model name cannot be None.')
+            raise ValueError("When loading from pretrained detector model name cannot be None.")
         best_detector = BayesianDetectorModel.from_pretrained(repo_name).to(DEVICE)
 
     best_detector.config.set_detector_information(
-        model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG)
+        model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG
+    )
     if save_model_to_hf_hub:
         utils.upload_model_to_hf(best_detector, repo_name)
-
 
     # Evaluate model response with the detector
     if eval_detector_on_prompts:
         model_name = best_detector.config.model_name
         watermark_config_dict = best_detector.config.watermarking_config
         logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
-            **watermark_config_dict, device=DEVICE)
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
-            model_name)
+            **watermark_config_dict, device=DEVICE
+        )
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
         synthid_text_detector = transformers.generation.SynthIDTextWatermarkDetector(
-            best_detector, logits_processor, tokenizer)
+            best_detector, logits_processor, tokenizer
+        )
 
         if model is None:
             model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
-        watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(
-            **watermark_config_dict)
+        watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(**watermark_config_dict)
 
-        prompts = ['Write a essay on cats.']
+        prompts = ["Write a essay on cats."]
         inputs = tokenizer(
             prompts,
-            return_tensors='pt',
+            return_tensors="pt",
             padding=True,
         ).to(DEVICE)
 
-        _, inputs_len = inputs['input_ids'].shape
+        _, inputs_len = inputs["input_ids"].shape
 
         outputs = model.generate(
             **inputs,

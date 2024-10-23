@@ -13,20 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datasets
 import gc
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Optional, Tuple
 
-from huggingface_hub import HfApi, create_repo
-from huggingface_hub.utils import RepositoryNotFoundError
+import datasets
 import numpy as np
-from sklearn import model_selection
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import torch
 import tqdm
+from huggingface_hub import HfApi, create_repo
+from huggingface_hub.utils import RepositoryNotFoundError
+from sklearn import model_selection
+
 import transformers
-from transformers import BayesianDetectorConfig, BayesianDetectorModel
 
 
 def pad_to_len(
@@ -124,9 +124,7 @@ def process_outputs_for_training(
             # We also filter for length when CV negatives are processed.
             outputs = filter_and_truncate(outputs, pos_truncation_length, eos_token_mask)
         elif not is_pos and not is_cv:
-            outputs = filter_and_truncate(
-                outputs, neg_truncation_length, eos_token_mask
-            )
+            outputs = filter_and_truncate(outputs, neg_truncation_length, eos_token_mask)
 
         # If no filtered outputs skip this batch.
         if outputs.shape[0] == 0:
@@ -332,66 +330,64 @@ def process_raw_model_outputs(
 
 
 def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
-  dataset, info = tfds.load('wikipedia/20230601.en', split='train', with_info=True)
-  dataset = dataset.take(num_negatives)
+    dataset, info = tfds.load("wikipedia/20230601.en", split="train", with_info=True)
+    dataset = dataset.take(num_negatives)
 
-  # Convert the dataset to a DataFrame
-  df = tfds.as_dataframe(dataset, info)
-  ds = tf.data.Dataset.from_tensor_slices(dict(df))
-  tf.random.set_seed(0)
-  ds = ds.shuffle(buffer_size=10_000)
-  ds = ds.batch(batch_size=neg_batch_size)
+    # Convert the dataset to a DataFrame
+    df = tfds.as_dataframe(dataset, info)
+    ds = tf.data.Dataset.from_tensor_slices(dict(df))
+    tf.random.set_seed(0)
+    ds = ds.shuffle(buffer_size=10_000)
+    ds = ds.batch(batch_size=neg_batch_size)
 
-  tokenized_uwm_outputs = []
-  lengths = []
-  batched = []
-  # Pad to this length (on the right) for batching.
-  padded_length = 1000
-  for i, batch in tqdm.tqdm(enumerate(ds)):
-    responses = [val.decode() for val in batch['text'].numpy()]
-    inputs = tokenizer(
-        responses,
-        return_tensors='pt',
-        padding=True,
-    ).to(device)
-    inputs = inputs['input_ids'].cpu().numpy()
-    if inputs.shape[1] >= padded_length:
-      inputs = inputs[:, :padded_length]
-    else:
-      inputs = np.concatenate(
-          [inputs, np.ones((neg_batch_size, padded_length - inputs.shape[1])) * tokenizer.eos_token_id], axis=1)
-    tokenized_uwm_outputs.append(inputs)
-    if len(tokenized_uwm_outputs) * neg_batch_size > num_negatives:
-      break
-  return tokenized_uwm_outputs
+    tokenized_uwm_outputs = []
+    # Pad to this length (on the right) for batching.
+    padded_length = 1000
+    for i, batch in tqdm.tqdm(enumerate(ds)):
+        responses = [val.decode() for val in batch["text"].numpy()]
+        inputs = tokenizer(
+            responses,
+            return_tensors="pt",
+            padding=True,
+        ).to(device)
+        inputs = inputs["input_ids"].cpu().numpy()
+        if inputs.shape[1] >= padded_length:
+            inputs = inputs[:, :padded_length]
+        else:
+            inputs = np.concatenate(
+                [inputs, np.ones((neg_batch_size, padded_length - inputs.shape[1])) * tokenizer.eos_token_id], axis=1
+            )
+        tokenized_uwm_outputs.append(inputs)
+        if len(tokenized_uwm_outputs) * neg_batch_size > num_negatives:
+            break
+    return tokenized_uwm_outputs
 
 
 def get_tokenized_wm_outputs(
-      model,
-      tokenizer,
-      watermark_config,
-      num_pos_batches,
-      pos_batch_size,
-      temperature,
-      max_output_len,
-      top_k,
-      top_p,
-      device,
+    model,
+    tokenizer,
+    watermark_config,
+    num_pos_batches,
+    pos_batch_size,
+    temperature,
+    max_output_len,
+    top_k,
+    top_p,
+    device,
 ):
     eli5_prompts = datasets.load_dataset("Pavithree/eli5")
 
     wm_outputs = []
 
     for batch_id in tqdm.tqdm(range(num_pos_batches)):
-        prompts = eli5_prompts['train']['title'][
-            batch_id * pos_batch_size:(batch_id + 1) * pos_batch_size]
+        prompts = eli5_prompts["train"]["title"][batch_id * pos_batch_size : (batch_id + 1) * pos_batch_size]
         prompts = [prompt.strip('"') for prompt in prompts]
         inputs = tokenizer(
             prompts,
-            return_tensors='pt',
+            return_tensors="pt",
             padding=True,
         ).to(device)
-        _, inputs_len = inputs['input_ids'].shape
+        _, inputs_len = inputs["input_ids"].shape
 
         outputs = model.generate(
             **inputs,
@@ -414,18 +410,18 @@ def get_tokenized_wm_outputs(
 
 
 def upload_model_to_hf(model, hf_repo_name: str, private: bool = True):
-  api = HfApi()
+    api = HfApi()
 
-  # Check if the repository exists
-  try:
-      api.repo_info(repo_id=hf_repo_name, use_auth_token=True)
-      print(f"Repository '{hf_repo_name}' already exists.")
-  except RepositoryNotFoundError:
-      # If the repository does not exist, create it
-      print(f"Repository '{hf_repo_name}' not found. Creating it...")
-      create_repo(repo_id=hf_repo_name, private=private, use_auth_token=True)
-      print(f"Repository '{hf_repo_name}' created successfully.")
+    # Check if the repository exists
+    try:
+        api.repo_info(repo_id=hf_repo_name, use_auth_token=True)
+        print(f"Repository '{hf_repo_name}' already exists.")
+    except RepositoryNotFoundError:
+        # If the repository does not exist, create it
+        print(f"Repository '{hf_repo_name}' not found. Creating it...")
+        create_repo(repo_id=hf_repo_name, private=private, use_auth_token=True)
+        print(f"Repository '{hf_repo_name}' created successfully.")
 
-  # Push the model to the Hugging Face Hub
-  print(f"Uploading model to Hugging Face repo '{hf_repo_name}'...")
-  model.push_to_hub(repo_id=hf_repo_name, use_auth_token=True)
+    # Push the model to the Hugging Face Hub
+    print(f"Uploading model to Hugging Face repo '{hf_repo_name}'...")
+    model.push_to_hub(repo_id=hf_repo_name, use_auth_token=True)

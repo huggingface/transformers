@@ -191,6 +191,20 @@ class AlternatingCodebooksLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class BayesianDetectorConfig(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BayesianDetectorModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeamScorer(metaclass=DummyObject):
     _backends = ["torch"]
 

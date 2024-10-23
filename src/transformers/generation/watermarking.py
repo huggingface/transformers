@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, Optional, Union, Tuple, Any
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -24,14 +24,14 @@ from torch import nn
 from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, add_start_docstrings, is_torch_available, logging
+from ..utils import ModelOutput, is_torch_available, logging
 from .configuration_utils import GreenRedWatermarkingConfig, PretrainedConfig
 
 
 if is_torch_available():
     import torch
 
-    from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -253,7 +253,7 @@ class BayesianDetectorConfig(PretrainedConfig):
     Args:
         watermarking_depth (`int`, *optional*):
             The number of tournament layers.
-        base_rate (`float1`, *optional*, defaults to `0.5`):
+        base_rate (`float1`, *optional*, defaults to 0.5):
             Prior probability P(w) that a text is watermarked.
     """
 
@@ -364,15 +364,16 @@ class BayesianDetectorPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
 
-BAYESIAN_DETECTOR_START_DOCSTRING = r"""
-Bayesian classifier for watermark detection.
+class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
+    r"""
+    Bayesian classifier for watermark detection.
 
     This detector uses Bayes' rule to compute a watermarking score, which is
-    the sigmoid of the log of ratio of the posterior probabilities  P(watermarked|g_values)  and P(unwatermarked|g_values). 
-    Please see the section on BayesianScore in the paper for further details. 
+    the sigmoid of the log of ratio of the posterior probabilities  P(watermarked|g_values)  and P(unwatermarked|g_values).
+    Please see the section on BayesianScore in the paper for further details.
     Paper URL: https://www.nature.com/articles/s41586-024-08025-4
 
-Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5) g-value distribution.
+    Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5) g-value distribution.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -386,12 +387,8 @@ Note that this detector only works with non-distortionary Tournament-based water
         config ([`BayesianDetectorConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+    """
 
-@add_start_docstrings(
-    BAYESIAN_DETECTOR_START_DOCSTRING,
-)
-class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -482,29 +479,24 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
             return (out,) if loss is None else (out, loss)
 
         return BayesianWatermarkDetectorModelOutput(loss=loss, posterior_probabilities=out)
-    
 
-SYNTHID_TEXT_DETECTOR_START_DOCSTRING = r"""
 
+class SynthIDTextWatermarkDetector:
+    r"""
     SynthID text watermark detector class.
 
-    This class has to be initialized with the trained bayesian detector module check script 
+    This class has to be initialized with the trained bayesian detector module check script
     in examples/synthid_text/detector_training.py for example in training/saving/loading this
     detector module. The folder also showcases example use case of this detector.
 
     Parameters:
-        detector_module ([`BayesianDetectorModel`]): 
-            Bayesian detector module object initialized with parameters. 
+        detector_module ([`BayesianDetectorModel`]):
+            Bayesian detector module object initialized with parameters.
             Check examples/research_projects/synthid_text/detector_training.py for usage.
         logits_processor: ([`SynthIDTextWatermarkLogitsProcessor`])
             SynthIDTextWatermarkLogitsProcessor object for watermar detection.
-"""
+    """
 
-
-@add_start_docstrings(
-    SYNTHID_TEXT_DETECTOR_START_DOCSTRING,
-)
-class SynthIDTextWatermarkDetector:
     def __init__(
         self,
         detector_module: BayesianDetectorModel,
