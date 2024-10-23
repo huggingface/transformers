@@ -380,7 +380,7 @@ if __name__ == "__main__":
     MAX_PADDED_LENGTH = 1000
 
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-    if DEVICE.type in ("cuda", "tpu"):
+    if DEVICE.type not in ("cuda", "tpu"):
       raise ValueError(
           "We have found the training stable on GPU and TPU, we are working on"
           " a fix for CPUs"

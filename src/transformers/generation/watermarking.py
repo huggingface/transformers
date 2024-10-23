@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, Optional, Union, Tuple
+from typing import Dict, Optional, Union, Tuple, Any
 
 import numpy as np
 import torch
@@ -509,9 +509,11 @@ class SynthIDTextWatermarkDetector:
         self,
         detector_module: BayesianDetectorModel,
         logits_processor: SynthIDTextWatermarkLogitsProcessor,
+        tokenizer: Any,
     ):
         self.detector_module = detector_module
         self.logits_processor = logits_processor
+        self.tokenizer = tokenizer
 
     def __call__(self, tokenized_outputs: torch.Tensor):
         # eos mask is computed, skip first ngram_len - 1 tokens

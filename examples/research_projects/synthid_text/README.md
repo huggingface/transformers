@@ -4,6 +4,11 @@ This project showcases the use of SynthIDText for watermarking LLMs. The code sh
 demostrates the training of the detector for detecting such watermarked text. This detector can be uploaded onto
 a private HF hub repo (private for security reasons) and can be initialized again through pretrained model loading also shown in this script.
 
+
+## Python version
+
+User would need python 3.9 to run this example.
+
 ## Installation and running
 
 Once you install transformers you would need to install requirements for this project through requirements.txt provided in this folder. 
