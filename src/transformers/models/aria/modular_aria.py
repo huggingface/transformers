@@ -1229,7 +1229,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position=None,
-        num_logits_to_keep=None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.
@@ -1331,6 +1331,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            num_logits_to_keep=num_logits_to_keep,
         )
 
         logits = outputs[0]
