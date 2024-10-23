@@ -185,6 +185,9 @@ generation.
 [[autodoc]] SuppressTokensLogitsProcessor
     - __call__
 
+[[autodoc]] SynthIDTextWatermarkLogitsProcessor
+    - __call__
+
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 

@@ -22,9 +22,22 @@ import immutabledict
 import numpy as np
 import torch
 
-import transformers
-import utils
-from transformers import AutoModelForCausalLM, BayesianDetectorConfig, BayesianDetectorModel
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BayesianDetectorConfig,
+    BayesianDetectorModel,
+    SynthIDTextWatermarkDetector,
+    SynthIDTextWatermarkingConfig,
+    SynthIDTextWatermarkLogitsProcessor,
+)
+from utils import (
+    get_tokenized_uwm_outputs,
+    get_tokenized_wm_outputs,
+    process_raw_model_outputs,
+    update_fn_if_fpr_tpr,
+    upload_model_to_hf,
+)
 
 
 @enum.unique
@@ -138,7 +151,7 @@ def train_detector(
         if g_values_val is not None:
             detector.eval()
             if validation_metric == ValidationMetric.TPR_AT_FPR:
-                val_loss = utils.update_fn_if_fpr_tpr(
+                val_loss = update_fn_if_fpr_tpr(
                     detector,
                     g_values_val,
                     mask_val,
@@ -181,7 +194,7 @@ def train_detector(
 def train_best_detector(
     tokenized_wm_outputs: Union[List[np.ndarray], np.ndarray],
     tokenized_uwm_outputs: Union[List[np.ndarray], np.ndarray],
-    logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
+    logits_processor: SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
     torch_device: torch.device,
     test_size: float = 0.3,
@@ -210,7 +223,7 @@ def train_best_detector(
         cv_g_values,
         cv_masks,
         cv_labels,
-    ) = utils.process_raw_model_outputs(
+    ) = process_raw_model_outputs(
         logits_processor,
         tokenizer,
         pos_truncation_length,
@@ -301,16 +314,15 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--save_model_to_hf_hub",
-        type=bool,
-        default=False,
+        action="store_true",
         help=("Whether to save the trained model HF hub. By default it will be a private repo."),
     )
     parser.add_argument(
         "--load_from_hf_hub",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether to load trained detector model from HF Hub, make sure its the model trained on the same model we are loading in the script."
+            "Whether to load trained detector model from HF Hub, make sure its the model trained on the same model "
+            "we are loading in the script."
         ),
     )
     parser.add_argument(
@@ -321,8 +333,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--eval_detector_on_prompts",
-        type=bool,
-        default=True,
+        action="store_true",
         help=("Evaluate detector on a prompt and print probability of watermark."),
     )
 
@@ -398,16 +409,14 @@ if __name__ == "__main__":
                 "context_history_size": 1024,
             }
         )
-        watermark_config = transformers.generation.SynthIDTextWatermarkingConfig(**DEFAULT_WATERMARKING_CONFIG)
+        watermark_config = SynthIDTextWatermarkingConfig(**DEFAULT_WATERMARKING_CONFIG)
 
         model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
-        tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
 
-        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
-            **DEFAULT_WATERMARKING_CONFIG, device=DEVICE
-        )
-        tokenized_wm_outputs = utils.get_tokenized_wm_outputs(
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(**DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+        tokenized_wm_outputs = get_tokenized_wm_outputs(
             model,
             tokenizer,
             watermark_config,
@@ -419,7 +428,7 @@ if __name__ == "__main__":
             top_p,
             DEVICE,
         )
-        tokenized_uwm_outputs = utils.get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
+        tokenized_uwm_outputs = get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
 
         best_detector, lowest_loss = train_best_detector(
             tokenized_wm_outputs=tokenized_wm_outputs,
@@ -448,24 +457,20 @@ if __name__ == "__main__":
         model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG
     )
     if save_model_to_hf_hub:
-        utils.upload_model_to_hf(best_detector, repo_name)
+        upload_model_to_hf(best_detector, repo_name)
 
     # Evaluate model response with the detector
     if eval_detector_on_prompts:
         model_name = best_detector.config.model_name
         watermark_config_dict = best_detector.config.watermarking_config
-        logits_processor = transformers.generation.SynthIDTextWatermarkLogitsProcessor(
-            **watermark_config_dict, device=DEVICE
-        )
-        tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermark_config_dict, device=DEVICE)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
-        synthid_text_detector = transformers.generation.SynthIDTextWatermarkDetector(
-            best_detector, logits_processor, tokenizer
-        )
+        synthid_text_detector = SynthIDTextWatermarkDetector(best_detector, logits_processor, tokenizer)
 
         if model is None:
-            model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
-        watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(**watermark_config_dict)
+            model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        watermarking_config = SynthIDTextWatermarkingConfig(**watermark_config_dict)
 
         prompts = ["Write a essay on cats."]
         inputs = tokenizer(

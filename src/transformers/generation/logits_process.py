@@ -2555,9 +2555,9 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             Size of the tensor to keep track of seen contexts.
         device (`torch.device`):
             Device to use.
-        skip_first_ngram_calls hashing_key (`bool`, optional, *optional*, defaults to False):
+        skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
-        debug_mode (`bool`, optional, *optional*, defaults to False):
+        debug_mode (`bool`, optional, *optional*, defaults to `False`):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
 
@@ -2565,7 +2565,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
 
-    >>> # Standard model and toeknizer initialization
     >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b-it')
     >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b-it')
 
