@@ -606,6 +606,8 @@
         title: XLNet
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/zamba
+        title: Zamba
       title: Text models
     - isExpanded: false
       sections:
