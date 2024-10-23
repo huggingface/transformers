@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
@@ -607,3 +607,130 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
             )
             inputs = image_processor(images=[image_5], return_tensors="pt")
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))
+
+    @slow
+    @require_torch_gpu
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations
+    def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
+        # prepare image and target
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        target = {"image_id": 39769, "annotations": target}
+
+        # Ignore copy
+        processor = self.image_processor_list[1]()
+
+        # 1. run processor on CPU
+        encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
+        # 2. run processor on GPU
+        encoding_gpu = processor(images=image, annotations=target, return_tensors="pt", device="cuda")
+
+        # verify pixel values
+        self.assertEqual(encoding_cpu["pixel_values"].shape, encoding_gpu["pixel_values"].shape)
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["pixel_values"][0, 0, 0, :3],
+                encoding_gpu["pixel_values"][0, 0, 0, :3].to("cpu"),
+                atol=1e-4,
+            )
+        )
+        # verify area
+        self.assertTrue(torch.allclose(encoding_cpu["labels"][0]["area"], encoding_gpu["labels"][0]["area"].to("cpu")))
+        # verify boxes
+        self.assertEqual(encoding_cpu["labels"][0]["boxes"].shape, encoding_gpu["labels"][0]["boxes"].shape)
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["labels"][0]["boxes"][0], encoding_gpu["labels"][0]["boxes"][0].to("cpu"), atol=1e-3
+            )
+        )
+        # verify image_id
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["image_id"], encoding_gpu["labels"][0]["image_id"].to("cpu"))
+        )
+        # verify is_crowd
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["iscrowd"], encoding_gpu["labels"][0]["iscrowd"].to("cpu"))
+        )
+        # verify class_labels
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["labels"][0]["class_labels"], encoding_gpu["labels"][0]["class_labels"].to("cpu")
+            )
+        )
+        # verify orig_size
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["orig_size"], encoding_gpu["labels"][0]["orig_size"].to("cpu"))
+        )
+        # verify size
+        self.assertTrue(torch.allclose(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu")))
+
+    @slow
+    @require_torch_gpu
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations
+    def test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations(self):
+        # prepare image, target and masks_path
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+
+        masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
+
+        # Ignore copy
+        processor = self.image_processor_list[1](format="coco_panoptic")
+
+        # 1. run processor on CPU
+        encoding_cpu = processor(
+            images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cpu"
+        )
+        # 2. run processor on GPU
+        encoding_gpu = processor(
+            images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cuda"
+        )
+
+        # verify pixel values
+        self.assertEqual(encoding_cpu["pixel_values"].shape, encoding_gpu["pixel_values"].shape)
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["pixel_values"][0, 0, 0, :3],
+                encoding_gpu["pixel_values"][0, 0, 0, :3].to("cpu"),
+                atol=1e-4,
+            )
+        )
+        # verify area
+        self.assertTrue(torch.allclose(encoding_cpu["labels"][0]["area"], encoding_gpu["labels"][0]["area"].to("cpu")))
+        # verify boxes
+        self.assertEqual(encoding_cpu["labels"][0]["boxes"].shape, encoding_gpu["labels"][0]["boxes"].shape)
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["labels"][0]["boxes"][0], encoding_gpu["labels"][0]["boxes"][0].to("cpu"), atol=1e-3
+            )
+        )
+        # verify image_id
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["image_id"], encoding_gpu["labels"][0]["image_id"].to("cpu"))
+        )
+        # verify is_crowd
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["iscrowd"], encoding_gpu["labels"][0]["iscrowd"].to("cpu"))
+        )
+        # verify class_labels
+        self.assertTrue(
+            torch.allclose(
+                encoding_cpu["labels"][0]["class_labels"], encoding_gpu["labels"][0]["class_labels"].to("cpu")
+            )
+        )
+        # verify masks
+        masks_sum_cpu = encoding_cpu["labels"][0]["masks"].sum()
+        masks_sum_gpu = encoding_gpu["labels"][0]["masks"].sum()
+        relative_error = torch.abs(masks_sum_cpu - masks_sum_gpu) / masks_sum_cpu
+        self.assertTrue(relative_error < 1e-3)
+        # verify orig_size
+        self.assertTrue(
+            torch.allclose(encoding_cpu["labels"][0]["orig_size"], encoding_gpu["labels"][0]["orig_size"].to("cpu"))
+        )
+        # verify size
+        self.assertTrue(torch.allclose(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu")))
