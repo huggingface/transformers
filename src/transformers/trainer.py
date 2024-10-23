@@ -229,6 +229,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
+    from accelerate.data_loader import DataLoaderShard
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DistributedDataParallelKwargs,
@@ -4704,7 +4705,16 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = dataloader.batch_size
+        if isinstance(dataloader, DataLoaderShard):
+            batch_size = dataloader.total_batch_size
+        else:
+            batch_size = dataloader.batch_size
+
+        if batch_size is None:
+            raise ValueError(
+                "Batch size cannot be None. Ensure the dataloader has a valid batch_size or total_batch_size."
+            )
+
         num_examples = self.num_examples(dataloader)
         logger.info(f"\n***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
