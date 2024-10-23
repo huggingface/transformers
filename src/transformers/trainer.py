@@ -2463,7 +2463,6 @@ class Trainer:
 
                     if step % args.gradient_accumulation_steps == 0:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
-                    
 
                     with self.accelerator.accumulate(model):
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
