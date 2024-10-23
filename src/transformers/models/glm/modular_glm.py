@@ -48,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "dummy"
 
+
 class GlmRMSNorm(Phi3RMSNorm):
     pass
 
