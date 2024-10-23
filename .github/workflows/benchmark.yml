@@ -23,7 +23,7 @@ jobs:
       options: --gpus all --privileged --ipc host
     steps:
       - name: Get repo
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow')
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
