@@ -2427,8 +2427,14 @@ class Trainer:
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
+                    is_last_step_and_steps_less_than_grad_acc = (
+                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
+                    )
+                    do_sync_step = is_last_step_and_steps_less_than_grad_acc or (
+                        total_batched_samples % args.gradient_accumulation_steps == 0
+                    )
                     # Since we perform prefetching, we need to manually set sync_gradients
-                    if total_batched_samples % args.gradient_accumulation_steps != 0:
+                    if not do_sync_step:
                         self.accelerator.gradient_state._set_sync_gradients(False)
                     else:
                         self.accelerator.gradient_state._set_sync_gradients(True)
@@ -2483,16 +2489,7 @@ class Trainer:
 
                     self.current_flos += float(self.floating_point_ops(inputs))
 
-                    is_last_step_and_steps_less_than_grad_acc = (
-                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                    )
-
-                    if (
-                        (total_batched_samples) % args.gradient_accumulation_steps == 0
-                        or
-                        # last step in epoch but step is always smaller than gradient_accumulation_steps
-                        is_last_step_and_steps_less_than_grad_acc
-                    ):
+                    if do_sync_step:
                         # Since we perform prefetching, we need to manually set sync_gradients to True
                         self.accelerator.gradient_state._set_sync_gradients(True)
 
