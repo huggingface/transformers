@@ -937,7 +937,7 @@ class ModularConverterTransformer(CSTTransformer):
                             f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead"
                         )
                     if "auto.modeling_auto" in import_statement:
-                        break
+                        continue
                     if import_statement not in self.transformers_imports:
                         if "models" not in import_statement:
                             import_statement = "models." + import_statement
