@@ -1831,6 +1831,9 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
+        layer_device_map (`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1877,6 +1880,7 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
