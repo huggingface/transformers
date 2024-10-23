@@ -244,7 +244,7 @@ class WatermarkDetector:
 
 class BayesianDetectorConfig(PretrainedConfig):
     """
-     This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
+    This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
     instantiate a Bayesian Detector model according to the specified arguments.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -304,7 +304,8 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         """Computes the unique token probability distribution given g-values.
 
         Args:
-            g_values: PRF values of shape [batch_size, seq_len, watermarking_depth].
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth)`):
+                PRF values.
 
         Returns:
             p_one_unique_token and p_two_unique_tokens, both of shape
@@ -335,12 +336,11 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         """Computes the likelihoods P(g_values|watermarked).
 
         Args:
-            g_values: g-values (values 0 or 1) of shape [batch_size, seq_len,
-            watermarking_depth]
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth)`):
+                g-values (values 0 or 1)
 
         Returns:
-            p(g_values|watermarked) of shape [batch_size, seq_len,
-            watermarking_depth].
+            p(g_values|watermarked) of shape [batch_size, seq_len, watermarking_depth].
         """
         p_one_unique_token, p_two_unique_tokens = self._compute_latents(g_values)
 
@@ -368,12 +368,13 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
     r"""
     Bayesian classifier for watermark detection.
 
-    This detector uses Bayes' rule to compute a watermarking score, which is
-    the sigmoid of the log of ratio of the posterior probabilities  P(watermarked|g_values)  and P(unwatermarked|g_values).
-    Please see the section on BayesianScore in the paper for further details.
+    This detector uses Bayes' rule to compute a watermarking score, which is the sigmoid of the log of ratio of the
+    posterior probabilities P(watermarked|g_values) and P(unwatermarked|g_values). Please see the section on
+    BayesianScore in the paper for further details.
     Paper URL: https://www.nature.com/articles/s41586-024-08025-4
 
-    Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5) g-value distribution.
+    Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5)
+    g-value distribution.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -406,16 +407,18 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
         mask: torch.Tensor,
         prior: float,
     ) -> torch.Tensor:
-        """Compute posterior P(w|g) given likelihoods, mask and prior.
+        """
+        Compute posterior P(w|g) given likelihoods, mask and prior.
 
         Args:
-            likelihoods_watermarked: shape [batch, length, depth]. Likelihoods
-            P(g_values|watermarked) of g-values under watermarked model.
-            likelihoods_unwatermarked: shape [batch, length, depth]. Likelihoods
-            P(g_values|unwatermarked) of g-values under unwatermarked model.
-            mask: A binary array shape [batch, length] indicating which g-values should
-            be used. g-values with mask value 0 are discarded.
-            prior: float, the prior probability P(w) that the text is watermarked.
+            likelihoods_watermarked (`torch.Tensor` of shape `(batch, length, depth)`):
+                Likelihoods P(g_values|watermarked) of g-values under watermarked model.
+            likelihoods_unwatermarked (`torch.Tensor` of shape `(batch, length, depth)`):
+                Likelihoods P(g_values|unwatermarked) of g-values under unwatermarked model.
+            mask (`torch.Tensor` of shape `(batch, length)`):
+                A binary array indicating which g-values should be used. g-values with mask value 0 are discarded.
+            prior (`float`):
+                the prior probability P(w) that the text is watermarked.
 
         Returns:
             Posterior probability P(watermarked|g_values), shape [batch].
@@ -447,16 +450,18 @@ class BayesianDetectorModel(BayesianDetectorPreTrainedModel):
         loss_batch_weight=1,
         return_dict=False,
     ) -> BayesianWatermarkDetectorModelOutput:
-        """Computes the watermarked posterior P(watermarked|g_values).
+        """
+        Computes the watermarked posterior P(watermarked|g_values).
 
         Args:
-        g_values: g-values (with values 0 or 1) of shape [batch_size, seq_len,
-            watermarking_depth, ...]
-        mask: A binary array shape [batch_size, seq_len] indicating which g-values
-            should be used. g-values with mask value 0 are discarded.
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth, ...)`):
+                g-values (with values 0 or 1)
+            mask:
+                A binary array shape [batch_size, seq_len] indicating which g-values should be used. g-values with mask
+                value 0 are discarded.
 
         Returns:
-        p(watermarked | g_values), of shape [batch_size].
+            p(watermarked | g_values), of shape [batch_size].
         """
 
         likelihoods_watermarked = self.likelihood_model_watermarked(g_values)
@@ -493,8 +498,10 @@ class SynthIDTextWatermarkDetector:
         detector_module ([`BayesianDetectorModel`]):
             Bayesian detector module object initialized with parameters.
             Check examples/research_projects/synthid_text/detector_training.py for usage.
-        logits_processor: ([`SynthIDTextWatermarkLogitsProcessor`])
-            SynthIDTextWatermarkLogitsProcessor object for watermar detection.
+        logits_processor (`SynthIDTextWatermarkLogitsProcessor`):
+            The logits processor used for watermarking.
+        tokenizer (`Any`):
+            The tokenizer used for the model.
     """
 
     def __init__(

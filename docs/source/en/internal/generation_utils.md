@@ -418,5 +418,17 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 ## Watermark Utils
 
+[[autodoc]] GreenRedWatermarkingConfig
+    - __call__
+
 [[autodoc]] WatermarkDetector
+    - __call__
+
+[[autodoc]] BayesianDetectorConfig
+    - __call__
+
+[[autodoc]] BayesianDetectorModel
+    - __call__
+
+[[autodoc]] SynthIDTextWatermarkDetector
     - __call__

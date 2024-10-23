@@ -273,6 +273,7 @@ if TYPE_CHECKING:
         from .watermarking import (
             BayesianDetectorConfig,
             BayesianDetectorModel,
+            SynthIDTextWatermarkDetector,
             WatermarkDetector,
             WatermarkDetectorOutput,
         )

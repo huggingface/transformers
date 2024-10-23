@@ -317,6 +317,13 @@ class GenerationMixin(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GreenRedWatermarkingConfig(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -465,6 +472,13 @@ class SuppressTokensAtBeginLogitsProcessor(metaclass=DummyObject):
 
 
 class SuppressTokensLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SynthIDTextWatermarkDetector(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
