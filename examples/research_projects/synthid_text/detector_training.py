@@ -262,7 +262,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default='google/gemma-7b-it',
+        default='google/gemma-2b-it',
         help=(
             "LM model to train the detector for."
         ),
@@ -365,6 +365,8 @@ if __name__ == "__main__":
     num_negatives = args.num_negatives
     pos_batch_size = args.pos_batch_size
     num_pos_batch = args.num_pos_batch
+    if num_pos_batch < 10:
+        raise ValueError("--num_pos_batch should be greater than 10.")
     generation_length = args.generation_length
     save_model_to_hf_hub = args.save_model_to_hf_hub
     load_from_hf_hub = args.load_from_hf_hub
@@ -386,6 +388,7 @@ if __name__ == "__main__":
           " a fix for CPUs"
       )
 
+    model = None
     if not load_from_hf_hub:
         # Change this to make your watermark unique. Check documentation in the paper to understand the
         # impact of these parameters.
@@ -471,9 +474,9 @@ if __name__ == "__main__":
             raise ValueError('When loading from pretrained detector model name cannot be None.')
         best_detector = BayesianDetectorModel.from_pretrained(repo_name).to(DEVICE)
 
+    best_detector.config.set_detector_information(
+        model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG)
     if save_model_to_hf_hub:
-        best_detector.config.set_detector_information(
-            model_name=model_name, watermarking_config=DEFAULT_WATERMARKING_CONFIG)
         utils.upload_model_to_hf(best_detector, repo_name)
 
 
@@ -489,7 +492,8 @@ if __name__ == "__main__":
         synthid_text_detector = transformers.generation.SynthIDTextWatermarkDetector(
             best_detector, logits_processor, tokenizer)
 
-        model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+        if model is None:
+            model = transformers.AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
         watermarking_config = transformers.generation.SynthIDTextWatermarkingConfig(
             **watermark_config_dict)
 

@@ -13,15 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import datasets
-import enum
 import gc
 from typing import Any, List, Tuple, Optional
 
-from huggingface_hub import HfApi, Repository, create_repo
+from huggingface_hub import HfApi, create_repo
 from huggingface_hub.utils import RepositoryNotFoundError
-import immutabledict
 import numpy as np
 from sklearn import model_selection
 import tensorflow as tf
@@ -370,14 +367,14 @@ def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
 
 
 def get_tokenized_wm_outputs(
-      model, 
-      tokenizer, 
-      watermark_config, 
-      num_pos_batches, 
-      pos_batch_size, 
-      temperature, 
-      max_output_len, 
-      top_k, 
+      model,
+      tokenizer,
+      watermark_config,
+      num_pos_batches,
+      pos_batch_size,
+      temperature,
+      max_output_len,
+      top_k,
       top_p,
       device,
 ):
@@ -406,9 +403,10 @@ def get_tokenized_wm_outputs(
             top_p=top_p,
         )
 
-        wm_outputs.append(outputs[:, inputs_len:])
+        wm_outputs.append(outputs[:, inputs_len:].cpu().detach())
 
         del outputs, inputs, prompts
+        gc.collect()
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -417,7 +415,7 @@ def get_tokenized_wm_outputs(
 
 def upload_model_to_hf(model, hf_repo_name: str, private: bool = True):
   api = HfApi()
-  
+
   # Check if the repository exists
   try:
       api.repo_info(repo_id=hf_repo_name, use_auth_token=True)
