@@ -138,7 +138,7 @@ class Tool:
             "inputs": Dict,
             "output_type": str,
         }
-        authorized_types = ["string", "integer", "number", "image", "audio", "any"]
+        authorized_types = ["string", "integer", "number", "image", "audio", "any", "boolean"]
 
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
