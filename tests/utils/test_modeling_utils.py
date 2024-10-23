@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_read_token,
     require_safetensors,
     require_tf,
     require_torch,
@@ -2552,6 +2553,7 @@ class TestTensorSharing(TestCasePlus):
         self.assertEqual(identical_names, [])
 
 
+@require_read_token
 @require_torch
 class TestFromPretrained(unittest.TestCase):
     def test_tie_word_embeddings_false_load_weights_as_untiedtest_tie_word_embeddings_false_load_weights_as_untied(self):
@@ -2575,6 +2577,7 @@ class TestFromPretrained(unittest.TestCase):
             model.save_pretrained(local_path, safe_serialization=False)
             pytorch_bin = os.path.join(local_path, "pytorch_model.bin")
 
+            # These are prepared similarly to how `from_pretrained` is calling `_load_state_dict_into_meta_model`
             state_dict = load_state_dict(pytorch_bin)
             expected_keys = list(model.state_dict().keys())
 
@@ -2589,6 +2592,8 @@ class TestFromPretrained(unittest.TestCase):
                     device_map={'': torch.device(device_map)},
                     dtype=torch_dtype,
                 )
+                # check the change in `_load_state_dict_into_meta_model` in PR #33913 works as expected
+                # https://github.com/huggingface/transformers/pull/33913/files
                 assert model.state_dict()["model.embed_tokens.weight"].data_ptr() != model.state_dict()["lm_head.weight"].data_ptr()
 
                 # load model
@@ -2603,12 +2608,15 @@ class TestFromPretrained(unittest.TestCase):
                 with torch.no_grad():
                     model.lm_head.weight += 1
 
-                # check that embed_tokens is not modified
+                # check `embed_tokens` is modified or not according to `tie_word_embeddings`
+                # see: https://github.com/huggingface/transformers/issues/33689
                 if tie_word_embeddings:
                     assert torch.equal(model.lm_head.weight, model.model.embed_tokens.weight)
                 else:
                     assert not torch.equal(model.lm_head.weight, model.model.embed_tokens.weight)
 
+                # check `save_pretrained` works
+                # see: https://github.com/huggingface/transformers/issues/33688
                 with tempfile.TemporaryDirectory() as tempdir_2:
                     model.save_pretrained(tempdir_2, safe_serialization=True)
 
