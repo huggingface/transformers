@@ -35,7 +35,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 if TYPE_CHECKING:
@@ -61,6 +60,7 @@ if is_torch_available():
         StaticCache,
         StaticCacheConfig,
     )
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
     NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
