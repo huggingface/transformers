@@ -1832,7 +1832,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is split between differents gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:
@@ -1887,6 +1887,7 @@ class OffloadedStaticCache(StaticCache):
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
+        self.layer_device_map = layer_device_map
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
