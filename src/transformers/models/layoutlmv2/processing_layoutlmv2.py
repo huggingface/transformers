@@ -16,12 +16,51 @@
 Processor class for LayoutLMv2.
 """
 
+import sys
 import warnings
 from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class LayoutLMv2TextKwargs(TextKwargs, total=False):
+    boxes: Optional[Union[List[List[int]], List[List[List[int]]]]]
+    word_labels: Optional[Union[List[int], List[List[int]]]]
+
+
+class LayoutLMv2ImagesKwargs(ImagesKwargs, total=False):
+    apply_ocr: bool
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
+
+
+class LayoutLMv2ProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: LayoutLMv2TextKwargs
+    images_kwargs: LayoutLMv2ImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "apply_ocr": True,
+        },
+    }
 
 
 class LayoutLMv2Processor(ProcessorMixin):
@@ -47,6 +86,7 @@ class LayoutLMv2Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "LayoutLMv2ImageProcessor"
     tokenizer_class = ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast")
+    optional_call_args = ["text_pair", "boxes", "word_labels"]
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
@@ -68,27 +108,16 @@ class LayoutLMv2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
-    ) -> BatchEncoding:
+        images: ImageInput,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        # The following is to capture `text_pair`, `boxes`, `word_labels` arguments that may be passed as a positional argument.
+        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+        # This behavior is only needed for backward compatibility and will be removed in future versions.
+        *args,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[LayoutLMv2ProcessorKwargs],
+    ) -> BatchFeature:
         """
         This method first forwards the `images` argument to [`~LayoutLMv2ImageProcessor.__call__`]. In case
         [`LayoutLMv2ImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
@@ -98,59 +127,90 @@ class LayoutLMv2Processor(ProcessorMixin):
         arguments to [`~LayoutLMv2Tokenizer.__call__`] and returns the output, together with resized `images``.
 
         Please refer to the docstring of the above two methods for more information.
+
+        Args:
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **image** -- Pixel values to be fed to a model.
+            - **bbox** -- Bounding boxes of the words in the image.
         """
+        output_kwargs = self._merge_kwargs(
+            LayoutLMv2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+            **self.prepare_and_validate_optional_call_args(*args),
+        )
+
+        text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
+        boxes = output_kwargs["text_kwargs"].pop("boxes", None)
+        word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
+        apply_ocr = output_kwargs["images_kwargs"].get("apply_ocr", self.image_processor.apply_ocr)
+
         # verify input
-        if self.image_processor.apply_ocr and (boxes is not None):
+        if apply_ocr and (boxes is not None):
             raise ValueError(
                 "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
             )
 
-        if self.image_processor.apply_ocr and (word_labels is not None):
+        if apply_ocr and (word_labels is not None):
             raise ValueError(
                 "You cannot provide word labels if you initialized the image processor with apply_ocr set to True."
             )
 
-        if return_overflowing_tokens is True and return_offsets_mapping is False:
+        if (
+            output_kwargs["text_kwargs"]["return_overflowing_tokens"]
+            and not output_kwargs["text_kwargs"]["return_offsets_mapping"]
+        ):
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
         # first, apply the image processor
-        features = self.image_processor(images=images, return_tensors=return_tensors)
+        features = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         # second, apply the tokenizer
-        if text is not None and self.image_processor.apply_ocr and text_pair is None:
+        if text is not None and apply_ocr and text_pair is None:
             if isinstance(text, str):
                 text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
             text_pair = features["words"]
 
+        if text is None:
+            if not hasattr(features, "words"):
+                raise ValueError("You need to provide `text` or set `apply_ocr` to `True`")
+            text = features["words"]
+        if boxes is None:
+            if not hasattr(features, "boxes"):
+                raise ValueError("You need to provide `boxes` or set `apply_ocr` to `True`")
+            boxes = features["boxes"]
+
         encoded_inputs = self.tokenizer(
-            text=text if text is not None else features["words"],
-            text_pair=text_pair if text_pair is not None else None,
-            boxes=boxes if boxes is not None else features["boxes"],
+            text=text,
+            text_pair=text_pair,
+            boxes=boxes,
             word_labels=word_labels,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            return_tensors=return_tensors,
-            **kwargs,
+            **output_kwargs["text_kwargs"],
         )
 
         # add pixel values
         images = features.pop("pixel_values")
-        if return_overflowing_tokens is True:
+        if output_kwargs["text_kwargs"]["return_overflowing_tokens"] is True:
             images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
         encoded_inputs["image"] = images
 
-        return encoded_inputs
+        return BatchFeature(
+            data=dict(**encoded_inputs), tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
+        )
 
     def get_overflowing_images(self, images, overflow_to_sample_mapping):
         # in case there's an overflow, ensure each `input_ids` sample is mapped to its corresponding image
