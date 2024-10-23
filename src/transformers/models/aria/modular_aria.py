@@ -942,7 +942,7 @@ class AriaGroupedGEMM(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
+        self.weight = nn.Parameter(torch.ones(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -960,7 +960,8 @@ class AriaGroupedGEMM(nn.Module):
         # Ensure the CUDA device matches the input tensor's device.
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
-        torch.cuda.set_device(input.device)
+        if torch.cuda.is_available():
+            torch.cuda.set_device(input.device)
         return experts_gemm(input, self.weight, tokens_per_expert)
 
 
