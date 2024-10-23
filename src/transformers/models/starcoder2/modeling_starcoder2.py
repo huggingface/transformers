@@ -993,8 +993,12 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        pamplemousse:int = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
+            pamplemousse (`int`, *optional*):
+                A fun new argument
 
         Example:
 

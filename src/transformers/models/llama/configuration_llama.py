@@ -21,14 +21,15 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
-from ...utils import auto_docstring, ModelArgs
+from ...utils import auto_class_docstring
 
-ModelArgs.update({
-    "mlp_bias" : "mlp_bias is a boolean that bla bla bla"
-})
-
-@auto_docstring
+@auto_class_docstring
 class LlamaConfig(PretrainedConfig):
+    r"""
+    Args:
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+    """
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]
 

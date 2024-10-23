@@ -4,6 +4,105 @@ from functools import wraps
 import regex as re
 
 
+class ConfigArgs:
+    vocab_size = r"""
+    Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling `LlamaModel`.
+    """
+
+    hidden_size = r"""
+    Dimension of the hidden representations.
+    """
+
+    intermediate_size = r"""
+    Dimension of the MLP representations.
+    """
+
+    num_hidden_layers = r"""
+    Number of hidden layers in the Transformer decoder.
+    """
+
+    num_attention_heads = r"""
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """
+
+    num_key_value_heads = r"""
+    This is the number of key_value heads that should be used to implement Grouped Query Attention. If `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed by meanpooling all the original heads within that group. For more details checkout [this paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
+    """
+
+    hidden_act = r"""
+    The non-linear activation function (function or string) in the decoder. Defaults to `"silu"`.
+    """
+
+    max_position_embeddings = r"""
+    The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens, Llama 2 up to 4096, CodeLlama up to 16384.
+    """
+
+    initializer_range = r"""
+    The standard deviation of the truncated_normal_initializer for initializing all weight matrices. Defaults to 0.02.
+    """
+
+    rms_norm_eps = r"""
+    The epsilon used by the rms normalization layers. Defaults to 1e-06.
+    """
+
+    use_cache = r"""
+    Whether or not the model should return the last key/values attentions (not used by all models). Only relevant if `config.is_decoder=True`. Defaults to `True`.
+    """
+
+    pad_token_id = r"""
+    Padding token id.
+    """
+
+    bos_token_id = r"""
+    Beginning of stream token id. Defaults to 1.
+    """
+
+    eos_token_id = r"""
+    End of stream token id. Defaults to 2.
+    """
+
+    pretraining_tp = r"""
+    Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is necessary to ensure exact reproducibility of the pretraining results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232). Defaults to 1.
+    """
+
+    tie_word_embeddings = r"""
+    Whether to tie weight embeddings. Defaults to `False`.
+    """
+
+    rope_theta = r"""
+    The base period of the RoPE embeddings. Defaults to 10000.0.
+    """
+
+    rope_scaling = r"""
+    Dictionary containing the scaling configuration for the RoPE embeddings. If you apply new rope type and expect the model to work on longer `max_position_embeddings`, we recommend updating this value accordingly.
+
+    Expected contents:
+    - `rope_type` (`str`): The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope', 'llama3'], with 'default' being the original RoPE implementation.
+    - `factor` (`float`, optional): Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In most scaling types, a factor of x will enable the model to handle sequences of length x * original maximum pre-trained length.
+    - `original_max_position_embeddings` (`int`, optional): Used with 'dynamic', 'longrope', and 'llama3'. The original max position embeddings used during pretraining.
+    - `attention_factor` (`float`, optional): Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention computation. Defaults to the value recommended by the implementation, using the `factor` field to infer the suggested value.
+    - `beta_fast` (`float`, optional): Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear ramp function. Defaults to 32.
+    - `beta_slow` (`float`, optional): Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear ramp function. Defaults to 1.
+    - `short_factor` (`List[float]`, optional): Only used with 'longrope'. The scaling factor to be applied to short contexts (< `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden size divided by the number of attention heads divided by 2.
+    - `long_factor` (`List[float]`, optional): Only used with 'longrope'. The scaling factor to be applied to long contexts (< `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden size divided by the number of attention heads divided by 2.
+    - `low_freq_factor` (`float`, optional): Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE.
+    - `high_freq_factor` (`float`, optional): Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE.
+    """
+
+    attention_bias = r"""
+    Whether to use a bias in the query, key, value, and output projection layers during self-attention. Defaults to `False`.
+    """
+
+    attention_dropout = r"""
+    The dropout ratio for the attention probabilities. Defaults to 0.0.
+    """
+
+
+
+
+
+
+
 class ModelArgs:
     labels = r"""of shape `(batch_size, sequence_length)`, *optional*):
         Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -202,6 +301,21 @@ def get_indent_level(func):
     return indent_level
 
 
+def parse_docstring(docstring):
+    args_pattern = re.compile(r'Args:\s*(.*?)\n\n', re.DOTALL)
+
+    args_match = args_pattern.search(docstring)
+    args_section = args_match.group(1).strip() if args_match else None
+
+    params = {}
+    if args_section:
+        param_pattern = re.compile(r'(\w+) (\(.*?\):\s*)(.*?)(?=\n\w|\Z)')
+        for param_match in param_pattern.finditer(args_section):
+            param_name = param_match.group(1)
+            params[param_name] = "".join(param_match.groups()[1:])
+    return params
+
+
 def auto_docstring(func):
     """
     Wrapper that automatically generates docstring using ARG_TO_DOC.
@@ -221,6 +335,13 @@ def auto_docstring(func):
     docstring += ")\n\n"
     docstring += "Args:\n"
     # Adding description for each parameter from ARG_TO_DOC
+    undocumented_parameters = []
+    documented_params = set()
+
+    func_documentation = func.__doc__
+    if func_documentation is not None:
+        documented_params = parse_docstring(func_documentation)
+
     for param_name, param in sig.parameters.items():
         if param_name in ModelArgs.__dict__:
             if param.annotation != inspect.Parameter.empty:
@@ -238,10 +359,15 @@ def auto_docstring(func):
             docstring += f"{' '*indent_level}{param_name} (`{param_type}`{indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
+        elif param_name in documented_params:
+            docstring += f"{' '*indent_level}{param_name} {documented_params[param_name]}\n"
         else:
-            raise ValueError(
-                f"No pre-defined documentation was found for {param_name}. Make sure to define in in `src/transformers/utils/args_doc.py`: `ARGS_TO_DOC`."
+            undocumented_parameters.append(
+                f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
+
+    if len(undocumented_parameters)>0:
+        print("\n".join(undocumented_parameters))
     if func.__doc__ is not None:
         docstring += func.__doc__
     # Assign the dynamically generated docstring to the wrapper function
@@ -272,7 +398,11 @@ def auto_class_docstring(cls):
                 attr_type = "property"
             else:
                 attr_type = type(attr_value).__name__
-            indented_doc = getattr(ClassAttrs, attr_name, "")
+            if "Config" in name:
+                attribute_mapping = ConfigArgs
+            else:
+                attribute_mapping = ClassAttrs
+            indented_doc = getattr(attribute_mapping, attr_name, "")
             attr_docs += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
     if len(attr_docs.replace(" ", "")):
         docstring += f"{' ' * indent_level}Attributes:\n" + attr_docs
