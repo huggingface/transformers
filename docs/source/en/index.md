@@ -185,6 +185,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [LayoutXLM](model_doc/layoutxlm)                     |       ✅        |         ❌         |      ❌      |
 |                           [LED](model_doc/led)                           |       ✅        |         ✅         |      ❌      |
 |                         [LeViT](model_doc/levit)                         |       ✅        |         ❌         |      ❌      |
+|                     [LightGlue](model_doc/lightglue)                     |       ✅        |         ❌         |      ❌      |
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
@@ -303,6 +304,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [SqueezeBERT](model_doc/squeezebert)                   |       ✅        |         ❌         |      ❌      |
 |                      [StableLm](model_doc/stablelm)                      |       ✅        |         ❌         |      ❌      |
 |                    [Starcoder2](model_doc/starcoder2)                    |       ✅        |         ❌         |      ❌      |
+|                     [SuperGlue](model_doc/superglue)                     |       ✅        |         ❌         |      ❌      |
 |                    [SuperPoint](model_doc/superpoint)                    |       ✅        |         ❌         |      ❌      |
 |                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ✅         |      ❌      |
 |                    [Swin Transformer](model_doc/swin)                    |       ✅        |         ✅         |      ❌      |
