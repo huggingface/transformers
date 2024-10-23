@@ -224,7 +224,7 @@ def process_raw_model_outputs(
         "tokenizer": tokenizer,
         "pos_truncation_length": pos_truncation_length,
         "neg_truncation_length": neg_truncation_length,
-        "max_padded_length": max_padded_length,
+        "max_length": max_padded_length,
         "torch_device": torch_device,
     }
 

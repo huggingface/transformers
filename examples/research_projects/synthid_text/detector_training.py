@@ -18,7 +18,6 @@ import dataclasses
 import enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import immutabledict
 import numpy as np
 import torch
 
@@ -369,46 +368,44 @@ if __name__ == "__main__":
     if not load_from_hf_hub:
         # Change this to make your watermark unique. Check documentation in the paper to understand the
         # impact of these parameters.
-        DEFAULT_WATERMARKING_CONFIG = immutabledict.immutabledict(
-            {
-                "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
-                "keys": [
-                    654,
-                    400,
-                    836,
-                    123,
-                    340,
-                    443,
-                    597,
-                    160,
-                    57,
-                    29,
-                    590,
-                    639,
-                    13,
-                    715,
-                    468,
-                    990,
-                    966,
-                    226,
-                    324,
-                    585,
-                    118,
-                    504,
-                    421,
-                    521,
-                    129,
-                    669,
-                    732,
-                    225,
-                    90,
-                    960,
-                ],
-                "sampling_table_size": 2**16,
-                "sampling_table_seed": 0,
-                "context_history_size": 1024,
-            }
-        )
+        DEFAULT_WATERMARKING_CONFIG = {
+            "ngram_len": 5,  # This corresponds to H=4 context window size in the paper.
+            "keys": [
+                654,
+                400,
+                836,
+                123,
+                340,
+                443,
+                597,
+                160,
+                57,
+                29,
+                590,
+                639,
+                13,
+                715,
+                468,
+                990,
+                966,
+                226,
+                324,
+                585,
+                118,
+                504,
+                421,
+                521,
+                129,
+                669,
+                732,
+                225,
+                90,
+                960,
+            ],
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 1024,
+        }
         watermark_config = SynthIDTextWatermarkingConfig(**DEFAULT_WATERMARKING_CONFIG)
 
         model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
@@ -493,7 +490,8 @@ if __name__ == "__main__":
         outputs = outputs[:, inputs_len:]
         result = synthid_text_detector(outputs)
 
-        # You should set this based on expected fpr and tpr. Check our demo at HF Spaces for more info.
+        # You should set this based on expected fpr (false positive rate) and tpr (true positive rate).
+        # Check our demo at HF Spaces for more info.
         upper_threshold = 0.95
         lower_threshold = 0.12
         if result[0][0] > upper_threshold:
