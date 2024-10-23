@@ -373,11 +373,6 @@ class BayesianDetectorModel(PreTrainedModel):
         config ([`BayesianDetectorConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-
-    Examples:
-    ```python
-
-    ```
     """
 
     config_class = BayesianDetectorConfig
@@ -500,6 +495,25 @@ class SynthIDTextWatermarkDetector:
             The logits processor used for watermarking.
         tokenizer (`Any`):
             The tokenizer used for the model.
+
+    Examples:
+    ```python
+    >>> from transformers import (
+    ...     AutoTokenizer, BayesianDetectorModel, SynthIDTextWatermarkLogitsProcessor, SynthIDTextWatermarkDetector
+    ... )
+
+    >>> # Load the detector. See examples/research_projects/synthid_text for training a detector.
+    >>> detector_model = BayesianDetectorModel.from_pretrained("joaogante/dummy_synthid_detector")
+    >>> logits_processor = SynthIDTextWatermarkLogitsProcessor(
+    ...     **detector_model.config.watermarking_config, device="cpu"
+    ... )
+    >>> tokenizer = AutoTokenizer.from_pretrained(detector_model.config.model_name)
+    >>> detector = SynthIDTextWatermarkDetector(detector_model, logits_processor, tokenizer)
+
+    >>> # Test whether a certain string is watermarked
+    >>> test_input = tokenizer(["This is a test input"], return_tensors="pt")
+    >>> is_watermarked = detector(test_input.input_ids)
+    ```
     """
 
     def __init__(
