@@ -91,6 +91,7 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        LlamaForCausalLM,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -2568,7 +2569,7 @@ class TestFromPretrained(unittest.TestCase):
             config.num_hidden_layers = 2
             config.num_key_value_heads = 4
 
-            model = AutoModelForCausalLM(config=config)
+            model = LlamaForCausalLM(config=config)
 
             local_path = tempdir
             model.save_pretrained(local_path, safe_serialization=False)
@@ -2578,7 +2579,7 @@ class TestFromPretrained(unittest.TestCase):
             expected_keys = list(model.state_dict().keys())
 
             def check(torch_dtype, tie_word_embeddings, device_map):
-                model = AutoModelForCausalLM(config=config)
+                model = LlamaForCausalLM(config=config)
 
                 _load_state_dict_into_meta_model(
                     model=model,
