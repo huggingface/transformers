@@ -961,7 +961,7 @@ class AriaGroupedGEMM(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.ones(groups, in_features, out_features))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -1109,6 +1109,21 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class AriaTextPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
