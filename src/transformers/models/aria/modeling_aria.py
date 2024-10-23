@@ -83,7 +83,7 @@ class AriaPreTrainedModel(PreTrainedModel):
 
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.text_config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -3092,7 +3092,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.text_config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
