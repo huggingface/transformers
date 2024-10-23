@@ -1300,9 +1300,10 @@ class ModularConverterTransformer(CSTTransformer):
                     for dependency, parent in find_all_dependencies(
                         self.function_call_dependency_mapping, start_entity=top_level_function, return_parent=True
                     ):
-                        self._maybe_add_function_to_body(
-                            dependency, body, self.all_definitions[dependency], parent=parent
-                        )
+                        if dependency in self.all_definitions:
+                            self._maybe_add_function_to_body(
+                                dependency, body, self.all_definitions[dependency], parent=parent
+                            )
 
     def add_all_new_needed_assignments_in_files(self):
         """This adds all top-level assignments in the `modular_xxx.py` file in the created files, if not already present
