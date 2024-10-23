@@ -308,6 +308,8 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 특성 추출기
     - local: in_translation
@@ -322,14 +324,14 @@
         title: BART
       - local: in_translation
         title: (번역중) BARThez
-      - local: in_translation
-        title: (번역중) BARTpho
+      - local: model_doc/bartpho
+        title: BARTpho
       - local: in_translation
         title: (번역중) BERT
       - local: in_translation
         title: (번역중) BertGeneration
-      - local: in_translation
-        title: (번역중) BertJapanese
+      - local: model_doc/bert-japanese
+        title: 일본어 Bert
       - local: model_doc/bertweet
         title: Bertweet
       - local: in_translation
