@@ -16,7 +16,7 @@
 
 import math
 from functools import cached_property
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -1371,6 +1371,7 @@ class Emu3VQVAE(PreTrainedModel):
         self.encoder = Emu3VQVAEEncoder(config)
         self.decoder = Emu3VQVAEDecoder(config)
         self.quantize = Emu3VQVAEVectorQuantizer(config)
+        self.vision_spatial_factor = 2 ** (len(config.channel_multiplier) - 1)
 
         self.quant_conv = Emu3VQVAEConv3d(
             config.latent_channels, config.embed_dim, kernel_size=(3, 1, 1), stride=(1, 1, 1)
@@ -1383,7 +1384,7 @@ class Emu3VQVAE(PreTrainedModel):
 
         self.post_init()
 
-    def encode(self, pixel_values: torch.Tensor):
+    def encode(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor):
         is_image = pixel_values.ndim == 4
         if is_image:
             temporal = self.config.temporal_downsample_factor
@@ -1402,7 +1403,14 @@ class Emu3VQVAE(PreTrainedModel):
         hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
         codes = self.quantize(hidden_states)
 
-        return codes.squeeze(1) if is_image else codes
+        image_tokens = codes.squeeze(1) if is_image else codes
+
+        image_tokens = [
+            single_image[: int(size[0] / self.vision_spatial_factor), : int(size[1] / self.vision_spatial_factor)]
+            for single_image, size in zip(image_tokens, image_sizes)
+        ]
+
+        return image_tokens
 
     def decode(self, hidden_states: torch.Tensor):
         is_image = hidden_states.ndim == 3
@@ -1472,9 +1480,10 @@ class Emu3ImageVocabularyMapping:
             mapping[k] = v
         return mapping
 
-    def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
+    def convert_img2bpe(self, img_batch: List[torch.Tensor]) -> torch.Tensor:
         device = img_batch.device
-        eol_row = torch.ones((img_batch.shape[0], img_batch.shape[1], 1), dtype=torch.int) * self.eol_token_id
+        print(img_batch.shape)
+        eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
         img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
         return img_tokens.to(device)
@@ -1640,7 +1649,7 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -1650,18 +1659,15 @@ class Emu3Model(Emu3PreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
         """
-        batch_size = pixel_values.shape[0]
-        image_toks = self.vqmodel.encode(pixel_values)
-        bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
-        bpe_toks = bpe_toks.view(batch_size, -1)
-
-        return bpe_toks
+        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
+        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        bpe_tokens = torch.cat(bpe_tokens_list)
+        return bpe_tokens
 
     @torch.no_grad
     def decode_image_tokens(self, logits: torch.Tensor, height: int, width: int):
         sequences = logits[:, :-3].view(-1, height, width + 1)
         image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
-        print(image_tokens.shape)
         image = self.vqmodel.decode(image_tokens)
         return image
 
@@ -1670,6 +1676,7 @@ class Emu3Model(Emu3PreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        image_sizes: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1704,7 +1711,7 @@ class Emu3Model(Emu3PreTrainedModel):
             )
 
         if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values)
+            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
@@ -1896,6 +1903,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        image_sizes: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1946,6 +1954,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1991,6 +2000,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         input_ids,
         pixel_values=None,
         past_key_values=None,
+        image_sizes=None,
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
@@ -2024,6 +2034,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_sizes"] = image_sizes
 
         model_inputs.update(
             {

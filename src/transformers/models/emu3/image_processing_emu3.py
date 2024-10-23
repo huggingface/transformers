@@ -367,8 +367,20 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values.extend(image)
+
+        image_sizes = [image.shape[-2:] for image in pixel_values]
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
+        pixel_values = [
+            np.pad(image, ((0, 0), (0, max_shape[0] - size[0]), (0, max_shape[1] - size[1])))
+            for image, size in zip(pixel_values, image_sizes)
+        ]
         pixel_values = np.array(pixel_values)
-        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
+        )
 
     def postprocess(
         self,

@@ -19,7 +19,7 @@ Processor class for Emu3.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
@@ -156,36 +156,34 @@ class Emu3Processor(ProcessorMixin):
         # generate text from image + text input, so we add placeholders for image tokens
         if not return_for_image_generation and images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-            processed_images = iter(image_features.pixel_values)
+            image_sizes = iter(image_features.image_sizes)
 
             prompt_strings = []
             for sample in text:
                 while self.image_token in sample:
-                    curr_image = next(processed_images)
-                    height, width = get_image_size(to_numpy_array(curr_image))
+                    image_size = next(image_sizes)
+                    height, width = image_size
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
                     image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+                    print(image_size, height, width)
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
                     sample = f"<|extra_203|>{sample}"  # add BOS
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
-            image_sizes = None
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
-        else:
+        elif return_for_image_generation:
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
             image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
             text = [f"<|extra_203|>{sample}{image_prompt}" for sample in text]
-            image_sizes = [height, width]
+            image_features["image_sizes"] = [[height, width]] * len(text)
 
         # else just generate from text-only input, and we do no special treatment for text
         data = self.tokenizer(text, **output_kwargs["text_kwargs"])
         data.update(**image_features)
-        if image_sizes is not None:
-            data["image_sizes"] = image_sizes
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
 
