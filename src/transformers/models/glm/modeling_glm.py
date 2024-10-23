@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -52,6 +53,9 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 from ...modeling_flash_attention_utils import _flash_attention_forward
+
+
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
 
 
 class GlmRMSNorm(nn.Module):
@@ -1222,6 +1226,11 @@ class GlmForTokenClassification(GlmPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
