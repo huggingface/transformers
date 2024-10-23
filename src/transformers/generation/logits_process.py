@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team and Google DeepMind.
+# Copyright 2020 Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
