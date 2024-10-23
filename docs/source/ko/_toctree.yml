@@ -332,7 +332,6 @@
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
         title: 일본어 Bert
-      - local: in_translation
       - local: model_doc/bertweet
         title: Bertweet
       - local: in_translation
