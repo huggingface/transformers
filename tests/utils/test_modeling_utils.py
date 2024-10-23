@@ -2556,10 +2556,10 @@ class TestTensorSharing(TestCasePlus):
 @require_read_token
 @require_torch
 class TestFromPretrained(unittest.TestCase):
-    def test_tie_word_embeddings_false_load_weights_as_untiedtest_tie_word_embeddings_false_load_weights_as_untied(self):
-
+    def test_tie_word_embeddings_false_load_weights_as_untied(
+        self,
+    ):
         with tempfile.TemporaryDirectory() as tempdir:
-
             checkpoint = "meta-llama/Llama-2-7b-hf"
             config = AutoConfig.from_pretrained(checkpoint)
             config.tie_word_embeddings = True
@@ -2587,14 +2587,17 @@ class TestFromPretrained(unittest.TestCase):
                 _load_state_dict_into_meta_model(
                     model=model,
                     state_dict=state_dict,
-                    start_prefix='',
+                    start_prefix="",
                     expected_keys=expected_keys,
-                    device_map={'': torch.device(device_map)},
+                    device_map={"": torch.device(device_map)},
                     dtype=torch_dtype,
                 )
                 # check the change in `_load_state_dict_into_meta_model` in PR #33913 works as expected
                 # https://github.com/huggingface/transformers/pull/33913/files
-                assert model.state_dict()["model.embed_tokens.weight"].data_ptr() != model.state_dict()["lm_head.weight"].data_ptr()
+                assert (
+                    model.state_dict()["model.embed_tokens.weight"].data_ptr()
+                    != model.state_dict()["lm_head.weight"].data_ptr()
+                )
 
                 # load model
                 model = AutoModelForCausalLM.from_pretrained(
