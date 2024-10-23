@@ -282,23 +282,10 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
-        watermarking_config (`WatermarkingConfig` or `dict`, *optional*):
-            Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
-            If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
-            See [this paper](https://arxiv.org/abs/2306.04634) for more details. Accepts the following keys:
-            - greenlist_ratio (`float`):
-                Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
-            - bias (`float`):
-                Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
-            - hashing_key (`int`):
-                Hahsing key used for watermarking. Defaults to 15485863 (the millionth prime).
-            - seeding_scheme (`str`):
-                Algorithm to use for watermarking. Accepts values:
-                    - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
-                    - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
-                        The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
-            - context_width (`int`):
-                The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
+        watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
+            Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
+            tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
+            details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
 
         > Parameters that define the output variables of generate
 
@@ -432,7 +419,7 @@ class GenerationConfig(PushToHubMixin):
         watermarking_config = kwargs.pop("watermarking_config", None)
         if watermarking_config is None:
             self.watermarking_config = None
-        elif isinstance(watermarking_config, WatermarkingConfig):
+        elif isinstance(watermarking_config, BaseWatermarkingConfig):
             self.watermarking_config = watermarking_config
         else:
             self.watermarking_config = WatermarkingConfig.from_dict(watermarking_config)
@@ -769,15 +756,15 @@ class GenerationConfig(PushToHubMixin):
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
             if not (
-                isinstance(self.watermarking_config, GreenRedWatermarkingConfig)
+                isinstance(self.watermarking_config, WatermarkingConfig)
                 or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
             ):
                 warnings.warn(
                     "`watermarking_config` as a dict is deprecated. Please construct `watermarking_config` object with "
-                    "`GreenRedWatermarkingConfig` or `SynthIDTextWatermarkingConfig` class.",
+                    "`WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class.",
                     FutureWarning,
                 )
-                self.watermarking_config = GreenRedWatermarkingConfig.from_dict(self.watermarking_config)
+                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 7. other incorrect combinations
@@ -1297,20 +1284,20 @@ class GenerationConfig(PushToHubMixin):
 
 
 @dataclass
-class WatermarkingConfig(ABC):
+class BaseWatermarkingConfig(ABC):
     """Generic watermarking config"""
 
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
         """
-        Constructs a WatermarkingConfig instance from a dictionary of parameters.
+        Constructs a BaseWatermarkingConfig instance from a dictionary of parameters.
 
         Args:
             config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
 
         Returns:
-            WatermarkingConfig: Instance of WatermarkingConfig constructed from the dictionary.
+            BaseWatermarkingConfig: Instance of BaseWatermarkingConfig constructed from the dictionary.
         """
         config = cls(**config_dict)
         to_remove = []
@@ -1380,7 +1367,7 @@ class WatermarkingConfig(ABC):
 
 
 @dataclass
-class GreenRedWatermarkingConfig(WatermarkingConfig):
+class WatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
     See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
@@ -1458,7 +1445,7 @@ class GreenRedWatermarkingConfig(WatermarkingConfig):
 
 
 @dataclass
-class SynthIDTextWatermarkingConfig(WatermarkingConfig):
+class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     def __init__(
         self,
         ngram_len: int,

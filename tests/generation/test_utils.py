@@ -75,7 +75,6 @@ if is_torch_available():
         GenerationConfig,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
-        GreenRedWatermarkingConfig,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -87,6 +86,7 @@ if is_torch_available():
         StoppingCriteriaList,
         SynthIDTextWatermarkingConfig,
         WatermarkDetector,
+        WatermarkingConfig,
     )
     from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
     from transformers.generation.utils import _speculative_sampling
@@ -2509,7 +2509,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         input_len = model_inputs["input_ids"].shape[-1]
 
         # generation should work with both input types: WatermarkingConfig or Dict, so let's check it here :)
-        watermark_config = GreenRedWatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+        watermark_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
         _ = model.generate(**model_inputs, watermarking_config=watermark_config, do_sample=False, max_length=15)
 
         # We will not check watermarked text, since we check it in `logits_processors` tests

@@ -21,9 +21,9 @@ _import_structure = {
     "configuration_utils": [
         "GenerationConfig",
         "GenerationMode",
-        "GreenRedWatermarkingConfig",
-        "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
+        "SynthIDTextWatermarkingConfig",
+        "BaseWatermarkingConfig",
     ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
@@ -190,9 +190,9 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_utils import (
+        BaseWatermarkingConfig,
         GenerationConfig,
         GenerationMode,
-        GreenRedWatermarkingConfig,
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
     )

@@ -317,13 +317,6 @@ class GenerationMixin(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class GreenRedWatermarkingConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -521,6 +514,13 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
 
 
 class WatermarkDetector(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WatermarkingConfig(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

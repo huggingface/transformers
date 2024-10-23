@@ -418,7 +418,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 ## Watermark Utils
 
-[[autodoc]] GreenRedWatermarkingConfig
+[[autodoc]] WatermarkingConfig
     - __call__
 
 [[autodoc]] WatermarkDetector

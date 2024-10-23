@@ -25,7 +25,7 @@ from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
 from ..utils import ModelOutput, is_torch_available, logging
-from .configuration_utils import GreenRedWatermarkingConfig, PretrainedConfig
+from .configuration_utils import PretrainedConfig, WatermarkingConfig
 
 
 if is_torch_available():
@@ -106,7 +106,7 @@ class WatermarkDetector:
     >>> input_len = inputs["input_ids"].shape[-1]
 
     >>> # first generate text with watermark and without
-    >>> watermarking_config = GreenRedWatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+    >>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
     >>> out_watermarked = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
     >>> out = model.generate(**inputs, do_sample=False, max_length=20)
 
@@ -126,11 +126,11 @@ class WatermarkDetector:
         self,
         model_config: PretrainedConfig,
         device: str,
-        watermarking_config: Union[GreenRedWatermarkingConfig, Dict],
+        watermarking_config: Union[WatermarkingConfig, Dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
-        if isinstance(watermarking_config, GreenRedWatermarkingConfig):
+        if isinstance(watermarking_config, WatermarkingConfig):
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (
