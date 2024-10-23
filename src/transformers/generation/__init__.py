@@ -77,6 +77,7 @@ else:
         "SequenceBiasLogitsProcessor",
         "SuppressTokensLogitsProcessor",
         "SuppressTokensAtBeginLogitsProcessor",
+        "SynthIDTextWatermarkLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
@@ -84,7 +85,6 @@ else:
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
         "WatermarkLogitsProcessor",
-        "SynthIDTextWatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
