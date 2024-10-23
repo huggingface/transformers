@@ -642,16 +642,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         if position_embeddings is None:
             logger.warning_once(
@@ -671,6 +661,9 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Slice to k/v length (this is usually the sliding window length, but may be bigger)
+            if attention_mask is not None and isinstance(past_key_value, DynamicSlidingWindowCache):
+                attention_mask = attention_mask[:, -key_states.shape[-2]:]
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)

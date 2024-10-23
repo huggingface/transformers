@@ -481,6 +481,9 @@ class Phi3FlashAttention2(Phi3Attention):
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Slice to k/v length (this is usually the sliding window length, but may be bigger)
+            if attention_mask is not None and isinstance(past_key_value, DynamicSlidingWindowCache):
+                attention_mask = attention_mask[:, -key_states.shape[-2]:]
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
