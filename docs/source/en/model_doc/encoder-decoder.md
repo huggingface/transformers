@@ -179,7 +179,7 @@ were contributed by [ydshieh](https://github.com/ydshieh).
 </jax>
 </frameworkcontent>
 
-## How to create a model
+## Create a model
 
 To create an `EncoderDecoderModel`, you can use the `from_encoder_decoder_pretrained` method. This method allows you to initialize the model from a pretrained encoder and decoder checkpoint. Here is an example:
 
@@ -196,7 +196,7 @@ model.save_pretrained("./bert2bert")
 model = EncoderDecoderModel.from_pretrained("./bert2bert")
 ```
 
-## How to fine-tune the model
+## Finetune a model
 
 Once the model is created, it can be fine-tuned similar to BART, T5, or any other encoder-decoder model. Here is an example:
 
@@ -225,4 +225,5 @@ loss = model(input_ids=input_ids, labels=labels).loss
 
 ## Warning about configuration values
 
-It is important to correctly set the configuration values for the `EncoderDecoderModel`. Incorrect configuration values can lead to unexpected behavior. For more information on how to set the configuration values, refer to the [related issue](https://github.com/huggingface/transformers/issues/15479).
+> [!WARNING]
+> It is important to correctly set the configuration values for the `EncoderDecoderModel`. Incorrect configuration values can lead to unexpected behavior. For more information on how to set the configuration values, refer to the [related issue](https://github.com/huggingface/transformers/issues/15479).
