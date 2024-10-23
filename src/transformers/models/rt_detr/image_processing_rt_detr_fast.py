@@ -224,7 +224,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             `preprocess` method.
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        do_normalize (`bool`, *optional*, defaults to `False`):
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
