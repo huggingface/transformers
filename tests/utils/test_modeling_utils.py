@@ -2553,8 +2553,8 @@ class TestTensorSharing(TestCasePlus):
         self.assertEqual(identical_names, [])
 
 
-@require_read_token
 @require_torch
+@require_read_token
 class TestFromPretrained(unittest.TestCase):
     def test_tie_word_embeddings_false_load_weights_as_untied(self):
         with tempfile.TemporaryDirectory() as tempdir:
