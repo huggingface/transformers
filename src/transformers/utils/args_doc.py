@@ -98,11 +98,6 @@ class ConfigArgs:
     """
 
 
-
-
-
-
-
 class ModelArgs:
     labels = r"""of shape `(batch_size, sequence_length)`, *optional*):
         Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -272,6 +267,7 @@ class ClassDocstring:
     documentation from [`PretrainedConfig`] for more information.
     """
 
+
 class ClassAttrs:
     base_model_prefix = r"""TODO """
     supports_gradient_checkpointing = r"""TODO """
@@ -302,14 +298,14 @@ def get_indent_level(func):
 
 
 def parse_docstring(docstring):
-    args_pattern = re.compile(r'Args:\s*(.*?)\n\n', re.DOTALL)
+    args_pattern = re.compile(r"Args:\s*(.*?)\n\n", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
     args_section = args_match.group(1).strip() if args_match else None
 
     params = {}
     if args_section:
-        param_pattern = re.compile(r'(\w+) (\(.*?\):\s*)(.*?)(?=\n\w|\Z)')
+        param_pattern = re.compile(r"(\w+) (\(.*?\):\s*)(.*?)(?=\n\w|\Z)")
         for param_match in param_pattern.finditer(args_section):
             param_name = param_match.group(1)
             params[param_name] = "".join(param_match.groups()[1:])
@@ -323,7 +319,6 @@ def auto_docstring(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        # Call the original function
         return func(*args, **kwargs)
 
     # Use inspect to retrieve the function's signature
@@ -366,12 +361,13 @@ def auto_docstring(func):
                 f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
 
-    if len(undocumented_parameters)>0:
+    if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
     if func.__doc__ is not None:
         docstring += func.__doc__
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring
+    func.__doc__ = "Dummy docstring!"
     return wrapper
 
 
@@ -379,10 +375,10 @@ def auto_class_docstring(cls):
     """
     Wrapper that automatically generates a docstring for classes based on their attributes and methods.
     """
+    docstring = "DUMMUY DOCSTRING YOU DUMB"
 
-    class Wrapper(cls):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+    def wrapper(*args, **kwargs):
+        return cls(*args, **kwargs)
 
     indent_level = get_indent_level(cls) + 8
 
@@ -409,6 +405,7 @@ def auto_class_docstring(cls):
     # Assign the dynamically generated docstring to the wrapper class
     if cls.__doc__ is not None:
         docstring += cls.__doc__
-    Wrapper.__doc__ = docstring
-
-    return Wrapper
+    wrapper.__doc__ = docstring
+    wrapper.__name__ = cls.__name__
+    cls.__doc__ = "Dummy docstring!"
+    return wrapper
