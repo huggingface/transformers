@@ -35,7 +35,6 @@ import packaging.version
 
 from .. import __version__ as version
 from ..utils import (
-    PushToHubMixin,
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
