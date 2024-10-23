@@ -166,7 +166,7 @@ def process_outputs_for_training(
 
 
 def tpr_at_fpr(detector, detector_inputs, w_true, minibatch_size, target_fpr=0.01) -> torch.Tensor:
-    """Calculates TPR at FPR=target_fpr."""
+    """Calculates true positive rate (TPR) at false positive rate (FPR)=target_fpr."""
     positive_idxs = w_true == 1
     negative_idxs = w_true == 0
     num_samples = detector_inputs[0].size(0)
