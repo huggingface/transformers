@@ -1450,6 +1450,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: Optional[Union[int, None]] = None,
+        **loss_kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1515,7 +1516,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         aux_loss = None
         if output_router_logits:
