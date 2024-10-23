@@ -145,6 +145,11 @@ def find_all_dependencies(dependency_mapping: Dict[str, set], start_entity: str 
     return all_dependencies_with_parent
 
 class ClassDependenciesFinder(CSTVisitor):
+    """A visitor which analyzes classes to get their dependencies. If `global_names` is passed, only dependencies
+    present in the `global_names` will be added.
+    This class is used through the 3 convenient class methods allowing to get the dependencies of a given class node.
+    The `ClassFinder` uses it to get dependencies of classes.
+    """
 
     def __init__(self, class_name: str, global_names: set | None):
         super().__init__()
@@ -163,6 +168,7 @@ class ClassDependenciesFinder(CSTVisitor):
 
     @classmethod
     def dependencies_for_node(cls, node: cst.ClassDef, global_names: set) -> set:
+        """Create dependencies for a node in the `ClassFinder`."""
         temp_module = cst.Module(body=[node])
         visitor = cls(node.name.value, global_names)
         temp_module.visit(visitor)
@@ -170,6 +176,7 @@ class ClassDependenciesFinder(CSTVisitor):
 
     @classmethod
     def dependencies_for_new_node(cls, updated_node: cst.ClassDef, class_finder: "ClassFinder") -> set:
+        """Create dependencies for a node that was changed by `replace_call_to_super` and has a parent super-class."""
         temp_module = cst.Module(body=[updated_node])
         visitor = cls(updated_node.name.value, set(class_finder.global_nodes.keys()))
         temp_module.visit(visitor)
@@ -177,6 +184,7 @@ class ClassDependenciesFinder(CSTVisitor):
     
     @classmethod
     def dependencies_for_new_node_without_parents(cls, updated_node: cst.ClassDef) -> set:
+        """Create dependencies for a node without super-class parent."""
         temp_module = cst.Module(body=[updated_node])
         visitor = cls(updated_node.name.value, None)
         temp_module.visit(visitor)
@@ -185,7 +193,12 @@ class ClassDependenciesFinder(CSTVisitor):
 
     
 class ClassFinder(CSTVisitor):
-    """A visitor class which analyses a module, creating a mapping of dependencies between classes and functions.
+    """A visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
+    The `class_dependency_mapping` created contains 1st-level classes and assignments dependencies, as well
+    as all (recursively) functions dependencies.
+    The `function_call_recursive_dependecy_mapping` created contains all function definitions, and all their (recursively)
+    dependencies.
+
     For example if the visited code has
     ```python3
     def init_value(): return 1
@@ -195,47 +208,49 @@ class ClassFinder(CSTVisitor):
             super().__init__(self)
             self.value = init_value()
     ```
-    then the `class_dependency_mapping` should be: `{"LlamaModel":["PreTrainedModel","init_value"], "init_value":[]}
+    then the `class_dependency_mapping` should be: `{"LlamaModel": {"PreTrainedModel", "init_value"}}
 
-    The dependency mapping is updated via the `visit_Name`, `visit_Arg` and `visit_Decorator`. This is very broad, and by
-    checking the parent node, or the scope of a `cst.Name` or `cst.Arg` or `cst.Decorator` we are able to map the
-    dependence parent -> child.
+    The dependency mapping is updated via the `ClassDependenciesFinder`, then augmented with `augment_dependencies_with_functions`
+    to get all functions dependencies.
 
-    When visiting such nodes, we update the dependency of the parent node, to take into account the visited node.
-
-    All `visit_XXX` correspond to the code executed when vising the cst.Node of type XXX.
+    Optionally, if `only_for_function_mapping` is True, this class will only create the `function_call_recursive_dependecy_mapping`
+    for the given Module. This is useful for performance.
     """
 
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
 
-    def __init__(self, python_module: cst.Module):
+    def __init__(self, python_module: cst.Module, only_for_function_mapping: bool = False):
         # fmt: off
         self.python_module: cst.Module = python_module  # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}      # stores a mapping from classname to the cst.Node
+        self.classes: Dict[str, cst.ClassDef] = {}      # mapping from class names to Nodes
         self.imports = {}                               # stores all import statements
-        self.function_def = {}                          # stores global scope function definition
-        self.assignments = {}                           # LLAMA_DOCSTRING
-        self.class_dependency_mapping = {}
+        self.function_def = {}                          # mapping of global scope function names to Nodes
+        self.assignments = {}                           # mapping of global assignments names to Nodes
+        self.class_dependency_mapping = {}              # mapping of function name to immediate dependencies
         self.current_function = None
         self.function_call_dependency_mapping = defaultdict(set)
         # fmt: on
+        # This is for performance when we only want to get the functions mapping (using the class finder without rename)
+        self.only_for_function_mapping = only_for_function_mapping
 
     def visit_SimpleStatementLine(self, node):
         """
         Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
         are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
         """
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
-            self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
-        ):
-            left_hand_side = node.body[0].targets[0].target
-            if hasattr(left_hand_side, "value"):
-                self.assignments[left_hand_side.value] = node
-            else:
-                for idx, target in enumerate(list(left_hand_side.elements)):
-                    self.assignments[target.value.value] = node.body[0].value.elements[idx].value
-        if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
-            self.imports[node.body[0].names] = node
+        # If we are not only creating the function mapping
+        if not self.only_for_function_mapping:
+            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
+                self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
+            ):
+                left_hand_side = node.body[0].targets[0].target
+                if hasattr(left_hand_side, "value"):
+                    self.assignments[left_hand_side.value] = node
+                else:
+                    for idx, target in enumerate(list(left_hand_side.elements)):
+                        self.assignments[target.value.value] = node.body[0].value.elements[idx].value
+            if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
+                self.imports[node.body[0].names] = node
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -249,16 +264,20 @@ class ClassFinder(CSTVisitor):
             self.current_function = None
 
     def leave_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports[stmt.body[0].names] = node
+        # If we are not only creating the function mapping
+        if not self.only_for_function_mapping:
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports[stmt.body[0].names] = node
 
     def visit_ClassDef(self, node: ClassDef) -> None:
-        """We don't have non global scope class defs in transformers. Here we add the inheritance dependencies"""
-        self.classes[node.name.value] = node
+        """Record class nodes to create their dependencies at the end."""
+        # If we are not only creating the function mapping
+        if not self.only_for_function_mapping:
+            self.classes[node.name.value] = node
 
     def visit_Call(self, node: cst.Call):
-        """This is used to create a mapping from functions to class calling them, and from top-level functions to functions called inside them.
+        """This is used to create a mapping from top-level functions to functions called inside them.
         Important note: we only rely on direct Call to the functions here, not indirect mentions (such as assigning a variable with the function,
         add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible.
         """
@@ -268,32 +287,45 @@ class ClassFinder(CSTVisitor):
                 self.function_call_dependency_mapping[self.current_function].add(node.func.value)
 
     def leave_Module(self, node):
-        """When leaving the module, we store the position of each global scoped node (Assigns, function def and class def)
-        to allow sorting the dependencies based on their position in the code. We use the PositionProvider metadata wrapper for this.
+        """When leaving the module, we finally create the `function_call_recursive_dependency_mapping`, then we
+        compute the dependencies for all recorded classes based on all the nodes we visited. 
+        We also store the position of each global scoped node to allow sorting the dependencies based on their
+        position in the code later. We use the PositionProvider metadata wrapper for this.
         """
+        # Create a global mapping of recursive dependencies for functions
+        self.function_call_recursive_dependency_mapping = {}
+        for function_name, dependencies in self.function_call_dependency_mapping.items():
+            # We need to check if they are present in self.function_def to avoid built-in functions
+            all_dependencies = {dep for dep in find_all_dependencies(self.function_call_dependency_mapping, start_entity=function_name) if dep in self.function_def.keys()}
+            self.function_call_recursive_dependency_mapping[function_name] = all_dependencies
+
+        # assign all nodes
         self.global_nodes = {**self.assignments, **self.classes, **self.function_def}
         # now sort the class dependency_mapping based on the position of the nodes
         self.class_start_line = {}
         for id, node in self.global_nodes.items():
             self.class_start_line[id] = self.get_metadata(cst.metadata.PositionProvider, node).start.line
 
-        # Create the dependency mapping now that all classes, funcs, and assignments have been defined
-        for class_name, class_node in self.classes.items():
-            self.class_dependency_mapping[class_name] = ClassDependenciesFinder.dependencies_for_node(class_node, set(self.global_nodes.keys()))
+        # If we are not only creating the function mapping, create the class dependencies and augment them with function recursive deps
+        if not self.only_for_function_mapping:
+            # Create the dependency mapping for classes now that all potentials classes, functiosn, and assignments have been defined
+            for class_name, class_node in self.classes.items():
+                self.class_dependency_mapping[class_name] = ClassDependenciesFinder.dependencies_for_node(class_node, set(self.global_nodes.keys()))
 
-        # Recursively add all functions dependencies to the class dependencies (the class cannot be defined without all
-        # the needed functions -> they are considered 1st level dependencies)
-        for class_name, dependencies in self.class_dependency_mapping.items():
-            self.class_dependency_mapping[class_name] = self.augment_dependencies_with_functions(dependencies)
+            # Recursively add all functions dependencies to the class dependencies (the class cannot be defined without all
+            # the needed functions -> they are considered 1st level dependencies)
+            for class_name, dependencies in self.class_dependency_mapping.items():
+                self.class_dependency_mapping[class_name] = self.augment_dependencies_with_functions(dependencies)
 
     def augment_dependencies_with_functions(self, dependencies: set) -> set:
-        all_functions = set(self.function_def.keys())
+        """For a set of `dependencies`, augment them by adding all potential functions which are dependencies of
+        the functions present in the `dependencies`.
+        """
         new_dependencies = dependencies.copy()
         # Go through the set of dependencies
         for dep in tuple(dependencies):
-            if dep in all_functions:
-                all_dependencies = {dep for dep in find_all_dependencies(self.function_call_dependency_mapping, start_entity=dep) if dep in all_functions}
-                new_dependencies.update(all_dependencies)
+            if dep in self.function_def.keys():
+                new_dependencies.update(self.function_call_recursive_dependency_mapping[dep])
         return new_dependencies
 
 
@@ -1009,13 +1041,16 @@ class ModularConverterTransformer(CSTTransformer):
         return class_finder
     
     def _get_class_finder_without_rename(self, file):
+        """This helper function tries to get the class finder, and if not available create a new one, only for function
+        dependencies purposes (thus without renaming).
+        """
         if file in self.visited_module:
             class_finder = self.visited_module[file]
         elif file in self.visited_module_without_rename:
             class_finder = self.visited_module_without_rename[file]
         else:
             wrapper = MetadataWrapper(self.transformers_imports[file])
-            class_finder = ClassFinder(self.transformers_imports[file])
+            class_finder = ClassFinder(self.transformers_imports[file], only_function_mapping=True)
             wrapper.visit(class_finder)
             self.visited_module_without_rename[file] = class_finder
         return class_finder
@@ -1104,14 +1139,12 @@ class ModularConverterTransformer(CSTTransformer):
             for i, file in enumerate(files_to_visit):
                 # This class finder is only used to find function dependency graphs
                 class_finder = self._get_class_finder_without_rename(file)
-                all_dependencies_to_add = find_all_dependencies(dependency_mapping=class_finder.function_call_dependency_mapping,
-                                                                initial_dependencies=mutual_dependencies,
-                                                                initial_checked_dependencies=set(file_to_update.keys()))
+                all_dependencies_to_add = class_finder.augment_dependencies_with_functions(mutual_dependencies)
                 # Here we can only know the relative order of dependencies within a single file -> add them in the file order
                 dependencies.update(
                     {
                         dep: (class_finder.class_start_line[dep] + i*100000, class_finder.global_nodes[dep])
-                        for dep in all_dependencies_to_add
+                        for dep in all_dependencies_to_add if dep not in file_to_update.keys()
                     }
                 )
                 
