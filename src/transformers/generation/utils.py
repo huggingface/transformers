@@ -2636,28 +2636,18 @@ class GenerationMixin:
         if lm_head is None:
             raise ValueError("DoLa is not supported for models that don't have output embeddings.")
 
-        def model_forward(model, *args, **kwargs):
-            return model.forward(*args, **kwargs)
-
-        model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)  #
-
-        i = 0
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            if i == 0:
-                # forward pass to get next token
-                outputs = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=True,
-                )
-                i += 1
-            else:
-                outputs = model_forward(
-                    **model_inputs, return_dict=True, output_attentions=output_attentions, output_hidden_states=True
-                )
+
+            # forward pass to get next token
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=True,
+            )
+
             # .float() is needed to retain precision for later logits manipulations
             final_layer_next_token_logits = outputs.logits[:, -1, :].detach().clone().float()
             final_logits = outputs.logits[:, -1, :].float()
@@ -3221,7 +3211,9 @@ class GenerationMixin:
         def model_forward(model, *args, **kwargs):
             return model.forward(*args, **kwargs)
 
-        model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)  #
+        if isinstance(model_kwargs["past_key_values"], StaticCache):
+            if self.device == "cuda":
+                model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
 
         i = 0
         while self._has_unfinished_sequences(
@@ -3234,7 +3226,7 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
             if i == 0:
                 outputs = self(**model_inputs, return_dict=True)
                 i += 1
