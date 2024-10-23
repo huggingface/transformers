@@ -538,9 +538,8 @@ class GgufIntegrationTests(unittest.TestCase):
         for (quantized_name, quantized_param), (original_name, original_param) in zip(
             quantized_state_dict.items(), original_state_dict.items()
         ):
-            if "SelfAttention" in quantized_name and "SelfAttention" in original_name:
-                self.assertTrue(quantized_param.shape == original_param.shape)
-                torch.testing.assert_close(quantized_param, original_param)
+            self.assertTrue(quantized_param.shape == original_param.shape)
+            torch.testing.assert_close(quantized_param, original_param, rtol=5e-04, atol=5e-04)
 
     def test_gpt2_q8(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt2_model_id, gguf_file=self.q8_gpt2_model_id)

@@ -94,6 +94,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
+    # FIXME: Currnetly this implementation is only for flan-t5 architecture.
+    # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["tie_word_embeddings"] = False
         parsed_parameters["config"]["is_gated_act"] = True
