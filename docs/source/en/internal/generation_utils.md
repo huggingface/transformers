@@ -430,5 +430,8 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] BayesianDetectorModel
     - __call__
 
+[[autodoc]] SynthIDTextWatermarkingConfig
+    - __call__
+
 [[autodoc]] SynthIDTextWatermarkDetector
     - __call__
