@@ -18,21 +18,17 @@ jobs:
     name: Benchmark
     runs-on:
       group: aws-g5-4xlarge-cache
+    if: |
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host
     steps:
       - name: Get repo
-        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow')
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Get repo
-        if: github.event_name == 'push'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install libpq-dev & psql
         run: |
