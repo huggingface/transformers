@@ -3435,17 +3435,17 @@ class Trainer:
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
             kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments passed along to the respective methods depending on the chosen backend:
+                Additional keyword arguments for each backend:
 
-                - If you use `optuna`, those will be the `kwargs` of
+                - `optuna`: parameters from
                   [optuna.study.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
-                  and also the parameters `timeout`, `n_jobs` and `gc_after_trial` correspondign to
+                  and also the parameters `timeout`, `n_jobs` and `gc_after_trial` from
                   [optuna.study.Study.optimize](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.Study.html#optuna.study.Study.optimize)
-                - If you use `ray`, those will be the `kwargs` of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run).
-                  If `resources_per_trial` is not set in the `kwargs` it will default to 1 CPU core and 1 GPU (if available).
+                - `ray`: parameters from [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run).
+                  If `resources_per_trial` is not set in the `kwargs`, it defaults to 1 CPU core and 1 GPU (if available).
                   If `progress_reporter` is not set in the `kwargs`,
-                  [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html)will be used.
-                - If you use `sigopt`, you can use the parameter `proxies` for
+                  [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html) is used.
+                - `sigopt`: the parameter `proxies` from
                   [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
 
         Returns:
