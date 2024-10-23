@@ -254,42 +254,35 @@ def process_raw_model_outputs(
         **process_kwargs,
     )
 
-    # We get list of data; here we concat all together to be passed to the
-    # detector.
-    wm_masks_train = torch.cat(wm_masks_train, dim=0)
-    wm_g_values_train = torch.cat(wm_g_values_train, dim=0)
+    # We get list of data; here we concat all together to be passed to the detector.
+    def pack(mask, g_values):
+        mask = torch.cat(mask, dim=0)
+        g = torch.cat(g_values, dim=0)
+        return mask, g
+
+    wm_masks_train, wm_g_values_train = pack(wm_masks_train, wm_g_values_train)
     # Note: Use float instead of bool. Otherwise, the entropy calculation doesn't work
     wm_labels_train = torch.ones((wm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
 
-    wm_masks_cv = torch.cat(wm_masks_cv, dim=0)
-    wm_g_values_cv = torch.cat(wm_g_values_cv, dim=0)
+    wm_masks_cv, wm_g_values_cv = pack(wm_masks_cv, wm_g_values_cv)
     wm_labels_cv = torch.ones((wm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
 
-    uwm_masks_train = torch.cat(uwm_masks_train, dim=0)
-    uwm_g_values_train = torch.cat(uwm_g_values_train, dim=0)
+    uwm_masks_train, uwm_g_values_train = pack(uwm_masks_train, uwm_g_values_train)
     uwm_labels_train = torch.zeros((uwm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
-    uwm_masks_cv = torch.cat(uwm_masks_cv, dim=0)
-    uwm_g_values_cv = torch.cat(uwm_g_values_cv, dim=0)
+
+    uwm_masks_cv, uwm_g_values_cv = pack(uwm_masks_cv, uwm_g_values_cv)
     uwm_labels_cv = torch.zeros((uwm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
 
     # Concat pos and negatives data together.
-    train_g_values = torch.cat((wm_g_values_train, uwm_g_values_train), dim=0)
-    train_labels = torch.cat((wm_labels_train, uwm_labels_train), axis=0)
-    train_masks = torch.cat((wm_masks_train, uwm_masks_train), axis=0)
+    train_g_values = torch.cat((wm_g_values_train, uwm_g_values_train), dim=0).squeeze()
+    train_labels = torch.cat((wm_labels_train, uwm_labels_train), axis=0).squeeze()
+    train_masks = torch.cat((wm_masks_train, uwm_masks_train), axis=0).squeeze()
 
-    cv_g_values = torch.cat((wm_g_values_cv, uwm_g_values_cv), axis=0)
-    cv_labels = torch.cat((wm_labels_cv, uwm_labels_cv), axis=0)
-    cv_masks = torch.cat((wm_masks_cv, uwm_masks_cv), axis=0)
+    cv_g_values = torch.cat((wm_g_values_cv, uwm_g_values_cv), axis=0).squeeze()
+    cv_labels = torch.cat((wm_labels_cv, uwm_labels_cv), axis=0).squeeze()
+    cv_masks = torch.cat((wm_masks_cv, uwm_masks_cv), axis=0).squeeze()
 
     # Shuffle data.
-    train_g_values = train_g_values.squeeze()
-    train_labels = train_labels.squeeze()
-    train_masks = train_masks.squeeze()
-
-    cv_g_values = cv_g_values.squeeze()
-    cv_labels = cv_labels.squeeze()
-    cv_masks = cv_masks.squeeze()
-
     shuffled_idx = torch.randperm(train_g_values.shape[0])  # Use torch for GPU compatibility
 
     train_g_values = train_g_values[shuffled_idx]
