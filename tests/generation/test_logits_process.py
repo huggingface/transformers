@@ -978,10 +978,9 @@ class LogitsProcessorTest(unittest.TestCase):
         out = watermark(input_ids=input_ids, scores=scores)
         self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
 
-    """Test SynthID watermarked distribution bias uniformity over iterations."""
-
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):
+        """Test SynthID watermarked distribution bias uniformity over iterations."""
         torch.manual_seed(0)
         np.random.seed(0)
         watermarking_config = {
@@ -1005,10 +1004,9 @@ class LogitsProcessorTest(unittest.TestCase):
         g_values_mean = torch.mean(torch.mean(g_values.float(), dim=0))
         self.assertAlmostEqual(g_values_mean, 0.5, delta=0.01)
 
-    """Test SynthID watermarked distribution bias uniformity over voabs of the model."""
-
     @parameterized.expand([(10000, 3), (1000, 20)])
     def test_synthidtext_watermark_processor_bias_uniformity_across_vocab(self, vocab_size, num_layers):
+        """Test SynthID watermarked distribution bias uniformity over vocabs of the model."""
         batch_size = 1000
         ngram_len = 5
         torch.manual_seed(0)
@@ -1038,8 +1036,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # g_values shape should be [batch_size, vocab_size, num_layers]
         g_values_mean = torch.mean(torch.mean(g_values.float(), dim=1))
         self.assertAlmostEqual(g_values_mean, 0.5, delta=0.001)
-
-    """Test SynthID watermarked distribution matches unwatermarked distribution over many iterations."""
 
     @parameterized.expand([(2, "uniform"), (10, "uniform"), (2, "random"), (10, "random")])
     def test_synthidtext_watermark_processor_distributional_convergence(self, vocab_size, logits_type):
@@ -1100,10 +1096,9 @@ class LogitsProcessorTest(unittest.TestCase):
         )
         self.assertTrue(is_close)
 
-    """Test SynthID watermarking bais matches theoretical value."""
-
     @parameterized.expand([(2, 10, 1, 0.01), (100, 5, 1, 0.01), (100, 10, 2, 0.02)])
     def test_synthidtext_watermark_processor_bias_test(self, vocab_size, ngram_len, num_layers, atol):
+        """Test SynthID watermarking bias matches theoretical value."""
         batch_size = 20000
         generator = torch.Generator(device=torch_device).manual_seed(0)
         np.random.seed(0)
