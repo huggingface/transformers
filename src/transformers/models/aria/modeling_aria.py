@@ -1327,7 +1327,7 @@ class AriaGroupedGEMM(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.ones(groups, in_features, out_features))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -2211,6 +2211,8 @@ class AriaTextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 ARIA_TEXT_INPUTS_DOCSTRING = r"""
