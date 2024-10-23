@@ -24,11 +24,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.distributed.tensor import Replicate
-from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
-    RowwiseParallel,
-)
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -231,12 +226,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class LlamaMLP(nn.Module):
-    _tp_plan = {
-        "gate_proj": ColwiseParallel(),
-        "up_proj": ColwiseParallel(),
-        "down_proj": RowwiseParallel(),
-    }
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -266,13 +255,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    _tp_plan = {
-        "q_proj": ColwiseParallel(),
-        "k_proj": ColwiseParallel(),
-        "v_proj": ColwiseParallel(),
-        "o_proj": RowwiseParallel(),
-    }
 
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
@@ -824,8 +806,9 @@ class LlamaModel(LlamaPreTrainedModel):
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
+        self.gradient_checkpointing = False
+        self._tp_plan = config._base_model_tp_plan
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1081,9 +1064,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
 class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {
-        "lm_head": ColwiseParallel(output_layouts=Replicate()),
-    }
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)

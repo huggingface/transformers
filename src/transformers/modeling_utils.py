@@ -54,6 +54,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
+    translate_to_torch_parallel_style,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -4994,6 +4995,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         def tplize(mod: torch.nn.Module) -> None:
             tp_plan = getattr(mod, "_tp_plan", None)
             if tp_plan:
+                logger.debug(
+                    f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}"
+                )
+                # In model configs, we use a neutral type (string) to specify
+                # parallel styles, here we translate them into torch TP types.
+                # Using tree_map because `tp_plan` is a dict.
+                tp_plan = torch.utils._pytree.tree_map(
+                    translate_to_torch_parallel_style,
+                    tp_plan,
+                )
+                # Apply TP to current module.
                 torch.distributed.tensor.parallel.parallelize_module(
                     mod,
                     device_mesh=device_mesh,
