@@ -2560,6 +2560,28 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         debug_mode (`bool`, optional, *optional*, defaults to False):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
+
+    >>> # Standard model and toeknizer initialization
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b-it')
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b-it')
+
+    >>> # SynthID Text configuration
+    >>> watermarking_config = SynthIDTextWatermarkingConfig(
+    ...     keys=[654, 400, 836, 123, 340, 443, 597, 160, 57],
+    ...     ngram_len=5,
+    ... )
+
+    >>> # Generation with watermarking
+    >>> tokenized_prompts = tokenizer(["your prompts here"])
+    >>> output_sequences = model.generate(
+    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True,
+    ... )
+    >>> watermarked_text = tokenizer.batch_decode(output_sequences)
+    ```
     """
 
     def __init__(
