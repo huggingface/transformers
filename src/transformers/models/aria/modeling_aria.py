@@ -98,6 +98,10 @@ class AriaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, AriaGroupedGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
 
 class IdentityOp(torch.nn.Module):
