@@ -290,6 +290,11 @@ class DPTImageProcessor(BaseImageProcessor):
         label[label == 254] = 255
         return label
 
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
@@ -479,20 +484,6 @@ class DPTImageProcessor(BaseImageProcessor):
                         keep_aspect_ratio=keep_aspect_ratio,
                         ensure_multiple_of=ensure_multiple_of,
                         input_data_format=input_data_format,
-                    )
-                    for segmentation_map in segmentation_maps
-                ]
-
-            if do_rescale:
-                segmentation_maps = [
-                    self.rescale(image=segmentation_map, scale=rescale_factor, input_data_format=input_data_format)
-                    for segmentation_map in segmentation_maps
-                ]
-
-            if do_normalize:
-                segmentation_maps = [
-                    self.normalize(
-                        image=segmentation_map, mean=image_mean, std=image_std, input_data_format=input_data_format
                     )
                     for segmentation_map in segmentation_maps
                 ]
