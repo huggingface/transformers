@@ -37,6 +37,7 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaRMSNorm,
+    LlamaPreTrainedModel
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -61,7 +62,6 @@ class AriaVisionConfig(SiglipVisionConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self._attn_implementation = "eager"
 
 
 class IdentityOp(torch.nn.Module):
@@ -459,7 +459,8 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         for image in images:
             crop_images = get_split_image(image, split_image, split_ratio, max_size)
-            num_crops = len(crop_images)
+            if num_crops is None or len(crop_images) > num_crops:
+                num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
                 img_padded = self.transform(img_padded)
@@ -772,7 +773,6 @@ class AriaTextConfig(LlamaConfig):
         self.moe_z_loss_coeff = moe_z_loss_coeff
         self.moe_aux_loss_coeff = moe_aux_loss_coeff
         self.moe_num_shared_experts = moe_num_shared_experts
-        self._attn_implementation = "eager"
 
 
 class AriaConfig(PretrainedConfig):
@@ -838,7 +838,6 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig(**text_config)
 
         self.text_config = text_config
-        self._attn_implementation = "eager"
 
 
 class AriaPreTrainedModel(PreTrainedModel):
@@ -1087,7 +1086,22 @@ class AriaDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class AriaTextModel(LlamaModel):
+class AriaTextPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
+
+
+class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(

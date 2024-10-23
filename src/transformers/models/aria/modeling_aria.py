@@ -13,6 +13,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn.init import trunc_normal_
 
+from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -52,8 +53,47 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils import is_flash_attn_2_available
+from ...utils import (
+    ModelOutput,
+    is_flash_attn_2_available,
+)
 from .configuration_aria import AriaTextConfig
+
+
+class AriaPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA (Scaled Dot Product Attention) or not.
+        """
+        return self.language_model._supports_sdpa
+
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 class IdentityOp(torch.nn.Module):
@@ -134,28 +174,6 @@ def trunc_normal_tf_(
     with torch.no_grad():
         _trunc_normal_(tensor, 0, 1.0, a, b)
         tensor.mul_(std).add_(mean)
-
-
-class AriaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = []
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 class AriaVisionEmbeddings(nn.Module):
@@ -2569,6 +2587,20 @@ class AriaTextModel(AriaTextPreTrainedModel):
         return causal_mask
 
 
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
+
+
 ARIA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2778,6 +2810,20 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 @dataclass
@@ -3043,3 +3089,19 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedGEMM):
+            module.weight.data.normal_(mean=0.0, std=std)
+        else:
+            print(module)
