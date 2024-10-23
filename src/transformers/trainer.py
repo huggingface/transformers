@@ -603,9 +603,7 @@ class Trainer:
         self.optimizer, self.lr_scheduler = optimizers
         self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
         if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
-            raise RuntimeError(
-                "Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible."
-            )
+            raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
