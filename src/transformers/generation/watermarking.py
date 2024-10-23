@@ -325,8 +325,8 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         x = torch.tril(x, diagonal=-1)
 
         # [batch_size, seq_len, watermarking_depth]
-        # Long tensor doesn't work with einsum, so we need to switch to the same dtype as self.delta (FP32)
-        logits = torch.einsum("ijkl,ijkl->ijk", self.delta, x.type(self.delta.dtype)) + self.beta
+        # (i, j, k, l) x (i, j, k, l) -> (i, j, k) einsum equivalent
+        logits = (self.delta[..., None, :] @ x.type(self.delta.dtype)[..., None]).squeeze() + self.beta
 
         p_two_unique_tokens = torch.sigmoid(logits)
         p_one_unique_token = 1 - p_two_unique_tokens
