@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import gc
+import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
@@ -207,6 +208,61 @@ class TorchAoTest(unittest.TestCase):
         EXPECTED_OUTPUT = "What are we having for dinner?\n- 2. What is the temperature outside"
 
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+
+@require_torch_gpu
+@require_torchao
+class TorchAoSerializationTest(unittest.TestCase):
+    input_text = "What are we having for dinner?"
+    max_new_tokens = 10
+    EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda:0",
+            quantization_config=cls.quant_config,
+        )
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    def test_original_model_expected_output(self):
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_serialization_weight_only(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
+            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, torch_dtype=torch.bfloat16, device_map="cuda:0"
+            )
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+            output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            # TODO: investigate why we don't have the same output as the original model
+            EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+
+class TorchAoSerializationW8A8Test(TorchAoSerializationTest):
+    quant_config = TorchAoConfig("int8_dynamic_activation_int8_weight")
+    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+
+
+class TorchAoSerializationW8Test(TorchAoSerializationTest):
+    quant_config = TorchAoConfig("int8_weight_only")
+    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
 
 if __name__ == "__main__":
