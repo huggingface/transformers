@@ -83,7 +83,6 @@ def process_outputs_for_training(
     all_outputs: List[torch.Tensor],
     logits_processor: transformers.generation.SynthIDTextWatermarkLogitsProcessor,
     tokenizer: Any,
-    *,
     pos_truncation_length: Optional[int],
     neg_truncation_length: Optional[int],
     max_length: int,
@@ -220,50 +219,39 @@ def process_raw_model_outputs(
 
     train_uwm_outputs, cv_uwm_outputs = model_selection.train_test_split(tokenized_uwm_outputs, test_size=test_size)
 
+    process_kwargs = {
+        "logits_processor": logits_processor,
+        "tokenizer": tokenizer,
+        "pos_truncation_length": pos_truncation_length,
+        "neg_truncation_length": neg_truncation_length,
+        "max_padded_length": max_padded_length,
+        "torch_device": torch_device,
+    }
+
     # Process both train and CV data for training
     wm_masks_train, wm_g_values_train = process_outputs_for_training(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_wm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        pos_truncation_length=pos_truncation_length,
-        neg_truncation_length=neg_truncation_length,
-        max_length=max_padded_length,
         is_pos=True,
         is_cv=False,
-        torch_device=torch_device,
+        **process_kwargs,
     )
     wm_masks_cv, wm_g_values_cv = process_outputs_for_training(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_wm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        pos_truncation_length=pos_truncation_length,
-        neg_truncation_length=neg_truncation_length,
-        max_length=max_padded_length,
         is_pos=True,
         is_cv=True,
-        torch_device=torch_device,
+        **process_kwargs,
     )
     uwm_masks_train, uwm_g_values_train = process_outputs_for_training(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_uwm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        pos_truncation_length=pos_truncation_length,
-        neg_truncation_length=neg_truncation_length,
-        max_length=max_padded_length,
         is_pos=False,
         is_cv=False,
-        torch_device=torch_device,
+        **process_kwargs,
     )
     uwm_masks_cv, uwm_g_values_cv = process_outputs_for_training(
         [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_uwm_outputs],
-        logits_processor=logits_processor,
-        tokenizer=tokenizer,
-        pos_truncation_length=pos_truncation_length,
-        neg_truncation_length=neg_truncation_length,
-        max_length=max_padded_length,
         is_pos=False,
         is_cv=True,
-        torch_device=torch_device,
+        **process_kwargs,
     )
 
     # We get list of data; here we concat all together to be passed to the
