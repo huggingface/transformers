@@ -283,8 +283,6 @@ class ImageProcessingTestMixin:
             image_processor_slow_1 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=False)
 
         self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        print(image_processor_fast_0.to_dict())
-        print(image_processor_fast_1.to_dict())
         self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
 
     def test_init_without_params(self):
