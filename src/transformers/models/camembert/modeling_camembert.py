@@ -1466,6 +1466,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
         expected_loss=0.86,
     )
     def forward(
+        self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
