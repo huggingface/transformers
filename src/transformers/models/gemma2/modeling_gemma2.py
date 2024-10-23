@@ -50,6 +50,8 @@ from .configuration_gemma2 import Gemma2Config
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
 
+logger = logging.get_logger(__name__)
+
 
 class Gemma2RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):

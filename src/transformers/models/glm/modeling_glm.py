@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -50,8 +51,12 @@ from .configuration_glm import GlmConfig
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
 from ...modeling_flash_attention_utils import _flash_attention_forward
+
+
+logger = logging.get_logger(__name__)
+
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
 
 
 class GlmRMSNorm(nn.Module):
@@ -120,9 +125,6 @@ class GlmMLP(nn.Module):
         up_states = up_states * self.activation_fn(gate)
 
         return self.down_proj(up_states)
-
-
-logger = logging.get_logger(__name__)
 
 
 def rotate_half(x):
@@ -609,9 +611,6 @@ class GlmPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-_CONFIG_FOR_DOC = "GlmConfig"
-
-
 GLM_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -968,6 +967,9 @@ class GlmModel(GlmPreTrainedModel):
         return causal_mask
 
 
+_CONFIG_FOR_DOC = "GlmConfig"
+
+
 class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1221,6 +1223,11 @@ class GlmForTokenClassification(GlmPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

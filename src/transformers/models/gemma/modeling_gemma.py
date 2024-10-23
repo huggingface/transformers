@@ -51,6 +51,8 @@ from .configuration_gemma import GemmaConfig
 
 _CHECKPOINT_FOR_DOC = "google/gemma-7b"
 
+logger = logging.get_logger(__name__)
+
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
