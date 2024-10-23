@@ -19,7 +19,7 @@ jobs:
     runs-on:
       group: aws-g5-4xlarge-cache
     if: |
-      (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') ||
+      (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') )||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     container:
       image: huggingface/transformers-pytorch-gpu
