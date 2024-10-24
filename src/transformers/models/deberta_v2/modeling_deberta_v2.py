@@ -692,8 +692,6 @@ class DebertaV2Encoder(nn.Module):
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
 
-
-
             if query_states is not None:
                 query_states = output_states
                 if isinstance(hidden_states, Sequence):
