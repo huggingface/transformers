@@ -15,12 +15,19 @@
 """PyTorch EnCodec model."""
 
 import math
-from dataclasses import dataclass
+import typing as tp
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
 
+import einops
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
+import torchaudio
 from torch import nn
+from torch.nn.utils import spectral_norm, weight_norm
+
+from transformers.configuration_utils import PretrainedConfig
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -40,18 +47,35 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
+ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/encodec_24khz",
+    "facebook/encodec_48khz",
+    # See all EnCodec models at https://huggingface.co/models?filter=encodec
+]
+
+scales = [2**i for i in range(5, 12)]
+
+
 @dataclass
 class EncodecOutput(ModelOutput):
     """
     Args:
         audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
+            Discrete code embeddings computed using `model.encode`.
+        audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Encodec.
+        reconstruction_loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+            The reconstruction loss, which measures the difference between the input audio and the reconstructed audio.
+            It combines losses of both the time and frequency domains. Only returned when `return_loss=True` in `encode`.
+        commitment_loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+            Commitment loss for the vector quantization process. It encourages the encoder's output to stay close
+            to the quantized values. Only returned when `return_loss=True` in `encode`.
     """
 
     audio_codes: torch.LongTensor = None
     audio_values: torch.FloatTensor = None
+    reconstruction_loss: Optional[torch.FloatTensor] = None
+    commitment_loss: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -59,13 +83,14 @@ class EncodecEncoderOutput(ModelOutput):
     """
     Args:
         audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
+            Discrete code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
     audio_codes: torch.LongTensor = None
     audio_scales: torch.FloatTensor = None
+    commitment_loss: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -421,7 +446,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
 
-    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> Tuple[torch.Tensor, List]:
         """
         Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
@@ -429,13 +454,23 @@ class EncodecResidualVectorQuantizer(nn.Module):
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings
         all_indices = []
+        quantization_steps = []
         for layer in self.layers[:num_quantizers]:
             indices = layer.encode(residual)
             quantized = layer.decode(indices)
+
+            if self.training:
+                # Pass the gradients straight through the quantization, by directly linking the gradients of the input
+                # embed_ind with the output quantize in the computation graph.
+                quantized = residual + (quantized - residual).detach()
+                quantization_steps.append((residual, quantized.detach()))
+
+            # Note: There may be a bug here with the quantized results, but we do not fix it as it is present in the
+            # original FB code as well. For more context, see https://github.com/facebookresearch/encodec/issues/25.
             residual = residual - quantized
             all_indices.append(indices)
         out_indices = torch.stack(all_indices)
-        return out_indices
+        return out_indices, quantization_steps
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
@@ -456,6 +491,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
     config_class = EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -481,6 +517,10 @@ class EncodecPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(param)
                 elif "bias" in name:
                     nn.init.constant_(param, 0.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
+            module.gradient_checkpointing = value
 
 
 ENCODEC_START_DOCSTRING = r"""
@@ -547,6 +587,8 @@ class EncodecModel(EncodecPreTrainedModel):
 
         self.quantizer = EncodecResidualVectorQuantizer(config)
 
+        self.commitment_weight = config.__dict__.get("commitment_weight", 1)
+
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
             raise ValueError("The codebook_size must be a power of 2.")
@@ -561,8 +603,8 @@ class EncodecModel(EncodecPreTrainedModel):
         return self.decoder
 
     def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int, return_quantization_steps: bool = False
+    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], Tuple[torch.Tensor, Optional[torch.Tensor], List]]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
         normalized. The padding mask is required to compute the correct scale.
@@ -582,9 +624,9 @@ class EncodecModel(EncodecPreTrainedModel):
             input_values = input_values / scale
 
         embeddings = self.encoder(input_values)
-        codes = self.quantizer.encode(embeddings, bandwidth)
+        codes, quantization_steps = self.quantizer.encode(embeddings, bandwidth)
         codes = codes.transpose(0, 1)
-        return codes, scale
+        return codes, scale, quantization_steps
 
     def encode(
         self,
@@ -648,7 +690,7 @@ class EncodecModel(EncodecPreTrainedModel):
         for offset in range(0, input_length - step, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
-            encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
+            encoded_frame, scale, _ = self._encode_frame(frame, bandwidth, mask)
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
@@ -738,7 +780,7 @@ class EncodecModel(EncodecPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = return_dict or self.config.return_dict
 
         chunk_length = self.config.chunk_length
         if chunk_length is None:
@@ -762,6 +804,24 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_values,)
         return EncodecDecoderOutput(audio_values)
 
+    def compute_mel_spectrogram(self, audio, n_fft, hop_length, n_mels=64):
+        device = audio.device
+        # Adjust n_mels if necessary to avoid warnings
+        n_mels = min(n_mels, n_fft // 2 + 1)
+        # Create the window function on the correct device
+        window = torch.hann_window(n_fft, device=device)
+        mel_spec_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=self.config.sampling_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels,
+            window_fn=lambda x: window,
+            normalized=True,
+            center=False,
+            pad_mode=None,
+        ).to(device)
+        return mel_spec_transform(audio)
+
     @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=EncodecOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -772,7 +832,8 @@ class EncodecModel(EncodecPreTrainedModel):
         audio_codes: Optional[torch.Tensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
+        return_loss: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], EncodecOutput]:
         r"""
         Returns:
 
@@ -782,7 +843,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, EncodecModel
 
-        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
+        >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model_id = "facebook/encodec_24khz"
@@ -803,14 +864,288 @@ class EncodecModel(EncodecPreTrainedModel):
         if audio_codes is not None and audio_scales is None:
             raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
 
-        if audio_scales is not None and audio_codes is None:
-            raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
+        reconstruction_loss = None
+        commitment_loss = None
 
         if audio_scales is None and audio_codes is None:
-            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, False)
+            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict=False)
 
-        audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+            if return_loss:
+                embeddings = self.encoder(input_values)
+                _, quantization_steps = self.quantizer.encode(embeddings, bandwidth)
+
+                commitment_loss = torch.tensor(0.0, device=input_values.device)
+                for residual, quantize in quantization_steps:
+                    loss = F.mse_loss(quantize.permute(0, 2, 1), residual.permute(0, 2, 1))
+                    commitment_loss += loss
+                commitment_loss *= self.commitment_weight
+
+        decoded_output = self.decode(audio_codes, audio_scales)
+        audio_values = decoded_output.audio_values[:, :, : input_values.shape[-1]]
+
+        if return_loss:
+            # Time domain loss
+            time_loss = F.l1_loss(audio_values, input_values)
+            print(f"Time loss: {time_loss.item()}")
+
+            # Frequency domain loss
+            scales = [2**i for i in range(5, 12)]
+            frequency_loss = 0.0
+            for scale in scales:
+                n_fft = scale
+                hop_length = scale // 4
+                S_x = self.compute_mel_spectrogram(input_values, n_fft, hop_length, n_mels=64)
+                S_x_hat = self.compute_mel_spectrogram(audio_values, n_fft, hop_length, n_mels=64)
+                l1 = F.l1_loss(S_x_hat, S_x)
+                l2 = F.mse_loss(S_x_hat, S_x)
+                frequency_loss += l1 + l2
+
+            frequency_loss = frequency_loss / (len(scales) * 2)
+            print(f"Average frequency loss: {frequency_loss.item()}")
+
+            # Combine losses
+            lambda_t = 1.0  # look at this further, not sure why the need for a weight here
+            lambda_f = 1.0
+            reconstruction_loss = lambda_t * time_loss + lambda_f * frequency_loss
+            print(f"Reconstruction loss: {reconstruction_loss.item()}")
+
+            if commitment_loss is not None:
+                print(f"Commitment loss: {commitment_loss.item()}")
+
+        audio_values_to_return = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+
         if not return_dict:
-            return (audio_codes, audio_values)
+            return (audio_codes, audio_values_to_return, reconstruction_loss, commitment_loss)
 
-        return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
+        return EncodecOutput(
+            audio_codes=audio_codes,
+            audio_values=audio_values_to_return,
+            reconstruction_loss=reconstruction_loss,
+            commitment_loss=commitment_loss,
+        )
+
+
+"""
+    Discriminator code copied over and refactored from https://github.com/facebookresearch/encodec/blob/main/encodec/msstftd.py#L28
+"""
+
+
+@dataclass
+class EncodecDiscriminatorConfig(PretrainedConfig):
+    model_type: str = "encodec_discriminator"
+    filters: int = 32
+    in_channels: int = 1
+    out_channels: int = 1
+    n_ffts: list = field(default_factory=lambda: [1024, 2048, 512])
+    hop_lengths: list = field(default_factory=lambda: [256, 512, 128])
+    win_lengths: list = field(default_factory=lambda: [1024, 2048, 512])
+    kernel_size: tuple = (3, 9)
+    stride: tuple = (1, 2)
+    dilations: list = field(default_factory=lambda: [1, 2, 4])
+    max_filters: int = 1024
+    filters_scale: int = 2
+    normalized: bool = True
+    norm: str = "weight_norm"
+    activation: str = "LeakyReLU"
+    activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
+
+
+class ConvLayerNorm(nn.LayerNorm):
+    """
+    Convolution-friendly LayerNorm that moves channels to last dimensions
+    before running the normalization and moves them back to original position right after.
+    """
+
+    def __init__(self, normalized_shape: tp.Union[int, tp.List[int], torch.Size], **kwargs):
+        super().__init__(normalized_shape, **kwargs)
+
+    def forward(self, x):
+        x = einops.rearrange(x, "b ... t -> b t ...")
+        x = super().forward(x)
+        x = einops.rearrange(x, "b t ... -> b ... t")
+        return
+
+
+CONV_NORMALIZATIONS = frozenset(
+    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
+)
+
+
+def apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
+    assert norm in CONV_NORMALIZATIONS
+    if norm == "weight_norm":
+        return weight_norm(module)
+    elif norm == "spectral_norm":
+        return spectral_norm(module)
+    else:
+        # We already check was in CONV_NORMALIZATION, so any other choice
+        # doesn't need reparametrization.
+        return module
+
+
+def get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
+    """Return the proper normalization module. If causal is True, this will ensure the returned
+    module is causal, or return an error if the normalization doesn't support causal evaluation.
+    """
+    assert norm in CONV_NORMALIZATIONS
+    if norm == "layer_norm":
+        assert isinstance(module, nn.modules.conv._ConvNd)
+        return ConvLayerNorm(module.out_channels, **norm_kwargs)
+    elif norm == "time_group_norm":
+        if causal:
+            raise ValueError("GroupNorm doesn't support causal evaluation.")
+        assert isinstance(module, nn.modules.conv._ConvNd)
+        return nn.GroupNorm(1, module.out_channels, **norm_kwargs)
+    else:
+        return nn.Identity()
+
+
+class NormConv2d(nn.Module):
+    """Wrapper around Conv2d and normalization applied to this conv
+    to provide a uniform interface across normalization approaches.
+    """
+
+    def __init__(self, *args, norm: str = "none", norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+        super().__init__()
+        self.conv = apply_parametrization_norm(nn.Conv2d(*args, **kwargs), norm)
+        self.norm = get_norm_module(self.conv, causal=False, norm=norm, **norm_kwargs)
+        self.norm_type = norm
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        return x
+
+
+class STFTDiscriminator(nn.Module):
+    def __init__(
+        self,
+        filters,
+        in_channels,
+        out_channels,
+        n_fft,
+        hop_length,
+        win_length,
+        kernel_size,
+        stride,
+        dilations,
+        max_filters,
+        filters_scale,
+        normalized,
+        norm,
+        activation,
+        activation_params,
+    ):
+        super().__init__()
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.normalized = normalized
+
+        # STFT transformation
+        self.spec_transform = torchaudio.transforms.Spectrogram(
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window_fn=torch.hann_window,
+            normalized=self.normalized,
+            power=None,  # For complex STFT
+        )
+
+        self.activation = getattr(nn, activation)(**activation_params)
+
+        self.convs = nn.ModuleList()
+        in_ch = 2 * in_channels
+        out_ch = filters
+        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=(1, 1), norm=norm))
+        in_ch = out_ch
+        for dilation in dilations:
+            out_ch = min(in_ch * filters_scale, max_filters)
+            self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=stride, dilation=(dilation, 1), norm=norm))
+            in_ch = out_ch
+        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm))
+        self.conv_post = NormConv2d(out_ch, out_channels, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm)
+
+    def forward(self, x: torch.Tensor):
+        # Compute STFT
+        z = self.spec_transform(x)  # [B, 2, Freq, Frames, 2]
+        z = torch.cat([z.real, z.imag], dim=1)
+        z = z.permute(0, 1, 3, 2)  # [B, C, T, F]
+
+        feature_maps = []
+        for conv in self.convs:
+            z = conv(z)
+            z = self.activation(z)
+            feature_maps.append(z)
+        z = self.conv_post(z)
+        return z, feature_maps
+
+
+FeatureMapType = tp.List[torch.Tensor]
+LogitsType = torch.Tensor
+DiscriminatorOutput = tp.Tuple[tp.List[LogitsType], tp.List[FeatureMapType]]
+
+
+class EncodecDiscriminator(PreTrainedModel):
+    config_class = EncodecDiscriminatorConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.discriminators = nn.ModuleList(
+            [
+                STFTDiscriminator(
+                    filters=config.filters,
+                    in_channels=config.in_channels,
+                    out_channels=config.out_channels,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    win_length=win_length,
+                    kernel_size=config.kernel_size,
+                    stride=config.stride,
+                    dilations=config.dilations,
+                    max_filters=config.max_filters,
+                    filters_scale=config.filters_scale,
+                    normalized=config.normalized,
+                    norm=config.norm,
+                    activation=config.activation,
+                    activation_params=config.activation_params,
+                )
+                for n_fft, hop_length, win_length in zip(config.n_ffts, config.hop_lengths, config.win_lengths)
+            ]
+        )
+        self.num_discriminators = len(self.discriminators)
+
+    def forward(self, x: torch.Tensor) -> DiscriminatorOutput:
+        logits = []
+        fmaps = []
+        for disc in self.discriminators:
+            logit, fmap = disc(x)
+            logits.append(logit)
+            fmaps.append(fmap)
+        return logits, fmaps
+
+    def compute_loss(self, real_audio, fake_audio):
+        # Compute discriminator and generator losses
+        real_logits, real_features = self.forward(real_audio)
+        fake_logits, fake_features = self.forward(fake_audio)
+
+        # Discriminator loss
+        d_loss = 0
+        for real_logit, fake_logit in zip(real_logits, fake_logits):
+            d_loss += (F.relu(1 - real_logit)).mean() + F.relu(1 + fake_logit).mean()
+        d_loss /= self.num_discriminators
+
+        # Generator adversarial loss
+        g_adv_loss = 0
+        for fake_logit in fake_logits:
+            g_adv_loss += -fake_logit.mean()
+        g_adv_loss /= self.num_discriminators
+
+        # feature matching loss
+        fm_loss = 0
+        for real_feat, fake_feat in zip(real_features, fake_features):
+            for real_f, fake_f in zip(real_feat, fake_feat):
+                fm_loss += F.l1_loss(fake_f, real_f.detach())
+        fm_loss /= self.num_discriminators
+
+        return d_loss, g_adv_loss, fm_loss
