@@ -1631,11 +1631,12 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
             )
         return reordered_past
 
+
 @add_start_docstrings(
     "The M2M100 (SONAR) transformer decoder model for generating texts from embeddings.",
     M2M_100_START_DOCSTRING,
 )
-class M2M100DecoderModel(M2M100PreTrainedModel):
+class M2M100DecoderModel(M2M100PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
     _keys_to_ignore_on_load_unexpected = [r"encoder"]
 
@@ -1756,6 +1757,15 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
 
     def prepare_inputs_for_generation(
         self,
