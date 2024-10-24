@@ -134,12 +134,12 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 # which are not supported by torch.jit.trace.
 # Full credits to @Szustarol
 @torch.jit.script
-def scaled_size_sqrt(query_layer, scale_factor: int):
+def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
 @torch.jit.script
-def build_rpos(query_layer, key_layer, relative_pos):
+def build_rpos(query_layer: torch.Tensor, key_layer: torch.Tensor, relative_pos):
     if query_layer.size(-2) != key_layer.size(-2):
         return build_relative_position(key_layer, key_layer)
     else:
@@ -147,12 +147,12 @@ def build_rpos(query_layer, key_layer, relative_pos):
 
 
 @torch.jit.script
-def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+def compute_attention_span(query_layer: torch.Tensor, key_layer: torch.Tensor, max_relative_positions: int):
     return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
 
 
 @torch.jit.script
-def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+def uneven_size_corrected(p2c_att, query_layer: torch.Tensor, key_layer: torch.Tensor, relative_pos):
     if query_layer.size(-2) != key_layer.size(-2):
         pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
         return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
@@ -938,8 +938,6 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = [
         "cls.predictions.decoder.weight",
         "cls.predictions.decoder.bias",
-        "deberta.embeddings.word_embeddings.weight",
-        "lm_predictions.lm_head.weight",
     ]
 
     def __init__(self, config):
@@ -949,6 +947,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         if self.legacy:
             self.cls = LegacyDebertaOnlyMLMHead(config)
         else:
+            self._tied_weights_keys = ["lm_predictions.lm_head.weight", "deberta.embeddings.word_embeddings.weight"]
             self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -958,7 +957,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         if self.legacy:
             return self.cls.predictions.decoder
         else:
-            return self.lm_predictions.lm_head
+            return self.lm_predictions.lm_head.dense
 
     def set_output_embeddings(self, new_embeddings):
         if self.legacy:
