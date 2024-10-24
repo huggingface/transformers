@@ -738,7 +738,6 @@ class GgufIntegrationTests(unittest.TestCase):
 
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
-                # quantized models do not contain "lm_head.weight" layer
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
             else:
@@ -777,7 +776,6 @@ class GgufIntegrationTests(unittest.TestCase):
 
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
-                # quantized models do not contain "lm_head.weight" layer
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 if "mixer.A_log" in layer_name:
                     # we should increase tolerance after exponential reversing
