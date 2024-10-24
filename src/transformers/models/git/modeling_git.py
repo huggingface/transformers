@@ -1283,7 +1283,7 @@ class GitModel(GitPreTrainedModel):
             past_key_values_length = (
                 past_key_values[0][0].shape[2]
                 if not isinstance(past_key_values, Cache)
-                else past_key_values.get_past_seen_tokens()
+                else past_key_values.get_seq_length()
             )
 
         # Prepare head mask if needed
