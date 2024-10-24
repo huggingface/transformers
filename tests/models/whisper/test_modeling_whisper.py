@@ -3129,10 +3129,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         for i in range(num_samples):
-            if isinstance(EXPECTED_TEXT[i], str):
                 assert decoded_all[i] == EXPECTED_TEXT[i]
-            elif isinstance(EXPECTED_TEXT[i], tuple):
-                assert decoded_all[i] in EXPECTED_TEXT[i]
 
     @slow
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
