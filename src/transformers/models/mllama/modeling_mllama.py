@@ -1887,6 +1887,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1949,7 +1950,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1979,12 +1980,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.vision_output_dim = config.vision_config.vision_output_dim
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
-        self.vision_model = MllamaVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
-        self.language_model = MllamaForCausalLM._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_model = MllamaVisionModel._from_config(config.vision_config)
+        self.language_model = MllamaForCausalLM._from_config(config.text_config)
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
