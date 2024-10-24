@@ -905,3 +905,55 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         # No need to check the logits, we just check inference runs fine.
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+    @require_torch
+    def test_object_detection_training(self):
+        model_name = "google/owlv2-base-patch16"
+        model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        inputs = processor(
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        model.train()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        for _ in range(10):
+            optimizer.zero_grad()
+            outputs = model(**inputs)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+
+        self.assertLess(loss.item(), 1.0)
+
+    @require_torch
+    def test_object_detection_fine_tuning(self):
+        model_name = "google/owlv2-base-patch16"
+        model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        inputs = processor(
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        model.train()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        for _ in range(10):
+            optimizer.zero_grad()
+            outputs = model(**inputs)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+
+        self.assertLess(loss.item(), 1.0)
