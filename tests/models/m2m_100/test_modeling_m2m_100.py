@@ -797,6 +797,18 @@ class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add 
     def test_batching_equivalence(self):
         pass
 
+    @unittest.skip(
+        reason="For M2M100DecoderModel, the decoder inputs are usually fake, so they do not contain attentions."
+    )
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(
+        reason="For M2M100DecoderModel, the decoder inputs are usually fake, so they do not contain hidden states."
+    )
+    def test_hidden_states_output(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece
