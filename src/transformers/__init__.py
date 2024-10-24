@@ -1301,6 +1301,8 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "BayesianDetectorConfig",
+            "BayesianDetectorModel",
             "BeamScorer",
             "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
@@ -1339,6 +1341,9 @@ else:
             "StopStringCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
+            "SynthIDTextWatermarkDetector",
+            "SynthIDTextWatermarkingConfig",
+            "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
@@ -6213,6 +6218,8 @@ if TYPE_CHECKING:
         )
         from .generation import (
             AlternatingCodebooksLogitsProcessor,
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             BeamScorer,
             BeamSearchScorer,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -6251,6 +6258,9 @@ if TYPE_CHECKING:
             StopStringCriteria,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkDetector,
+            SynthIDTextWatermarkingConfig,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
