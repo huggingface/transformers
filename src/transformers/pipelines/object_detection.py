@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
