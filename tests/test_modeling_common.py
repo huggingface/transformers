@@ -2539,7 +2539,9 @@ class ModelTesterMixin:
             tf_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class}")
+            self.assertLessEqual(
+                max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}"
+            )
         else:
             raise ValueError(
                 "`tf_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `tf.Tensor`. Got"

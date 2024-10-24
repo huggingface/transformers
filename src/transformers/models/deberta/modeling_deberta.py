@@ -140,7 +140,7 @@ def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
 @torch.jit.script
 def build_rpos(query_layer: torch.Tensor, key_layer: torch.Tensor, relative_pos):
     if query_layer.size(-2) != key_layer.size(-2):
-        return build_relative_position(key_layer, key_layer)
+        return build_relative_position(query_layer, key_layer)
     else:
         return relative_pos
 
@@ -345,7 +345,7 @@ class DisentangledSelfAttention(nn.Module):
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
             r_pos = build_rpos(
-                query_layer,
+                key_layer,
                 key_layer,
                 relative_pos,
             )

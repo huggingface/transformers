@@ -336,7 +336,7 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = scaled_size_sqrt(pos_key_layer, scale_factor)
+            scale = scaled_size_sqrt(pos_query_layer, scale_factor)
             r_pos = build_rpos(
                 query_layer,
                 key_layer,
