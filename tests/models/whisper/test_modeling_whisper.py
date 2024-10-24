@@ -1837,9 +1837,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
-        EXPECTED_TRANSCRIPT = (
-            " Mr. Quilter is the apostle of the middle classes, and we are glad to"
-        )
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -1857,9 +1855,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
-        EXPECTED_TRANSCRIPT = (
-            " Mr. Quilter is the apostle of the middle classes and we are glad"
-        )
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -2247,12 +2243,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                         "timestamp": (23.16, 28.68),
                     },
                     {
-                        "text": (
-                            " and can discover"
-                        ),
+                        "text": (" and can discover"),
                         "timestamp": (28.68, 29.98),
                     },
-
                 ],
             }
         ]
@@ -2351,7 +2344,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
         # modified here since we add eos token + start tokens in generate
-        # nevertheless would have to be tested and compared with expected from openai 
+        # nevertheless would have to be tested and compared with expected from openai
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -2506,19 +2499,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert (
-            transcription
-            == " Mirchi mein ki tene vibinda prajatiya hai"
-        )
+        assert transcription == " Mirchi mein ki tene vibinda prajatiya hai"
 
         # set task to translate
         sequences = model.generate(input_features, task="translate")
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert (
-            transcription
-            == " How much is the difference between the girls?"
-        )
+        assert transcription == " How much is the difference between the girls?"
 
     @slow
     def test_default_multilingual_transcription_long_form(self):
@@ -2846,7 +2833,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": True,
             "logprob_threshold": -1.0,
-            "renormalize_logits":True,  # necessary to match OAI beam search implementation
+            "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
         def check_gen_kwargs(inputs, generation_config, *args, **kwargs):
@@ -2987,11 +2974,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         gen_kwargs = {
             "return_timestamps": True,
-            "no_speech_threshold": 0.6, # necessary to trigger no speech detection
+            "no_speech_threshold": 0.6,  # necessary to trigger no speech detection
             "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": False,
-            "logprob_threshold": -2.0, # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
+            "logprob_threshold": -2.0,  # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
         }
 
         decoded_single = []
@@ -3062,16 +3049,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": True,
-            "logprob_threshold": -2.0, # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
+            "logprob_threshold": -2.0,  # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
             "num_beams": 5,
-            "renormalize_logits":True,  # necessary to match OAI beam search implementation
+            "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         for i in range(num_samples):
-                assert decoded_all[i] == EXPECTED_TEXT[i]
+            assert decoded_all[i] == EXPECTED_TEXT[i]
 
     @slow
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
