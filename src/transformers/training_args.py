@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -153,14 +154,19 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
+    ADAMW_TORCH_4BIT = "adamw_torch_4bit"
+    ADEMAMIX = "ademamix"
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    ADEMAMIX_8BIT = "ademamix_8bit"
     LION_8BIT = "lion_8bit"
     LION = "lion_32bit"
     PAGED_ADAMW = "paged_adamw_32bit"
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_ADEMAMIX = "paged_ademamix_32bit"
+    PAGED_ADEMAMIX_8BIT = "paged_ademamix_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
@@ -175,6 +181,9 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
     LOMO = "lomo"
     ADALOMO = "adalomo"
+    GROKADAMW = "grokadamw"
+    SCHEDULE_FREE_ADAMW = "schedule_free_adamw"
+    SCHEDULE_FREE_SGD = "schedule_free_sgd"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -413,7 +422,7 @@ class TrainingArguments:
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
-            the [TF32](https://huggingface.co/docs/transformers/performance#tf32) documentation. This is an
+            the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
@@ -609,10 +618,11 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-            The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
-            adafactor.
+            The optimizer to use, such as "adamw_hf", "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
+            "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
+            for a full list of optimizers.
         optim_args (`str`, *optional*):
-            Optional arguments that are supplied to AnyPrecisionAdamW.
+            Optional arguments that are supplied to optimizers such as AnyPrecisionAdamW, AdEMAMix, and GaLore.
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
@@ -673,9 +683,9 @@ class TrainingArguments:
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-            - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+            - `"end"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and a
               draft of a model card when the [`~Trainer.save_model`] method is called.
-            - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and
+            - `"every_save"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and
               a draft of a model card each time there is a model save. The pushes are asynchronous to not block
               training, and in case the save are very frequent, a new push is only attempted if the previous one is
               finished. A last push is made with the final model at the end of training.
@@ -697,8 +707,12 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
-            Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
-            that need inputs, predictions and references for scoring calculation in Metric class.
+            This argument is deprecated. Use `include_for_metrics` instead, e.g, `include_for_metrics = ["inputs"]`.
+        include_for_metrics (`List[str]`, *optional*, defaults to `[]`):
+            Include additional data in the `compute_metrics` function if needed for metrics computation.
+            Possible options to add to `include_for_metrics` list:
+            - `"inputs"`: Input data passed to the model, intended for calculating input dependent metrics.
+            - `"loss"`: Loss values computed during evaluation, intended for calculating loss dependent metrics.
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
@@ -789,6 +803,11 @@ class TrainingArguments:
 
         eval_use_gather_object (`bool`, *optional*, defaults to `False`):
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
+
+        use_liger_kernel (`bool`, *optional*, defaults to `False`):
+            Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) Kernel for LLM model training.
+            It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
+            flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
     """
 
     framework = "pt"
@@ -1089,7 +1108,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1347,7 +1366,17 @@ class TrainingArguments:
         },
     )
     include_inputs_for_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+        default=False,
+        metadata={
+            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
+        },
+    )
+    include_for_metrics: List[str] = field(
+        default_factory=list,
+        metadata={
+            "help": "List of strings to specify additional data to include in the `compute_metrics` function."
+            "Options: 'inputs', 'loss'."
+        },
     )
     eval_do_concat_batches: bool = field(
         default=True,
@@ -1487,6 +1516,11 @@ class TrainingArguments:
         metadata={
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
+    )
+
+    use_liger_kernel: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
     )
 
     eval_use_gather_object: Optional[bool] = field(
@@ -1913,10 +1947,8 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = (
-                        str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
-                        if is_accelerate_available("0.26.0")
-                        else fsdp_option.upper()
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
+                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
                     )
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
@@ -1968,7 +2000,9 @@ class TrainingArguments:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
             if not is_accelerate_available():
-                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
+                raise ValueError(
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
+                )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -2044,6 +2078,19 @@ class TrainingArguments:
                 "This is not supported and we recommend you to update your version."
             )
 
+        if self.data_seed is not None:
+            if not is_accelerate_available("1.1.0"):
+                raise NotImplementedError(
+                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
+                    "This is not supported and we recommend you to update your version."
+                )
+
+        if self.include_inputs_for_metrics:
+            logger.warning(
+                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
+            )
+            self.include_for_metrics.append("inputs")
+
     def __str__(self):
         self_as_dict = asdict(self)
 
@@ -2102,7 +2149,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
@@ -2198,6 +2245,9 @@ class TrainingArguments:
             elif is_torch_mlu_available():
                 device = torch.device("mlu:0")
                 torch.mlu.set_device(device)
+            elif is_torch_musa_available():
+                device = torch.device("musa:0")
+                torch.musa.set_device(device)
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
@@ -2811,9 +2861,9 @@ class TrainingArguments:
             strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
                 Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-                - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+                - `"end"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`]) and a
                 draft of a model card when the [`~Trainer.save_model`] method is called.
-                - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`])
+                - `"every_save"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`])
                   and
                 a draft of a model card each time there is a model save. The pushes are asynchronous to not block
                 training, and in case the save are very frequent, a new push is only attempted if the previous one is

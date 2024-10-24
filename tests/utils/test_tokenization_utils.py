@@ -36,7 +36,7 @@ from transformers.testing_utils import TOKEN, USER, is_staging_test, require_tok
 from transformers.tokenization_utils import ExtensionsTrie, Trie
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
@@ -253,7 +253,6 @@ class TrieTest(unittest.TestCase):
         trie.add("Hello 友達")
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
         trie.add("Hello")
-        trie.data
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
 
     def test_trie_split(self):
@@ -326,8 +325,9 @@ class ExtensionsTrieTest(unittest.TestCase):
     def test_no_extension_match(self):
         trie = ExtensionsTrie()
         # Test searching for a prefix that doesn't match any key
-        with self.assertRaises(KeyError):
-            trie.extensions("unknown")
+        values = trie.extensions("unknown")
+
+        self.assertEqual(len(values), 0)
 
     def test_update_value(self):
         trie = ExtensionsTrie()

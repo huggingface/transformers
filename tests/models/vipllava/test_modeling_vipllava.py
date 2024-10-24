@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -73,7 +74,7 @@ class VipLlavaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -99,7 +100,7 @@ class VipLlavaVisionText2TextModelTester:
         self.vision_feature_layers = vision_feature_layers
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -110,7 +111,9 @@ class VipLlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 231
+        self.encoder_seq_length = 232
+        self.num_image_tokens = 225
+        self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return VipLlavaConfig(
@@ -120,6 +123,7 @@ class VipLlavaVisionText2TextModelTester:
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_layers=self.vision_feature_layers,
+            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -140,8 +144,9 @@ class VipLlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
-        input_ids[:, 1] = config.image_token_index
+
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -152,20 +157,65 @@ class VipLlavaVisionText2TextModelTester:
 
 @require_torch
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest with Llava->VipLlava
-class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `VipLlavaForConditionalGeneration`.
     """
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VipLlavaConfig, has_text_modality=False)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -191,6 +241,16 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 
@@ -228,26 +288,23 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_vipllava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
-        ).to(torch_device)
+        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
         # Simulate some user inputs
         pixel_values = torch.randn(
-            (2, 3, 336, 336),
+            (1, 3, 336, 336),
             dtype=torch.float,
             device=torch_device,
         )
         input_ids = torch.tensor(
             [
                 [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
             ],
             dtype=torch.long,
             device=torch_device,
         )
         attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1]],
             dtype=torch.long,
             device=torch_device,
         )
@@ -260,3 +317,33 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing(self):
+        model_id = "llava-hf/vip-llava-7b-hf"
+        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image>\nDescribe the image:\nASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs.input_ids.shape[-1] == 18)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

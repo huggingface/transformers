@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 LLMs，即大语言模型，是文本生成背后的关键组成部分。简单来说，它们包含经过大规模预训练的transformer模型，用于根据给定的输入文本预测下一个词（或更准确地说，下一个`token`）。由于它们一次只预测一个`token`，因此除了调用模型之外，您需要执行更复杂的操作来生成新的句子——您需要进行自回归生成。
 
-自回归生成是在给定一些初始输入，通过迭代调用模型及其自身的生成输出来生成文本的推理过程，。在🤗 Transformers中，这由[`~generation.GenerationMixin.generate`]方法处理，所有具有生成能力的模型都可以使用该方法。
+自回归生成是在给定一些初始输入，通过迭代调用模型及其自身的生成输出来生成文本的推理过程。在🤗 Transformers中，这由[`~generation.GenerationMixin.generate`]方法处理，所有具有生成能力的模型都可以使用该方法。
 
 本教程将向您展示如何：
 

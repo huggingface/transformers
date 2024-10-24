@@ -158,5 +158,5 @@ There was a lot in here, so let’s summarize with a quick checklist you can fol
 - Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
 - Don’t forget to take `jit_compile=True` out again when you move to TPU!
 - 🙏🙏🙏🥺🥺🥺
-- Call model.fit()
+- Call `model.fit()`
 - You did it!

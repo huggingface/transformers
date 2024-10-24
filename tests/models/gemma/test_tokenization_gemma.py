@@ -138,7 +138,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
             model_name="google/gemma-2b",
-            revision="",
             padding=False,
         )
 
