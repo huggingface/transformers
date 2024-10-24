@@ -575,7 +575,7 @@ class ClapAudioOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size

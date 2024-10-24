@@ -483,7 +483,7 @@ class Swin2SROutput(nn.Module):
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
 class Swin2SRLayer(nn.Module):
     def __init__(
-        self, config, dim, input_resolution, num_heads, drop_path_rate, shift_size=0, pretrained_window_size=0
+        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
     ):
         super().__init__()
         self.input_resolution = input_resolution
