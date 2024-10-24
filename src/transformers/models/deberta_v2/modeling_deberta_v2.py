@@ -659,11 +659,11 @@ class DebertaV2Encoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         next_kv = hidden_states
-
+        output_states = hidden_states
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (next_kv,)
+                all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
