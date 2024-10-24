@@ -527,6 +527,7 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.diffllama": ["DiffLlamaConfig"],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -1013,6 +1014,7 @@ else:
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
+    _import_structure["models.diffllama"].append("DiffLlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -2572,6 +2574,16 @@ else:
             "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.diffllama"].extend(
+        [
+            "DiffLlamaForCausalLM",
+            "DiffLlamaForQuestionAnswering",
+            "DiffLlamaForSequenceClassification",
+            "DiffLlamaForTokenClassification",
+            "DiffLlamaModel",
+            "DiffLlamaPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -4760,6 +4772,7 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
+    _import_structure["models.diffllama"].extend(["FlaxDiffLlamaForCausalLM", "FlaxDiffLlamaModel", "FlaxDiffLlamaPreTrainedModel"])
     _import_structure["models.gemma"].extend(["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
@@ -5397,6 +5410,7 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.diffllama import DiffLlamaConfig
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -5939,6 +5953,7 @@ if TYPE_CHECKING:
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
+        from .models.diffllama import DiffLlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBartTokenizer
@@ -7254,6 +7269,14 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.diffllama import (
+            DiffLlamaForCausalLM,
+            DiffLlamaForQuestionAnswering,
+            DiffLlamaForSequenceClassification,
+            DiffLlamaForTokenClassification,
+            DiffLlamaModel,
+            DiffLlamaPreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
@@ -9013,6 +9036,11 @@ if TYPE_CHECKING:
             FlaxLlamaForCausalLM,
             FlaxLlamaModel,
             FlaxLlamaPreTrainedModel,
+        )
+        from .models.diffllama import (
+            FlaxDiffLlamaForCausalLM,
+            FlaxDiffLlamaModel,
+            FlaxDiffLlamaPreTrainedModel,
         )
         from .models.longt5 import (
             FlaxLongT5ForConditionalGeneration,
