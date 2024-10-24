@@ -1870,6 +1870,9 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is split between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
+        layer_device_map (`typing.Optional[typing.Dict[int, typing.Union[str, torch.device, int]]]`, *optional*): Mapping between the layers and its device.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1888,6 +1891,8 @@ class OffloadedStaticCache(StaticCache):
             The device used to offload to.
         dtype (`torch.dtype`):
             The `dtype` used to initializing the cache.
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+            Mapping between the layers and its device.
 
     Example:
 
@@ -1916,12 +1921,14 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
+        self.layer_device_map = layer_device_map
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
