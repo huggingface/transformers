@@ -44,7 +44,7 @@ from ..phi3.modeling_phi3 import (
 from .configuration_glm import GlmConfig
 
 
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 
 logger = logging.get_logger(__name__)
 
