@@ -43,15 +43,15 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
 
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
         pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype)
-        image_token = processor.image_token if hasattr(processor, "image_token") else "<image>"
+        image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
                 "images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "text": f"{image_token} This is a ",
+                "text": f"{image_token}This is a ",
             },
             {
                 "images": "./tests/fixtures/tests_samples/COCO/000000039769.png",
-                "text": f"{image_token} Here I see a ",
+                "text": f"{image_token}Here I see a ",
             },
         ]
         return pipe, examples
