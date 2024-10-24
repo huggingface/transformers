@@ -55,7 +55,7 @@ if is_flash_attn_2_available():
 from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 
 
 class GlmRMSNorm(nn.Module):
