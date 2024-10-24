@@ -214,6 +214,7 @@ class DonutProcessor(ProcessorMixin):
         else:
             return [] if is_inner_value else {"text_sequence": tokens}
 
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.post_process_image_text_to_text
     def post_process_image_text_to_text(self, generated_outputs):
         """
         Post-process the output of the model to decode the text.

@@ -95,12 +95,14 @@ def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "
                     idx_images += 1
                 else:
                     raise ValueError(
-                        "The number of images in the chat should be the same as the number of images passed."
+                        "The number of images in the chat should be the same as the number of images passed to the pipeline."
                     )
 
     # The number of images passed should be consistent with the number of images in the chat without an image key
     if idx_images != len(images):
-        raise ValueError("The number of images in the chat should be the same as the number of images passed.")
+        raise ValueError(
+            "The number of images in the chat should be the same as the number of images passed to the pipeline."
+        )
 
     return retrieved_images
 
@@ -287,9 +289,9 @@ class ImageTextToTextPipeline(Pipeline):
                 return super().__call__(chats, **kwargs)
 
         # encourage the user to use the chat format if supported
-        if hasattr(self.processor, "chat_template") and self.processor.chat_template is not None:
+        if getattr(self.processor, "chat_template", None) is not None:
             logger.warning_once(
-                "The pipeline detected no chat format in the prompt, but this model supports chat format. "
+                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even though this model supports chat. "
                 "Consider using the chat format for better results. For more information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
 

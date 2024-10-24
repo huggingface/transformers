@@ -342,6 +342,7 @@ class Idefics3Processor(ProcessorMixin):
         decode_output = self.tokenizer.decode(*args, **kwargs)
         return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
 
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.post_process_image_text_to_text
     def post_process_image_text_to_text(self, generated_outputs):
         """
         Post-process the output of the model to decode the text.

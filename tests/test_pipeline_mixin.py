@@ -492,8 +492,19 @@ class PipelineTesterMixin:
                     yield copy.deepcopy(random.choice(examples))
 
             out = []
-            for item in pipeline(data(10), batch_size=4):
-                out.append(item)
+            # check if pipeline call signature has more than one argument
+            # in this case, we can't use a single generator, we need to collate the data first
+            input_signature = {
+                k: v for k, v in inspect.signature(pipeline.__call__).parameters.items() if k != "kwargs"
+            }
+            if len(input_signature) > 1:
+                data_list = list(data(10))
+                # collate data_list
+                data_dict = {k: [d[k] for d in data_list] for k in data_list[0]}
+                out = pipeline(**data_dict, batch_size=4)
+            else:
+                for item in pipeline(data(10), batch_size=4):
+                    out.append(item)
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
@@ -587,6 +598,18 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_image_segmentation_fp16(self):
         self.run_task_tests(task="image-segmentation", torch_dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text(self):
+        self.run_task_tests(task="image-text-to-text")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text_fp16(self):
+        self.run_task_tests(task="image-text-to-text", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision

@@ -41,27 +41,27 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(
-            model=model, tokenizer=tokenizer, image_processor=processor, torch_dtype=torch_dtype
-        )
+    def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
+        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype)
         image_token = processor.image_token if hasattr(processor, "image_token") else "<image>"
-        examples = {
-            "images": [
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            ],
-            "text": [f"{image_token} This is a ", f"{image_token} Here I see a "],
-        }
+        examples = [
+            {
+                "images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "text": f"{image_token} This is a ",
+            },
+            {
+                "images": "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "text": f"{image_token} Here I see a ",
+            },
+        ]
         return pipe, examples
 
     def run_pipeline_test(self, pipe, examples):
-        outputs = pipe(examples.get("images"), text=examples.get("text"), max_new_tokens=20)
+        outputs = pipe(examples[0].get("images"), text=examples[0].get("text"), max_new_tokens=20)
         self.assertEqual(
             outputs,
             [
-                [{"input_text": ANY(str), "generated_text": ANY(str)}],
-                [{"input_text": ANY(str), "generated_text": ANY(str)}],
+                {"input_text": ANY(str), "generated_text": ANY(str)},
             ],
         )
 
