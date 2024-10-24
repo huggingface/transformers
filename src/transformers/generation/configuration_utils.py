@@ -1471,8 +1471,8 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ```python
     >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
 
-    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b-it')
-    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b-it')
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b', padding_side="left")
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b')
 
     >>> # SynthID Text configuration
     >>> watermarking_config = SynthIDTextWatermarkingConfig(
@@ -1481,11 +1481,11 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ... )
 
     >>> # Generation with watermarking
-    >>> tokenized_prompts = tokenizer(["your prompts here"])
+    >>> tokenized_prompts = tokenizer(["Once upon a time, "], return_tensors="pt", padding=True)
     >>> output_sequences = model.generate(
-    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True,
-    ... )
-    >>> watermarked_text = tokenizer.batch_decode(output_sequences)
+    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True, max_new_tokens=10
+    >>> )
+    >>> watermarked_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
     ```
     """
 
