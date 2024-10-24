@@ -644,6 +644,7 @@ class MaskFormerSwinStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 )
                 for i in range(depth)
