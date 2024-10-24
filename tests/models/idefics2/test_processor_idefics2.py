@@ -276,6 +276,23 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things<image>",
+        ]
+        images = [[self.image1], []]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
