@@ -38,7 +38,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -370,31 +369,6 @@ class PhimoeFlashAttention2(PhimoeAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if (
-                getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -1403,6 +1377,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1463,17 +1438,12 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        if labels is None and not is_torchdynamo_compiling():
-            logger.warning_once(
-                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
-            )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        # TODO: remove the float() operation in v4.46
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         aux_loss = None
         if output_router_logits:

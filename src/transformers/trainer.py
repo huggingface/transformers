@@ -582,6 +582,16 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        # Just in case the model was wrapped outside of the `Trainer`
+        unwrapped_model = self.accelerator.unwrap_model(model)
+        model_forward = (
+            unwrapped_model.forward
+            if not _is_peft_model(unwrapped_model)
+            else unwrapped_model.get_base_model().forward
+        )
+
+        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
@@ -965,7 +975,7 @@ class Trainer:
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
-        if self.eval_dataset is None or not has_length(self.eval_dataset):
+        if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
 
@@ -986,10 +996,10 @@ class Trainer:
                 return SequentialSampler(eval_dataset)
 
         if self.args.group_by_length:
-            if is_datasets_available() and isinstance(self.eval_dataset, datasets.Dataset):
+            if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
                 lengths = (
-                    self.eval_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in self.eval_dataset.column_names
+                    eval_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in eval_dataset.column_names
                     else None
                 )
             else:
@@ -997,7 +1007,7 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
-                dataset=self.eval_dataset,
+                dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
@@ -2426,8 +2436,14 @@ class Trainer:
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
+                    is_last_step_and_steps_less_than_grad_acc = (
+                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
+                    )
+                    do_sync_step = is_last_step_and_steps_less_than_grad_acc or (
+                        total_batched_samples % args.gradient_accumulation_steps == 0
+                    )
                     # Since we perform prefetching, we need to manually set sync_gradients
-                    if total_batched_samples % args.gradient_accumulation_steps != 0:
+                    if not do_sync_step:
                         self.accelerator.gradient_state._set_sync_gradients(False)
                     else:
                         self.accelerator.gradient_state._set_sync_gradients(True)
@@ -2482,16 +2498,7 @@ class Trainer:
 
                     self.current_flos += float(self.floating_point_ops(inputs))
 
-                    is_last_step_and_steps_less_than_grad_acc = (
-                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                    )
-
-                    if (
-                        (total_batched_samples) % args.gradient_accumulation_steps == 0
-                        or
-                        # last step in epoch but step is always smaller than gradient_accumulation_steps
-                        is_last_step_and_steps_less_than_grad_acc
-                    ):
+                    if do_sync_step:
                         # Since we perform prefetching, we need to manually set sync_gradients to True
                         self.accelerator.gradient_state._set_sync_gradients(True)
 
@@ -3621,8 +3628,11 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        # if num_items_in_batch is not None:
-        #     inputs["num_items_in_batch"] = num_items_in_batch
+        if self.model_accepts_loss_kwargs:
+            loss_kwargs = {}
+            if num_items_in_batch is not None:
+                loss_kwargs["num_items_in_batch"] = num_items_in_batch
+            inputs = {**inputs, **loss_kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.

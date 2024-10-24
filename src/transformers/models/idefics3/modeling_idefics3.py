@@ -621,12 +621,13 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
     def _init_weights(self, module):
         std = (
-            self.config.initializer_range
+            self.config.text_config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
@@ -667,6 +668,7 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     config_class = Idefics3VisionConfig
+    _supports_sdpa = False
 
     def __init__(self, config: Idefics3VisionConfig):
         super().__init__(config)
@@ -824,18 +826,16 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics3VisionTransformer._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_model = Idefics3VisionTransformer._from_config(config.vision_config)
         self.connector = Idefics3Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = int(
             ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 
@@ -1210,10 +1210,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:

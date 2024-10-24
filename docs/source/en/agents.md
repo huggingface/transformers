@@ -332,7 +332,7 @@ This code can quickly be converted into a tool, just by wrapping it in a functio
 from transformers import tool
 
 @tool
-def model_download_counter(task: str) -> str:
+def model_download_tool(task: str) -> str:
     """
     This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub.
     It returns the name of the checkpoint.
@@ -345,7 +345,7 @@ def model_download_counter(task: str) -> str:
 ```
 
 The function needs:
-- A clear name. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's put `model_download_counter`.
+- A clear name. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's put `model_download_tool`.
 - Type hints on both inputs and output
 - A description, that includes an 'Args:' part where each argument is described (without a type indication this time, it will be pulled from the type hint).
 All these will be automatically baked into the agent's system prompt upon initialization: so strive to make them as clear as possible!
@@ -367,7 +367,7 @@ You get the following:
 ======== New task ========
 Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?
 ==== Agent is executing the code below:
-most_downloaded_model = model_download_counter(task="text-to-video")
+most_downloaded_model = model_download_tool(task="text-to-video")
 print(f"The most downloaded model for the 'text-to-video' task is {most_downloaded_model}.")
 ====
 ```
