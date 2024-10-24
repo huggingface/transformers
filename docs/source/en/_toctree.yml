@@ -179,6 +179,8 @@
     title: Optimum
   - local: quantization/torchao
     title: TorchAO
+  - local: quantization/bitnet
+    title: BitNet
   - local: quantization/compressed_tensors
     title: compressed-tensors
   - local: quantization/contribute
@@ -412,6 +414,8 @@
         title: Gemma
       - local: model_doc/gemma2
         title: Gemma2
+      - local: model_doc/glm
+        title: GLM
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -738,6 +742,8 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moshi
+        title: Moshi
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody

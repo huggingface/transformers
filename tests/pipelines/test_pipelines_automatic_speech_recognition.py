@@ -33,7 +33,7 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter
+from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -67,14 +67,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
             self.skipTest(reason="No tokenizer available")
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
 
         # test with a raw waveform
@@ -1199,7 +1212,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer_2 = AutomaticSpeechRecognitionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
-        output_2 = speech_recognizer_2(ds[0]["audio"])
+        output_2 = speech_recognizer_2(ds[40]["audio"])
         self.assertEqual(output, output_2)
 
         # either use generate_kwargs or set the model's generation_config
@@ -1211,7 +1224,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             generate_kwargs={"task": "transcribe", "language": "<|it|>"},
         )
-        output_3 = speech_translator(ds[0]["audio"])
+        output_3 = speech_translator(ds[40]["audio"])
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
 
     @slow
@@ -1883,15 +1896,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="vasista22/whisper-hindi-large-v2",
             device=torch_device,
         )
-        # Original model wasn't trained with timestamps and has incorrect generation config
-        pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
         # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
+        # Original model wasn't trained with timestamps and has incorrect generation config
         out = pipe(
             audio,
             return_timestamps=True,
+            generate_kwargs={"generation_config": GenerationConfig.from_pretrained("openai/whisper-large-v2")},
         )
         self.assertEqual(
             out,
@@ -1976,3 +1989,11 @@ class AudioUtilsTest(unittest.TestCase):
         )
         with self.assertRaises(StopIteration):
             next(iter_)
+
+    def test_ffmpeg_no_additional_args(self):
+        mic = ffmpeg_microphone_live(16000, 2.0)
+        mic.close()
+
+    def test_ffmpeg_additional_args(self):
+        mic = ffmpeg_microphone_live(16000, 2.0, ffmpeg_additional_args=["-nostdin"])
+        mic.close()

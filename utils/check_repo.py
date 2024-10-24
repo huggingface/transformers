@@ -82,6 +82,8 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics2PerceiverResampler",
+    "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
 ]
 
@@ -225,7 +227,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
-    "CLIPTextModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
@@ -327,6 +328,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SiglipVisionModel",
     "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
+    "CLIPTextModel",
+    "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
 ]
 
 # DO NOT edit this list!
@@ -1089,18 +1092,34 @@ def check_public_method_exists(documented_methods_map):
             for submodule_name in nested_submodules:
                 if submodule_name == "transformers":
                     continue
-                submodule = getattr(submodule, submodule_name)
+
+                try:
+                    submodule = getattr(submodule, submodule_name)
+                except AttributeError:
+                    failures.append(f"Could not parse {submodule_name}. Are the required dependencies installed?")
+                continue
+
         class_name = nested_path[-1]
-        obj_class = getattr(submodule, class_name)
+
+        try:
+            obj_class = getattr(submodule, class_name)
+        except AttributeError:
+            failures.append(f"Could not parse {submodule_name}. Are the required dependencies installed?")
+            continue
+
         # Checks that all explicitly documented methods are defined in the class
         for method in methods:
             if method == "all":  # Special keyword to document all public methods
                 continue
-            if not hasattr(obj_class, method):
-                failures.append(
-                    "The following public method is explicitly documented but not defined in the corresponding "
-                    f"class. class: {obj}, method: {method}"
-                )
+            try:
+                if not hasattr(obj_class, method):
+                    failures.append(
+                        "The following public method is explicitly documented but not defined in the corresponding "
+                        f"class. class: {obj}, method: {method}. If the method is defined, this error can be due to "
+                        f"lacking dependencies."
+                    )
+            except ImportError:
+                pass
 
     if len(failures) > 0:
         raise Exception("\n".join(failures))
