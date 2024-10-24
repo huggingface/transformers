@@ -25,7 +25,6 @@ from transformers import (
     GemmaTokenizer,
     GemmaTokenizerFast,
     PaliGemmaConfig,
-    PaliGemma2Config,
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
     SiglipImageProcessor,
@@ -92,7 +91,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "projector_hidden_act": "gelu_fast",
             "vision_use_head": False,
         }
-        final_config = PaliGemma2Config(text_config=text_config, vision_config=vision_config, **config)
+        final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
     else:
         raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA2_VARIANTS}")
     return final_config
