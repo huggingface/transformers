@@ -260,7 +260,6 @@ class HubertGroupNormConvLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
 class HubertPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -272,25 +271,29 @@ class HubertPositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = weight_norm(self.conv, name="weight", dim=2)
-            if hasattr(self.conv, "parametrizations"):
-                weight_g = self.conv.parametrizations.weight.original0
-                weight_v = self.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.conv.weight_g
-                weight_v = self.conv.weight_v
-            deepspeed.zero.register_external_parameter(self, weight_v)
-            deepspeed.zero.register_external_parameter(self, weight_g)
+        if config.conv_pos_batch_norm:
+            batch_norm = nn.BatchNorm1d(config.hidden_size)
+            self.conv = nn.Sequential(batch_norm, self.conv)
         else:
-            self.conv = weight_norm(self.conv, name="weight", dim=2)
+            weight_norm = nn.utils.weight_norm
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                weight_norm = nn.utils.parametrizations.weight_norm
+
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                    self.conv = weight_norm(self.conv, name="weight", dim=2)
+                if hasattr(self.conv, "parametrizations"):
+                    weight_g = self.conv.parametrizations.weight.original0
+                    weight_v = self.conv.parametrizations.weight.original1
+                else:
+                    weight_g = self.conv.weight_g
+                    weight_v = self.conv.weight_v
+                deepspeed.zero.register_external_parameter(self, weight_v)
+                deepspeed.zero.register_external_parameter(self, weight_g)
+            else:
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
