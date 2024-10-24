@@ -567,11 +567,12 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
+        num_beams = generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
-            num_beams=kwargs.get("num_beams", 1),
+            num_beams=num_beams,
             device=device,
         )
 
@@ -724,12 +725,10 @@ class WhisperGenerationMixin(GenerationMixin):
                     return_token_timestamps=return_token_timestamps,
                 )
 
+                seek[prev_i] += segment_offset     
+
                 current_segments[prev_i] += segments
 
-                if is_shortform:
-                    seek[prev_i] += max_frames[i]
-                else:
-                    seek[prev_i] += segment_offset
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -859,12 +858,15 @@ class WhisperGenerationMixin(GenerationMixin):
             model_output_type = type(seek_outputs)
 
             # post-process sequence tokens and outputs to be in list form
+            is_first_segment = (seek == 0.).all()
+
             seek_sequences, seek_outputs = self._postprocess_outputs(
                 seek_outputs=seek_outputs,
                 decoder_input_ids=decoder_input_ids,
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
+                is_first_segment=is_first_segment,
             )
 
             if cur_bsz < batch_size:
@@ -879,22 +881,16 @@ class WhisperGenerationMixin(GenerationMixin):
             new_decoder_attention_mask = []
 
             for i, seek_sequence in enumerate(seek_sequences):
-                # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                prev_i = batch_idx_map[fallback_index_map[i]]
-                is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
-
-                # remove eos token id
-                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
-                    seek_sequence = seek_sequence[:-1]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-
-                # remove all padding tokens
+                # remove all padding tokens, except for the eos token
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
+                    if generation_config.pad_token_id == generation_config.eos_token_id:
+                        # we do not remove the eos token id since it is needed for avg logprob calculation in _need_fallback
+                        num_paddings -= 1
+                    if num_paddings != 0:
+                        seek_sequence = seek_sequence[:-num_paddings]
+                        if return_token_timestamps and not is_shortform:
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -905,7 +901,15 @@ class WhisperGenerationMixin(GenerationMixin):
                     generation_config,
                     self.config.vocab_size,
                     temperature,
+                    is_first_segment,
+                    decoder_input_ids,
                 )
+
+                # remove eos token 
+                if seek_sequence[-1] == generation_config.eos_token_id:
+                    seek_sequence = seek_sequence[:-1]
+                    if return_token_timestamps:
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
@@ -949,10 +953,11 @@ class WhisperGenerationMixin(GenerationMixin):
         return current_segments
 
     def _postprocess_outputs(
-        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
+        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform, is_first_segment
     ):
         # remove all previously passed decoder input ids
-        start_idx = decoder_input_ids.shape[-1] if not is_shortform else torch.tensor(0)
+        # should happen only if it is the first generated segment
+        start_idx = decoder_input_ids.shape[-1] 
 
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, start_idx:]
@@ -1061,6 +1066,8 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config,
         vocab_size,
         temperature,
+        is_first_segment,
+        decoder_input_ids,
     ):
         needs_fallback = False
         should_skip = False
@@ -1076,7 +1083,7 @@ class WhisperGenerationMixin(GenerationMixin):
             else:
                 scores = seek_outputs[index]["scores"]
                 logprobs = self._retrieve_avg_logprobs(
-                    scores, seek_sequence, generation_config.eos_token_id, temperature
+                    scores, seek_sequence, generation_config.eos_token_id, temperature, is_first_segment, decoder_input_ids
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1752,22 +1759,22 @@ class WhisperGenerationMixin(GenerationMixin):
         return compression_ratio
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
+    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature, is_first_segment, decoder_input_ids):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
         if scores.shape[0] > tokens.shape[0]:
             scores = scores[: tokens.shape[0]]
         else:
-            tokens = tokens[-scores.shape[0] :]
+            tokens = tokens[-scores.shape[0]:]
 
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 
         # retrieve logprob of selected tokens and sum
-        sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-        length = (tokens != eos_token_id).sum(-1) if eos_token_id is not None else tokens.shape[0]
+        # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
+        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / (length + 1)
+        avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
 
     @staticmethod
@@ -1836,11 +1843,13 @@ class WhisperGenerationMixin(GenerationMixin):
             last_timestamp_pos = seek_num_frames[prev_idx]
             if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
+                # TODO: I think there is an unconsistency with above last_timestamp_pos 
                 last_timestamp_pos = timestamps[-1].item() - timestamp_begin
             segments = [
                 {
                     "start": time_offset[prev_idx],
-                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
+                    # here last_timestamp_pos is the number of frames from the last segment, so time precision is not 0.02 but 0.01
+                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision / 2, 
                     "tokens": seek_sequence,
                     "result": seek_outputs[idx],
                 }
