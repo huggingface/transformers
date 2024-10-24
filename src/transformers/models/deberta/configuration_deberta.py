@@ -85,6 +85,7 @@ class DebertaConfig(PretrainedConfig):
         legacy (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
             for mask infilling tasks.
+
     Example:
 
     ```python
