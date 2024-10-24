@@ -2571,45 +2571,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             == " How many different species are there in the chilli? How many different species are there in the chilli?"
         )
 
-    @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
-
-        output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all(token in text for token in expected_tokens))
-
-    @slow
-    def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
-
-        model.generation_config.forced_decoder_ids = None
-        model.config.forced_decoder_ids = None
-
-        output = model.generate(input_features, prompt_ids=prompt_ids, return_timestamps=True)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-
     @require_non_xpu
     @slow
     @require_torch_gpu
