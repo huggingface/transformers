@@ -16,6 +16,7 @@ from . import (
     albert,
     align,
     altclip,
+    aria,
     audio_spectrogram_transformer,
     auto,
     autoformer,
