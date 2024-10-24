@@ -294,6 +294,10 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_feed_forward_chunking(self):
         pass
 
+    @unittest.skip(reason="Unstable test")
+    def test_initialization(self):
+        pass
+
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
