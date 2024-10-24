@@ -47,7 +47,11 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
-    with open(os.path.join(pytorch_dump_folder_path, LukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
+    with open(
+        os.path.join(pytorch_dump_folder_path, LukeTokenizer.vocab_files_names["entity_vocab_file"]),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(entity_vocab, f)
 
     tokenizer = LukeTokenizer.from_pretrained(pytorch_dump_folder_path)

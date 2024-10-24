@@ -1071,7 +1071,7 @@ def get_checkpoint_shard_files(
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
-    with open(index_filename, "r") as f:
+    with open(index_filename, "r", encoding="utf-8") as f:
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
@@ -1227,7 +1227,7 @@ def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
     os.makedirs(os.path.join(repo, "refs"), exist_ok=True)
     if revision != commit_hash:
         ref_path = os.path.join(repo, "refs", revision)
-        with open(ref_path, "w") as f:
+        with open(ref_path, "w", encoding="utf-8") as f:
             f.write(commit_hash)
 
     # blobs
@@ -1356,7 +1356,7 @@ if cache_version < 1 and cache_is_not_empty:
 if cache_version < 1:
     try:
         os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
-        with open(cache_version_file, "w") as f:
+        with open(cache_version_file, "w", encoding="utf-8") as f:
             f.write("1")
     except Exception:
         logger.warning(

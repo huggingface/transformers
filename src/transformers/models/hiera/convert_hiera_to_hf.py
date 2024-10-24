@@ -161,7 +161,7 @@ def get_labels_for_classifier(model_name: str) -> Tuple[Dict[int, str], Dict[str
 
     filename = "imagenet-1k-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
     num_labels = len(id2label)

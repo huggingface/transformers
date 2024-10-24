@@ -686,7 +686,7 @@ def load_yaml(path):
 
 
 def save_json(content: Union[Dict, List], path: str) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(content, f)
 
 

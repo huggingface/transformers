@@ -573,15 +573,15 @@ def compute_predictions_logits(
         all_nbest_json[example.qas_id] = nbest_json
 
     if output_prediction_file:
-        with open(output_prediction_file, "w") as writer:
+        with open(output_prediction_file, "w", encoding="utf-8") as writer:
             writer.write(json.dumps(all_predictions, indent=4) + "\n")
 
     if output_nbest_file:
-        with open(output_nbest_file, "w") as writer:
+        with open(output_nbest_file, "w", encoding="utf-8") as writer:
             writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
 
     if output_null_log_odds_file and version_2_with_negative:
-        with open(output_null_log_odds_file, "w") as writer:
+        with open(output_null_log_odds_file, "w", encoding="utf-8") as writer:
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
     return all_predictions
@@ -766,14 +766,14 @@ def compute_predictions_log_probs(
 
         all_nbest_json[example.qas_id] = nbest_json
 
-    with open(output_prediction_file, "w") as writer:
+    with open(output_prediction_file, "w", encoding="utf-8") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
 
-    with open(output_nbest_file, "w") as writer:
+    with open(output_nbest_file, "w", encoding="utf-8") as writer:
         writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
 
     if version_2_with_negative:
-        with open(output_null_log_odds_file, "w") as writer:
+        with open(output_null_log_odds_file, "w", encoding="utf-8") as writer:
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
     return all_predictions

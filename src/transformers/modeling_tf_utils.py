@@ -1880,7 +1880,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(os.path.join(output_dir, "README.md"), "w") as f:
+        with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
             f.write(model_card)
 
     def set_input_embeddings(self, value):

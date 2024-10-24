@@ -50,7 +50,7 @@ def get_detr_config(model_name):
         config.num_labels = 91
         repo_id = "huggingface/label-files"
         filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

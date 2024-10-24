@@ -251,7 +251,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         model.priors[i].load_state_dict(weight_dict[2 - i])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    with open(f"{pytorch_dump_folder_path}/mapping.json", "w") as txtfile:
+    with open(f"{pytorch_dump_folder_path}/mapping.json", "w", encoding="utf-8") as txtfile:
         json.dump(mapping, txtfile)
 
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

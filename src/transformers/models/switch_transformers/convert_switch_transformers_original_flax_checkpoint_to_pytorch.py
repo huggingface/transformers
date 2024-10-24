@@ -122,7 +122,7 @@ def convert_gin_to_config(gin_file, num_experts):
     # Convert a google style config to the hugging face fromat
     import regex as re
 
-    with open(gin_file, "r") as f:
+    with open(gin_file, "r", encoding="utf-8") as f:
         raw_gin = f.read()
 
     regex_match = re.findall(r"(.*) = ([0-9.]*)", raw_gin)

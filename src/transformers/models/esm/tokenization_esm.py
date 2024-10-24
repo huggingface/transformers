@@ -27,7 +27,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
 def load_vocab_file(vocab_file):
-    with open(vocab_file, "r") as f:
+    with open(vocab_file, "r", encoding="utf-8") as f:
         lines = f.read().splitlines()
         return [l.strip() for l in lines]
 
@@ -135,7 +135,7 @@ class EsmTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory, filename_prefix):
         vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.txt")
-        with open(vocab_file, "w") as f:
+        with open(vocab_file, "w", encoding="utf-8") as f:
             f.write("\n".join(self.all_tokens))
         return (vocab_file,)
 

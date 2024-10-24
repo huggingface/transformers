@@ -51,13 +51,17 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r", encoding="utf-8") as f:
         tokenizer_config = json.load(f)
     tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)
 
-    with open(os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
+    with open(
+        os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(entity_vocab, f)
 
     tokenizer = MLukeTokenizer.from_pretrained(pytorch_dump_folder_path)

@@ -634,7 +634,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path, "latest_checkpointed_iteration.txt")
-    with open(tracker_filepath, "w") as f:
+    with open(tracker_filepath, "w", encoding="utf-8") as f:
         f.write("release")
 
     # create `release` dir in args.load_path

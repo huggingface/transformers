@@ -53,7 +53,7 @@ def get_mobilenet_v1_config(model_name):
     config.num_labels = 1001
     filename = "imagenet-1k-id2label.json"
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k) + 1: v for k, v in id2label.items()}
     id2label[0] = "background"
     config.id2label = id2label

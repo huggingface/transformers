@@ -355,7 +355,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
         )
-        with open(out_vocab_file, "w") as file:
+        with open(out_vocab_file, "w", encoding="utf-8") as file:
             file.write(json.dumps(self.encoder))
 
         return (out_vocab_file,)
