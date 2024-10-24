@@ -96,17 +96,21 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         )
         conn.commit()
         benchmark_id = cur.fetchone()[0]
+        logger.info(f"running benchmark #{benchmark_id} on {gpu_name}")
         metrics_thread = Thread(target=collect_metrics, args=[benchmark_id, continue_metric_collection])
         metrics_thread.start()
+        logger.info("started background thread to fetch device metrics")
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
 
         device = "cuda"
         ckpt = "meta-llama/Llama-2-7b-hf"
 
+        logger.info("downloading weights")
         # This is to avoid counting download in model load time measurement
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16)
         gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
+        logger.info("loading model")
         start = perf_counter()
         model = AutoModelForCausalLM.from_pretrained(
             ckpt, torch_dtype=torch.float16, generation_config=gen_config
