@@ -261,6 +261,7 @@ _import_structure = {
     ],
     "models.emu3": [
         "Emu3Config",
+        "Emu3TextConfig",
         "Emu3Processor",
         "Emu3VQVAEConfig",
     ],
@@ -1687,7 +1688,8 @@ else:
     _import_structure["models.emu3"].extend(
         [
             "Emu3ForConditionalGeneration",
-            "Emu3Model",
+            "Emu3ForCausalLM",
+            "Emu3TextModel",
             "Emu3PreTrainedModel",
             "Emu3Processor",
             "Emu3VQVAE",
@@ -5243,6 +5245,7 @@ if TYPE_CHECKING:
     from .models.emu3 import (
         Emu3Config,
         Emu3Processor,
+        Emu3TextConfig,
         Emu3VQVAEConfig,
     )
     from .models.encodec import (
@@ -6876,10 +6879,11 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.emu3 import (
+            Emu3ForCausalLM,
             Emu3ForConditionalGeneration,
-            Emu3Model,
             Emu3PreTrainedModel,
             Emu3Processor,
+            Emu3TextModel,
             Emu3VQVAE,
         )
         from .models.encodec import (

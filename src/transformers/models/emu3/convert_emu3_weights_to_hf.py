@@ -30,6 +30,8 @@ from transformers import (
     Emu3ForConditionalGeneration,
     Emu3ImageProcessor,
     Emu3Processor,
+    Emu3TextConfig,
+    GenerationConfig,
 )
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 
@@ -55,7 +57,7 @@ processor = Emu3Processor.from_pretrained("/output/path")
 
 
 byte_encoder = bytes_to_unicode()
-CHAT_TEMPLATE = "TODO: should be almost same as llava-1.5 vicuna"
+CHAT_TEMPLATE = "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}"
 
 
 # Tiktoken to HF conversion, thanks for Xenova
@@ -114,6 +116,7 @@ def convert_tiktoken(tokenizer, output_dir):
             "special": True,
         }
         for content, id in encoder._special_tokens.items()
+        if content != "<|extra_0|>"
     ]
 
     # https://huggingface.co/Xenova/gpt2/raw/main/tokenizer_config.json
@@ -126,6 +129,22 @@ def convert_tiktoken(tokenizer, output_dir):
     }
     tokenizer_config_template.update({"tokenizer_class": "GPT2Tokenizer"})
     tokenizer_config_template = dict(sorted(tokenizer_config_template.items(), key=lambda x: x[0]))
+
+    # add placeholder image token by taking one of the reserved tokens
+    reserved_token_id = vocab["<|extra_0|>"]
+    vocab["<image>"] = reserved_token_id
+    del vocab["<|extra_0|>"]
+    added_tokens.append(
+        {
+            "id": reserved_token_id,
+            "content": "<image>",
+            "single_word": False,
+            "lstrip": False,
+            "rstrip": False,
+            "normalized": False,
+            "special": True,
+        }
+    )
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -197,7 +216,13 @@ KEYS_TO_MODIFY_MAPPING = {
     "^post_quant_conv": "model.vqmodel.post_quant_conv",
     "^quant_conv": "model.vqmodel.quant_conv",
     "^quantize": "model.vqmodel.quantize",
+    "^model": "text_model.model",
+    "lm_head.weight": "text_model.lm_head.weight",
+    "^text_model.model.vqmodel": "vqmodel",
 }
+
+# Missing key(s) in state_dict: "vq_model.encoder.conv_in.weight", "vq_model.encoder.conv_in.bias"
+# Unexpected key(s) in state_dict: "vqmodel.encoder.conv_in.weight", "vqmodel.encoder.conv_in.bias", "
 
 
 def convert_state_dict_to_hf(old_state_dict, new_state_dict):
@@ -209,13 +234,14 @@ def convert_state_dict_to_hf(old_state_dict, new_state_dict):
     return new_state_dict
 
 
-def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
+def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test_inference=False):
     os.makedirs(output_dir, exist_ok=True)
 
     # Convert and save processor
     tokenizer_tiktoken = AutoTokenizer.from_pretrained(llm_model_id, trust_remote_code=True)
     convert_tiktoken(tokenizer_tiktoken, output_dir)
     tokenizer_converted = AutoTokenizer.from_pretrained(output_dir)
+    tokenizer_converted.padding_side = "left"
 
     image_processor = Emu3ImageProcessor.from_pretrained(vq_model_id)
     processor = Emu3Processor(image_processor, tokenizer_converted, chat_template=CHAT_TEMPLATE)
@@ -231,14 +257,21 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
         tokenizer_config = json.load(file)
     vocabulary_map = tokenizer_config["model"]["vocab"]
 
-    config = Emu3Config(
+    text_config = Emu3TextConfig(
         max_position_embeddings=model_llm.config.max_position_embeddings,
         rope_scaling={"rope_type": "default"},
-        vocabulary_map=vocabulary_map,
     )
+    config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
     with init_empty_weights():
         model = Emu3ForConditionalGeneration(config=config)
+        model.generation_config = GenerationConfig(
+            do_sample=True,
+            top_k=2048,
+            max_new_tokens=50_000,
+            pad_token_id=processor.tokenizer.pad_token_id,
+            eos_token_id=processor.tokenizer.eos_token_id,
+        )
 
     state_dict = {}
     state_dict = convert_state_dict_to_hf(model_llm.state_dict(), state_dict)
@@ -247,14 +280,34 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
     model.load_state_dict(state_dict, assign=True, strict=True)
     model.save_pretrained(output_dir, safe_serialization=True)
 
-    if test_inference:
+    if hub_model_id is not None:
+        model.push_to_hub(hub_model_id)
+        processor.push_to_hub(hub_model_id)
+
+    if test_inference and llm_model_id.endswith("Chat"):
         # Short inference on a few examples to check if generation makes sense
         print("Loading the checkpoint in a Emu3 model...")
         print("*" * 100)
         model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
         processor = Emu3Processor.from_pretrained(output_dir)
 
-        prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
+        conversation = [
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": "You are a helpful assistant."},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Please tell me about this art work and its artist."},
+                    {"type": "image"},
+                ],
+            },
+        ]
+        prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+
         image = Image.open(
             requests.get(
                 "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
@@ -268,20 +321,66 @@ def convert_model(vq_model_id, llm_model_id, output_dir, test_inference=False):
 
         print(f"Generation for single-image: {generated_text}")
         print("*" * 100)
+    elif test_inference and llm_model_id.endswith("Gen"):
+        processor = Emu3Processor.from_pretrained(output_dir)
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
 
-        # Multi-image example
-        # prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-        # image = Image.open(
-        #     requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-        # )
-        # image_2 = Image.open(
-        #     requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-        # )
-        # inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
-        # length = inputs.input_ids.shape[1]
-        # out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
-        # generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
-        # print(f"Generation for multi-image: {generated_text}")
+        inputs = processor(
+            text=[
+                "a portrait of young girl. masterpiece, film grained, best quality.",
+                "a dog running under the rain",
+            ],
+            padding=True,
+            return_tensors="pt",
+            return_for_image_generation=True,
+        )
+        inputs = inputs.to(device="cuda:0", dtype=torch.bfloat16)
+
+        neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
+        neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device="cuda:0")
+
+        image_sizes = inputs.pop("image_sizes")
+        HEIGHT, WIDTH = image_sizes[0]
+        VISUAL_TOKENS = model.vocabulary_mapping.image_tokens
+
+        def prefix_allowed_tokens_fn(batch_id, input_ids):
+            height, width = HEIGHT, WIDTH
+            visual_tokens = VISUAL_TOKENS
+            image_token_id = processor.tokenizer.encode("<|image token|>", return_tensors="pt")[0].to(model.device)
+            eoi_token_id = processor.tokenizer.encode("<|image end|>", return_tensors="pt")[0]
+            eos_token_id = processor.tokenizer.encode("<|extra_204|>", return_tensors="pt")[0]
+            pad_token_id = processor.tokenizer.encode("<|endoftext|>", return_tensors="pt")[0]
+            eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
+            eof_token_id = processor.tokenizer.encode("<|extra_201|>", return_tensors="pt")[0]
+
+            position = torch.nonzero(input_ids == image_token_id, as_tuple=True)[0][0]
+            offset = input_ids.shape[0] - position
+            if offset % (width + 1) == 0:
+                return (eol_token_id,)
+            elif offset == (width + 1) * height + 1:
+                return (eof_token_id,)
+            elif offset == (width + 1) * height + 2:
+                return (eoi_token_id,)
+            elif offset == (width + 1) * height + 3:
+                return (eos_token_id,)
+            elif offset > (width + 1) * height + 3:
+                return (pad_token_id,)
+            else:
+                return visual_tokens
+
+        out = model.generate(
+            **inputs,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            negative_prompt_ids=neg_inputs.input_ids,
+            negative_prompt_attention_mask=neg_inputs.attention_mask,
+        )
+
+        image = model.model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        images = processor.postprocess(
+            list(image.float()), return_tensors="PIL.Image.Image"
+        )  # internally we convert to np but it's not supported in bf16 precision
+        for i, image in enumerate(images["pixel_values"]):
+            image.save(f"result_{i}.png")
 
 
 def main():
@@ -301,6 +400,10 @@ def main():
         help="Location to write HF model",
     )
     parser.add_argument(
+        "--hub_model_id",
+        help="Model ID in the hub where to push the model.",
+    )
+    parser.add_argument(
         "--test_inference",
         action="store_true",
         help="Whether to load the model for generation to test it's converted correctly.",
@@ -310,6 +413,7 @@ def main():
         vq_model_id=args.vq_model_id,
         llm_model_id=args.llm_model_id,
         output_dir=args.output_dir,
+        hub_model_id=args.hub_model_id,
         test_inference=args.test_inference,
     )
 

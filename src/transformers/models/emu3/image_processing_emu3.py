@@ -15,13 +15,14 @@
 """Image processor class for Emu3."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     convert_to_rgb,
+    pad,
     resize,
     to_channel_dimension_format,
 )
@@ -125,6 +126,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         min_pixels (`int`, *optional*, defaults to `512 * 512`):
             The min pixels of the image to resize the image.
         max_pixels (`int`, *optional*, defaults to `1024 * 1024`):
@@ -145,6 +149,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
+        do_pad: bool = True,
         min_pixels: int = 512 * 512,
         max_pixels: int = 1024 * 1024,
         spatial_factor: int = 8,
@@ -260,6 +265,51 @@ class Emu3ImageProcessor(BaseImageProcessor):
         images = np.array(processed_images)
         return images
 
+    def _pad_for_batching(
+        self,
+        pixel_values: List[np.ndarray],
+        image_sizes: List[List[int]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
+
+        Args:
+            pixel_values (`List[np.ndarray]`):
+                An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
+            image_sizes (`List[List[int]]`):
+                A list of sizes for each image in `pixel_values` in (height, width) format.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+
+        Returns:
+            List[`np.ndarray`]: The padded images.
+        """
+
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
+        pixel_values = [
+            pad(
+                image,
+                padding=((0, max_shape[0] - size[0]), (0, max_shape[1] - size[1])),
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image, size in zip(pixel_values, image_sizes)
+        ]
+        return pixel_values
+
     def preprocess(
         self,
         images: ImageInput,
@@ -272,6 +322,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
+        do_pad: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -302,6 +353,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            do_pad (`bool`, *optional*, defaults to `True`):
+                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -331,6 +385,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_pad = do_pad if do_pad is not None else self.do_pad
 
         if images is not None:
             images = make_batched_images(images)
@@ -369,15 +424,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
             pixel_values.extend(image)
 
         image_sizes = [image.shape[-2:] for image in pixel_values]
-        max_shape = (
-            max([size[0] for size in image_sizes]),
-            max([size[1] for size in image_sizes]),
-        )
-        pixel_values = [
-            np.pad(image, ((0, 0), (0, max_shape[0] - size[0]), (0, max_shape[1] - size[1])))
-            for image, size in zip(pixel_values, image_sizes)
-        ]
-        pixel_values = np.array(pixel_values)
+        if do_pad:
+            pixel_values = self._pad_for_batching(pixel_values, image_sizes)
+            pixel_values = np.array(pixel_values)
+
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
@@ -422,13 +472,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        rescale_factor = 1 / rescale_factor
-
+        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        image_mean, image_std = self.inverse_meanstd(image_mean, image_std)
 
         images = make_list_of_images(images)
         if isinstance(images[0], Image.Image):
@@ -442,8 +489,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         for image in images:
             image = to_numpy_array(image)
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                image = self.unnormalize(
+                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
                 )
 
             if do_rescale:
@@ -461,17 +508,47 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def inverse_meanstd(self, image_mean, image_std):
-        image_mean = self.to_tuple(image_mean)
-        image_std = self.to_tuple(image_std)
+    def unnormalize(
+        self,
+        image: np.array,
+        image_mean: Union[float, Iterable[float]],
+        image_std: Union[float, Iterable[float]],
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+        image = (image * image_std) + image_mean
+        Args:
+            image (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
+                Batch of pixel values to postprocess.
+            image_mean (`float` or `Iterable[float]`):
+                The mean to use for unnormalization.
+            image_std (`float` or `Iterable[float]`):
+                The standard deviation to use for unnormalization.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        num_channels = 3
 
-        rev_image_mean = tuple(-m / s for m, s in zip(image_mean, image_std))
-        rev_image_std = tuple(1 / s for s in image_std)
+        if isinstance(image_mean, Iterable):
+            if len(image_mean) != num_channels:
+                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}")
+        else:
+            image_mean = [image_mean] * num_channels
 
-        return rev_image_mean, rev_image_std
+        if isinstance(image_std, Iterable):
+            if len(image_std) != num_channels:
+                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}")
+        else:
+            image_std = [image_std] * num_channels
 
-    def to_tuple(self, value, dim=3):
-        if isinstance(value, (int, float)):
-            return (value,) * dim
-
-        return tuple(value)
+        rev_image_mean = tuple(-mean / std for mean, std in zip(image_mean, image_std))
+        rev_image_std = tuple(1 / std for std in image_std)
+        image = self.normalize(
+            image=image, mean=rev_image_mean, std=rev_image_std, input_data_format=input_data_format
+        )
+        return image

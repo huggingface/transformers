@@ -44,7 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_emu3 import Emu3Config, Emu3VQVAEConfig
+from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 if is_flash_attn_2_available():
@@ -1446,7 +1446,7 @@ class Emu3ImageVocabularyMapping:
     def __init__(self, vocab_map):
         self.vocab_map = vocab_map
         self.eol_token_id = vocab_map.get("<|extra_200|>")
-        self.image_token_id = vocab_map.get("<|extra_0|>")
+        self.image_token_id = vocab_map.get("<image>")  # 151646
 
     @cached_property
     def image_tokens(self):
@@ -1482,7 +1482,6 @@ class Emu3ImageVocabularyMapping:
 
     def convert_img2bpe(self, img_batch: List[torch.Tensor]) -> torch.Tensor:
         device = img_batch.device
-        print(img_batch.shape)
         eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
         img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
@@ -1531,7 +1530,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.get_text_config().initializer_range
         if isinstance(module, Emu3VQVAE):
             module.apply(module._init_weights)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -1614,30 +1613,30 @@ EMU3_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare emu3 Model outputting raw hidden-states without any specific head on top.",
+    "The Emu3 Text Model with an lm head on top outputting logits for next token prediction.",
     EMU3_START_DOCSTRING,
 )
-class Emu3Model(Emu3PreTrainedModel):
+class Emu3TextModel(Emu3PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Emu3DecoderLayer`]
 
     Args:
-        config: Emu3Config
+        config: Emu3TextConfig
     """
 
-    def __init__(self, config: Emu3Config):
+    config_class = Emu3TextConfig
+
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.vocabulary_mapping = Emu3ImageVocabularyMapping(config.vocabulary_map)
         decoder_layer = Emu3DecoderLayer
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.vqmodel = Emu3VQVAE(config.vq_config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1649,34 +1648,10 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
-        """
-        Tokenizes images into discrete tokens with VQGAN module. Converts
-        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
-        special tokens.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        """
-        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
-        bpe_tokens = torch.cat(bpe_tokens_list)
-        return bpe_tokens
-
-    @torch.no_grad
-    def decode_image_tokens(self, logits: torch.Tensor, height: int, width: int):
-        sequences = logits[:, :-3].view(-1, height, width + 1)
-        image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
-        image = self.vqmodel.decode(image_tokens)
-        return image
-
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1699,22 +1674,6 @@ class Emu3Model(Emu3PreTrainedModel):
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1863,39 +1822,200 @@ class Emu3Model(Emu3PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Emu3 Model with a head on top used for outputting logits for next token prediction.",
+    "Emu3 Model with a head on top used for outputting logits for next token prediction conditioned on image inputs.",
     EMU3_START_DOCSTRING,
 )
-# Copied from transformers.models.chameleon.modeling_chameleon.ChameleonForConditionalGeneration with CHAMELEON->EMU3,Chameleon->Emu3,chameleon->emu3
-class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
+    config_class = Emu3TextConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Emu3Model(config)
-        self.vocab_size = config.vocab_size
+        self.model = Emu3TextModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
+        >>> import torch
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> model = Emu3ForConditionalGeneration.from_pretrained("facebook/emu3-7b", torch_dtype=torch.bfloat16)
+        >>> processor = Emu3Processor.from_pretrained("facebook/emu3-7b")
+
+        >>> prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
+        >>> image = Image.open(requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw)
+        >>> image_2 = Image.open(requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw)
+
+        >>> inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
+        >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+        logits = logits.float()
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        **kwargs,
+    ):
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        if past_key_values is not None:
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
+
+
+@add_start_docstrings(
+    "Emu3 Model with a head on top used for outputting logits for next token prediction conditioned on image inputs.",
+    EMU3_START_DOCSTRING,
+)
+class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        self.text_model = Emu3ForCausalLM._from_config(config.text_config)
+        self.vqmodel = Emu3VQVAE(config.vq_config)
+        self.vocabulary_mapping = Emu3ImageVocabularyMapping(config.vocabulary_map)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.text_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.text_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module. Converts
+        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
+        special tokens.
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
+        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        bpe_tokens = torch.cat(bpe_tokens_list)
+        return bpe_tokens
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
+    @torch.no_grad
+    def decode_image_tokens(self, logits: torch.Tensor, height: int, width: int):
+        sequences = logits[:, :-3].view(-1, height, width + 1)
+        image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
+        image = self.vqmodel.decode(image_tokens)
+        return image
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1950,11 +2070,25 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None:
+            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs = self.text_model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1966,34 +2100,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             cache_position=cache_position,
         )
 
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
-
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return outputs
 
     def prepare_inputs_for_generation(
         self,

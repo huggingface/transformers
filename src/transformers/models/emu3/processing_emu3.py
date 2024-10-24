@@ -60,29 +60,27 @@ class Emu3Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`Emu3TokenizerFast`]):
             The tokenizer is a required input.
-        image_seq_length (`int`, *optional*, defaults to 1024):
-            Sequence length of one image embedding.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
     """
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    valid_kwargs = ["image_seq_length", "image_token"]
+    valid_kwargs = ["image_token"]
     image_processor_class = "Emu3ImageProcessor"
 
     def __init__(
         self,
         image_processor,
         tokenizer,
-        image_token: str = "<|extra_0|>",
+        image_token: str = "<image>",
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = "<|extra_0|>"  # image_token, as temporarty placeholder for vq-vae tokens
-        self.image_start_token = "<|image start|>"  # fixed tokens for start and end
+        self.image_token = image_token  # image_token as temporarty placeholder to be replaced by vq-vae tokens
+        self.image_start_token = "<|image start|>"  # fixed tokens for start and end of image
         self.image_end_token = "<|image end|>"
-        self.fake_token_around_image = "<|image token|>"  # another token indicating start of image?
+        self.fake_token_around_image = "<|image token|>"  # wrapper token and every image starts with it
         self.eof_token = "<|extra_201|>"
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -166,7 +164,6 @@ class Emu3Processor(ProcessorMixin):
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
                     image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
-                    print(image_size, height, width)
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)

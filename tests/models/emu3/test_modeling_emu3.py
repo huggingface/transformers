@@ -16,24 +16,21 @@
 
 import unittest
 
-import pytest
 import requests
 from parameterized import parameterized
 
-from transformers import Emu3Config, is_torch_available, is_vision_available, set_seed
+from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -44,251 +41,104 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Emu3ForCausalLM,
         Emu3ForConditionalGeneration,
-        Emu3Model,
         Emu3Processor,
+        Emu3TextModel,
     )
 
 
-class Emu3ModelTester:
+class Emu3Text2TextModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=7,
         is_training=False,
-        use_input_mask=True,
-        use_labels=True,
         vocab_size=99,
-        image_token_id=98,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
         num_key_value_heads=2,
         intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
         initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
         pad_token_id=0,
-        vq_num_embeds=12,
-        vq_embed_dim=12,
-        vq_channel_multiplier=[1, 2],
-        vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
-        scope=None,
+        bos_token_id=1,
+        eos_token_id=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.image_token_id = image_token_id
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
         self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.vq_num_embeds = vq_num_embeds
-        self.vq_embed_dim = vq_embed_dim
-        self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_img_token_start_id = vq_img_token_start_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+        attention_mask = input_ids.ne(1).to(torch_device)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, attention_mask
 
     def get_config(self):
-        # create dummy vocab map for image2bpe mapping if it needs remapping
-        # we assume that vocab size is big enough to accoun for image tokens somewhere in the beginning
-        # same way as in real ckpt, when img tokens are in first half of embeds
-        # we will need "vq_num_embeds" amount of tokens
-
-        vocab_map = {i: chr(i) for i in range(self.vocab_size)}
-        vocab_map[self.image_token_id] = "<image>"
-        start = self.vq_img_token_start_id
-        end = self.vq_img_token_start_id + self.vq_num_embeds
-        for i in range(start, end):
-            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
-
-        return Emu3Config(
+        return Emu3TextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
-            vocabulary_map={v: k for k, v in vocab_map.items()},
-            vq_config=self.get_vq_config(),
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
         )
-
-    def get_vq_config(self):
-        return {
-            "embed_dim": self.vq_embed_dim,
-            "num_embeddings": self.vq_num_embeds,
-            "latent_channels": self.vq_embed_dim,
-            "in_channels": 3,
-            "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
-            "channel_multiplier": self.vq_channel_multiplier,
-        }
-
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = Emu3Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = Emu3ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        model = Emu3ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            attention_mask,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
 @require_torch
-class Emu3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Emu3Model, Emu3ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
+class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "text-generation": Emu3ForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
     def setUp(self):
-        self.model_tester = Emu3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Emu3Config, hidden_size=37)
+        self.model_tester = Emu3Text2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
@@ -297,7 +147,7 @@ class Emu3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = Emu3Model(config)
+        original_model = Emu3TextModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -305,7 +155,7 @@ class Emu3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = Emu3Model(config)
+        scaled_model = Emu3TextModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -321,51 +171,196 @@ class Emu3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @require_flash_attn
-    @require_read_token
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "facebook/emu3-7b",
-            load_in_4bit=True,
-            device_map={"": 0},
+
+class Emu3Vision2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=False,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        intermediate_size=37,
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        image_token_id=3,
+        image_size=30,
+        codebook_size=20,
+        temporal_downsample_factor=1,
+        base_channels=32,
+        vq_channel_multiplier=[1, 1],
+        image_seq_length=100,
+        vq_img_token_start_id=3,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.intermediate_size = intermediate_size
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.image_token_id = image_token_id
+        self.image_size = image_size
+        self.codebook_size = codebook_size
+        self.temporal_downsample_factor = temporal_downsample_factor
+        self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_img_token_start_id = vq_img_token_start_id
+        self.base_channels = base_channels
+        self.seq_length = seq_length + image_seq_length
+        self.image_seq_length = image_seq_length
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
+        attention_mask = input_ids.ne(1).to(torch_device)
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
+
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                3,
+                self.image_size,
+                self.image_size,
+            ]
+        )
+        image_sizes = [[self.image_size, self.image_size]] * self.batch_size
+        image_sizes = torch.tensor(image_sizes, device=torch_device, dtype=torch.int64)
+
+        return config, input_ids, attention_mask, pixel_values, image_sizes
+
+    def get_config(self):
+        # create dummy vocab map for image2bpe mapping if it needs remapping
+        # we assume that vocab size is big enough to account for `codebook_size` amount of
+        # image tokens somewhere at the beginning of total vocab size
+
+        vocab_map = {i: chr(i) for i in range(self.vocab_size)}
+        start = self.vq_img_token_start_id
+        end = self.vq_img_token_start_id + self.codebook_size
+        for i in range(start, end):
+            # dummy str for each token, anything that fits pattern "<|visual token XXXXXX|>"
+            vocab_map[i] = f"<|visual token{i:06d}|>"
+
+        # add tokens that have to be in the vocab, we'll retrieve their ids later in modeling code
+        vocab_map[self.image_token_id] = "<image>"
+        vocab_map[self.image_token_id + 1] = "<|extra_200|>"
+        vocab_map = {v: k for k, v in vocab_map.items()}
+
+        text_config = Emu3TextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            intermediate_size=self.intermediate_size,
+            max_position_embeddings=self.max_position_embeddings,
+            initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
         )
 
-        processor = Emu3Processor.from_pretrained("facebook/emu3-7b")
-        texts = ["hi", "Hello this is a very long sentence"]
+        vq_config = {
+            "codebook_size": self.codebook_size,
+            "temporal_downsample_factor": self.temporal_downsample_factor,
+            "base_channels": self.base_channels,
+            "channel_multiplier": self.vq_channel_multiplier,
+        }
+        return Emu3Config(text_config=text_config, vq_config=vq_config, vocabulary_map=vocab_map)
 
-        processor.tokenizer.padding_side = "right"
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            pixel_values,
+            image_sizes,
+        ) = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "image_sizes": image_sizes,
+        }
+        return config, inputs_dict
 
-        inputs = processor(text=texts, return_tensors="pt", padding=True).to(0)
 
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = processor.tokenizer.batch_decode(output_native)
+@require_torch
+class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {}
+    test_headmasking = False
+    test_pruning = False
+    fx_compatible = False
 
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "facebook/emu3-7b",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
+    def setUp(self):
+        self.model_tester = Emu3Vision2TextModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=Emu3Config, has_text_modality=False, common_properties=["vocabulary_map"]
         )
 
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
-        self.assertListEqual(output_native, output_fa_2)
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip("Emu3 forces some token ids to be -inf!")
-    def test_batching_equivalence(self):
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("Emu3 is not compatible with end-to-end generation compilation")
-    def test_generate_compile_fullgraph(self):
-        pass
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
 
 @require_torch

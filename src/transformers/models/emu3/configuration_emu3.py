@@ -14,7 +14,7 @@
 # limitations under the License.
 """emu3 model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -105,9 +105,9 @@ class Emu3VQVAEConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Emu3Config(PretrainedConfig):
+class Emu3TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Emu3Model`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [BAAI/Emu3-Chat-hf](https://huggingface.co/BAAI/Emu3-Chat-hf).
@@ -201,10 +201,6 @@ class Emu3Config(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        vq_config (`dict`, *optional*):
-            Emu3VQVAEConfig instance containing the configuration for the VQ-VAE model.
-        vocabulary_map (`dict`, *optional*):
-            A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
 
 
     ```python
@@ -220,7 +216,7 @@ class Emu3Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "emu3"
+    model_type = "emu3_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -244,8 +240,6 @@ class Emu3Config(PretrainedConfig):
         rope_theta: float = 1000000.0,
         rope_scaling: Optional = None,
         attention_dropout: float = 0.1,
-        vq_config: Dict = None,
-        vocabulary_map: Dict[int, int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -266,13 +260,6 @@ class Emu3Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.pretraining_tp = pretraining_tp
 
-        if vq_config is None:
-            vq_config = {}
-            logger.info("vq_config is None. initializing the Emu3VQVAEConfig with default values.")
-
-        self.vq_config = Emu3VQVAEConfig(**vq_config)
-        self.vocabulary_map = vocabulary_map
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -280,3 +267,50 @@ class Emu3Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+class Emu3Config(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`Emu3Model`]. It is used to instantiate a
+    emu3 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [BAAI/Emu3-Chat-hf](https://huggingface.co/BAAI/Emu3-Chat-hf).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vq_config (`dict`, *optional*):
+            Emu3VQVAEConfig instance containing the configuration for the VQ-VAE model.
+        vocabulary_map (`dict`, *optional*):
+            A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+    """
+
+    model_type = "emu3"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        vq_config: Union[Dict, Emu3VQVAEConfig] = None,
+        text_config: Union[Dict, Emu3TextConfig] = None,
+        vocabulary_map: Dict[int, int] = None,
+        **kwargs,
+    ):
+        if vq_config is None:
+            vq_config = Emu3VQVAEConfig()
+            logger.info("Passed `vq_config` is None. initializing the `Emu3VQVAEConfig` with default values.")
+        elif isinstance(vq_config, dict):
+            vq_config = Emu3VQVAEConfig(**vq_config)
+
+        if text_config is None:
+            text_config = Emu3TextConfig()
+            logger.info("Passed `text_config` is None. initializing the `Emu3TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Emu3TextConfig(**text_config)
+
+        self.vq_config = vq_config
+        self.text_config = text_config
+        self.vocabulary_map = vocabulary_map
+
+        super().__init__(**kwargs)

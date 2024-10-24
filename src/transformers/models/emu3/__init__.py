@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_emu3": ["Emu3Config", "Emu3VQVAEConfig"],
+    "configuration_emu3": ["Emu3Config", "Emu3VQVAEConfig", "Emu3TextConfig"],
     "processing_emu3": ["Emu3Processor"],
 }
 
@@ -37,7 +37,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_emu3"] = [
         "Emu3ForConditionalGeneration",
-        "Emu3Model",
+        "Emu3ForCausalLM",
+        "Emu3TextModel",
         "Emu3PreTrainedModel",
         "Emu3VQVAE",
     ]
@@ -52,7 +53,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_emu3 import Emu3Config, Emu3VQVAEConfig
+    from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
     from .processing_emu3 import Emu3Processor
 
     try:
@@ -62,9 +63,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_emu3 import (
+            Emu3ForCausalLM,
             Emu3ForConditionalGeneration,
-            Emu3Model,
             Emu3PreTrainedModel,
+            Emu3TextModel,
             Emu3VQVAE,
         )
 
