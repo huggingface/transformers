@@ -1770,6 +1770,10 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available():
             self.device
 
+        # Disable average tokens when using single device
+        if self.world_size == 1:
+            self.average_tokens_across_devices = False
+
         if self.torchdynamo is not None:
             warnings.warn(
                 "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
