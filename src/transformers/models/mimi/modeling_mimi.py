@@ -559,7 +559,6 @@ class MimiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Mimi
 class MimiFlashAttention2(MimiAttention):
     """
     Mimi flash attention module. This module inherits from `MimiAttention` as the weights of the module stays
