@@ -2540,7 +2540,9 @@ class ModelTesterMixin:
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
             self.assertLessEqual(
-                max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}"
+                max_diff,
+                tol,
+                f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
             )
         else:
             raise ValueError(
