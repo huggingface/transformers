@@ -91,8 +91,8 @@ class AriaVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
         self._supports_sdpa = False
+        self.hidden_act = hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

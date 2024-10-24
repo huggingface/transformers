@@ -287,7 +287,11 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         pass
 
     @unittest.skip(reason="")
-    def test_new_cache_format(self):
+    def test_new_cache_format_1(self):
+        pass
+
+    @unittest.skip(reason="")
+    def test_new_cache_format_0(self):
         pass
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")

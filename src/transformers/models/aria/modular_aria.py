@@ -36,8 +36,8 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaPreTrainedModel
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -765,9 +765,10 @@ class AriaTextConfig(LlamaConfig):
         moe_z_loss_coeff: float = 1e-5,
         moe_aux_loss_coeff: float = 1e-3,
         moe_num_shared_experts: int = 2,
+        pad_token_id=2,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
         self.moe_intermediate_size = moe_intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
@@ -863,7 +864,6 @@ class AriaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
-        std = self.config.text_config.initializer_range
         if hasattr(self.config, 'initializer_range'):
             std = self.config.initializer_range
         elif hasattr(self.config, 'text_config'):
@@ -880,6 +880,10 @@ class AriaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, AriaGroupedGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
 
 # adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
@@ -1124,10 +1128,6 @@ class AriaTextPreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, AriaGroupedGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
 
 
 class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):

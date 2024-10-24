@@ -1374,11 +1374,9 @@ class AriaGroupedGEMM(nn.Module):
         if torch.cuda.is_available():
             torch.cuda.set_device(input.device)
         original_dtype = input.dtype
-        return experts_gemm(
-            input.to(torch.bfloat16),
-            self.weight.to(torch.bfloat16),
-            tokens_per_expert
-        ).to(original_dtype)
+        return experts_gemm(input.to(torch.bfloat16), self.weight.to(torch.bfloat16), tokens_per_expert).to(
+            original_dtype
+        )
 
 
 class AriaGroupedMLP(nn.Module):
@@ -2811,7 +2809,6 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
         )
 
 
-
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
     """
@@ -3076,4 +3073,3 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
