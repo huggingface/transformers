@@ -220,11 +220,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     name = "lm_head.weight"
                     parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
                     continue
-            if architecture == "starcoder2":
-                if "token_embd" in name and all(tens.name != "output.weight" for tens in reader.tensors):
-                    parsed_parameters["tensors"][tensor_key_mapping["output.weight"]] = torch.from_numpy(
-                        np.copy(weights)
-                    )
             if architecture == "mamba":
                 if "ssm_d" in name and "bias" not in name and "weight" not in name:
                     # ssm_d has conflicts with ssm_dt in name checking
@@ -238,10 +233,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     # Original exponential implementation
                     # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
                     weights = np.log(-weights)
-                if "token_embd" in name and all(tens.name != "output.weight" for tens in reader.tensors):
-                    parsed_parameters["tensors"][tensor_key_mapping["output.weight"]] = torch.from_numpy(
-                        np.copy(weights)
-                    )
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name.format(bid=bid) in name:
