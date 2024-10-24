@@ -18,7 +18,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
@@ -50,6 +49,8 @@ from ..gemma.modeling_gemma import (
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
+_CHECKPOINT_FOR_DOC = "google/gemma2-7b"
 
 logger = logging.get_logger(__name__)
 
@@ -755,6 +756,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         ```python
@@ -806,18 +808,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

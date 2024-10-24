@@ -47,6 +47,7 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
+        MistralForQuestionAnswering,
         MistralForSequenceClassification,
         MistralForTokenClassification,
         MistralModel,
@@ -291,7 +292,13 @@ class MistralModelTester:
 @require_torch
 class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification)
+        (
+            MistralModel,
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralForTokenClassification,
+            MistralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -303,6 +310,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "token-classification": MistralForTokenClassification,
             "text-generation": MistralForCausalLM,
             "zero-shot": MistralForSequenceClassification,
+            "question-answering": MistralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -347,6 +355,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     def test_Mistral_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

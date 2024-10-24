@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
@@ -327,7 +328,13 @@ class Qwen2MoeModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
 class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        (
+            Qwen2MoeModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
+            Qwen2MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -339,6 +346,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
             "zero-shot": Qwen2MoeForSequenceClassification,
+            "question-answering": Qwen2MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -382,6 +390,9 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     def test_Qwen2Moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
