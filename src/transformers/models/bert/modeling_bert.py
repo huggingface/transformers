@@ -455,6 +455,148 @@ class BertSdpaSelfAttention(BertSelfAttention):
         return outputs
 
 
+class RMSNorm(nn.Module):
+    def __init__(self, d, eps=1e-5, elementwise_affine=True):
+        super().__init__()
+        self.eps = eps
+        self.elementwise_affine = elementwise_affine
+        if self.elementwise_affine:
+            self.weight = nn.Parameter(torch.ones(d))
+
+    def forward(self, x):
+        norm_x = x.norm(2, dim=-1, keepdim=True)
+        rms_x = norm_x * (x.size(-1) ** -0.5)
+        x_normed = x / (rms_x + self.eps)
+        if self.elementwise_affine:
+            x_normed = x_normed * self.weight
+        return x_normed
+
+
+class BertDifferentialSelfAttention(nn.Module):
+    def __init__(self, config, position_embedding_type=None, depth=None):
+        super().__init__()
+        if config.hidden_size % (config.num_attention_heads * 2) != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of 2 times the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads // 2
+
+        self.attention_head_size = config.hidden_size // config.num_attention_heads // 2
+
+        self.all_head_size = self.num_attention_heads * self.attention_head_size * 2 * 2
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.is_decoder = config.is_decoder
+
+        # Differential attention parameters
+        self.lambda_init = self.lambda_init_fn(depth if depth is not None else 0)
+        self.lambda_q1 = nn.Parameter(torch.zeros(self.attention_head_size).normal_(mean=0, std=0.1))
+        self.lambda_k1 = nn.Parameter(torch.zeros(self.attention_head_size).normal_(mean=0, std=0.1))
+        self.lambda_q2 = nn.Parameter(torch.zeros(self.attention_head_size).normal_(mean=0, std=0.1))
+        self.lambda_k2 = nn.Parameter(torch.zeros(self.attention_head_size).normal_(mean=0, std=0.1))
+
+        self.subln = RMSNorm(self.num_attention_heads * self.attention_head_size, eps=1e-5, elementwise_affine=False)
+
+    def lambda_init_fn(self, depth):
+        return 0.8 - 0.6 * math.exp(-0.3 * depth)
+
+    def transpose_for_scores_qk(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (batch_size, seq_length, all_head_size)
+        batch_size, seq_length, _ = x.size()
+        x = x.view(
+            batch_size,
+            seq_length,
+            2,
+            self.num_attention_heads * 2,
+            self.attention_head_size,
+        )
+        # (batch_size, seq_length, 2, num_heads, head_size)
+        x = x.permute(0, 2, 3, 1, 4)
+        # (batch_size, 2, num_heads, seq_length, head_size)
+        return x
+
+    def transpose_for_scores_v(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (batch_size, seq_length, all_head_size)
+        batch_size, seq_length, _ = x.size()
+        x = x.view(
+            batch_size,
+            seq_length,
+            self.num_attention_heads * 2,
+            self.attention_head_size * 2,
+        )
+        x = x.permute(0, 2, 1, 3)
+        return x
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
+
+        # Shape: (batch_size, 2, num_heads, seq_length, head_size)
+        query_layer = self.transpose_for_scores_qk(mixed_query_layer)
+        key_layer = self.transpose_for_scores_qk(mixed_key_layer)
+        value_layer = self.transpose_for_scores_v(mixed_value_layer)
+
+        # Shape: (batch_size, 2, num_heads, seq_length, seq_length)
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        # Computing lambda_1, lambda_2, lambda_full
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1))
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2))
+        lambda_full = lambda_1 - lambda_2 + self.lambda_init
+
+        # Adjusting attention_scores by subtracting
+        # attention_scores shape: (batch_size, num_heads, seq_length, seq_length)
+        attention_scores = attention_scores[:, 0] - lambda_full * attention_scores[:, 1]
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
+
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        attention_probs = self.dropout(attention_probs)
+
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        # context_layer shape: (batch_size, num_heads, seq_length, head_size)
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        # Reshaping context_layer for subln
+        # context_layer shape: (batch_size, seq_length, num_heads,  head_size)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+
+        # new_context_layer_shape: (batch_size, seq_length, num_heads * head_size)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        # Applying subln
+        context_layer = self.subln(context_layer)
+
+        # Multiply by (1 - lambda_init)
+        context_layer = context_layer * (1 - self.lambda_init)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -472,6 +614,7 @@ class BertSelfOutput(nn.Module):
 BERT_SELF_ATTENTION_CLASSES = {
     "eager": BertSelfAttention,
     "sdpa": BertSdpaSelfAttention,
+    "differential": BertDifferentialSelfAttention,
 }
 
 
@@ -832,6 +975,7 @@ class BertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_differential = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
