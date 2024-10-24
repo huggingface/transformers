@@ -260,6 +260,11 @@ _import_structure = {
         "ChameleonProcessor",
         "ChameleonVQVAEConfig",
     ],
+    "models.emu3": [
+        "Emu3Config",
+        "Emu3Processor",
+        "Emu3VQVAEConfig",
+    ],
     "models.chinese_clip": [
         "ChineseCLIPConfig",
         "ChineseCLIPProcessor",
@@ -1177,6 +1182,7 @@ else:
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chameleon"].append("ChameleonImageProcessor")
+    _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -1692,6 +1698,15 @@ else:
             "ChameleonPreTrainedModel",
             "ChameleonProcessor",
             "ChameleonVQVAE",
+        ]
+    )
+    _import_structure["models.emu3"].extend(
+        [
+            "Emu3ForConditionalGeneration",
+            "Emu3Model",
+            "Emu3PreTrainedModel",
+            "Emu3Processor",
+            "Emu3VQVAE",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -5278,6 +5293,11 @@ if TYPE_CHECKING:
         ElectraConfig,
         ElectraTokenizer,
     )
+    from .models.emu3 import (
+        Emu3Config,
+        Emu3Processor,
+        Emu3VQVAEConfig,
+    )
     from .models.encodec import (
         EncodecConfig,
         EncodecFeatureExtractor,
@@ -6099,6 +6119,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
+        from .models.emu3 import Emu3ImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -6921,6 +6942,13 @@ if TYPE_CHECKING:
             ElectraModel,
             ElectraPreTrainedModel,
             load_tf_weights_in_electra,
+        )
+        from .models.emu3 import (
+            Emu3ForConditionalGeneration,
+            Emu3Model,
+            Emu3PreTrainedModel,
+            Emu3Processor,
+            Emu3VQVAE,
         )
         from .models.encodec import (
             EncodecModel,
