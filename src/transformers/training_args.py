@@ -33,6 +33,7 @@ from .trainer_utils import (
     FSDPOption,
     HubStrategy,
     IntervalStrategy,
+    SaveStrategy,
     SchedulerType,
 )
 from .utils import (
@@ -349,12 +350,13 @@ class TrainingArguments:
 
             </Tip>
 
-        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
+        save_strategy (`str` or [`~trainer_utils.SaveStrategy`], *optional*, defaults to `"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
                 - `"no"`: No save is done during training.
                 - `"epoch"`: Save is done at the end of each epoch.
                 - `"steps"`: Save is done every `save_steps`.
+                - `"best"`: Save is done whenever a new `best_metric` is achieved.
 
                 If `"epoch"` or `"steps"` is chosen, saving will also be performed at the
                 very end of training, always.
@@ -962,7 +964,7 @@ class TrainingArguments:
         },
     )
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
-    save_strategy: Union[IntervalStrategy, str] = field(
+    save_strategy: Union[SaveStrategy, str] = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
     )
@@ -1580,7 +1582,7 @@ class TrainingArguments:
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
-        self.save_strategy = IntervalStrategy(self.save_strategy)
+        self.save_strategy = SaveStrategy(self.save_strategy)
         self.hub_strategy = HubStrategy(self.hub_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
@@ -1616,7 +1618,7 @@ class TrainingArguments:
             if self.eval_steps != int(self.eval_steps):
                 raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
             self.eval_steps = int(self.eval_steps)
-        if self.save_strategy == IntervalStrategy.STEPS and self.save_steps > 1:
+        if self.save_strategy == SaveStrategy.STEPS and self.save_steps > 1:
             if self.save_steps != int(self.save_steps):
                 raise ValueError(f"--save_steps must be an integer if bigger than 1: {self.save_steps}")
             self.save_steps = int(self.save_steps)
@@ -2750,8 +2752,8 @@ class TrainingArguments:
         100
         ```
         """
-        self.save_strategy = IntervalStrategy(strategy)
-        if self.save_strategy == IntervalStrategy.STEPS and steps == 0:
+        self.save_strategy = SaveStrategy(strategy)
+        if self.save_strategy == SaveStrategy.STEPS and steps == 0:
             raise ValueError("Setting `strategy` as 'steps' requires a positive value for `steps`.")
         self.save_steps = steps
         self.save_total_limit = total_limit
