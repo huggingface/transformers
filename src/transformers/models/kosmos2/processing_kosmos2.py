@@ -59,9 +59,6 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "add_eos_token": False,
         },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
     }
 
 
@@ -84,11 +81,11 @@ class Kosmos2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["num_patch_index_tokens"]
+    valid_kwargs = ["num_patch_index_tokens", "num_image_tokens"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
+    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, num_image_tokens=64, *kwargs):
         tokenizer.return_token_type_ids = False
 
         self.eod_token = "</doc>"
@@ -125,6 +122,7 @@ class Kosmos2Processor(ProcessorMixin):
 
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
+        self.num_image_tokens = num_image_tokens
 
         tokens_to_add = []
         for token in self.tag_tokens + patch_index_tokens:
@@ -171,7 +169,7 @@ class Kosmos2Processor(ProcessorMixin):
         )
 
         bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
+        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", self.num_image_tokens)
         first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
