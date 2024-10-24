@@ -356,7 +356,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PR #34283 made changes to the forward function.")
     def test_torch_fx_output_loss(self):
         super().test_torch_fx_output_loss()
 
