@@ -4715,10 +4715,7 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        if isinstance(dataloader, DataLoaderShard):
-            batch_size = dataloader.total_batch_size
-        else:
-            batch_size = dataloader.batch_size
+        batch_size = dataloader.total_batch_size if getattr(dataloader, "_is_accelerate_prepared", False) else dataloader.batch_size
 
         if batch_size is None:
             raise ValueError(
