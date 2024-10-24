@@ -3122,6 +3122,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "condition_on_prev_tokens": True,
             "logprob_threshold": -2.0, # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
             "num_beams": 5,
+            "renormalize_logits":True,  # necessary to match OAI beam search implementation
         }
 
         result = model.generate(**inputs, **gen_kwargs)
