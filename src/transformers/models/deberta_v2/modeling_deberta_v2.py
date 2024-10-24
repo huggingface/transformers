@@ -659,14 +659,10 @@ class DebertaV2Encoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         next_kv = hidden_states
-        output_states = hidden_states
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (output_states,)
-
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
+                output_states, attn_weights = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     next_kv,
                     attention_mask,
@@ -676,7 +672,7 @@ class DebertaV2Encoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(
+                output_states, attn_weights = layer_module(
                     next_kv,
                     attention_mask,
                     query_states=query_states,
@@ -685,12 +681,14 @@ class DebertaV2Encoder(nn.Module):
                     output_attentions=output_attentions,
                 )
 
-            output_states = layer_outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (attn_weights,)
 
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
+
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (output_states,)
 
             if query_states is not None:
                 query_states = output_states

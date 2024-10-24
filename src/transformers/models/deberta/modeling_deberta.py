@@ -597,7 +597,7 @@ class DebertaEncoder(PreTrainedModel):
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
+                hidden_states, att_m = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     next_kv,
                     attention_mask,
@@ -607,7 +607,7 @@ class DebertaEncoder(PreTrainedModel):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(
+                hidden_states, att_m = layer_module(
                     next_kv,
                     attention_mask,
                     query_states=query_states,
@@ -616,17 +616,11 @@ class DebertaEncoder(PreTrainedModel):
                     output_attentions=output_attentions,
                 )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                att_m = layer_outputs[1]
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if query_states is not None:
                 query_states = hidden_states
-                if isinstance(hidden_states, Sequence):
-                    next_kv = hidden_states[i + 1] if i + 1 < len(self.layer) else None
             else:
                 next_kv = hidden_states
 
