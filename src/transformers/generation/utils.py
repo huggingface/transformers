@@ -1440,8 +1440,11 @@ class GenerationMixin:
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
-        else:  # by default let's always generate 10 new tokens
+        elif has_default_max_length:  # by default let's always generate 20 new tokens
             generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
