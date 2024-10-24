@@ -1622,15 +1622,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 @add_start_docstrings(
     "The M2M100 (SONAR) transformer decoder model for generating texts from embeddings.",
@@ -1709,8 +1700,6 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
 
         if encoder_outputs is None:
             raise ValueError("M2M100DecoderModel expects the `encoder_outputs` to be always present.")
-        embeddings = encoder_outputs.last_hidden_state
-        batch_size = embeddings.shape[0]
 
         if return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1743,24 +1732,6 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
             labels = labels.to(lm_logits.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if (output_attentions or self.config.output_attentions) and encoder_outputs.attentions is None:
-            # just for the sake of compatibility, adding fake encoder attentions
-            encoder_outputs.attentions = [
-                torch.ones(
-                    (batch_size, self.config.encoder_attention_heads, 1, 1),
-                    device=embeddings.device,
-                    dtype=embeddings.dtype,
-                )
-                for layer in range(self.config.encoder_layers)
-            ]
-
-        if (output_hidden_states or self.config.output_hidden_states) and encoder_outputs.hidden_states is None:
-            # just for the sake of compatibility, adding fake encoder hidden states
-            encoder_outputs.hidden_states = [
-                torch.zeros((batch_size, 1, self.config.d_model), device=embeddings.device, dtype=embeddings.dtype)
-                for layer in range(self.config.encoder_layers + 1)
-            ]
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:]
@@ -1814,15 +1785,6 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings(
