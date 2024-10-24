@@ -788,6 +788,8 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_eager_matches_sdpa_generate(self):
+        """Overwritten -- mochi has custom inputs and custom output checks"""
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
