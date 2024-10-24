@@ -130,6 +130,7 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
         total_trgs += trg_len - 1
 
     nlls.append(neg_log_likelihood)
+
     prev_end_loc = end_loc
     if end_loc == seq_len:
         break
