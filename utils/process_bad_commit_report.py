@@ -28,7 +28,18 @@ if __name__ == "__main__":
         data = json.load(fp)
 
     # TODO: extend
-    team_members = ["ydshieh", "zucchini-nlp", "ArthurZucker", "gante", "LysandreJik", "molbap", "qubvel", "Rocketknight1", "muellerzr", "SunMarc"]
+    team_members = [
+        "ydshieh",
+        "zucchini-nlp",
+        "ArthurZucker",
+        "gante",
+        "LysandreJik",
+        "molbap",
+        "qubvel",
+        "Rocketknight1",
+        "muellerzr",
+        "SunMarc",
+    ]
 
     # Counting the number of failures grouped by authors
     new_data = {}
