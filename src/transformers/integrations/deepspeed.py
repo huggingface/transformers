@@ -22,7 +22,7 @@ import weakref
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_available, logging
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 
 if is_torch_available():
