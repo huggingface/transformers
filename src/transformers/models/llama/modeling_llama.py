@@ -1108,7 +1108,8 @@ class LlamaModel(LlamaPreTrainedModel):
         return causal_mask
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs):...
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
 
 class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
