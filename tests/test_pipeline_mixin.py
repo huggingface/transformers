@@ -495,9 +495,7 @@ class PipelineTesterMixin:
             # check if pipeline call signature has more than one argument
             # in this case, we can't use a single generator, we need to collate the data first
             input_signature = {
-                k: v
-                for k, v in inspect.signature(pipeline.__call__).parameters.items()
-                if k != "kwargs" and k != "args"
+                k: v for k, v in inspect.signature(pipeline.__call__).parameters.items() if k not in ("kwargs", "args")
             }
             if len(input_signature) > 1:
                 data_list = list(data(10))
