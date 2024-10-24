@@ -261,6 +261,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.post_process_image_text_to_text
     def post_process_image_text_to_text(self, generated_outputs):
         """
         Post-process the output of the model to decode the text.
