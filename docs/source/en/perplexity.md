@@ -130,28 +130,14 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
         neg_log_likelihood = (trg_len - 1) * outputs.loss
         total_trgs += trg_len - 1
 
-<<<<<<< HEAD
-    # Accumulate the total negative log-likelihood and the total number of tokens
-    num_valid_tokens = (target_ids != -100).sum().item()  # number of valid tokens in target_ids
-    batch_size = target_ids.size(0)
-    num_loss_tokens = num_valid_tokens - batch_size  # subtract batch_size due to internal label shift
-    nll_sum += neg_log_likelihood * num_loss_tokens
-    n_tokens += num_loss_tokens
-
-=======
     nlls.append(neg_log_likelihood)
->>>>>>> 4e69c7516 (Fixing perplexity calculation)
+
     prev_end_loc = end_loc
     if end_loc == seq_len:
         break
 
-<<<<<<< HEAD
-avg_nll = nll_sum / n_tokens  # average negative log-likelihood per token
-ppl = torch.exp(avg_nll)
-=======
 # Sum up and divide by the total number of targets
-ppl = torch.exp(torch.stack(nlls).sum()/(total_trgs))
->>>>>>> 4e69c7516 (Fixing perplexity calculation)
+ppl = torch.exp(torch.stack(nlls).sum()/total_trgs)
 ```
 
 Running this with the stride length equal to the max input length is equivalent to the suboptimal, non-sliding-window
