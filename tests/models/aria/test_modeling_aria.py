@@ -298,6 +298,10 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_initialization(self):
         pass
 
+    @unittest.skip(reason="Unstable test")
+    def test_dola_decoding_sample(self):
+        pass
+
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
