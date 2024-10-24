@@ -187,6 +187,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
@@ -347,6 +348,16 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     @unittest.skip(reason="TODO (@joao): fix me -- failing to produce similar results")
     def test_static_cache_matches_dynamic(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 

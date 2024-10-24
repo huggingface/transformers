@@ -236,6 +236,7 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     all_generative_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
@@ -370,6 +371,16 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
     )
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 
