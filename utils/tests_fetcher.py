@@ -997,7 +997,7 @@ def _print_list(l) -> str:
 def infer_tests_to_run(
     output_file: str,
     diff_with_last_commit: bool = False,
-    filter_models: bool = True,
+    filter_models: bool = False,
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.

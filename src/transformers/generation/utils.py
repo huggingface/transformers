@@ -1446,6 +1446,8 @@ class GenerationMixin:
             if max_position_embeddings is not None:
                 generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
+        assert 1 == 1
+
         # same for min length
         if generation_config.min_new_tokens is not None:
             if not has_default_min_length:
