@@ -210,7 +210,6 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    @require_multi_gpu
     def test_foo(self):
         assert 1 == 2
 
