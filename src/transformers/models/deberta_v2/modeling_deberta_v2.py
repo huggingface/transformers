@@ -662,6 +662,9 @@ class DebertaV2Encoder(nn.Module):
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (next_kv,)
+
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
@@ -689,8 +692,7 @@ class DebertaV2Encoder(nn.Module):
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (output_states,)
+
 
             if query_states is not None:
                 query_states = output_states
