@@ -190,29 +190,32 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     def __init__(
         self,
         scalp=1,
-        embed_dim=112,
-        num_heads=2,
+        embed_dim=96,
+        num_heads=1,
         drop_path_rate=0.0,
         q_pool=3,
         q_stride=(2, 2),
-        stages=(2, 3, 16, 3),
+        stages=(1, 2, 7, 2),
         dim_mul=2.0,
         head_mul=2.0,
-        window_pos_embed_bkg_spatial_size=(14, 14),
+        window_pos_embed_bkg_spatial_size=(7, 7),
         window_spec=(8, 4, 14, 7),
-        global_att_blocks=(12, 16, 20),
-        return_interm_layers=True,
+        global_att_blocks=(5, 7, 9),
         d_model=256,
-        backbone_channel_list=[896, 448, 224, 112],
+        backbone_channel_list=[768, 384, 192, 96],
         kernel_size=1,
         stride=1,
         padding=0,
         fpn_top_down_levels=[2, 3],
         fpn_interp_model="nearest",
         fuse_type="sum",
+        layer_norm_eps=1e-6,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        assert len(stages) == len(window_spec)
+
         self.scalp = scalp
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -225,7 +228,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.window_pos_embed_bkg_spatial_size = window_pos_embed_bkg_spatial_size
         self.window_spec = window_spec
         self.global_att_blocks = global_att_blocks
-        self.return_interm_layers = return_interm_layers
 
         # Neck
         self.d_model = d_model
@@ -236,6 +238,8 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.fpn_top_down_levels = fpn_top_down_levels
         self.fpn_interp_model = fpn_interp_model
         self.fuse_type = fuse_type
+
+        self.layer_norm_eps = layer_norm_eps
 
 
 class Sam2Config(PretrainedConfig):

@@ -29,13 +29,13 @@ from PIL import Image
 
 from transformers import (
     Sam2Config,
-    Sam2ImageProcessor,
-    Sam2Model,
-    Sam2Processor,
     Sam2ImageEncoderConfig,
-    Sam2PromptEncoderConfig,
+    Sam2ImageProcessor,
     Sam2MemoryAttentionConfig,
     Sam2MemoryEncoderConfig,
+    Sam2Model,
+    Sam2Processor,
+    Sam2PromptEncoderConfig,
 )
 
 

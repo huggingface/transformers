@@ -106,6 +106,35 @@ def get_sdpa_settings():
 OLD_GPU, USE_FLASH_ATTN, MATH_KERNEL_ON = get_sdpa_settings()
 
 
+@dataclass
+class Sam2ImageEncoderOutput(ModelOutput):
+    """
+    Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    neck_hidden_states: Optional[torch.FloatTensor] = None
+    neck_position_embedding: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
 class Sam2PositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1063,7 +1092,6 @@ class Sam2LayerNorm(nn.Module):
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(normalized_shape))
@@ -1123,55 +1151,60 @@ class Sam2MultiScaleAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim_out * 3)
         self.proj = nn.Linear(dim_out, dim_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, H, W, _ = x.shape
+    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (B, H * W, 3, nHead, C)
-        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1)
+        qkv = self.qkv(hidden_states).reshape(batch_size, height * width, 3, self.num_heads, -1)
         # q, k, v with shape (B, H * W, nheads, C)
-        q, k, v = torch.unbind(qkv, 2)
+        query, key, value = torch.unbind(qkv, 2)
+
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
         # Q pooling (for downsample at stage changes)
         if self.q_pool:
-            q = do_pool(q.reshape(B, H, W, -1), self.q_pool)
-            H, W = q.shape[1:3]  # downsampled shape
-            q = q.reshape(B, H * W, self.num_heads, -1)
+            query = do_pool(query.reshape(batch_size, height, width, -1), self.q_pool)
+            height, width = query.shape[1:3]  # downsampled shape
+            query = query.reshape(batch_size, height * width, self.num_heads, -1)
 
         # Torch's SDPA expects [B, nheads, H*W, C] so we transpose
-        x = F.scaled_dot_product_attention(
-            q.transpose(1, 2),
-            k.transpose(1, 2),
-            v.transpose(1, 2),
+        attn_output = F.scaled_dot_product_attention(
+            query.transpose(1, 2),
+            key.transpose(1, 2),
+            value.transpose(1, 2),
         )
         # Transpose back
-        x = x.transpose(1, 2)
-        x = x.reshape(B, H, W, -1)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size, height, width, -1)
 
-        x = self.proj(x)
+        attn_output = self.proj(attn_output)
 
-        return x
+        if output_attentions:
+            outputs = (attn_output, attn_weights)
+        else:
+            outputs = (attn_output, None)
+
+        return outputs
 
 
 class Sam2MultiScaleBlock(nn.Module):
     def __init__(
         self,
+        config,
         dim: int,
         dim_out: int,
         num_heads: int,
         mlp_ratio: float = 4.0,
         drop_path: float = 0.0,
-        norm_layer: Union[nn.Module, str] = "LayerNorm",
         q_stride: Tuple[int, int] = None,
         act_layer: nn.Module = nn.GELU,
         window_size: int = 0,
     ):
         super().__init__()
 
-        if isinstance(norm_layer, str):
-            norm_layer = partial(getattr(nn, norm_layer), eps=1e-6)
-
         self.dim = dim
         self.dim_out = dim_out
-        self.norm1 = norm_layer(dim)
+        self.layer_norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
         self.window_size = window_size
 
@@ -1187,7 +1220,7 @@ class Sam2MultiScaleBlock(nn.Module):
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-        self.norm2 = norm_layer(dim_out)
+        self.layer_norm2 = nn.LayerNorm(dim_out, eps=config.layer_norm_eps)
         self.mlp = Sam2MLP(
             dim_out,
             int(dim_out * mlp_ratio),
@@ -1199,26 +1232,34 @@ class Sam2MultiScaleBlock(nn.Module):
         if dim != dim_out:
             self.proj = nn.Linear(dim, dim_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        shortcut = x  # B, H, W, C
-        x = self.norm1(x)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        residual = hidden_states  # B, H, W, C
+
+        hidden_states = self.layer_norm1(hidden_states)
 
         # Skip connection
         if self.dim != self.dim_out:
-            shortcut = do_pool(self.proj(x), self.pool)
+            residual = do_pool(self.proj(hidden_states), self.pool)
 
         # Window partition
         window_size = self.window_size
-        if window_size > 0:
-            H, W = x.shape[1], x.shape[2]
-            x, pad_hw = window_partition(x, window_size)
+        if self.window_size > 0:
+            H, W = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, pad_hw = window_partition(hidden_states, window_size)
 
         # Window Attention + Q Pooling (if stage change)
-        x = self.attn(x)
+        hidden_states, attn_weights = self.attn(
+            hidden_states=hidden_states,
+            output_attentions=output_attentions,
+        )
         if self.q_stride:
             # Shapes have changed due to Q pooling
             window_size = self.window_size // self.q_stride[0]
-            H, W = shortcut.shape[1:3]
+            H, W = residual.shape[1:3]
 
             pad_h = (window_size - H % window_size) % window_size
             pad_w = (window_size - W % window_size) % window_size
@@ -1226,56 +1267,51 @@ class Sam2MultiScaleBlock(nn.Module):
 
         # Reverse window partition
         if self.window_size > 0:
-            x = window_unpartition(x, window_size, pad_hw, (H, W))
+            hidden_states = window_unpartition(hidden_states, window_size, pad_hw, (H, W))
 
-        x = shortcut + self.drop_path(x)
-        # MLP
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+        hidden_states = residual + self.drop_path(hidden_states)
+        layernorm_output = self.layer_norm2(hidden_states)
+        hidden_states = hidden_states + self.drop_path(self.mlp(layernorm_output))
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
-class Sam2HieraBackbone(nn.Module):
-    """
-    Reference: https://arxiv.org/abs/2306.00989
-    """
-
-    def __init__(self, config):
+class Sam2ImageEncoder(nn.Module):
+    def __init__(self, config: Sam2ImageEncoderConfig):
         super().__init__()
+        self.config = config
 
-        assert len(config.stages) == len(config.window_spec)
-        self.window_spec = config.window_spec
-
-        depth = sum(config.stages)
-        embed_dim = config.embed_dim
-        num_heads = config.num_heads
-        self.q_stride = config.q_stride
-        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
-        assert 0 <= config.q_pool <= len(self.stage_ends[:-1])
-        self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
-        self.return_interm_layers = config.return_interm_layers
-
+        # Patch embdding
         self.patch_embed = Sam2PatchEmbed(
-            embed_dim=embed_dim,
+            embed_dim=config.embed_dim,
         )
-        # Which blocks have global att?
+        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
+        self.pos_embed = nn.Parameter(torch.zeros(1, config.embed_dim, *config.window_pos_embed_bkg_spatial_size))
+        self.pos_embed_window = nn.Parameter(
+            torch.zeros(1, config.embed_dim, config.window_spec[0], config.window_spec[0])
+        )
+
+        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
         self.global_att_blocks = config.global_att_blocks
 
-        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
-        self.window_pos_embed_bkg_spatial_size = config.window_pos_embed_bkg_spatial_size
-        self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, *self.window_pos_embed_bkg_spatial_size))
-        self.pos_embed_window = nn.Parameter(torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0]))
-
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]  # stochastic depth decay rule
-
-        cur_stage = 1
         self.blocks = nn.ModuleList()
-
-        for i in range(depth):
+        embed_dim = config.embed_dim
+        num_heads = config.num_heads
+        dpr = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.stages))
+        ]  # stochastic depth decay rule
+        self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
+        cur_stage = 1
+        for i in range(sum(config.stages)):
             dim_out = embed_dim
             # lags by a block, so first block of
             # next stage uses an initial window size
             # of previous stage and final window size of current stage
-            window_size = self.window_spec[cur_stage - 1]
+            window_size = config.window_spec[cur_stage - 1]
 
             if self.global_att_blocks is not None:
                 window_size = 0 if i in self.global_att_blocks else window_size
@@ -1286,22 +1322,20 @@ class Sam2HieraBackbone(nn.Module):
                 cur_stage += 1
 
             block = Sam2MultiScaleBlock(
+                config=config,
                 dim=embed_dim,
                 dim_out=dim_out,
                 num_heads=num_heads,
                 drop_path=dpr[i],
-                q_stride=self.q_stride if i in self.q_pool_blocks else None,
+                q_stride=config.q_stride if i in self.q_pool_blocks else None,
                 window_size=window_size,
             )
 
             embed_dim = dim_out
             self.blocks.append(block)
 
-        self.channel_list = (
-            [self.blocks[i].dim_out for i in self.stage_ends[::-1]]
-            if config.return_interm_layers
-            else [self.blocks[-1].dim_out]
-        )
+        self.neck = Sam2VisionNeck(config)
+        self.scalp = config.scalp
 
     def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
         h, w = hw
@@ -1311,48 +1345,69 @@ class Sam2HieraBackbone(nn.Module):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        x = self.patch_embed(x)
-        # x: (B, H, W, C)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Sam2ImageEncoderOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Add pos embed
-        x = x + self._get_pos_embed(x.shape[1:3])
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
-        outputs = []
-        for i, blk in enumerate(self.blocks):
-            x = blk(x)
-            if (i == self.stage_ends[-1]) or (i in self.stage_ends and self.return_interm_layers):
-                feats = x.permute(0, 3, 1, 2)
-                outputs.append(feats)
+        hidden_states = self.patch_embed(pixel_values)
+        hidden_states = hidden_states + self._get_pos_embed(hidden_states.shape[1:3])
 
-        return outputs
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
+        intermediate_hidden_states = ()
+        for i, block_module in enumerate(self.blocks):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-class Sam2ImageEncoder(nn.Module):
-    def __init__(self, config: Sam2ImageEncoderConfig):
-        super().__init__()
-        self.config = config
-        self.trunk = Sam2HieraBackbone(config)
-        self.neck = Sam2VisionNeck(config)
-        self.scalp = config.scalp
-        assert (
-            self.trunk.channel_list == self.neck.backbone_channel_list
-        ), f"Channel dims of trunk and neck do not match. Trunk: {self.trunk.channel_list}, neck: {self.neck.backbone_channel_list}"
+            block_outputs = block_module(hidden_states, output_attentions=output_attentions)
+            hidden_states = block_outputs[0]
 
-    def forward(self, sample: torch.Tensor):
+            if (i == self.stage_ends[-1]) or (i in self.stage_ends):
+                intermediate_hidden_states = intermediate_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (block_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
         # Forward through backbone
-        features, pos = self.neck(self.trunk(sample))
+        neck_hidden_states, neck_position_embedding = self.neck(intermediate_hidden_states)
         if self.scalp > 0:
             # Discard the lowest resolution features
-            features, pos = features[: -self.scalp], pos[: -self.scalp]
+            neck_hidden_states, neck_position_embedding = (
+                neck_hidden_states[: -self.scalp],
+                neck_position_embedding[: -self.scalp],
+            )
 
-        src = features[-1]
-        output = {
-            "vision_features": src,
-            "vision_pos_enc": pos,
-            "backbone_fpn": features,
-        }
-        return output  # TODO: Wrap in an Output Class
+        if not return_dict:
+            outputs = (hidden_states, neck_hidden_states, neck_position_embedding)
+            if output_hidden_states:
+                outputs = outputs + (all_hidden_states,)
+            if output_attentions:
+                outputs = outputs + (all_self_attentions,)
+            return outputs
+
+        return Sam2ImageEncoderOutput(
+            last_hidden_state=hidden_states,
+            neck_hidden_states=neck_hidden_states,
+            neck_position_embedding=neck_position_embedding,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
@@ -1994,7 +2049,6 @@ class Sam2Model(Sam2PreTrainedModel):
             )
 
         self.post_init()
-
 
     @property
     def device(self):
