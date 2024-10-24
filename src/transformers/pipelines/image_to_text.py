@@ -81,9 +81,6 @@ class ImageToTextPipeline(Pipeline):
         if prompt is not None:
             preprocess_params["prompt"] = prompt
         if timeout is not None:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = timeout
 
         if max_new_tokens is not None:
@@ -117,6 +114,10 @@ class ImageToTextPipeline(Pipeline):
 
             generate_kwargs (`Dict`, *optional*):
                 Pass it to send all of these arguments directly to `generate` allowing full control of this function.
+
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
