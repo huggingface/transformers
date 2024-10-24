@@ -1421,7 +1421,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if cache_position is not None:
             past_key_values_length = cache_position[0]
         elif past_key_values is not None:
-            past_key_values_length = past_key_values.get_seq_length()
+            past_key_values_length = past_key_values.get_past_seen_tokens()
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -1431,7 +1431,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if attention_mask is None:
             # required mask seq length can be calculated via length of past
             mask_seq_length = (
-                past_key_values.get_seq_length() + seq_length if past_key_values is not None else seq_length
+                past_key_values.get_past_seen_tokens() + seq_length if past_key_values is not None else seq_length
             )
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 

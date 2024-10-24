@@ -1160,7 +1160,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if use_cache and past_key_values is None and not self.training:
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
-        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_past_seen_tokens()
         if cache_position is None:
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + input_ids.shape[1], device=input_ids.device
@@ -1496,7 +1496,7 @@ class MoshiModel(MoshiPreTrainedModel):
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
