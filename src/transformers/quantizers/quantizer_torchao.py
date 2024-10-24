@@ -73,6 +73,50 @@ class TorchAoHfQuantizer(HfQuantizer):
                     )
                 else:
                     self.offload = True
+        if self.pre_quantized:
+            safe_globals = []
+            if self.quantization_config.quant_type == "int4_weight_only":
+                from torchao.dtypes.affine_quantized_tensor import (
+                    AffineQuantizedTensor,
+                    TensorCoreTiledAQTLayout,
+                    TensorCoreTiledLayoutType,
+                    ZeroPointDomain,
+                )
+
+                safe_globals += [
+                    AffineQuantizedTensor,
+                    TensorCoreTiledAQTLayout,
+                    TensorCoreTiledLayoutType,
+                    ZeroPointDomain,
+                ]
+            elif self.quantization_config.quant_type == "int8_weight_only":
+                from torchao.dtypes.affine_quantized_tensor import (
+                    AffineQuantizedTensor,
+                    PlainAQTLayout,
+                    PlainLayoutType,
+                    ZeroPointDomain,
+                )
+
+                safe_globals += [PlainAQTLayout, AffineQuantizedTensor, PlainLayoutType, ZeroPointDomain]
+            elif self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
+                from torchao.dtypes.affine_quantized_tensor import (
+                    AffineQuantizedTensor,
+                    PlainAQTLayout,
+                    PlainLayoutType,
+                    ZeroPointDomain,
+                )
+                from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
+                from torchao.quantization.quant_api import _int8_symm_per_token_reduced_range_quant
+
+                safe_globals += [
+                    LinearActivationQuantizedTensor,
+                    AffineQuantizedTensor,
+                    PlainAQTLayout,
+                    PlainLayoutType,
+                    ZeroPointDomain,
+                    _int8_symm_per_token_reduced_range_quant,
+                ]
+            torch.serialization.add_safe_globals(safe_globals)
 
     def update_torch_dtype(self, torch_dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
@@ -85,6 +129,10 @@ class TorchAoHfQuantizer(HfQuantizer):
                     "Setting torch_dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set torch_dtype=torch.bfloat16 to remove this warning."
                 )
                 torch_dtype = torch.bfloat16
+        if self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
+            if torch_dtype is None:
+                # we need to set the torch_dtype, otherwise we have dtype mismatch when performing the quantized linear op
+                torch_dtype = torch.float32
         return torch_dtype
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
@@ -172,6 +220,12 @@ class TorchAoHfQuantizer(HfQuantizer):
         )
         if not _is_torchao_serializable:
             logger.warning("torchao quantized model is only serializable after huggingface_hub >= 0.25.0 ")
+        if self.offload and self.quantization_config.modules_to_not_convert is None:
+            logger.warning(
+                "The model contains offloaded modules and these modules are not quantized. We don't recommend saving the model as we won't be able to reload them."
+                "If you want to specify modules to not quantize, please specify modules_to_not_convert in the quantization_config."
+            )
+            return False
         return _is_torchao_serializable
 
     @property
