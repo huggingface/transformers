@@ -561,6 +561,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             )
 
         video_features = None
+        num_frames = 0
         if pixel_values_videos is not None:
             video_features, num_frames = self.get_video_features(
                 pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer
