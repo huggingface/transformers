@@ -22,8 +22,6 @@ from numpy import load
 
 from transformers import (
     AutoTokenizer,
-    GemmaTokenizer,
-    GemmaTokenizerFast,
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
@@ -42,12 +40,34 @@ logger = logging.get_logger(__name__)
 
 PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448"]
 VARIANT_CONFIGS = {
-    "2b": {"hidden_size": 2304, "num_hidden_layers": 18, "intermediate_size": 9216, "num_key_value_heads": 4, "num_attention_heads": 8, "head_dim": 256},
-    "9b": {"hidden_size": 3584, "num_hidden_layers": 28, "intermediate_size": 14336, "num_key_value_heads": 8, "num_attention_heads": 16, "head_dim": 256},
-    "27b": {"hidden_size": 4608, "num_hidden_layers": 46, "intermediate_size": 36864, "num_key_value_heads": 16, "num_attention_heads": 32, "head_dim": 128},
+    "2b": {
+        "hidden_size": 2304,
+        "num_hidden_layers": 18,
+        "intermediate_size": 9216,
+        "num_key_value_heads": 4,
+        "num_attention_heads": 8,
+        "head_dim": 256,
+    },
+    "9b": {
+        "hidden_size": 3584,
+        "num_hidden_layers": 28,
+        "intermediate_size": 14336,
+        "num_key_value_heads": 8,
+        "num_attention_heads": 16,
+        "head_dim": 256,
+    },
+    "27b": {
+        "hidden_size": 4608,
+        "num_hidden_layers": 46,
+        "intermediate_size": 36864,
+        "num_key_value_heads": 16,
+        "num_attention_heads": 32,
+        "head_dim": 128,
+    },
 }
 
-DTYPES = {'float32': torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+
 
 def get_paligemma2_config(variant: str, precision: str):
     config = {
@@ -56,14 +76,14 @@ def get_paligemma2_config(variant: str, precision: str):
         "bos_token_id": 2,
         "eos_token_id": 1,
     }
-    base_variant = variant.split('-')[0]
+    base_variant = variant.split("-")[0]
 
     if variant in PALIGEMMA2_VARIANTS:
-        image_size = int(variant.split('-')[1])
+        image_size = int(variant.split("-")[1])
         variant_config = VARIANT_CONFIGS[base_variant]
         patch_size = 14
         num_image_tokens = (image_size**2) // (patch_size**2)
-        config['projection_dim'] = 2304
+        config["projection_dim"] = 2304
         config["image_token_index"] = 257152
         text_config = {
             "model_type": "gemma2",
@@ -83,11 +103,11 @@ def get_paligemma2_config(variant: str, precision: str):
             "image_size": image_size,
             "patch_size": patch_size,
             "num_image_tokens": num_image_tokens,
-            "hidden_size": 1152, 
+            "hidden_size": 1152,
             "intermediate_size": 4304,
             "num_hidden_layers": 27,
             "num_attention_heads": 16,
-            "projection_dim": 2304, # 2304 ? has changed from paligemma-1?
+            "projection_dim": 2304,  # 2304 ? has changed from paligemma-1?
             "projector_hidden_act": "gelu_fast",
             "vision_use_head": False,
         }
@@ -246,7 +266,7 @@ def convert_paligemma2_checkpoint(
     """
     config = get_paligemma2_config(variant, precision=precision)
     if do_convert_weights:
-        tokenizer_id = "google/paligemma-3b-pt-224" # same tokenizer as paligemma 1
+        tokenizer_id = "google/paligemma-3b-pt-224"  # same tokenizer as paligemma 1
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
         image_token = AddedToken("<image>", normalized=False, special=True)
         tokens_to_add = {"additional_special_tokens": [image_token]}
@@ -296,7 +316,7 @@ def convert_paligemma2_checkpoint(
         dim=0,
     )
     # convert to needed precision
-    
+
     model.to(DTYPES[precision])
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
     processor.save_pretrained(pytorch_dump_folder_path)
