@@ -577,6 +577,8 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_gpt2_xl_Q6_K(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt2_xl_model_id, gguf_file=self.q6_k_gpt2_xl_model_id)
@@ -643,7 +645,8 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
-            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_stablelm_q4_k_m(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -713,7 +716,8 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
-            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_starcoder2_weights_conversion_fp16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
@@ -781,7 +785,8 @@ class GgufIntegrationTests(unittest.TestCase):
                     torch.testing.assert_close(original_params, converted_state_dict[layer_name], atol=1e-3, rtol=1e-3)
                 else:
                     torch.testing.assert_close(original_params, converted_state_dict[layer_name])
-            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_mamba_q6_k(self):
         model = AutoModelForCausalLM.from_pretrained(
