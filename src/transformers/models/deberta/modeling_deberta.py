@@ -345,7 +345,7 @@ class DisentangledSelfAttention(nn.Module):
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
             r_pos = build_rpos(
-                key_layer,
+                query_layer,
                 key_layer,
                 relative_pos,
             )
