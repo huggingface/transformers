@@ -530,13 +530,13 @@ class Message:
 
             # upload results to Hub dataset
             file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            commit_info = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+            # commit_info = api.upload_file(
+            #     path_or_fileobj=file_path,
+            #     path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+            #     repo_id="hf-internal-testing/transformers_daily_ci",
+            #     repo_type="dataset",
+            #     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            # )
             url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
 
             # extra processing to save to json format
@@ -556,13 +556,14 @@ class Message:
 
             # upload results to Hub dataset
             file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
-            _ = api.upload_file(
+            commit_info = api.upload_file(
                 path_or_fileobj=file_path,
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json",
                 repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json"
 
             block = {
                 "type": "section",
@@ -1250,7 +1251,7 @@ if __name__ == "__main__":
             )
 
     prev_ci_artifacts = None
-    if is_scheduled_ci_run:
+    if True:
         if job_name == "run_models_gpu":
             # Get the last previously completed CI's failure tables
             artifact_names = [f"ci_results_{job_name}"]
