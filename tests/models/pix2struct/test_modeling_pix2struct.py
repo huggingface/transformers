@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
+from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig, set_seed
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -419,6 +419,7 @@ class Pix2StructModelTester:
 @require_torch
 class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else {}
     pipeline_model_mapping = {"image-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
@@ -444,6 +445,16 @@ class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     self.model_tester.text_model_tester.vocab_size,
                 ),
             )
+
+    def test_generative_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).eval().to(torch_device)
+
+            output = model.generate(**input_dict, use_cache=False, min_new_tokens=10, max_new_tokens=10)
+            output_use_cache = model.generate(**input_dict, use_cache=True, min_new_tokens=10, max_new_tokens=10)
+
+            torch.testing.assert_close(output, output_use_cache, rtol=1e-3, atol=1e-3)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
