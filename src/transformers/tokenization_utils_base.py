@@ -65,7 +65,11 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
+from .utils.chat_template_utils import (
+    _compile_inverse_template,
+    _compile_jinja_template,
+    _render_with_assistant_indices,
+)
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -145,6 +149,7 @@ AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+INVERSE_TEMPLATE_FILE = "inverse_template.jinja"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -1631,6 +1636,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.inverse_template = kwargs.pop("inverse_template", None)
+
         super().__init__(**kwargs)
 
     @property
@@ -1919,6 +1926,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             return rendered
 
+    def apply_inverse_template(self, chat: str, inverse_template: Optional[str] = None, skip_json_load: bool = False):
+        if inverse_template is None:
+            if self.inverse_template is not None:
+                inverse_template = self.inverse_template
+            else:
+                raise ValueError(
+                    "Cannot use apply_inverse_template() because tokenizer.inverse_template is not set! Please set "
+                    "the tokenizer.inverse_template attribute to a valid Jinja template string."
+                )
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = _compile_inverse_template(inverse_template)
+
+        template_out = compiled_template.render(chat=chat)
+        if skip_json_load:
+            return template_out
+        else:
+            return json.loads(template_out)
+
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """
         Retrieve the chat template string used for tokenizing chat messages. This template is used
@@ -2124,6 +2149,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                     # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
                     "tokenizer_file": FULL_TOKENIZER_FILE,
+                    "inverse_template": INVERSE_TEMPLATE_FILE,
                 }
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
@@ -2244,6 +2270,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_slow = kwargs.get("from_slow", False)
         gguf_file = kwargs.get("gguf_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+        inverse_template_file = resolved_vocab_files.pop("inverse_template", None)
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
@@ -2344,6 +2371,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f" load from this checkpoint is '{config_tokenizer_class}'. \nThe class this function is called"
                     f" from is '{cls.__name__}'."
                 )
+
+        if inverse_template_file is not None:
+            with open(inverse_template_file) as chat_template_handle:
+                init_kwargs["inverse_template"] = chat_template_handle.read()
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
@@ -2580,6 +2611,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
 
+        inverse_chat_template_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + INVERSE_TEMPLATE_FILE
+        )
+
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
         # Let's save the init kwargs
@@ -2601,6 +2636,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
             else:
                 tokenizer_config["chat_template"] = self.chat_template
+
+        if self.inverse_template is not None:
+            with open(inverse_chat_template_file, "w", encoding="utf-8") as f:
+                f.write(self.inverse_template)
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
