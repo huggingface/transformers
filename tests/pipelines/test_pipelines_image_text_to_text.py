@@ -71,7 +71,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         text = "<image> What this is? Assistant: This is"
 
-        outputs = pipe(image, text=text, max_new_tokens=20)
+        outputs = pipe(image, text=text)
         self.assertEqual(
             outputs,
             [
@@ -82,7 +82,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = pipe([image, image], text=[text, text], max_new_tokens=20)
+        outputs = pipe([image, image], text=[text, text])
         self.assertEqual(
             outputs,
             [
@@ -103,8 +103,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
-        outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=20)
-        outputs_batched = pipe([image, image], text=[prompt, prompt], max_new_tokens=20, batch_size=2)
+        outputs = pipe([image, image], text=[prompt, prompt])
+        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2)
         self.assertEqual(outputs, outputs_batched)
 
     @slow
@@ -123,7 +123,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages, max_new_tokens=20)
+        outputs = pipe([image_ny, image_chicago], text=messages)
         self.assertEqual(
             outputs,
             [
@@ -178,7 +178,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             },
         ]
-        outputs = pipe(text=messages, max_new_tokens=20)
+        outputs = pipe(text=messages)
         self.assertEqual(
             outputs,
             [
@@ -237,7 +237,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
+        outputs = pipe(text=messages, return_full_text=False)
         self.assertEqual(
             outputs,
             [
