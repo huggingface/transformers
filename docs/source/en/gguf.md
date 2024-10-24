@@ -85,6 +85,7 @@ For now the supported model architectures are the architectures that have been v
 - StableLM
 - GPT2
 - Starcoder2
+- T5
 
 ## Example usage
 
