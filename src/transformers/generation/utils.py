@@ -3194,6 +3194,14 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
+        def model_forward(model, *args, **kwargs):
+            return model.forward(*args, **kwargs)
+
+        if isinstance(model_kwargs["past_key_values"], StaticCache):
+            if self.device == "cuda":
+                model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
+
+        i = 0
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3204,8 +3212,12 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-            # forward pass to get next token
-            outputs = self(**model_inputs, return_dict=True)
+
+            if i == 0:
+                outputs = self(**model_inputs, return_dict=True)
+                i += 1
+            else:
+                outputs = model_forward(self, return_dict=True, **model_inputs)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
