@@ -18,7 +18,7 @@ RUN [ ${#TENSORFLOW} -gt 0 ] && VERSION='tensorflow=='$TENSORFLOW'.*' ||  VERSIO
 RUN python3 -m pip uninstall -y torch flax
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U "tensorflow_probability<0.22"
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
