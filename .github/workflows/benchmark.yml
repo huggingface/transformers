@@ -66,6 +66,8 @@ jobs:
           python3 benchmark/llama.py "${{ github.head_ref || github.ref_name }}" "$commit_id" "$commit_msg"
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+          HF_HUB_VERBOSITY: debug
+          TRANSFORMERS_VERBOSITY: debug
           PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
           PGUSER: transformers_benchmarks
           PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
