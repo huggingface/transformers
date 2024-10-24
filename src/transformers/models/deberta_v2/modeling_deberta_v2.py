@@ -684,8 +684,7 @@ class DebertaV2Encoder(nn.Module):
 
             output_states = layer_outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1], )
-
+                all_attentions = all_attentions + (layer_outputs[1],)
 
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
