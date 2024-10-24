@@ -15,7 +15,7 @@
 
 import inspect
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -180,6 +180,10 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
 
+flash_241 = is_flash_attn_greater_or_equal("2.4.1")
+deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+
+
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -194,6 +198,10 @@ def _flash_attention_forward(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: bool = None,
+    cu_seq_lens_q: Optional[torch.LongTensor] = None,
+    cu_seq_lens_k: Optional[torch.LongTensor] = None,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -232,9 +240,9 @@ def _flash_attention_forward(
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
-    if is_flash_attn_greater_or_equal("2.4.1"):
+    if flash_241:
         if deterministic is None:
-            deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+            deterministic = deterministic_g
         flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
@@ -267,23 +275,32 @@ def _flash_attention_forward(
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (torch.diff(position_ids, dim=-1) >= 0).all() and query_length != 1:
+    elif position_ids is not None and (
+        max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all())
+    ):
         batch_size = query_states.size(0)
-        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
-            query_states, key_states, value_states, position_ids
-        )
 
-        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+        if cu_seq_lens_q is None or cu_seq_lens_k is None:
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
+                prepare_fa2_from_position_ids(query_states, key_states, value_states, position_ids)
+            )
+
+            cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens
+            max_length_q, max_length_k = max_seq_lens
+
+        else:
+            query_states = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+            key_states = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+            value_states = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
 
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,
             value_states,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_in_batch_q,
-            max_seqlen_k=max_seqlen_in_batch_k,
+            cu_seqlens_q=cu_seq_lens_q,
+            cu_seqlens_k=cu_seq_lens_k,
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
@@ -298,3 +315,24 @@ def _flash_attention_forward(
         )
 
     return attn_output
+
+
+class FlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for Flash Attention with Compile.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+            Gets cumlative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+            Gets cumlative sequence length for key state.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length for query state.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length for key state.
+    """
+
+    cu_seq_lens_q: Optional[torch.LongTensor]
+    cu_seq_lens_k: Optional[torch.LongTensor]
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]

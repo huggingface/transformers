@@ -17,23 +17,17 @@ Processor class for Idefics3.
 """
 
 import re
-import sys
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
 
@@ -240,9 +234,6 @@ class Idefics3Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        # Temporary fix for "padding_side" in init_kwargs
-        output_kwargs["text_kwargs"].pop("padding_side", None)
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 

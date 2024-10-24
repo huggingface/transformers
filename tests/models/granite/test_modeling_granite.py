@@ -106,7 +106,7 @@ class GraniteModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -538,7 +538,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
+                out.logits[0, 0, :15].float(),
                 atol=1e-3,
                 rtol=1e-3,
             )
@@ -558,4 +558,4 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]])
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), atol=1e-2, rtol=1e-2))

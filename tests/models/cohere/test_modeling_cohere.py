@@ -95,7 +95,7 @@ class CohereModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -303,6 +303,10 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="PR #34283 made changes to the forward function.")
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     @require_bitsandbytes
     @require_torch_sdpa
