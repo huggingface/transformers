@@ -1532,9 +1532,7 @@ class TrainingArguments:
 
     average_tokens_across_devices: Optional[bool] = field(
         default=False,
-        metadata={
-            "help": "Whether or not to average tokens across devices."
-        }
+        metadata={"help": "Whether or not to average tokens across devices."},
     )
 
     def __post_init__(self):
