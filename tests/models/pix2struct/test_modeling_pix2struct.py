@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig, set_seed
+from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
