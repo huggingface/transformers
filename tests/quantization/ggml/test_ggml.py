@@ -643,6 +643,7 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_stablelm_q4_k_m(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -712,6 +713,7 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_starcoder2_weights_conversion_fp16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
@@ -731,10 +733,12 @@ class GgufIntegrationTests(unittest.TestCase):
         original_state_dict = original_model.state_dict()
 
         for layer_name, original_params in original_state_dict.items():
-            if layer_name in converted_state_dict and layer_name != "lm_head.weight":
+            if layer_name in converted_state_dict:
                 # quantized models do not contain "lm_head.weight" layer
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_starcoder2_q6_k(self):
         example_function_text = "def print_hello_world():"
@@ -768,7 +772,7 @@ class GgufIntegrationTests(unittest.TestCase):
         original_state_dict = original_model.state_dict()
 
         for layer_name, original_params in original_state_dict.items():
-            if layer_name in converted_state_dict and layer_name != "lm_head.weight":
+            if layer_name in converted_state_dict:
                 # quantized models do not contain "lm_head.weight" layer
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 if "mixer.A_log" in layer_name:
@@ -777,6 +781,7 @@ class GgufIntegrationTests(unittest.TestCase):
                     torch.testing.assert_close(original_params, converted_state_dict[layer_name], atol=1e-3, rtol=1e-3)
                 else:
                     torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_mamba_q6_k(self):
         model = AutoModelForCausalLM.from_pretrained(
