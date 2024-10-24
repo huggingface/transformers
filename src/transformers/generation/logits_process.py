@@ -2578,7 +2578,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     >>> tokenized_prompts = tokenizer(["Once upon a time, "], return_tensors="pt", padding=True)
     >>> output_sequences = model.generate(
     ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True, max_new_tokens=10
-    >>> )
+    ... )
     >>> watermarked_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
     ```
     """
