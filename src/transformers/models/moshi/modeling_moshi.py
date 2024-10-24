@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache, DynamicSlidingWindowCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowCache, SlidingWindowCache, StaticCache
 from ...generation import (
     GenerationConfig,
     GenerationMixin,
@@ -588,7 +588,7 @@ class MoshiFlashAttention2(MoshiAttention):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
             # Slice to k/v length (this is usually the sliding window length, but may be bigger)
             if attention_mask is not None and isinstance(past_key_value, DynamicSlidingWindowCache):
-                attention_mask = attention_mask[:, -key_states.shape[-2]:]
+                attention_mask = attention_mask[:, -key_states.shape[-2] :]
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
