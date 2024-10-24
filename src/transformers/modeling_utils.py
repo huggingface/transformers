@@ -3960,6 +3960,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
 
+            # NOTE: Be careful! This returns an unrename gguf state dict
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
 
             resolved_archive_file = None
@@ -4213,6 +4214,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
+
+            if gguf_file is not None:
+                from .modeling_gguf_pytorch_utils import convert_gguf_state_dict_to_hf
+
+                state_dict = convert_gguf_state_dict_to_hf(state_dict, model)
 
             (
                 model,

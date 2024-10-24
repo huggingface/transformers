@@ -60,7 +60,49 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
+def get_gguf_hf_weights_map(hf_model):
+    """
+    GGUF uses this naming convention for their tensors from HF checkpoint:
+    `blk.N.BB.weight` and `blk.N.BB.bias`
+    where N signifies the block number of a layer, and BB signifies the
+    attention/mlp layer components.
+    See "Standardized tensor names" in
+    https://github.com/ggerganov/ggml/blob/master/docs/gguf.md for details.
+    """
+    from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
+
+    model_type = hf_model.config.model_type
+    # hack: ggufs have a different name for cohere
+    if model_type == "cohere":
+        model_type = "command-r"
+    arch = None
+    for key, value in MODEL_ARCH_NAMES.items():
+        if value == model_type:
+            arch = key
+            break
+    if arch is None:
+        raise RuntimeError(f"Unknown gguf model_type: {model_type}")
+    num_layers = hf_model.config.num_hidden_layers
+    name_map = get_tensor_name_map(arch, num_layers)
+    state_dict = hf_model.state_dict()
+
+    gguf_to_hf_name_map = {}
+    for hf_name in state_dict.keys():
+        name, suffix = hf_name.rsplit(".", 1)
+        gguf_name = name_map.get_name(name)
+        gguf_to_hf_name_map[f"{gguf_name}.{suffix}"] = hf_name
+    return gguf_to_hf_name_map
+
+
+def convert_gguf_state_dict_to_hf(gguf_state_dict, model):
+    gguf_to_hf_name_map = get_gguf_hf_weights_map(model)
+    new_state_dict = {}
+    for gguf_name, value in gguf_state_dict.items():
+        new_state_dict[gguf_to_hf_name_map[gguf_name]] = value
+    return new_state_dict
+
+
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, dummy_model=None):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -165,7 +207,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             )
 
     if return_tensors:
-        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        # tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
             name = tensor.name
@@ -180,14 +222,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 elif ".attn_k." in name:
                     weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
 
-            if architecture == "qwen2moe":
-                if "_exp" in name:
-                    split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
-                    continue
-                if "ffn_gate_inp_shexp" in name:
-                    # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
-                    # quantized one is (2048)
-                    weights = np.expand_dims(weights, axis=0)
+            # if architecture == "qwen2moe":
+            #     if "_exp" in name:
+            #         split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
+            #         continue
+            #     if "ffn_gate_inp_shexp" in name:
+            #         # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
+            #         # quantized one is (2048)
+            #         weights = np.expand_dims(weights, axis=0)
 
             if architecture == "bloom" and "attn_qkv" in name:
                 num_heads = parsed_parameters["config"]["n_head"]
@@ -197,33 +239,33 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 else:
                     weights = reverse_reshape_bias(weights, num_heads, n_embed)
 
-            bid = None
-            if architecture in ("t5", "t5encoder"):
-                for chunk in name.split("."):
-                    if chunk.isdigit():
-                        bid = int(chunk)
-                        break
+            # bid = None
+            # if architecture in ("t5", "t5encoder"):
+            #     for chunk in name.split("."):
+            #         if chunk.isdigit():
+            #             bid = int(chunk)
+            #             break
 
-            if architecture == "gpt2":
-                if (
-                    "attn_qkv.weight" in name
-                    or "ffn_down.weight" in name
-                    or "ffn_up.weight" in name
-                    or "attn_output.weight" in name
-                ):
-                    # Original transpose implementation
-                    # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
-                    weights = weights.T
-                if name == "output.weight":
-                    # output.weight has conflicts with attn_output.weight in name checking
-                    # we have to explicitly check that name is exactly output.weight
-                    name = "lm_head.weight"
-                    parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-                    continue
+            # if architecture == "gpt2":
+            #     if (
+            #         "attn_qkv.weight" in name
+            #         or "ffn_down.weight" in name
+            #         or "ffn_up.weight" in name
+            #         or "attn_output.weight" in name
+            #     ):
+            #         # Original transpose implementation
+            #         # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
+            #         weights = weights.T
+            #     if name == "output.weight":
+            #         # output.weight has conflicts with attn_output.weight in name checking
+            #         # we have to explicitly check that name is exactly output.weight
+            #         name = "lm_head.weight"
+            #         parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
+            #         continue
 
-            for tensor_name in tensor_key_mapping:
-                if tensor_name.format(bid=bid) in name:
-                    name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
+            # for tensor_name in tensor_key_mapping:
+            #     if tensor_name.format(bid=bid) in name:
+            #         name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
 
             # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
