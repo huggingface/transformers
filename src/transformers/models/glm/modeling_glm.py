@@ -51,12 +51,8 @@ from .configuration_glm import GlmConfig
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
 from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...processing_utils import Unpack
-
-
-_CHECKPOINT_FOR_DOC = "dummy"
 
 
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
