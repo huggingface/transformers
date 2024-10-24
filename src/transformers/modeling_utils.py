@@ -5000,6 +5000,40 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.warning_once(warn_string)
 
+    @property
+    def _is_quantized_training_enabled(self):
+        warnings.warn(
+            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
+            FutureWarning,
+        )
+
+        if not hasattr(self, "hf_quantizer"):
+            return False
+
+        return self.hf_quantizer.is_trainable
+
+    @property
+    @lru_cache
+    def loss_function(self):
+        if getattr(self.config, "loss_type", None) is not None:
+            loss_type = self.config.loss_type
+        else:
+            loss_type = self.__class__.__name__
+            if loss_type not in LOSS_MAPPING:
+                loss_groups = f"({'|'.join(LOSS_MAPPING)})"
+                loss_type = re.findall(loss_groups, self.__class__.__name__)
+                if len(loss_type) > 0:
+                    loss_type = loss_type[0]
+                else:
+                    loss_type = None
+        if loss_type is None or loss_type not in LOSS_MAPPING and getattr(self.config, "loss_type", None) is not None:
+            logger.warning_once(
+                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"Using the default loss: `ForCausalLMLoss`."
+            )
+            loss_type = "ForCausalLM"
+        return LOSS_MAPPING[loss_type]
+
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
