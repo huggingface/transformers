@@ -2615,7 +2615,7 @@ class ModelTesterMixin:
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
-            pt_model = model_class(config)
+            pt_model = model_class(config).eval()
             tf_model = tf_model_class(config)
 
             pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)

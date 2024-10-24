@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch DeBERTa model."""
 
-from collections.abc import Sequence
 from typing import Optional, Tuple, Union
 
 import torch
