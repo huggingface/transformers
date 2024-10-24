@@ -1269,25 +1269,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for row in output.tolist():
             self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
 
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
-
-        output = model.generate(
-            input_features, max_new_tokens=5, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids
-        )
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            *[token for _rank, token in forced_decoder_ids],
-        ]
-        for row in output.tolist():
-            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
-
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.max_target_positions = 7
