@@ -3603,6 +3603,9 @@ class Trainer:
                 scaled_loss.backward()
         else:
             loss *= self.args.gradient_accumulation_steps
+            if (self.args.average_tokens_across_devices and num_items_in_batch is not None and
+                    self.args.world_size > 1):
+                loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
@@ -3617,6 +3620,10 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+        if (self.args.average_tokens_across_devices and num_items_in_batch is not None and
+                self.args.world_size > 1):
+            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
+            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
         if self.model_accepts_loss_kwargs:
             loss_kwargs = {}
             if num_items_in_batch is not None:
@@ -3636,15 +3643,7 @@ class Trainer:
                 model_name = unwrapped_model._get_name()
             # User-defined compute_loss function
             if self.compute_loss_func is not None:
-                if (self.args.average_tokens_across_devices and num_items_in_batch is not None and
-                        self.args.world_size > 1):
-                    num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
-                    num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
-                    device_count_for_loss = self.args.world_size
-                else:
-                    device_count_for_loss = 1
                 loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
-                loss *= device_count_for_loss
             elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
