@@ -111,7 +111,7 @@ nll_sum = 0.0
 n_tokens = 0
 prev_end_loc = 0
 total_trgs = 0
-for begin_loc in range(0, seq_len, stride):
+for begin_loc in tqdm(range(0, seq_len, stride)):
     end_loc = min(begin_loc + max_length, seq_len)
     trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
     input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
