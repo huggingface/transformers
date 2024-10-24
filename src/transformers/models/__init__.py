@@ -234,6 +234,7 @@ from . import (
     squeezebert,
     stablelm,
     starcoder2,
+    superglue,
     superpoint,
     swiftformer,
     swin,

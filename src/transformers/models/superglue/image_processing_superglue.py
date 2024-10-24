@@ -23,11 +23,16 @@ from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
+    ImageType,
+    PILImageResampling,
+    get_image_type,
     infer_channel_dimension_format,
+    is_pil_image,
     is_scaled_image,
-    make_list_of_images,
+    is_valid_image,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging, requires_backends
 
@@ -38,6 +43,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
 def is_grayscale(
     image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -52,6 +58,7 @@ def is_grayscale(
         return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
 
 
+# Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
 def convert_to_grayscale(
     image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -90,9 +97,153 @@ def convert_to_grayscale(
     return image
 
 
-class SuperPointImageProcessor(BaseImageProcessor):
+def validate_and_format_image_pairs(images: ImageInput):
+    error_message = (
+        "Input images must be a one of the following :" " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A 4D array with shape (2, H, W, C).",
+        " - A 5D array with shape (B, 2, H, W, C).",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+        " - A list of 4D arrays with shape (2, H, W, C).",
+    )
+
+    def _flatten_image_list(image_list):
+        """
+        Flattens a list of images.
+        In the case of images being an array of shape (B, H, W, C), returns a B long list of (H, W, C) images.
+        """
+        return list(image_list)
+
+    def _flatten_image_list_sequence(image_list_sequence):
+        """
+        Flattens a list of list of images.
+        In the case of images being an array of shape (B, 2, H, W, C), returns a B * 2 long list of (H, W, C) images.
+        """
+        return [image for image_list in image_list_sequence for image in image_list]
+
+    def _is_pair_of_PIL(images):
+        """images is a pair of PIL images."""
+        return len(images) == 2 and all(is_pil_image(image) for image in images)
+
+    def _is_3d_array(image):
+        """images is a 3D array."""
+        return is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+
+    def _is_pair_of_3d_arrays(images):
+        """images is a pair of 3D arrays."""
+        return all(_is_3d_array(image) for image in images) and len(images) == 2
+
+    def _is_list_of_images_with_length_different_from_two(images):
+        """images is a flat list of either PIL images or 3D arrays but not a pair of images."""
+        return (
+            all(is_valid_image(image) and (is_pil_image(image) or _is_3d_array(image)) for image in images)
+            and len(images) != 2
+        )
+
+    def _is_list_of_4d_arrays(images):
+        """images is a list of 4D arrays with shape (2, H, W, C)."""
+        return all(_is_4d_array(image) for image in images)
+
+    def _is_4d_array(image):
+        """images is a 4D array with shape (2, H, W, C)."""
+        return is_valid_image(image) and not is_pil_image(image) and len(image.shape) == 4 and image.shape[0] == 2
+
+    def _is_5d_array(images):
+        """images is a 5D array with shape (B, 2, H, W, C)."""
+        return (
+            is_valid_image(images)
+            and get_image_type(images) != ImageType.PIL
+            and len(images.shape) == 5
+            and images.shape[1] == 2
+        )
+
+    def _format_image_list(images):
+        """
+        Function that takes a valid image input and turns it into a list of images.
+
+        A valid image input is one of the following:
+        - A pair of PIL images.
+        - A pair of 3D arrays.
+        - A list of 4D arrays with shape (2, H, W, C).
+        - A 5D array with shape (B, 2, H, W, C).
+
+        Raises a ValueError if the input is one of the following :
+        - A list of images of length != 2.
+        - A single PIL image.
+        - A single 3D array.
+        """
+        if isinstance(images, list):
+            if _is_pair_of_PIL(images) or _is_pair_of_3d_arrays(images):
+                return images
+            if _is_list_of_images_with_length_different_from_two(images):
+                raise ValueError(error_message)
+            if _is_list_of_4d_arrays(images):
+                return _flatten_image_list_sequence(images)
+        if is_valid_image(images):
+            if is_pil_image(images):
+                raise ValueError
+            if _is_3d_array(images):
+                raise ValueError
+            if _is_4d_array(images):
+                return _flatten_image_list(images)
+            if _is_5d_array(images):
+                return _flatten_image_list_sequence(images)
+        return images
+
+    def _is_list_sequence(images):
+        """images is a list of lists of images."""
+        return isinstance(images, list) and all(isinstance(image, list) for image in images)
+
+    def _is_list_of_pairs(images):
+        """images is a list of either pairs of PIL images or pairs of 3D arrays."""
+        return all(_is_pair_of_PIL(image) or _is_pair_of_3d_arrays(image) for image in images)
+
+    def _format_image_list_sequence(images):
+        """Function that takes an image pair sequence that is either a list of pairs of PIL images or a list of pairs of 3D
+        arrays and turns it into a flatten list of images."""
+        if _is_list_sequence(images):
+            if _is_list_of_pairs(images):
+                return _flatten_image_list_sequence(images)
+        return images
+
+    def _is_list_of_pil(images):
+        """images is a list of PIL images with even length."""
+        return (
+            all(is_valid_image(image) and get_image_type(image) == ImageType.PIL for image in images)
+            and len(images) % 2 == 0
+        )
+
+    def _is_list_of_3d_arrays(images):
+        """images is a list of 3D arrays with even length."""
+        return all(_is_3d_array(image) for image in images) and len(images) % 2 == 0
+
+    def _validate_image_list_format(images):
+        """
+        Function that validates the format of the output list.
+
+        A valid output is one of the following:
+        - A list of PIL images with even length.
+        - A list of 3D arrays with even length.
+
+        Raises a ValueError if the output is not one of the above.
+        """
+        if _is_list_of_pil(images):
+            return images
+        if _is_list_of_3d_arrays(images):
+            return images
+        raise ValueError(error_message)
+
+    images = _format_image_list(images)
+    images = _format_image_list_sequence(images)
+    images = _validate_image_list_format(images)
+
+    return images
+
+
+class SuperGlueImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a SuperPoint image processor.
+    Constructs a SuperGlue image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -101,6 +252,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
             `True`. Can be overriden by `size` in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
             the `preprocess` method.
@@ -117,6 +270,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_grayscale: bool = True,
@@ -128,10 +282,12 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_grayscale = do_grayscale
 
+    # Copied from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -176,6 +332,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         images,
         do_resize: bool = None,
         size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_grayscale: bool = None,
@@ -189,8 +346,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+                Image pairs to preprocess. Expects either a list of 2 images or a list of list of 2 images list with
+                pixel values ranging from 0 to 255. If passing in images with pixel values between 0 and 1, set
+                `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -198,6 +356,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
                 `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
+            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of `PILImageResampling`, filters. Only
+                has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -225,6 +386,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         """
 
         do_resize = do_resize if do_resize is not None else self.do_resize
+        resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
@@ -232,7 +394,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        images = make_list_of_images(images)
+        images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -240,11 +402,13 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -260,17 +424,16 @@ class SuperPointImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            images = [self.resize(image=image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_grayscale:
             images = [convert_to_grayscale(image, input_data_format=input_data_format) for image in images]
@@ -279,6 +442,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        data = {"pixel_values": images}
+        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+
+        data = {"pixel_values": image_pairs}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
