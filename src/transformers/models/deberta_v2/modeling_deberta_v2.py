@@ -1027,7 +1027,8 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
             self.cls.predictions.decoder = new_embeddings
             self.cls.predictions.bias = new_embeddings.bias
         else:
-            self.lm_predictions.lm_head = new_embeddings
+            self.lm_predictions.lm_head.dense = new_embeddings
+            self.lm_predictions.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
