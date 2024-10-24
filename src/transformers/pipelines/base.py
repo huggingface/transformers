@@ -814,7 +814,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
         modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = "pt",
+        framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, "torch.device"] = None,
