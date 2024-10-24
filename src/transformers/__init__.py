@@ -3151,6 +3151,7 @@ else:
     _import_structure["models.qwen2_vl"].extend(
         [
             "Qwen2VLForConditionalGeneration",
+            "Qwen2VLForSequenceClassification",
             "Qwen2VLModel",
             "Qwen2VLPreTrainedModel",
         ]
@@ -7702,6 +7703,7 @@ if TYPE_CHECKING:
         )
         from .models.qwen2_vl import (
             Qwen2VLForConditionalGeneration,
+            Qwen2VLForSequenceClassification,
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
         )
