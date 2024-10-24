@@ -141,7 +141,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by RTDETR.
+    Convert the target in COCO format into the format expected by RT-DETR.
     """
     image_height, image_width = image.size()[-2:]
 
@@ -221,8 +221,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
