@@ -61,7 +61,13 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
+    from transformers.cache_utils import (
+        DynamicCache,
+        DynamicSlidingWindowCache,
+        EncoderDecoderCache,
+        QuantoQuantizedCache,
+        StaticCache,
+    )
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -2045,6 +2051,122 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
+
+    @parameterized.expand([(False,), (True,)])
+    @pytest.mark.generate
+    def test_generate_with_dynamic_sliding_window_cache(self, left_padding: bool):
+        """
+        Tests if DynamicSlidingWindowCache works the same as DynamicCache for models that support it.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+            if not hasattr(config, "sliding_window"):
+                self.skipTest(reason="This model does not support sliding window.")
+            if hasattr(config, "cache_implementation"):
+                self.skipTest(reason="This model uses a specific cache format.")
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support Cache classes")
+            if model_class.__name__ == "MoshiForConditionalGeneration":
+                self.skipTest(reason="MoshiForConditionalGeneration has specific forward inputs")
+
+            input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
+            if left_padding:
+                attention_mask = torch.tensor(
+                    [
+                        [0, 0, 0, 1, 1, 1, 1],
+                        [1, 1, 1, 1, 1, 1, 1],
+                    ],
+                    device=input_ids.device,
+                    dtype=int,
+                )
+            else:
+                attention_mask = torch.ones_like(input_ids)
+
+            # Make sure we will go beyond the sliding window
+            config.sliding_window = 3
+            model = model_class(config).to(torch_device).eval()
+            all_generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 20,
+                "min_new_tokens": 20,
+                "use_cache": True,
+            }
+
+            dynamic_cache = DynamicCache()
+            dynamic_sliding_cache = DynamicSlidingWindowCache(config.sliding_window)
+
+            results_dynamic = model.generate(
+                input_ids, attention_mask=attention_mask, **all_generation_kwargs, past_key_values=dynamic_cache
+            )
+            results_sliding_dynamic = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                **all_generation_kwargs,
+                past_key_values=dynamic_sliding_cache,
+            )
+
+            self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
+
+    @parameterized.expand([(3, 1), (3, 4), (14, 5)])
+    @pytest.mark.generate
+    def test_generate_continue_from_dynamic_sliding_window_cache(self, sliding_window: int, additional_tokens: int):
+        """
+        Tests if we can correctly continue generation with DynamicSlidingWindowCache.
+        - First case tests that we can continue if the cache is already full, and we add less tokens than the sliding window
+        - Second case tests that we can continue if the cache is already full, and we add more tokens that the sliding window
+        - Third case tests that we can continue if the cache is not full, and we add tokens so that the new input is bigger than the sliding window
+        """
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+            if not hasattr(config, "sliding_window"):
+                self.skipTest(reason="This model does not support sliding window.")
+            if hasattr(config, "cache_implementation"):
+                self.skipTest(reason="This model uses a specific cache format.")
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support Cache classes")
+            if model_class.__name__ == "MoshiForConditionalGeneration":
+                self.skipTest(reason="MoshiForConditionalGeneration has specific forward inputs")
+
+            # We need to be sure to always have shape (2, 7) for the different test assumptions to hold
+            input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
+
+            # Make sure we will go beyond the sliding window
+            config.sliding_window = sliding_window
+            model = model_class(config).to(torch_device).eval()
+            all_generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,
+                "use_cache": True,
+                "return_dict_in_generate": True,
+            }
+
+            dynamic_cache = DynamicCache()
+            dynamic_sliding_cache = DynamicSlidingWindowCache(config.sliding_window)
+
+            out_dynamic = model.generate(input_ids, **all_generation_kwargs, past_key_values=dynamic_cache)
+            out_sliding_dynamic = model.generate(
+                input_ids, **all_generation_kwargs, past_key_values=dynamic_sliding_cache
+            )
+
+            results_dynamic, dynamic_cache = out_dynamic.sequences, out_dynamic.past_key_values
+            results_sliding_dynamic, dynamic_sliding_cache = (
+                out_sliding_dynamic.sequences,
+                out_sliding_dynamic.past_key_values,
+            )
+
+            self.assertListEqual(results_dynamic.tolist(), results_sliding_dynamic.tolist())
+
+            bs = results_dynamic.shape[0]
+            added_tokens = ids_tensor((bs, additional_tokens), vocab_size=config.vocab_size)
+            input_ids = torch.cat([results_dynamic, added_tokens], dim=-1)
+
+            out_dynamic = model.generate(input_ids, **all_generation_kwargs, past_key_values=dynamic_cache)
+            out_sliding_dynamic = model.generate(
+                input_ids, **all_generation_kwargs, past_key_values=dynamic_sliding_cache
+            )
+
+            self.assertListEqual(out_dynamic.sequences.tolist(), out_sliding_dynamic.sequences.tolist())
 
     def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
         # we can be sure what is batch size from main input but seq length depends on model type and whether input is text/audio/image

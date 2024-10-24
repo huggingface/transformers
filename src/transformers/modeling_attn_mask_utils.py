@@ -275,13 +275,13 @@ class AttentionMaskConverter:
             if (
                 (is_training or not is_tracing)
                 and (query_length == 1 or key_value_length == query_length)
-                and (sliding_window is None or key_value_length < sliding_window)
+                and (sliding_window is None or key_value_length <= sliding_window)
             ):
                 ignore_causal_mask = True
-        elif sliding_window is None or key_value_length < sliding_window:
+        elif sliding_window is None or key_value_length <= sliding_window:
             if len(attention_mask.shape) == 4:
                 return False
-            elif not is_tracing and torch.all(attention_mask == 1):
+            elif not is_tracing and torch.all(attention_mask[:, -key_value_length:] == 1):
                 if query_length == 1 or key_value_length == query_length:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
                     ignore_causal_mask = True

@@ -64,6 +64,12 @@ class Cache(torch.nn.Module):
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
+    def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the number of already processed tokens. For all Cache classes except SlidingWindow caches, this is the same as
+        `get_seq_length()`. However, with sliding window we can process more tokens than the cache size. A layer index can be optionally passed.
+        """
+        return self.get_seq_length(layer_idx)
+
     # Deprecate in favor of max-cache-shape because we want to be specifc by what we mean with "max_length"
     # Prev some cache objects didn't have "max_length" (SlidingWindowCache or SinkCache) because the cache object technically handles
     # infinite amount of tokens. In the codebase what we really need to check is the max capacity of certain cache instances, so
@@ -543,6 +549,133 @@ class DynamicCache(Cache):
         for layer_idx in range(len(self)):
             self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
+
+
+# TODO: (cyril) Make this the default for models with sliding window once `generate` no longer returns Cache as tuples
+class DynamicSlidingWindowCache(DynamicCache):
+    """
+    A cache that grows dynamically as more tokens are generated, but will stop growing if the sequence length is bigger than the sliding window.
+    This will be the default for generative models with sliding window attention (except for assisted decoding where `DynamicCache` is used).
+
+    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
+    `[batch_size, num_heads, seq_len, head_dim]` and up to `[batch_size, num_heads, sliding_window-1, head_dim]` if seq_len >= sliding_window-1.
+
+    Note: Since we only keep maximum `sliding_window-1` tokens in the cache, once this value is reached the cache can no
+    longer be roll-backed to previous states without losing information. For this reason, it should not be used with assisted decoding
+    (or contrastive search when using `low_memory=True`).
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicSlidingWindowCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
+
+        >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> past_key_values = DynamicSlidingWindowCache(model.config.sliding_window)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        DynamicSlidingWindowCache()
+        ```
+    """
+
+    def __init__(self, sliding_window: int) -> None:
+        super().__init__()
+        self.sliding_window = sliding_window
+        # We overwrite the field and maintain a list of size `num_hidden_layers` to accurately reflect the seen tokens at each layer during `update`
+        self._seen_tokens = []
+
+    def get_past_seen_tokens(self, layer_idx: Optional[int] = 0) -> int:
+        """This needs to be overriden because the number of processed tokens may be larger than the cache length."""
+        if len(self._seen_tokens) <= layer_idx:
+            return 0
+        else:
+            return self._seen_tokens[layer_idx]
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`. Discard previous
+        tokens according to the sliding window if needed.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        if len(self.key_cache) <= layer_idx:
+            # Update the number of seen tokens
+            self._seen_tokens.append(key_states.shape[-2])
+            # Add only up to sliding window size if larger
+            self.key_cache.append(key_states[..., -self.sliding_window + 1 :, :])
+            self.value_cache.append(value_states[..., -self.sliding_window + 1 :, :])
+            # We should return full states during prefill even though we only save up to sliding window-1
+            return key_states, value_states
+        else:
+            self._seen_tokens[layer_idx] += key_states.shape[-2]
+            # We may need to return longer states (e.g. to continue generation with previous cache, with added tokens), but we only keep
+            # the last `sliding_window-1` states in the cache for next forward
+            full_key_states = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            full_value_states = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            self.key_cache[layer_idx] = full_key_states[..., -self.sliding_window + 1 :, :]
+            self.value_cache[layer_idx] = full_value_states[..., -self.sliding_window + 1 :, :]
+            return full_key_states, full_value_states
+
+    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
+        out = []
+        for i in range(0, full_batch_size, split_size):
+            current_split = DynamicSlidingWindowCache(self.sliding_window)
+            current_split._seen_tokens = self._seen_tokens
+            current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
+            current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
+            out.append(current_split)
+        return out
+
+    @classmethod
+    def from_batch_splits(cls, splits: List["DynamicSlidingWindowCache"]) -> "DynamicSlidingWindowCache":
+        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
+        cache = cls(splits[0].sliding_window)
+        for idx in range(len(splits[0])):
+            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
+            value_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
+            if key_cache != []:
+                layer_keys = torch.cat(key_cache, dim=0)
+                layer_values = torch.cat(value_cache, dim=0)
+                cache.update(layer_keys, layer_values, idx)
+
+        # We need this because _seen_tokens may be bigger than what will be automatically set with `update` (if cache > sliding_window)
+        cache._seen_tokens = splits[0]._seen_tokens
+        return cache
+
+    def crop(self, max_length: int):
+        if self.get_past_seen_tokens() >= self.sliding_window - 1:
+            raise RuntimeError(
+                "The current DynamicSlidingWindowCache is full. It cannot be cropped as this would mean losing past states."
+            )
+        else:
+            super().crop(max_length)
+
+    from_legacy_cache = None
+    to_legacy_cache = None
 
 
 class OffloadedCache(DynamicCache):

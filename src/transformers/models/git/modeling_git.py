@@ -1613,7 +1613,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
 
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
+            past_length = past_key_values.get_past_seen_tokens()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

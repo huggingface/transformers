@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -559,7 +559,6 @@ class MimiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Mimi
 class MimiFlashAttention2(MimiAttention):
     """
     Mimi flash attention module. This module inherits from `MimiAttention` as the weights of the module stays
@@ -613,6 +612,9 @@ class MimiFlashAttention2(MimiAttention):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Slice to k/v length (this is usually the sliding window length, but may be bigger)
+            if attention_mask is not None and isinstance(past_key_value, DynamicSlidingWindowCache):
+                attention_mask = attention_mask[:, -key_states.shape[-2] :]
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -958,7 +960,7 @@ class MimiTransformerModel(nn.Module):
                 )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
             )
@@ -1044,7 +1046,8 @@ class MimiTransformerModel(nn.Module):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        current_cache_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
@@ -1057,7 +1060,7 @@ class MimiTransformerModel(nn.Module):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
+                past_key_values_length=current_cache_length,
                 sliding_window=self.config.sliding_window,
                 is_training=self.training,
             ):
@@ -1076,12 +1079,18 @@ class MimiTransformerModel(nn.Module):
                 if isinstance(attention_mask, torch.Tensor)
                 else past_seen_tokens + sequence_length + 1
             )
+        initial_mask_position = (
+            max(0, past_seen_tokens - self.config.sliding_window + 1)
+            if isinstance(past_key_values, DynamicSlidingWindowCache)
+            else 0
+        )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
+            initial_mask_position=initial_mask_position,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -1109,6 +1118,7 @@ class MimiTransformerModel(nn.Module):
         attention_mask: torch.Tensor,
         sequence_length: int,
         target_length: int,
+        initial_mask_position: int,
         dtype: torch.dtype,
         device: torch.device,
         cache_position: torch.Tensor,
@@ -1127,6 +1137,9 @@ class MimiTransformerModel(nn.Module):
                 The sequence length being processed.
             target_length (`int`):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+            initial_mask_position (`int`):
+                The initial mask position to use when creating the 4d mask. If the Cache does not keep all states in memory (e.g. only `sliding_window` states),
+                this is needed to know where to start from to create the new mask (because the new mask).
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
@@ -1146,14 +1159,19 @@ class MimiTransformerModel(nn.Module):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length - initial_mask_position),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            diagonal_attend_mask = torch.arange(
+                initial_mask_position, target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             if config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
+                    sliding_attend_mask = torch.arange(initial_mask_position, target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
                     diagonal_attend_mask |= sliding_attend_mask
@@ -1164,7 +1182,9 @@ class MimiTransformerModel(nn.Module):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = (
+                    causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, initial_mask_position:]
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype

@@ -646,7 +646,7 @@ class BloomModel(BloomPreTrainedModel):
                 )
 
         batch_size, seq_length, _ = inputs_embeds.shape
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_length = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_length
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
@@ -747,7 +747,7 @@ class BloomModel(BloomPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward

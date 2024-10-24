@@ -28,7 +28,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
@@ -331,15 +331,15 @@ class MixtralAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_len = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
+
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -414,27 +414,23 @@ class MixtralFlashAttention2(MixtralAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = (
-            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
-        )
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_len = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Slice to k/v length (this is usually the sliding window length, but may be bigger)
+            if attention_mask is not None and isinstance(past_key_value, DynamicSlidingWindowCache):
+                attention_mask = attention_mask[:, -key_states.shape[-2] :]
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -535,11 +531,14 @@ class MixtralSdpaAttention(MixtralAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
+        rotary_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            if past_key_value.get_max_cache_shape() is not None:
+                rotary_seq_len = past_key_value.get_max_cache_shape()
+            else:
+                rotary_seq_len += past_key_value.get_past_seen_tokens(self.layer_idx)
 
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -963,7 +962,7 @@ class MixtralModel(MixtralPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -1062,7 +1061,8 @@ class MixtralModel(MixtralPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        current_cache_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
@@ -1075,7 +1075,7 @@ class MixtralModel(MixtralPreTrainedModel):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
+                past_key_values_length=current_cache_length,
                 sliding_window=self.config.sliding_window,
                 is_training=self.training,
             ):
@@ -1094,12 +1094,18 @@ class MixtralModel(MixtralPreTrainedModel):
                 if isinstance(attention_mask, torch.Tensor)
                 else past_seen_tokens + sequence_length + 1
             )
+        initial_mask_position = (
+            max(0, past_seen_tokens - self.config.sliding_window + 1)
+            if isinstance(past_key_values, DynamicSlidingWindowCache)
+            else 0
+        )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
+            initial_mask_position=initial_mask_position,
             dtype=dtype,
             device=device,
             cache_position=cache_position,
@@ -1127,6 +1133,7 @@ class MixtralModel(MixtralPreTrainedModel):
         attention_mask: torch.Tensor,
         sequence_length: int,
         target_length: int,
+        initial_mask_position: int,
         dtype: torch.dtype,
         device: torch.device,
         cache_position: torch.Tensor,
@@ -1145,6 +1152,9 @@ class MixtralModel(MixtralPreTrainedModel):
                 The sequence length being processed.
             target_length (`int`):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+            initial_mask_position (`int`):
+                The initial mask position to use when creating the 4d mask. If the Cache does not keep all states in memory (e.g. only `sliding_window` states),
+                this is needed to know where to start from to create the new mask (because the new mask).
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
@@ -1164,14 +1174,19 @@ class MixtralModel(MixtralPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length - initial_mask_position),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            diagonal_attend_mask = torch.arange(
+                initial_mask_position, target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             if config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
+                    sliding_attend_mask = torch.arange(initial_mask_position, target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
                     diagonal_attend_mask |= sliding_attend_mask
@@ -1182,7 +1197,9 @@ class MixtralModel(MixtralPreTrainedModel):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = (
+                    causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, initial_mask_position:]
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
