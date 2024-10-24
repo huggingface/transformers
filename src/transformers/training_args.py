@@ -1530,6 +1530,13 @@ class TrainingArguments:
         },
     )
 
+    average_tokens_across_devices: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to average tokens across devices."
+        }
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
