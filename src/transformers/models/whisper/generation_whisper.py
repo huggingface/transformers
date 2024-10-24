@@ -566,11 +566,12 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
+        num_beams = generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
-            num_beams=kwargs.get("num_beams", 1),
+            num_beams=num_beams,
             device=device,
         )
 
