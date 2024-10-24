@@ -37,30 +37,28 @@ class TimesFMConfig(PretrainedConfig):
     Arguments:
         patch_len (`int`, *optional*, defaults to 32):
             The length of one patch in the input sequence.
-        horizon_len (`int`, *optional*, defaults to 128):
-            The length of the prediction horizon.
         context_len (`int`, *optional*, defaults to 512):
             The length of the input context.
+        horizon_len (`int`, *optional*, defaults to 128):
+            The length of the prediction horizon.
         freq_size (`int`, *optional*, defaults to 3):
             The number of frequency embeddings.
+        num_layers (`int`, *optional*, defaults to 20):
+            Number of Transformer layers.
         model_dim (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
         head_dim (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * head_dim`.
-        num_layers (`int`, *optional*, defaults to 20):
-            Number of Transformer layers.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        tolerance (`float`, *optional*, defaults to 1e-6):
-            The tolerance for the quantile loss.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        tolerance (`float`, *optional*, defaults to 1e-06):
+            The tolerance for the quantile loss.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the RMS normalization layers.
-        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.25, 0.5, 0.75, 0.9]`):
+        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
             The quantiles to predict.
         pad_val (`float`, *optional*, defaults to 1123581321.0):
             The value used to pad the predictions.
@@ -68,11 +66,9 @@ class TimesFMConfig(PretrainedConfig):
             Whether to add positional embeddings.
         per_core_batch_size (`int`, *optional*, defaults to 32):
             The batch size per core for data parallelism.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        backend (`str`, *optional*, defaults to `"gpu"`):
-            The backend to use for the model. Can be either `"gpu"` or `"cpu"`.
     """
 
     model_type = "timesfm"
@@ -82,6 +78,7 @@ class TimesFMConfig(PretrainedConfig):
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
     }
+    is_encoder_decoder = False
 
     def __init__(
         self,

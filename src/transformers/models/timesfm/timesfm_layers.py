@@ -17,10 +17,11 @@
 
 import math
 from typing import List, Tuple
+
 import numpy as np
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 
 def masked_mean_std(
@@ -379,6 +380,7 @@ class TimesFMAttention(nn.Module):
         hidden_states_shape = hidden_states.shape
         assert len(hidden_states_shape) == 3
 
+        print(">>> TimesFMAttention hidden_states_shape", hidden_states_shape)
         batch_size, input_len, _ = hidden_states_shape
 
         qkv = self.qkv_proj(hidden_states)
@@ -461,6 +463,7 @@ class TimesFMDecoderLayer(nn.Module):
         kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # Self Attention
+        print(">>> TimesFMDecoderLayer hidden_states", hidden_states.shape)
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         scores, hidden_states = self.self_attn(
@@ -511,21 +514,32 @@ class StackedDecoder(nn.Module):
         paddings: torch.Tensor,
         kv_write_indices: torch.Tensor | None = None,
         kv_caches: List[Tuple[torch.Tensor, torch.Tensor]] | None = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
     ) -> torch.Tensor:
+        print(">>> StackedDecoder hidden_states", hidden_states.shape)
         padding_mask = convert_paddings_to_mask(paddings, hidden_states.dtype)
         atten_mask = causal_mask(hidden_states)
         mask = merge_masks(padding_mask, atten_mask)
+        all_attentions = []
+        all_hidden_states = []
+
         for i in range(len(self.layers)):
             layer = self.layers[i]
             kv_cache = kv_caches[i] if kv_caches is not None else None
-            _, hidden_states = layer(
+            scores, hidden_states = layer(
                 hidden_states=hidden_states,
                 mask=mask,
                 paddings=paddings,
                 kv_write_indices=kv_write_indices,
                 kv_cache=kv_cache,
             )
-        return hidden_states
+            if output_attentions:
+                all_attentions.append(scores)
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
+        return hidden_states, all_attentions, all_hidden_states
 
 
 class PositionalEmbedding(torch.nn.Module):
