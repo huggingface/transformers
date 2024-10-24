@@ -208,14 +208,6 @@ class ImageTextToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        else:
-            if "generate_kwargs" not in forward_kwargs:
-                forward_kwargs["generate_kwargs"] = {}
-            if "max_new_tokens" not in forward_kwargs["generate_kwargs"]:
-                logger.warning_once(
-                    "The `max_new_tokens` parameter is not set. By default, the model will generate up to 20 tokens."
-                )
-                forward_kwargs["generate_kwargs"]["max_new_tokens"] = 20
 
         if return_full_text is not None and return_type is None:
             if return_tensors is not None:
