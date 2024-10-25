@@ -155,6 +155,17 @@ class ColPaliProcessor(PaliGemmaProcessor):
             in a chat into a tokenizable string.
     """
 
+    visual_prompt_prefix: ClassVar[str] = "Describe the image."
+    query_prefix: ClassVar[str] = "Question: "
+
+    @property
+    def query_augmentation_token(self) -> str:
+        """
+        Return the query augmentation token.
+        Query augmentation buffers are used as reasoning buffers during inference.
+        """
+        return self.tokenizer.pad_token
+
     def __call__(
         self,
         images: ImageInput = None,
@@ -222,7 +233,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
                 raise ValueError("images must be an image, list of images or list of list of images")
 
-            texts_doc = ["Describe the image."] * len(images)
+            texts_doc = [self.visual_prompt_prefix] * len(images)
             images = [image.convert("RGB") for image in images]
 
             input_strings = [
@@ -261,17 +272,15 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 text = [text]
             elif not (isinstance(text, list) and isinstance(text[0], str)):
                 raise ValueError("Text must be a string or a list of strings")
-            prefix = "Question: "
 
             if suffix is None:
-                suffix = "<pad>" * 10
+                suffix = self.query_augmentation_token * 10
             texts_query: List[str] = []
 
             for query in text:
-                query = self.tokenizer.bos_token + prefix + query
+                query = self.tokenizer.bos_token + self.query_prefix + query
                 query += suffix  # add suffix (pad tokens)
-                # NOTE: Make input ISO to PaliGemma's processor
-                query += "\n"
+                query += "\n"  # make input ISO to PaliGemma's processor
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
@@ -396,6 +405,25 @@ class ColPaliProcessor(PaliGemmaProcessor):
         assert scores.shape[0] == len(qs), f"Expected {len(qs)} scores, got {scores.shape[0]}"
 
         return scores
+
+    def get_n_patches(
+        self,
+        image_size: Tuple[int, int],  # for API consistency wrt to colpali-engine's interpretability module
+        patch_size: int,
+    ) -> Tuple[int, int]:
+        """
+        Return the number of patches (n_patches_x, n_patches_y) for the give image along the two image axis.
+        """
+        n_patches_x = self.image_processor.size["width"] // patch_size
+        n_patches_y = self.image_processor.size["height"] // patch_size
+
+        return n_patches_x, n_patches_y
+
+    def get_image_mask(self, batch_images: BatchFeature) -> torch.Tensor:
+        """
+        Return an image mask that indicates which input tokens correspond to visual tokens.
+        """
+        return batch_images.input_ids == self.image_token_id
 
 
 @dataclass
