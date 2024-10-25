@@ -2425,7 +2425,6 @@ class Trainer:
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
                 for inputs in batch_samples:
                     step += 1
-                    print(step, (step+1) % args.gradient_accumulation_steps)
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
                     if not do_sync_step:
