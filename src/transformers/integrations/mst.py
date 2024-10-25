@@ -15,20 +15,14 @@
 Integration with MsT
 """
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-)
+from torch.nn import CrossEntropyLoss
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from ..models.llama.modeling_llama import LlamaMLP, LlamaForCausalLM
 from ..models.gemma2.modeling_gemma2 import Gemma2MLP, Gemma2ForCausalLM
@@ -36,10 +30,8 @@ from ..models.qwen2.modeling_qwen2 import Qwen2MLP, Qwen2ForCausalLM
 from ..models.mistral.modeling_mistral import MistralMLP, MistralForCausalLM
 
 import torch.nn.functional as F
-from typing import List, Optional, Tuple, Union
 
 def minis_mlp_forward(self, x):
-
     bsz, q_len, _ = x.size()
     chunk_size = self.hidden_size
 
@@ -50,11 +42,10 @@ def minis_mlp_forward(self, x):
     for i in range(len(x_list)):
         x = x_list[i]
         output_list[i] = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-            
+
     down_proj = torch.cat(output_list, dim=1)
 
-    return down_proj  
-
+    return down_proj
 
 class _LM_head(torch.autograd.Function):
 
@@ -63,11 +54,11 @@ class _LM_head(torch.autograd.Function):
         logits = F.linear(hidden_states, weights).float()
         loss_fct = torch.nn.CrossEntropyLoss(reduction="sum")
         loss_i = loss_fct(logits, indices)
-        
+
         weights.count += 1
 
         ctx.save_for_backward(hidden_states, indices, weights)
-        
+
         return loss_i
 
     @classmethod
@@ -77,7 +68,7 @@ class _LM_head(torch.autograd.Function):
         to get p[k], which is most of what we need...  neg_logprobs will be
         modified in place to become the gradient we want
         """
-        
+
         # load saved tensors
         hidden_states, indices, weights = ctx.saved_tensors
         weights.count -= 1
@@ -98,8 +89,8 @@ class _LM_head(torch.autograd.Function):
         grad_input[reverse_mask] = 0
         grad_input *= dneg_logprobs
         grad_input = grad_input.to(hidden_states.dtype)
-        
-        if hasattr(weights, 'grad') and weights.grad != None:
+
+        if hasattr(weights, 'grad') and weights.grad is not None:
             torch.addmm(
                     weights.grad,
                     grad_input.T,
@@ -117,22 +108,17 @@ class _LM_head(torch.autograd.Function):
         else:
             return grad_input, None, None
 
-
 class LMheadWarpper(nn.Module):
     def __init__(
         self,
         original_weight = None
     ):
         super().__init__()
-        if original_weight is None:
-            self.LM_head_weight = nn.Parameter(torch.empty(hidden_size, vocab_size))
-        else:
-            self.LM_head_weight = original_weight
+        self.LM_head_weight = original_weight
         self.LM_head = _LM_head.apply
         self.LM_head_weight.count = 0
 
     def forward(self, hidden_states, labels):
-        ignore_index = -100
         loss = self.LM_head(hidden_states, labels, self.LM_head_weight)
         return loss
 
@@ -156,8 +142,6 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
     
     loss = None
     for i in range(mini_s):
-
-
         shift_hidden_states = hidden_states[..., i * tmp : (i+1)*tmp, :].contiguous()
         shift_hidden_states = shift_hidden_states.view(-1, hidden_size)
         shift_labels = labels[..., i * tmp : (i+1)*tmp ].contiguous()
@@ -174,7 +158,6 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
 
     loss = loss / torch.sum(torch.ne(labels, -100))
     return None, loss
-
 
 def minis_CausalLM_forward(
     self,
@@ -262,4 +245,3 @@ def replace_with_minis():
     Gemma2ForCausalLM.  forward = minis_CausalLM_forward
     Qwen2ForCausalLM.   forward = minis_CausalLM_forward
     MistralForCausalLM. forward = minis_CausalLM_forward
-
