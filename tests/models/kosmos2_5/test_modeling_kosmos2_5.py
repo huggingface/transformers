@@ -542,6 +542,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Kosmos 2.5 is multimodel and has specific input shapes.")
+    def test_flash_attn_2_generate_reuse_cache(self):
+        pass
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             self.skipTest(reason="test_torchscript is set to False")
