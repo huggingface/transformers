@@ -434,15 +434,9 @@ class ImageTextToTextPipeline(Pipeline):
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
-        try:
-            model_inputs = self.processor(
-                images=images, text=text, return_tensors=self.framework, **processing_kwargs
-            ).to(dtype=self.torch_dtype)
-        except TypeError:
-            processing_kwargs.pop("legacy", None)
-            model_inputs = self.processor(
-                images=images, text=text, return_tensors=self.framework, **processing_kwargs
-            ).to(dtype=self.torch_dtype)
+        model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
+            dtype=self.torch_dtype
+        )
 
         model_inputs["text"] = inputs_text
 
