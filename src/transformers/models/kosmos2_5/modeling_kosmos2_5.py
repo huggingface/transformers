@@ -666,13 +666,11 @@ KOSMOS2_5_VISION_ATTENTION_CLASSES = {
 
 
 class Kosmos2_5VisionLayer(nn.Module):
-    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer.__init__ with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
-        # Ignore copy
         self.config = config
 
         self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
