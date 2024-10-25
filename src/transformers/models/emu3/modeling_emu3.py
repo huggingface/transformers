@@ -1489,7 +1489,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
         std = self.config.get_text_config().initializer_range
         if isinstance(module, Emu3VQVAE):
             module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
