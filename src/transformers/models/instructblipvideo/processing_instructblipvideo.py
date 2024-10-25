@@ -131,7 +131,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 video_tokens = (
                     self.video_token.content * self.num_query_tokens * 4
                 )  # InstrucBLIP works with 4 frames only
-                video_token_encoding = self.tokenizer([video_tokens], add_special_tokens=False, return_tensors=None)
+                video_token_encoding = self.tokenizer(
+                    [video_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding

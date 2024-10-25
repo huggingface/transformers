@@ -17,15 +17,10 @@
 import tempfile
 import unittest
 
-from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from transformers import AltCLIPProcessor, CLIPImageProcessor, XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import AltCLIPProcessor, CLIPImageProcessor
 
 
 @require_vision
