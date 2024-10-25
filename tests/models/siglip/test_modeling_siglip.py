@@ -670,6 +670,10 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SiglipConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
     def test_model(self):

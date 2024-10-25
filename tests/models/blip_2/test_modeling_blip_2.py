@@ -461,6 +461,13 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
+        common_properties = ["image_token_index", "num_query_tokens", "image_text_hidden_size"]
+        self.config_tester = ConfigTester(
+            self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

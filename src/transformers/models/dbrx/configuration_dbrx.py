@@ -41,6 +41,8 @@ class DbrxAttentionConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
     """
 
+    base_config_key = "attn_config"
+
     def __init__(
         self,
         attn_pdrop: float = 0.0,
@@ -60,23 +62,6 @@ class DbrxAttentionConfig(PretrainedConfig):
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["attn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class DbrxFFNConfig(PretrainedConfig):
@@ -99,6 +84,8 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_loss_weight (`float`, *optional*, defaults to 0.01): The loss weight for the mixture of experts layer.
         moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
     """
+
+    base_config_key = "ffn_config"
 
     def __init__(
         self,
@@ -127,23 +114,6 @@ class DbrxFFNConfig(PretrainedConfig):
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["ffn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class DbrxConfig(PretrainedConfig):
@@ -202,6 +172,9 @@ class DbrxConfig(PretrainedConfig):
     """
 
     model_type = "dbrx"
+    sub_configs = ["attn_config", "ffn_config"]
+    attn_config_class = "DbrxAttentionConfig"
+    ffn_config_class = "DbrxFFNConfig"
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",

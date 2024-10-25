@@ -81,6 +81,9 @@ class LlavaOnevisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_onevision"
+    sub_configs = ["text_config", "vision_config"]
+    text_config_class = "AutoConfig"
+    vision_config_class = "AutoConfig"
     is_composition = False
 
     def __init__(

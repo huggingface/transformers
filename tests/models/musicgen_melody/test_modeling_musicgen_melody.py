@@ -47,7 +47,6 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -187,10 +186,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     def setUp(self):
         self.model_tester = MusicgenMelodyDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MusicgenMelodyDecoderConfig, hidden_size=16)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     # special case for labels
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest._prepare_for_class

@@ -75,6 +75,9 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "vision-text-dual-encoder"
+    sub_configs = ["text_config", "vision_config"]
+    text_config_class = "AutoConfig"
+    vision_config_class = "AutoConfig"
     is_composition = True
 
     def __init__(self, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):

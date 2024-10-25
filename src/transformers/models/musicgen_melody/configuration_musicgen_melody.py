@@ -78,6 +78,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
     """
 
     model_type = "musicgen_melody_decoder"
+    base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -195,6 +196,10 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ```"""
 
     model_type = "musicgen_melody"
+    sub_configs = ["text_encoder_config", "audio_encoder_config", "decoder_config"]
+    text_config_class = "AutoConfig"
+    vision_config_class = "AutoConfig"
+    decoder_config_class = "MusicgenMelodyDecoderConfig"
     is_composition = True
 
     def __init__(

@@ -465,6 +465,15 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=InstructBlipConfig,
+            has_text_modality=False,
+            common_properties=["num_query_tokens", "image_token_index"],
+        )
+
+    def test_config(self):
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

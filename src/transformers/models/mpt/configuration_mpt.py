@@ -66,6 +66,8 @@ class MptAttentionConfig(PretrainedConfig):
             The maximum value of the alibi bias.
     """
 
+    base_config_key = "attn_config"
+
     def __init__(
         self,
         attn_type="multihead_attention",
@@ -96,23 +98,6 @@ class MptAttentionConfig(PretrainedConfig):
             raise ValueError(
                 f"`attn_type` has to be either `multihead_attention` or `multiquery_attention`. Received: {attn_type}"
             )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "mpt":
-            config_dict = config_dict["attn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class MptConfig(PretrainedConfig):
@@ -188,6 +173,8 @@ class MptConfig(PretrainedConfig):
     """
 
     model_type = "mpt"
+    sub_configs = ["attn_config"]
+    attn_config_class = "MptAttentionConfig"
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",

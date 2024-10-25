@@ -14,8 +14,7 @@
 # limitations under the License.
 """BARK model configuration"""
 
-import os
-from typing import Dict, Optional, Union
+from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
@@ -64,7 +63,6 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
 
 
 class BarkSubModelConfig(PretrainedConfig):
-    model_type = "bark_module"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     attribute_map = {
@@ -100,38 +98,6 @@ class BarkSubModelConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        **kwargs,
-    ) -> "PretrainedConfig":
-        kwargs["cache_dir"] = cache_dir
-        kwargs["force_download"] = force_download
-        kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
-
-        cls._set_token_in_kwargs(kwargs, token)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the config dict if we are loading from Bark
-        if config_dict.get("model_type") == "bark":
-            config_dict = config_dict[f"{cls.model_type}_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 @add_start_docstrings(
@@ -265,6 +231,11 @@ class BarkConfig(PretrainedConfig):
     """
 
     model_type = "bark"
+    sub_configs = ["semantic_config", "coarse_acoustics_config", "fine_acoustics_config", "codec_config"]
+    semantic_config_class = "BarkSemanticConfig"
+    coarse_acoustics_config_class = "BarkCoarseConfig"
+    fine_acoustics_config_class = "BarkFineConfig"
+    codec_config_class = "AutoConfig"
 
     def __init__(
         self,

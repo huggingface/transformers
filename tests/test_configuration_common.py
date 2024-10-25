@@ -17,10 +17,15 @@ import copy
 import json
 import os
 import tempfile
+from pathlib import Path
 
-from transformers import is_torch_available
+from transformers import AutoConfig, is_torch_available
+from transformers.utils import direct_transformers_import
 
 from .utils.test_configuration_utils import config_common_kwargs
+
+
+transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
 class ConfigTester:
@@ -109,6 +114,34 @@ class ConfigTester:
             config_second = self.config_class.from_pretrained(tmpdirname, subfolder=subfolder)
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
+
+    def create_and_test_config_from_and_save_pretrained_composite(self):
+        config = self.config_class(**self.inputs_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            general_config_loaded = self.config_class.from_pretrained(tmpdirname)
+            general_config_dict = config.to_dict()
+
+            sub_configs = self.config_class.sub_configs
+            for sub_config_key in sub_configs:
+                class_name = getattr(self.config_class, f"{sub_config_key}_class")
+                if class_name != "AutoConfig":
+                    sub_config_class = getattr(transformers_module, class_name)
+                    sub_config_loaded = sub_config_class.from_pretrained(tmpdirname)
+                else:
+                    sub_class = AutoConfig.for_model(**general_config_dict[sub_config_key])
+                    sub_config_loaded = sub_class.__class__.from_pretrained(tmpdirname)
+
+                # Pop `transformers_version`, it never exists when a config is part of a general composite config
+                # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
+                sub_config_loaded_dict = sub_config_loaded.to_dict()
+                sub_config_loaded_dict.pop("transformers_version", None)
+                self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
+
+                # Verify that the loaded config type is same as in the general config
+                type_from_general_config = type(getattr(general_config_loaded, sub_config_key))
+                self.parent.assertTrue(isinstance(sub_config_loaded, type_from_general_config))
 
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)

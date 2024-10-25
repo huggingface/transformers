@@ -547,6 +547,14 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)
+        common_properties = ["projection_dim", "prompt_layers", "prompt_num_attention_heads"]
+        self.config_tester = ConfigTester(
+            self, config_class=XCLIPConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

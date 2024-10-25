@@ -86,7 +86,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_next_video"
-    is_composition = True
+    sub_configs = ["text_config", "vision_config"]
+    text_config_class = "AutoConfig"
+    vision_config_class = "AutoConfig"
 
     def __init__(
         self,

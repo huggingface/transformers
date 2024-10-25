@@ -190,7 +190,14 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):

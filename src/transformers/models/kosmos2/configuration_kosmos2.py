@@ -14,9 +14,6 @@
 # limitations under the License.
 """KOSMOS-2 model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -72,6 +69,7 @@ class Kosmos2TextConfig(PretrainedConfig):
     ```"""
 
     model_type = "kosmos_2_text_model"
+    base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
@@ -124,24 +122,6 @@ class Kosmos2TextConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Kosmos2Config
-        if config_dict.get("model_type") == "kosmos-2":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class Kosmos2VisionConfig(PretrainedConfig):
     r"""
@@ -183,6 +163,7 @@ class Kosmos2VisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "kosmos_2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -214,24 +195,6 @@ class Kosmos2VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Kosmos2Config
-        if config_dict.get("model_type") == "kosmos-2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Kosmos2Config(PretrainedConfig):
@@ -267,7 +230,9 @@ class Kosmos2Config(PretrainedConfig):
     ```"""
 
     model_type = "kosmos-2"
-    is_composition = True
+    sub_configs = ["text_config", "vision_config"]
+    text_config_class = "Kosmos2TextConfig"
+    vision_config_class = "Kosmos2VisionConfig"
 
     def __init__(
         self,

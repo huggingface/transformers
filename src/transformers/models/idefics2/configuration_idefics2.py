@@ -13,9 +13,6 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -76,7 +73,8 @@ class Idefics2VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "idefics2"
+    model_type = "idefics2_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -107,24 +105,6 @@ class Idefics2VisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Idefics2Config
-        if config_dict.get("model_type") == "idefics2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class Idefics2PerceiverConfig(PretrainedConfig):
     r"""
@@ -152,7 +132,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
     """
 
-    model_type = "idefics2"
+    model_type = "idefics2_perceiver"
 
     def __init__(
         self,
@@ -220,7 +200,10 @@ class Idefics2Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics2"
-    is_composition = True
+    sub_configs = ["text_config", "perceiver_config", "vision_config"]
+    text_config_class = "AutoConfig"
+    perceiver_config_class = "Idefics2PerceiverConfig"
+    vision_config_class = "Idefics2VisionConfig"
 
     def __init__(
         self,
