@@ -843,6 +843,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 ):
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
+
 # We will verify our results on an image of cute cats
 def prepare_video():
     video_file = hf_hub_download(
