@@ -493,13 +493,13 @@ class TextGenerationPipelineTests(unittest.TestCase):
             and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
         ):
             # Handling of large generations
-            if text_generator.device == "cpu":
+            if str(text_generator.device) == "cpu":
                 with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
                     text_generator("This is a test" * 500, max_new_tokens=20)
 
             outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
             # Hole strategy cannot work
-            if text_generator.device == "cpu":
+            if str(text_generator.device) == "cpu":
                 with self.assertRaises(ValueError):
                     text_generator(
                         "This is a test" * 500,
