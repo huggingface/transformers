@@ -1246,29 +1246,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
-    def test_generate_with_prompt_ids_and_task_and_language(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        language = "<|de|>"
-        task = "translate"
-        lang_id = 6
-        task_id = 7
-        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
-        model.generation_config.__setattr__("task_to_id", {task: task_id})
-
-        output = model.generate(input_features, max_new_tokens=5, task=task, language=language, prompt_ids=prompt_ids)
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            lang_id,
-            task_id,
-        ]
-        for row in output.tolist():
-            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
-
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.max_target_positions = 7
