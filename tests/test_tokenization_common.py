@@ -1358,6 +1358,55 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
+    def test_continue_final_message_for_llama(self):
+        """Regression test for Llama 3.1 chat templates: https://github.com/huggingface/transformers/pull/34214"""
+
+        # This is a simplified Llama chat template since we don't require all the tools logic
+        dummy_template = """
+        {{- bos_token }}
+
+        {#- This block extracts the system message, so we can slot it into the right place. #}
+        {%- if messages[0]['role'] == 'system' %}
+            {%- set system_message = messages[0]['content']|trim %}
+            {%- set messages = messages[1:] %}
+        {%- else %}
+            {%- set system_message = "" %}
+        {%- endif %}
+
+        {%- for message in messages %}
+            {%- if not (message.role == 'ipython' or message.role == 'tool' or 'tool_calls' in message) %}
+                {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' }}
+            {%- endif %}
+        {%- endfor %}
+        {%- if add_generation_prompt %}
+            {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
+        {%- endif %}
+        """
+        dummy_conversation = [
+            {"role": "system", "content": "system message"},
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "assistant message"},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=False
+                )
+                self.assertEqual(
+                    output,
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\nsystem message<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nuser message<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nassistant message<|eot_id|>",
+                )
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\nsystem message<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nuser message<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nassistant message",
+                )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
