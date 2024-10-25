@@ -113,7 +113,6 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
 _datasets_available = _is_package_available("datasets")
-_decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -188,7 +187,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
-_torchvision_available = _is_package_available("torchvision")
+_torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
@@ -366,6 +365,14 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_torchvision_v2_available():
+    if not is_torchvision_available():
+        return False
+
+    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
+    return version.parse(_torchvision_version) >= version.parse("0.15")
 
 
 def is_galore_torch_available():
@@ -1178,10 +1185,6 @@ def is_ccl_available():
     return _is_ccl_available
 
 
-def is_decord_available():
-    return _decord_available
-
-
 def is_sudachi_available():
     return _sudachipy_available
 
@@ -1561,10 +1564,6 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
-DECORD_IMPORT_ERROR = """
-{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
-decord`. Please note that you may need to restart your runtime after installation.
-"""
 
 CYTHON_IMPORT_ERROR = """
 {0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
@@ -1626,7 +1625,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
@@ -1967,6 +1965,13 @@ def create_import_structure_from_path(module_path):
     # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
+
+    # Modular files should not be imported
+    def find_substring(substring, list_):
+        return any(substring in x for x in list_)
+
+    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
+        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
 
     module_requirements = {}
     for module_name in adjacent_modules:
