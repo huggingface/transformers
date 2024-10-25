@@ -15,6 +15,7 @@
 
 
 import copy
+import gc
 import inspect
 import tempfile
 import unittest
@@ -2073,12 +2074,24 @@ class GenerationTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                del model
+                gc.collect()
+
+                generate_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": False,
+                    "return_dict_in_generate": True,
+                    "output_scores": True,
+                }
 
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
+                res_sdpa = model_sdpa.generate(**inputs_dict, **generate_kwargs)
+                del model_sdpa
+                gc.collect()
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -2086,16 +2099,9 @@ class GenerationTesterMixin:
                     low_cpu_mem_usage=True,
                     attn_implementation="eager",
                 ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                generate_kwargs = {
-                    "max_new_tokens": max_new_tokens,
-                    "do_sample": False,
-                    "return_dict_in_generate": True,
-                    "output_scores": True,
-                }
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
-                res_sdpa = model_sdpa.generate(**inputs_dict, **generate_kwargs)
+                del model_eager
+                gc.collect()
 
                 # Eager and SDPA are very similar, but not exactly the same. Because we are using random models, this
                 # test would be flaky if we only checked the sequences. Two situations in which this test passes:
