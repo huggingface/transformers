@@ -943,11 +943,11 @@ def _load_state_dict_into_meta_model(
         old_param = model
         splits = param_name.split(".")
         for split in splits:
-            old_param = getattr(old_param, split)
+            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
+            old_param = getattr(old_param, split, None)
             if old_param is None:
                 break
 
-        # Not all the attributes of a module are Parameters/Tensor
         if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
             old_param = None
 
