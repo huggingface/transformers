@@ -694,7 +694,7 @@ class FuyuProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text output.
         """
-        beginning_of_answer = self.tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        beginning_of_answer = self.tokenizer.convert_tokens_to_ids[BEGINNING_OF_ANSWER_STRING]
         # get boa index for each outputted sequence tensor
         # start all generated sequences from the beginning of the answer token, pad to have consistent length
         unpadded_output_sequences = [

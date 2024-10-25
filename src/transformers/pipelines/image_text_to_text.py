@@ -64,15 +64,6 @@ class Chat:
         self.images = images
 
 
-class ImageText:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We used this class
-    as the base pipeline does not support multiple inputs, so we need to convert multiple inputs to a single input."""
-
-    def __init__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], text: Union[str, List[str]]):
-        self.images = images
-        self.text = text
-
-
 def retrieve_images_in_messages(
     messages: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]
 ):
@@ -364,7 +355,7 @@ class ImageTextToTextPipeline(Pipeline):
         if nested_images:
             results = []
             for image_group, text_single in zip(images, text):
-                results.extend(super().__call__(ImageText(image_group, text_single), **kwargs))
+                results.extend(super().__call__({"images": image_group, "text": text_single}, **kwargs))
             return results
 
         # otherwise, we can flatten the images and text as we have a 1:1 relationship
@@ -376,10 +367,10 @@ class ImageTextToTextPipeline(Pipeline):
         results = []
         while batching_index < len(images):
             batch_results = super().__call__(
-                ImageText(
-                    images[batching_index : batching_index + batch_size],
-                    text[batching_index : batching_index + batch_size],
-                ),
+                {
+                    "images": images[batching_index : batching_index + batch_size],
+                    "text": text[batching_index : batching_index + batch_size],
+                },
                 **kwargs,
             )
             results.extend(batch_results)
@@ -397,16 +388,6 @@ class ImageTextToTextPipeline(Pipeline):
             text = inputs
             inputs_text = inputs
         else:
-            # We have an ImageText or Chat inputs
-            images = inputs.images
-            if len(images) > 0:
-                if not isinstance(images, (list, tuple)):
-                    images = load_image(images, timeout=timeout)
-                else:
-                    images = [load_image(image, timeout=timeout) for image in images]
-            else:
-                images = None
-
             if isinstance(inputs, Chat):
                 # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
                 # because very few models support multiple separate, consecutive assistant messages
@@ -419,9 +400,19 @@ class ImageTextToTextPipeline(Pipeline):
                     return_tensors=self.framework,
                 )
                 inputs_text = inputs
+                images = inputs.images
             else:
-                text = inputs.text
-                inputs_text = inputs.text
+                text = inputs["text"]
+                inputs_text = inputs["text"]
+                images = inputs["images"]
+
+            if len(images) > 0:
+                if not isinstance(images, (list, tuple)):
+                    images = load_image(images, timeout=timeout)
+                else:
+                    images = [load_image(image, timeout=timeout) for image in images]
+            else:
+                images = None
 
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:

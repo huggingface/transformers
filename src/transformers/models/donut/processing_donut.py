@@ -114,10 +114,8 @@ class DonutProcessor(ProcessorMixin):
 
         if images is not None:
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        if text is not None and images is None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        elif text is not None:
-            if not legacy:
+        if text is not None:
+            if not legacy and images is not None:
                 output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
