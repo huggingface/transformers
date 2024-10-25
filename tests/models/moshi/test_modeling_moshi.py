@@ -591,9 +591,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
+    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        super()._check_outputs(output, input_ids, config, use_cache=True, num_return_sequences=num_return_sequences)
+        super()._check_outputs(output, config, use_cache=True, num_return_sequences=num_return_sequences)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
