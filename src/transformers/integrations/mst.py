@@ -15,13 +15,14 @@
 Integration with MsT
 """
 import math
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from typing import List, Optional, Tuple, Union
 
+from ..modeling_outputs import CausalLMOutputWithPast
 from ..models.gemma2.modeling_gemma2 import Gemma2ForCausalLM, Gemma2MLP
 from ..models.llama.modeling_llama import LlamaForCausalLM, LlamaMLP
 from ..models.mistral.modeling_mistral import MistralForCausalLM, MistralMLP
