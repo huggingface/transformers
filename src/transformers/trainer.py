@@ -2425,12 +2425,8 @@ class Trainer:
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
                 for inputs in batch_samples:
                     step += 1
-                    is_last_step_and_steps_less_than_grad_acc = (
-                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                    )
-                    do_sync_step = is_last_step_and_steps_less_than_grad_acc or (
-                        step % args.gradient_accumulation_steps == 0
-                    )
+                    print(step, (step+1) % args.gradient_accumulation_steps)
+                    do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
                     if not do_sync_step:
                         self.accelerator.gradient_state._set_sync_gradients(False)
@@ -4908,6 +4904,7 @@ class Trainer:
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
 
         grad_acc_kwargs["sync_with_dataloader"] = False
+
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         accelerator_config = self.args.accelerator_config.to_dict()
