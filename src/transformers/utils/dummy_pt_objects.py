@@ -3769,14 +3769,14 @@ def load_tf_weights_in_electra(*args, **kwargs):
     requires_backends(load_tf_weights_in_electra, ["torch"])
 
 
-class Emu3ForConditionalGeneration(metaclass=DummyObject):
+class Emu3ForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class Emu3Model(metaclass=DummyObject):
+class Emu3ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3791,6 +3791,13 @@ class Emu3PreTrainedModel(metaclass=DummyObject):
 
 
 class Emu3Processor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Emu3TextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

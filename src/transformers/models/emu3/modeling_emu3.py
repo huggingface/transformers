@@ -22,7 +22,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
@@ -51,64 +50,10 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
-# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
-def _prepare_4d_causal_attention_mask_with_cache_position(
-    attention_mask: torch.Tensor,
-    sequence_length: int,
-    target_length: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    min_dtype: float,
-    cache_position: torch.Tensor,
-    batch_size: int,
-):
-    """
-    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-    `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-    Args:
-        attention_mask (`torch.Tensor`):
-            A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-        sequence_length (`int`):
-            The sequence length being processed.
-        target_length (`int`):
-            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-        dtype (`torch.dtype`):
-            The dtype to use for the 4D attention mask.
-        device (`torch.device`):
-            The device to plcae the 4D attention mask on.
-        min_dtype (`float`):
-            The minimum value representable with the dtype `dtype`.
-        cache_position (`torch.Tensor`):
-            Indices depicting the position of the input sequence tokens in the sequence.
-        batch_size (`torch.Tensor`):
-            Batch size.
-    """
-    if attention_mask is not None and attention_mask.dim() == 4:
-        # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-        causal_mask = attention_mask
-    else:
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-            padding_mask = padding_mask == 0
-            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                padding_mask, min_dtype
-            )
-
-    return causal_mask
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Emu3Config"
-_CHECKPOINT_FOR_DOC = "BAAI/Emu3-Chat-hf"
+_CHECKPOINT_FOR_DOC = "Emu3-community/Emu3-Chat-hf"
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Emu3
@@ -293,9 +238,9 @@ class Emu3MLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     # Ignore copy
@@ -336,6 +281,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Emu3
 class Emu3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -573,6 +519,7 @@ class Emu3FlashAttention2(Emu3Attention):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Emu3
 class Emu3SdpaAttention(Emu3Attention):
     """
     Emu3 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -1343,16 +1290,15 @@ class Emu3VQVAE(PreTrainedModel):
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
     _no_split_modules = [
-        "Emu3VQVAEDecoderResnetBlock",
-        "Emu3VQVAEEncoderResnetBlock",
+        "Emu3VQVAETemporalResnetBlock",
         "Emu3VQVAEAttnBlock",
-        "Emu3VQVAEResnetTemporalBlock",
+        "Emu3VQVAEResnetBlock",
+        "Emu3VQVAEVectorQuantizer",
     ]
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
             nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
@@ -1459,8 +1405,6 @@ class Emu3ImageVocabularyMapping:
     @cached_property
     def img2bpe(self):
         return {int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str}
-        # visual 000000 -> 151854
-        # need a map from "00000" to 151854
 
     @cached_property
     def bpe2img(self):
@@ -1512,7 +1456,7 @@ EMU3_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare emu3 Model outputting raw hidden-states without any specific head on top.",
+    "The bare Emu3 Model outputting raw hidden-states without any specific head on top.",
     EMU3_START_DOCSTRING,
 )
 # Copied from transformers.models.chameleon.modeling_chameleon.ChameleonPreTrainedModel with Chameleon->Emu3
@@ -1529,6 +1473,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
 
+    # Ignore copy
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
         if isinstance(module, Emu3VQVAE):
@@ -1543,7 +1488,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-EMU3_INPUTS_DOCSTRING = r"""
+EMU3_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1553,9 +1498,6 @@ EMU3_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1586,7 +1528,91 @@ EMU3_INPUTS_DOCSTRING = r"""
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Should always be a [`~cache_utils.Cache`] instance and the model will output the same cache instance.
+            Has to be an instance of [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+            The model will output the same cache type that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
+
+EMU3_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
+            [`Emu3ImageProcessor`] for processing images).
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
+                The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
+            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
+            [`Emu3ImageProcessor`] for processing images).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Has to be an instance of [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
             of shape `(batch_size, sequence_length)`.
@@ -1613,7 +1639,7 @@ EMU3_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The Emu3 Text Model with an lm head on top outputting logits for next token prediction.",
+    "The Emu3 Text Model which consists of transformer with self attention layers.",
     EMU3_START_DOCSTRING,
 )
 class Emu3TextModel(Emu3PreTrainedModel):
@@ -1632,9 +1658,8 @@ class Emu3TextModel(Emu3PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        decoder_layer = Emu3DecoderLayer
         self.layers = nn.ModuleList(
-            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -1648,7 +1673,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1784,10 +1809,9 @@ class Emu3TextModel(Emu3PreTrainedModel):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1796,13 +1820,12 @@ class Emu3TextModel(Emu3PreTrainedModel):
             )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
             device=device,
-            min_dtype=min_dtype,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -1816,13 +1839,71 @@ class Emu3TextModel(Emu3PreTrainedModel):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
+            min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
+    @staticmethod
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
 
         return causal_mask
 
 
 @add_start_docstrings(
-    "Emu3 Model with a head on top used for outputting logits for next token prediction conditioned on image inputs.",
+    "Emu3 Model with a head on top used for outputting logits for next token prediction.",
     EMU3_START_DOCSTRING,
 )
 class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
@@ -1831,12 +1912,13 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.model = Emu3TextModel(config)
+        self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1869,14 +1951,10 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = Emu3ForConditionalGeneration.from_pretrained("facebook/emu3-7b", torch_dtype=torch.bfloat16)
-        >>> processor = Emu3Processor.from_pretrained("facebook/emu3-7b")
+        >>> model = Emu3ForCausalLM.from_pretrained("Emu3-community/Emu3-Chat-hf", torch_dtype=torch.bfloat16)
+        >>> processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
-        >>> prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-        >>> image = Image.open(requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw)
-        >>> image_2 = Image.open(requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw)
-
-        >>> inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+        >>> inputs = processor(text=["Can you write me a poem about winter."], return_tensors="pt").to(model.device)
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -1907,16 +1985,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1930,53 +1999,9 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
-
 
 @add_start_docstrings(
-    "Emu3 Model with a head on top used for outputting logits for next token prediction conditioned on image inputs.",
+    """The Emu3 model which consists of a VQ-VAE and a language model.""",
     EMU3_START_DOCSTRING,
 )
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
@@ -1995,15 +2020,17 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor):
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
         special tokens.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
+            image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
+                The sizes of the images in the batch, being (height, width) for each image.
         """
         image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
         bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
@@ -2011,8 +2038,20 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return bpe_tokens
 
     @torch.no_grad
-    def decode_image_tokens(self, logits: torch.Tensor, height: int, width: int):
-        sequences = logits[:, :-3].view(-1, height, width + 1)
+    def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
+        """
+        Decodes generated image tokens from language model to continuous pixel values
+        with VQGAN module via upsampling.
+
+        Args:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_of_tokens)`):
+                The tensors corresponding to the input images.
+            height (`int`):
+                Height of the generated image before upsampling.
+            width (`int`):
+                Width of the generated image before upsampling.
+        """
+        sequences = image_tokens[:, :-3].view(-1, height, width + 1)
         image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
         image = self.vqmodel.decode(image_tokens)
         return image
@@ -2052,14 +2091,29 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = Emu3ForConditionalGeneration.from_pretrained("facebook/emu3-7b", torch_dtype=torch.bfloat16)
-        >>> processor = Emu3Processor.from_pretrained("facebook/emu3-7b")
+        >>> model = Emu3ForConditionalGeneration.from_pretrained("Emu3-community/Emu3-Chat-hf", torch_dtype=torch.bfloat16)
+        >>> processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
-        >>> prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-        >>> image = Image.open(requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw)
-        >>> image_2 = Image.open(requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw)
+        >>> conversation = [
+        ...     {
+        ...     "role": "system",
+        ...     "content": [
+        ...         {"type": "text", "text": "You are a helpful assistant."},
+        ...         ],
+        ...     },
+        ...     {
+        ...     "role": "user",
+        ...     "content": [
+        ...         {"type": "image"},
+        ...         {"type": "text", "text": "Please describe the image."},
+        ...         ],
+        ...     },
+        ... ]
 
-        >>> inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+        >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+        >>> image = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+
+        >>> inputs = processor(images=[image], text=[prompt], return_tensors="pt").to(model.device, torch.bfloat16)
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -2133,9 +2187,30 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            attention_mask = self.text_model.model._prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_cache_shape(),
+                dtype=self.dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=batch_size,
+                config=self.config,
+                past_key_values=past_key_values,
+            )
 
         if cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore

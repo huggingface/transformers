@@ -20,7 +20,7 @@ from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -28,14 +28,14 @@ class Emu3TextKwargs(TextKwargs, total=False):
     return_for_image_generation: bool
 
 
-class Emu3ImageKwargs(TextKwargs, total=False):
+class Emu3ImagesKwargs(ImagesKwargs, total=False):
     ratio: str
     image_area: int
 
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
-    images_kwargs: Emu3ImageKwargs
+    images_kwargs: Emu3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -62,6 +62,8 @@ class Emu3Processor(ProcessorMixin):
             The tokenizer is a required input.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]

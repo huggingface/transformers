@@ -39,7 +39,7 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Dimension of the quantized vector in codebook.
         latent_channels (`int`, *optional*, defaults to 4):
             Dimension of the output channel of encoder and the input channel of decoder
-        double_latent (`bool`, *optional*, defaults to False):
+        double_latent (`bool`, *optional*, defaults to `False`):
             Whether double the output dim of the encoder.
         in_channels (`int`, *optional*, defaults to 3):
             Input channel of encoder.
@@ -53,10 +53,10 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Channel scaling factor of the intermediate blocks.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Residual block number in each stage.
-        attn_resolutions (`List[int]`, *optional*, defaults to 3):
+        attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability.
+        initializer_range (`<float>`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     ```python
     >>> from transformers import Emu3VQVAE, Emu3VQVAEConfig
@@ -199,6 +199,8 @@ class Emu3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
 
@@ -239,6 +241,7 @@ class Emu3TextConfig(PretrainedConfig):
         tie_word_embeddings: bool = False,
         rope_theta: float = 1000000.0,
         rope_scaling: Optional = None,
+        mlp_bias=False,
         attention_dropout: float = 0.1,
         **kwargs,
     ):
@@ -255,6 +258,7 @@ class Emu3TextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.mlp_bias = mlp_bias
         rope_config_validation(self)
 
         self.attention_dropout = attention_dropout
@@ -281,8 +285,10 @@ class Emu3Config(PretrainedConfig):
 
 
     Args:
-        vq_config (`dict`, *optional*):
+        vq_config (`Union[Dict, Emu3VQVAEConfig]`, *optional*):
             Emu3VQVAEConfig instance containing the configuration for the VQ-VAE model.
+        text_config (`Union[Dict, Emu3TextConfig]``, *optional*):
+            Emu3TextConfig instance containing the configuration for the language model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
     """
