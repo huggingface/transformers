@@ -1438,7 +1438,7 @@ class HFTracer(Tracer):
         your custom tracer.
         """
         attribute = HFAttribute(obj, "keys")()
-        if obj.node.target == "**kwargs":
+        if obj.node.target.startswith("**"):
             return attribute._metadata
         return attribute
 
