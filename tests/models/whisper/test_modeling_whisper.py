@@ -2433,6 +2433,39 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_ids.tolist()[0], generated_ids_forced.tolist()[0])
 
     @slow
+    def test_generate_with_prompt_ids_task_language(self):
+        EXPECTED_TEXT = " Mr. Kilter is the apostle of the middle classes and we are glad to welcome his gospel."
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to(torch_device)
+
+        prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        input_speech = ds[0]["audio"]["array"]
+
+        input_features = processor(
+            input_speech, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
+        )["input_features"]
+        input_features = input_features.to(device=torch_device)
+
+        gen_kwargs = {
+            "do_sample": False,
+            "return_timestamps": True,
+            "language": "english",
+            "task": "transcribe",
+            "prompt_ids": prompt_ids,
+        }
+
+        generated_ids = model.generate(input_features, **gen_kwargs)
+        transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+
+        self.assertEqual(transcription, EXPECTED_TEXT)
+
+    @slow
     def test_language_detection(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
