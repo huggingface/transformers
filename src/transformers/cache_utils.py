@@ -1860,7 +1860,7 @@ class OffloadedStaticCache(StaticCache):
             The configuration file defining the shape-related attributes required to initialize
             the static cache.
         batch_size (`int`):
-            The maximum batch size with which the model will be used.
+            The batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`Union[str, torch.device]`):
@@ -1881,8 +1881,8 @@ class OffloadedStaticCache(StaticCache):
         value_cache (`List[torch.Tensor]`):
             Off-loaded value cache tensors. First one will be on device, where-as the others are
             off-loaded.
-        max_batch_size (`int`):
-            The maximum batch size with which this cache can be used.
+        batch_size (`int`):
+            The batch size with which this cache can be used.
         max_cache_len (`int`):
             The maximum sequence length with which this cache can be used.
         device (`torch.device`):
@@ -1923,7 +1923,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device: Union[str, torch.device] = torch.device("cpu"),
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
-        self.max_batch_size = batch_size
+        self.batch_size = batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
@@ -1937,7 +1937,7 @@ class OffloadedStaticCache(StaticCache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        cache_shape = (batch_size, num_key_value_heads, self.max_cache_len, head_dim)
+        cache_shape = (self.batch_size, num_key_value_heads, self.max_cache_len, head_dim)
 
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
