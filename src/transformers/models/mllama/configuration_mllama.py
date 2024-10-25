@@ -58,7 +58,7 @@ class MllamaVisionConfig(PretrainedConfig):
             The size (resolution) of each image *tile*.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         max_num_tiles (`int`, *optional*, defaults to 4):
             Maximum number of tiles for image splitting.
@@ -161,12 +161,12 @@ class MllamaTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
             specified, will default to `num_attention_heads`.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
+        rope_theta (`float`, *optional*, defaults to `500000.0`):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type

@@ -58,7 +58,7 @@ class Kosmos2TextConfig(PretrainedConfig):
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -66,6 +66,12 @@ class Kosmos2TextConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(embed_dim).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Token id used for padding.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Token id used for beginning of string.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            Token id used for end of string.
     ```"""
 
     model_type = "kosmos_2_text_model"
@@ -151,13 +157,13 @@ class Kosmos2VisionConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
     ```"""

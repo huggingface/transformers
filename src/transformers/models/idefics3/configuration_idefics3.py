@@ -54,8 +54,7 @@ class Idefics3VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        intializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
+        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
 
     Example:
 

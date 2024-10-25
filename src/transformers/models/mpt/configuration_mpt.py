@@ -41,22 +41,22 @@ class MptAttentionConfig(PretrainedConfig):
     Args:
         attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
             type of attention to use. Options: `"multihead_attention"`, `"multiquery_attention"`.
-        attn_pdrop (`float`, *optional*, defaults to 0.0):
+        attn_pdrop (`float`, *optional*, defaults to `0.0`):
             The dropout probability for the attention layers.
         attn_impl (`str`, *optional*, defaults to `"torch"`):
             The attention implementation to use. One of `"torch"`, `"flash"`, or `"triton"`.
         clip_qkv (`float`, *optional*):
             If not `None`, clip the queries, keys, and values in the attention layer to this value.
-        softmax_scale (`float`, *optional*, defaults to `None`):
+        softmax_scale (`float`, *optional*):
             If not `None`, scale the softmax in the attention layer by this value. If `None`, will default to
             `1/sqrt(hidden_size)`.
-        prefix_lm (`bool`, *optional*, defaults to `False`)):
+        prefix_lm (`bool`, *optional*, defaults to `False`):
             Whether the model should operate as a Prefix LM. This requires passing an extra `prefix_mask` argument
             which indicates which tokens belong to the prefix. Tokens in the prefix can attend to one another
             bi-directionally. Tokens outside the prefix use causal attention.
         qk_ln (`bool`, *optional*, defaults to `False`):
             Whether to apply layer normalization to the queries and keys in the attention layer.
-        attn_uses_sequence_id (`bool`, *optional*, defaults to `False`)):
+        attn_uses_sequence_id (`bool`, *optional*, defaults to `False`):
             Whether to restrict attention to tokens that have the same token_type_ids. When the model is in `train`
             mode, this requires passing an extra *token_type_ids* argument which indicates which sub-sequence each
             token belongs to. Defaults to `False` meaning any provided *token_type_ids* will be ignored.

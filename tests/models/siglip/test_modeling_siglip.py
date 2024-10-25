@@ -667,7 +667,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_disk_offload_bin = False
     _is_composite = True
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SiglipConfig, has_text_modality=False)

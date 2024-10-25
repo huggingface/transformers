@@ -103,6 +103,10 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+    sub_configs = ["text_config", "qformer_config", "vision_config"]
+    text_config_class = "AutoConfig"
+    qformer_config_class = "InstructBlipVideoQFormerConfig"
+    vision_config_class = "InstructBlipVideoVisionConfig"
 
     def __init__(
         self,
