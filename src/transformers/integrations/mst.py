@@ -39,14 +39,16 @@ def minis_mlp_forward(self, x):
 
     for i in range(len(x_list)):
         x = x_list[i]
-        output_list[i] = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        output_list[i] = self.down_proj(
+            self.act_fn(self.gate_proj(x)) * self.up_proj(x)
+        )
 
     down_proj = torch.cat(output_list, dim=1)
 
     return down_proj
 
-class _LM_head(torch.autograd.Function):
 
+class _LM_head(torch.autograd.Function):
     @classmethod
     def forward(cls, ctx, hidden_states, indices, weights):
         logits = F.linear(hidden_states, weights).float()
@@ -61,12 +63,6 @@ class _LM_head(torch.autograd.Function):
 
     @classmethod
     def backward(cls, ctx, dneg_logprobs):
-        """We know d(-log(p[i])/dlogit[k] = -id_mat[i,k] + p[k]
-        so we initialize the gradient as neg_logprobs, so we can just exponentiate
-        to get p[k], which is most of what we need...  neg_logprobs will be
-        modified in place to become the gradient we want
-        """
-
         # load saved tensors
         hidden_states, indices, weights = ctx.saved_tensors
         weights.count -= 1
@@ -88,13 +84,13 @@ class _LM_head(torch.autograd.Function):
         grad_input *= dneg_logprobs
         grad_input = grad_input.to(hidden_states.dtype)
 
-        if hasattr(weights, 'grad') and weights.grad is not None:
+        if hasattr(weights, "grad") and weights.grad is not None:
             torch.addmm(
-                    weights.grad,
-                    grad_input.T,
-                    hidden_states,
-                    out=weights.grad,
-                )
+                weights.grad,
+                grad_input.T,
+                hidden_states,
+                out=weights.grad,
+            )
         else:
             weights.grad = grad_input.T @ hidden_states
 
@@ -106,11 +102,9 @@ class _LM_head(torch.autograd.Function):
         else:
             return grad_input, None, None
 
+
 class LMheadWarpper(nn.Module):
-    def __init__(
-        self,
-        original_weight = None
-    ):
+    def __init__(self, original_weight=None):
         super().__init__()
         self.LM_head_weight = original_weight
         self.LM_head = _LM_head.apply
@@ -140,9 +134,11 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
 
     loss = None
     for i in range(mini_s):
-        shift_hidden_states = hidden_states[..., i * tmp : (i+1)*tmp, :].contiguous()
+        shift_hidden_states = hidden_states[
+            ..., i * tmp : (i + 1) * tmp, :
+        ].contiguous()
         shift_hidden_states = shift_hidden_states.view(-1, hidden_size)
-        shift_labels = labels[..., i * tmp : (i+1)*tmp ].contiguous()
+        shift_labels = labels[..., i * tmp : (i + 1) * tmp].contiguous()
         shift_labels = shift_labels.view(-1)
 
         loss_i = LMhead(shift_hidden_states, shift_labels)
@@ -156,6 +152,7 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
 
     loss = loss / torch.sum(torch.ne(labels, -100))
     return None, loss
+
 
 def minis_CausalLM_forward(
     self,
@@ -196,11 +193,19 @@ def minis_CausalLM_forward(
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
     ```"""
-    output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-    output_hidden_states = (
-        output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+    output_attentions = (
+        output_attentions
+        if output_attentions is not None
+        else self.config.output_attentions
     )
-    return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    output_hidden_states = (
+        output_hidden_states
+        if output_hidden_states is not None
+        else self.config.output_hidden_states
+    )
+    return_dict = (
+        return_dict if return_dict is not None else self.config.use_return_dict
+    )
 
     # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
     outputs = self.model(
@@ -234,12 +239,13 @@ def minis_CausalLM_forward(
         attentions=outputs.attentions,
     )
 
+
 def replace_with_minis():
-    LlamaMLP.           forward = minis_mlp_forward
-    Gemma2MLP.          forward = minis_mlp_forward
-    Qwen2MLP.           forward = minis_mlp_forward
-    MistralMLP.         forward = minis_mlp_forward
-    LlamaForCausalLM.   forward = minis_CausalLM_forward
-    Gemma2ForCausalLM.  forward = minis_CausalLM_forward
-    Qwen2ForCausalLM.   forward = minis_CausalLM_forward
-    MistralForCausalLM. forward = minis_CausalLM_forward
+    LlamaMLP.forward = minis_mlp_forward
+    Gemma2MLP.forward = minis_mlp_forward
+    Qwen2MLP.forward = minis_mlp_forward
+    MistralMLP.forward = minis_mlp_forward
+    LlamaForCausalLM.forward = minis_CausalLM_forward
+    Gemma2ForCausalLM.forward = minis_CausalLM_forward
+    Qwen2ForCausalLM.forward = minis_CausalLM_forward
+    MistralForCausalLM.forward = minis_CausalLM_forward
