@@ -1776,11 +1776,13 @@ class TrainingArguments:
         if self.average_tokens_across_devices:
             try:
                 if self.world_size == 1:
-                    logger.warning('average_tokens_across_devices is set to True but it is invalid when world size is'
-                                   '1. Turn it to False automatically.')
+                    logger.warning(
+                        "average_tokens_across_devices is set to True but it is invalid when world size is"
+                        "1. Turn it to False automatically."
+                    )
                     self.average_tokens_across_devices = False
             except ImportError as e:
-                logger.warning(f'Can not specify world size due to {e}. Turn average_tokens_across_devices to False.')
+                logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
                 self.average_tokens_across_devices = False
 
         if self.torchdynamo is not None:
