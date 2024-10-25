@@ -27,7 +27,8 @@ from ...tokenization_utils import (
 from ...utils import (
     logging,
 )
-from ..auto import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
+from ..idefics3.configuration_idefics3 import Idefics3VisionConfig
 from ..idefics3.modeling_idefics3 import Idefics3VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -40,7 +41,6 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionModel
 from .processing_utils import (
     experts_gemm,
@@ -50,19 +50,6 @@ from .processing_utils import (
 
 
 logger = logging.get_logger(__name__)
-
-
-class AriaVisionConfig(SiglipVisionConfig):
-    """Configuration class for AriaVisionModel."""
-
-    model_type = "aria_vision_model"
-
-    def __init__(
-        self,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self._supports_sdpa = False
 
 
 class IdentityOp(torch.nn.Module):
@@ -79,19 +66,6 @@ class IdentityOp(torch.nn.Module):
     def forward(self, x, *args, **kwargs):
         return x
 
-
-class AriaVisionTransformer(Idefics3VisionTransformer):
-    """
-    Aria Vision Transformer model based on Idefics3VisionTransformer.
-
-    This class extends the original Idefics3VisionTransformer by removing the post-layernorm operation.
-    """
-
-    _supports_sdpa = False
-
-    def __init__(self, config: AriaVisionConfig):
-        super().__init__(config)
-        self.post_layernorm = IdentityOp()
 
 
 class AriaRMSNorm(LlamaRMSNorm):
@@ -111,16 +85,12 @@ class AriaVisionModel(SiglipVisionModel):
     This mask helps the model focus on the relevant parts of the image during processing.
     """
 
-    config_class = AriaVisionConfig
     main_input_name = "pixel_values"
     _supports_sdpa = False
 
-    def __init__(self, config: AriaVisionConfig):
+    def __init__(self, config: Idefics3VisionConfig):
         super().__init__(config)
-        self.vision_model = AriaVisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.vision_model = Idefics3VisionTransformer(config)
 
     def forward(
         self,
@@ -155,6 +125,10 @@ class AriaVisionModel(SiglipVisionModel):
         )
 
         image_attentions = self._create_image_attention_mask(patch_attention_mask)
+
+        last_hidden_state_pre_normalization = vision_output.hidden_states[-1]
+
+        vision_output.last_hidden_state = last_hidden_state_pre_normalization
 
         if not return_dict:
             return vision_output, image_attentions
@@ -826,13 +800,17 @@ class AriaConfig(PretrainedConfig):
                 4900: 256,
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-        if vision_config is None:
-            vision_config = AriaVisionConfig()
         if text_config is None:
             text_config = AriaTextConfig()
 
-        if isinstance(vision_config, dict) and "model_type" in vision_config:
-            vision_config = AriaVisionConfig(**vision_config)
+
+        if isinstance(vision_config, dict):
+            vision_config["model_type"] = (
+                vision_config["model_type"] if "model_type" in vision_config else "idefics3"
+            )
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            vision_config = CONFIG_MAPPING["idefics3"]()
 
         self.vision_config = vision_config
 
@@ -895,7 +873,7 @@ class AriaTopKRouter(nn.Module):
     It also applies auxiliary losses to encourage load balancing among experts.
 
     Args:
-        config (AriaConfig): Configuration object containing MoE-related parameters.
+        config (AriaTextConfig): Configuration object containing MoE-related parameters.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -932,7 +910,7 @@ class AriaMLP(LlamaMLP):
     This class reconfigures the intermediate size in comparison to the LlamaMLP.
 
     Args:
-        config (AriaConfig): Configuration object for the Aria language model.
+        config (AriaTextConfig): Configuration object for the Aria language model.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -998,7 +976,7 @@ class AriaGroupedMLP(nn.Module):
     Grouped MLP module for Mixture of Experts.
 
     Args:
-        config (AriaConfig): Configuration object for the model.
+        config (AriaTextConfig): Configuration object for the model.
     """
 
     def __init__(self, config: AriaTextConfig) -> None:
@@ -1035,7 +1013,7 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
     the outputs.
 
     Args:
-        config (AriaConfig): Configuration object for the MoE layer.
+        config (AriaTextConfig): Configuration object for the MoE layer.
     """
 
     def __init__(self, config: AriaTextConfig):

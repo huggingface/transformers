@@ -23,7 +23,6 @@ from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
     AriaTextConfig,
-    AriaVisionConfig,
     AutoProcessor,
     AutoTokenizer,
     is_torch_available,

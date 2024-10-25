@@ -172,7 +172,6 @@ _import_structure = {
     "models.aria": [
         "AriaConfig",
         "AriaTextConfig",
-        "AriaVisionConfig",
     ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
@@ -2461,6 +2460,8 @@ else:
             "Idefics3Model",
             "Idefics3PreTrainedModel",
             "Idefics3Processor",
+            "Idefics3VisionTransformer",
+            "Idefics3VisionConfig",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -5022,7 +5023,6 @@ if TYPE_CHECKING:
     from .models.aria import (
         AriaConfig,
         AriaTextConfig,
-        AriaVisionConfig,
     )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
@@ -7178,6 +7178,8 @@ if TYPE_CHECKING:
             Idefics3Model,
             Idefics3PreTrainedModel,
             Idefics3Processor,
+            Idefics3VisionTransformer,
+            Idefics3VisionConfig,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,

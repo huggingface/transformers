@@ -135,6 +135,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("idefics", "IdeficsModel"),
         ("idefics2", "Idefics2Model"),
         ("idefics3", "Idefics3Model"),
+        ("idefics3_vision", "Idefics3VisionTransformer"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("jamba", "JambaModel"),
