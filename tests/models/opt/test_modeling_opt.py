@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -338,68 +337,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350M")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        model_sdpa = OPTForCausalLM.from_pretrained(
-            "facebook/opt-350M",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="sdpa",
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = OPTForCausalLM.from_pretrained(
-            "facebook/opt-350M",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        for _, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for _, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
-
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
-
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):

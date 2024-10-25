@@ -343,14 +343,6 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     ):
         return True
 
-    # Ignore copy
-    # TODO: @Fxmarty
-    @require_torch_sdpa
-    @slow
-    @unittest.skip(reason="Currently failing.")
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
     def setUp(self):
         self.model_tester = Qwen2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2Config, hidden_size=37)

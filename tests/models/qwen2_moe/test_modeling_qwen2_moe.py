@@ -368,12 +368,6 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     ):
         return True
 
-    # Ignore copy
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
     def setUp(self):
         self.model_tester = Qwen2MoeModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2MoeConfig, hidden_size=37)

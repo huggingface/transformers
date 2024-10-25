@@ -24,11 +24,9 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -301,13 +299,6 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_cpu_offload = False
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
-
-    # TODO: @Fxmarty
-    @is_flaky(max_attempts=3, description="flaky on some models.")
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
