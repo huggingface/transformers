@@ -520,7 +520,7 @@ class MaskFormerSwinOutput(nn.Module):
 
 
 class MaskFormerSwinLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.shift_size = shift_size
         self.window_size = config.window_size
@@ -528,7 +528,7 @@ class MaskFormerSwinLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = MaskFormerSwinAttention(config, dim, num_heads, self.window_size)
         self.drop_path = (
-            MaskFormerSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+            MaskFormerSwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         )
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = MaskFormerSwinIntermediate(config, dim)
