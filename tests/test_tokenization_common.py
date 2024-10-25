@@ -1358,34 +1358,17 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
-    def test_continue_final_message_for_llama(self):
-        """Regression test for Llama 3.1 chat templates: https://github.com/huggingface/transformers/pull/34214"""
+    def test_continue_final_message_with_trim(self):
+        """Regression test for chat templates with trimming: https://github.com/huggingface/transformers/pull/34214"""
 
-        # This is a simplified Llama chat template since we don't require all the tools logic
         dummy_template = """
-        {{- bos_token }}
-
-        {#- This block extracts the system message, so we can slot it into the right place. #}
-        {%- if messages[0]['role'] == 'system' %}
-            {%- set system_message = messages[0]['content']|trim %}
-            {%- set messages = messages[1:] %}
-        {%- else %}
-            {%- set system_message = "" %}
-        {%- endif %}
-
         {%- for message in messages %}
-            {%- if not (message.role == 'ipython' or message.role == 'tool' or 'tool_calls' in message) %}
-                {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' }}
-            {%- endif %}
-        {%- endfor %}
-        {%- if add_generation_prompt %}
-            {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
-        {%- endif %}
-        """
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] | trim + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
         dummy_conversation = [
             {"role": "system", "content": "system message"},
             {"role": "user", "content": "user message"},
-            {"role": "assistant", "content": "assistant message"},
+            {"role": "assistant", "content": "assistant message "},  # Note the trailing whitespace
         ]
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -1395,7 +1378,7 @@ class TokenizerTesterMixin:
                 )
                 self.assertEqual(
                     output,
-                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\nsystem message<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nuser message<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nassistant message<|eot_id|>",
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message<|im_end|>\n",
                 )
                 prefill_output = tokenizer.apply_chat_template(
                     dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
@@ -1403,7 +1386,7 @@ class TokenizerTesterMixin:
                 # Assert that the final message is unterminated
                 self.assertEqual(
                     prefill_output,
-                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\nsystem message<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nuser message<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nassistant message",
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message",
                 )
 
     @require_jinja
