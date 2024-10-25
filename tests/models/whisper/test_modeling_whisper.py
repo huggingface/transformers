@@ -2429,6 +2429,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_without_prompt, expected_without_prompt)
         self.assertEqual(output_with_prompt, expected_with_prompt)
+    
+    @slow
+    def test_generate_with_forced_decoder_ids(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        ds = load_dataset(
+            "facebook/multilingual_librispeech", "german", split="test", streaming=True
+        )
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        forced_decoder_ids = processor.get_decoder_prompt_ids(
+            task="transcribe",  
+            language="german",
+        )
+
+        generated_ids = model.generate(
+            input_features, do_sample=False, language="<|de|>", task="transcribe"
+        )
+        generated_ids_forced = model.generate(
+            input_features, do_sample=False, forced_decoder_ids=forced_decoder_ids
+        )
+
+        self.assertListEqual(generated_ids.tolist()[0], generated_ids_forced.tolist()[0])
 
     @slow
     def test_language_detection(self):
