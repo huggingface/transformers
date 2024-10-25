@@ -66,10 +66,10 @@ manager_agent.run("Who is the CEO of Hugging Face?")
 
 Let's take again the tool example from main documentation, for which we had implemented a `tool` decorator.
 
-If you need to add variation, like custom attributes for your too, you can build your tool following the fine-grained method: building a class that inherits from the [`Tool`] superclass.
+If you need to add variation, like custom attributes for your tool, you can build your tool following the fine-grained method: building a class that inherits from the [`Tool`] superclass.
 
 The custom tool needs:
-- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name is `model_download_counter`.
+- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name it `model_download_counter`.
 - An attribute `description` is used to populate the agent's system prompt.
 - An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
 - An `output_type` attribute, which specifies the output type.
