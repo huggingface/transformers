@@ -2079,9 +2079,9 @@ class TrainingArguments:
             )
 
         if self.data_seed is not None:
-            if not is_accelerate_available("1.1.0"):
+            if not is_accelerate_available("1.0.1"):
                 raise NotImplementedError(
-                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
+                    "data_seed requires Accelerate version `accelerate` >= 1.0.1. "
                     "This is not supported and we recommend you to update your version."
                 )
 
