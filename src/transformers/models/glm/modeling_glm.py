@@ -50,7 +50,6 @@ from ...utils import (
 from .configuration_glm import GlmConfig
 
 
-
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 
 
