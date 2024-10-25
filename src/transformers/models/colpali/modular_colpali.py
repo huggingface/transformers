@@ -164,7 +164,41 @@ class ColPaliProcessor(PaliGemmaProcessor):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several queries or images.
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
+        both text and images at the same time.
+
+        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        [`~LlamaTokenizerFast.__call__`].
+        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        [`~SiglipImageProcessor.__call__`].
+        Please refer to the doctsring of the above two methods for more information.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             ColPaliProcessorKwargs,
@@ -256,8 +290,32 @@ class ColPaliProcessor(PaliGemmaProcessor):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Process images for indexing.
-        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
+        [`ColPaliProcessor.__call__`].
+
+        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         return self.__call__(images=images, **kwargs)
 
@@ -267,8 +325,31 @@ class ColPaliProcessor(PaliGemmaProcessor):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Process queries for indexing.
-        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
+        [`ColPaliProcessor.__call__`].
+
+        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
         """
         return self.__call__(text=text, **kwargs)
 
@@ -482,7 +563,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        # mask out pad-token-ids in labels for BC
+        # Mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
             logger.warning_once(
                 "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. ",
@@ -543,7 +624,6 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             mean_resizing=mean_resizing,
         )
 
-        # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
