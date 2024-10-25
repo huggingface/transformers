@@ -21,15 +21,12 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from ..models.llama.modeling_llama import LlamaMLP, LlamaForCausalLM
 from ..models.gemma2.modeling_gemma2 import Gemma2MLP, Gemma2ForCausalLM
 from ..models.qwen2.modeling_qwen2 import Qwen2MLP, Qwen2ForCausalLM
 from ..models.mistral.modeling_mistral import MistralMLP, MistralForCausalLM
-
-import torch.nn.functional as F
 
 def minis_mlp_forward(self, x):
     bsz, q_len, _ = x.size()
@@ -139,7 +136,7 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
     labels = labels.to(hidden_states.device)
 
     LMhead = LMheadWarpper(lm_head.weight)
-    
+
     loss = None
     for i in range(mini_s):
         shift_hidden_states = hidden_states[..., i * tmp : (i+1)*tmp, :].contiguous()
@@ -223,7 +220,7 @@ def minis_CausalLM_forward(
     minis = math.ceil(self.config.vocab_size / self.config.hidden_size)
 
     logits, loss = minis_processing(hidden_states, labels, self.lm_head, minis)
-            
+
     if not return_dict:
         output = (logits,) + outputs[1:]
         return (loss,) + output if loss is not None else output
