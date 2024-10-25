@@ -16,8 +16,10 @@
 
 import unittest
 
+import numpy as np
 import pytest
 import requests
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import Emu3Config, Emu3TextConfig, StaticCache, is_torch_available, is_vision_available, set_seed
@@ -456,12 +458,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
-        prompt = "<image>Describe what do you see here and tell me about the history behind it?"
+        prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
 
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['USER: 114*143Describe what do you see here and tell me about the history behind it? ASSISTANT: The image depicts the constellation of Ursa Minor, also known as the Little Bear. This constellation was one of the 24 modern constellations introduced by Charles Messier in 178']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -473,6 +475,7 @@ class Emu3IntegrationTest(unittest.TestCase):
             "Emu3-community/Emu3-Chat-hf", load_in_4bit=True, device_map="auto"
         )
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
+        processor.tokenizer.padding_side = "left"
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -481,8 +484,8 @@ class Emu3IntegrationTest(unittest.TestCase):
             requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
         )
         prompts = [
-            "<image>Describe what do you see here and tell me about the history behind it?",
-            "What constellation is this image showing?<image>",
+            "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:",
+            "USER: <image>What do you know about the constellation in this image? ASSISTANT:",
         ]
 
         inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
@@ -491,8 +494,8 @@ class Emu3IntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
-            'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
-            'What constellation is this image showing?The image is showing the constellation of Orion.'
+            'USER: 114*143Describe what do you see here and tell me about the history behind it? ASSISTANT: The image depicts the constellation of Ursa Minor, also known as the Little Bear. This constellation was one of the 24 modern constellations introduced by Charles Messier in 178',
+            'USER: 75*125What do you know about the constellation in this image? ASSISTANT: The image shows a segment of a wire rope, characterized by its consistent pattern and regular twists, indicative of a high-quality, well-made rope. This type of detail suggests careful manufacturing processes and attention to'
             ]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -512,12 +515,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         image_2 = Image.open(
             requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
         )
-        prompt = "What do these two images have in common?<image><image>"
+        prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between two things that are not necessarily related. The first image shows a group of stars, while the second image shows a network of lines connecting two points. The connection between']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['USER: 114*14375*125What do these two images have in common? ASSISTANT: The two images both depict a geometric shape - a triangle in the larger image and a line segment in the smaller image. They share a common feature of being created with a series of connected dots, which']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -526,22 +529,66 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_model_generate_images(self):
         model = Emu3ForConditionalGeneration.from_pretrained(
-            "Emu3-community/Emu3-Chat-hf", load_in_4bit=True, device_map="auto"
+            "Emu3-community/Emu3-Gen-hf", load_in_4bit=True, device_map="auto"
         )
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
-        image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-        )
-        image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-        )
-        prompt = "What do these two images have in common?<image><image>"
+        inputs = processor(
+            text=["a portrait of young girl. masterpiece, film grained, best quality."],
+            padding=True,
+            return_tensors="pt",
+            return_for_image_generation=True,
+        ).to(model.device)
+        self.assertTrue(inputs.input_ids.shape[1] == 23)
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        image_sizes = inputs.pop("image_sizes")
+        HEIGHT, WIDTH = image_sizes[0]
+        VISUAL_TOKENS = model.vocabulary_mapping.image_tokens
 
-        # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between two things that are not necessarily related. The first image shows a group of stars, while the second image shows a network of lines connecting two points. The connection between']  # fmt: skip
-        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        def prefix_allowed_tokens_fn(batch_id, input_ids):
+            height, width = HEIGHT, WIDTH
+            visual_tokens = VISUAL_TOKENS
+            image_wrapper_token_id = processor.tokenizer.encode("<|image token|>", return_tensors="pt")[0].to(
+                model.device
+            )
+            eoi_token_id = processor.tokenizer.encode("<|image end|>", return_tensors="pt")[0]
+            eos_token_id = processor.tokenizer.encode("<|extra_204|>", return_tensors="pt")[0]
+            pad_token_id = processor.tokenizer.encode("<|endoftext|>", return_tensors="pt")[0]
+            eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
+            eof_token_id = processor.tokenizer.encode("<|extra_201|>", return_tensors="pt")[0]
+
+            position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
+            offset = input_ids.shape[0] - position
+            if offset % (width + 1) == 0:
+                return (eol_token_id,)
+            elif offset == (width + 1) * height + 1:
+                return (eof_token_id,)
+            elif offset == (width + 1) * height + 2:
+                return (eoi_token_id,)
+            elif offset == (width + 1) * height + 3:
+                return (eos_token_id,)
+            elif offset > (width + 1) * height + 3:
+                return (pad_token_id,)
+            else:
+                return visual_tokens
+
+        out = model.generate(
+            **inputs,
+            max_new_tokens=50_000,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            do_sample=False,
+        )
+        self.assertTrue(out.shape[1] == 8216)
+
+        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        images = processor.postprocess(list(image.float()), return_tensors="np")
+        self.assertTrue(images["pixel_values"].shape == (3, 720, 720))
+        self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
+
+        filepath = hf_hub_download(
+            repo_id="raushan-testing-hf/images_test",
+            filename="emu3_generated_pixels.npy",
+            repo_type="dataset",
+        )
+        original_pixels = np.load(filepath)
+        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))

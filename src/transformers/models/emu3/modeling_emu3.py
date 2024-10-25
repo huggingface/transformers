@@ -32,7 +32,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
+from .configuration_emu3 import Emu3Config, Emu3VQVAEConfig
 
 
 if is_flash_attn_2_available():
@@ -1489,7 +1489,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
         std = self.config.get_text_config().initializer_range
         if isinstance(module, Emu3VQVAE):
             module.apply(module._init_weights)
-        elif isinstance(module, nn.Linear):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
