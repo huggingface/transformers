@@ -742,7 +742,14 @@ class TFSwinOutput(keras.layers.Layer):
 
 class TFSwinLayer(keras.layers.Layer):
     def __init__(
-        self, config, dim, input_resolution: Tuple[int, int], num_heads: int,drop_path_rate:float=0.0, shift_size: int = 0, **kwargs
+        self,
+        config,
+        dim,
+        input_resolution: Tuple[int, int],
+        num_heads: int,
+        drop_path_rate: float = 0.0,
+        shift_size: int = 0,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
