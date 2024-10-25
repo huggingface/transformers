@@ -1373,8 +1373,14 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for _, segment in enumerate(segments):
             self.assertTrue(segment["start"] <= segment["end"], "start has to be smaller equal end")
-            self.assertTrue(any(s > timestamp_begin for s in segment["tokens"][1:]), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}")
-            self.assertTrue(segment["tokens"].shape[-1] <= max_length, "make sure that no segment is larger than max generation length")
+            self.assertTrue(
+                any(s > timestamp_begin for s in segment["tokens"][1:]),
+                f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}",
+            )
+            self.assertTrue(
+                segment["tokens"].shape[-1] <= max_length,
+                "make sure that no segment is larger than max generation length",
+            )
 
     def test_longform_generate_single_batch(self):
         self._check_longform_generate_single_batch(condition_on_prev_tokens=False)
@@ -2402,16 +2408,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_without_prompt, expected_without_prompt)
         self.assertEqual(output_with_prompt, expected_with_prompt)
-    
+
     @slow
     def test_generate_with_forced_decoder_ids(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
 
-        ds = load_dataset(
-            "facebook/multilingual_librispeech", "german", split="test", streaming=True
-        )
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -2419,16 +2423,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(torch_device)
 
         forced_decoder_ids = processor.get_decoder_prompt_ids(
-            task="transcribe",  
+            task="transcribe",
             language="german",
         )
 
-        generated_ids = model.generate(
-            input_features, do_sample=False, language="<|de|>", task="transcribe"
-        )
-        generated_ids_forced = model.generate(
-            input_features, do_sample=False, forced_decoder_ids=forced_decoder_ids
-        )
+        generated_ids = model.generate(input_features, do_sample=False, language="<|de|>", task="transcribe")
+        generated_ids_forced = model.generate(input_features, do_sample=False, forced_decoder_ids=forced_decoder_ids)
 
         self.assertListEqual(generated_ids.tolist()[0], generated_ids_forced.tolist()[0])
 
@@ -2513,7 +2513,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         sequences = model.generate(input_features, task="translate", return_timestamps=True)
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        self.assertEqual(transcription, " How many different species are there in the chilli? How many different species are there in the chilli?")
+        self.assertEqual(
+            transcription,
+            " How many different species are there in the chilli? How many different species are there in the chilli?",
+        )
 
     @require_non_xpu
     @slow
@@ -2560,7 +2563,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
         self.assertEqual(transcription_ass, transcription_non_ass)
-        self.assertEqual(transcription_ass, [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."])
+        self.assertEqual(
+            transcription_ass,
+            [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
+        )
         self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
 
     @slow
@@ -2607,7 +2613,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
         self.assertEqual(transcription_ass, transcription_non_ass)
-        self.assertEqual(transcription_ass, [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."])
+        self.assertEqual(
+            transcription_ass,
+            [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
+        )
         self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
 
     @slow
