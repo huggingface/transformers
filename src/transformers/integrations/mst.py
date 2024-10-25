@@ -23,10 +23,10 @@ import torch.utils.checkpoint
 from torch import nn
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from ..models.llama.modeling_llama import LlamaMLP, LlamaForCausalLM
-from ..models.gemma2.modeling_gemma2 import Gemma2MLP, Gemma2ForCausalLM
-from ..models.qwen2.modeling_qwen2 import Qwen2MLP, Qwen2ForCausalLM
-from ..models.mistral.modeling_mistral import MistralMLP, MistralForCausalLM
+from ..models.gemma2.modeling_gemma2 import Gemma2ForCausalLM, Gemma2MLP
+from ..models.llama.modeling_llama import LlamaForCausalLM, LlamaMLP
+from ..models.mistral.modeling_mistral import MistralForCausalLM, MistralMLP
+from ..models.qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2MLP
 
 def minis_mlp_forward(self, x):
     bsz, q_len, _ = x.size()
