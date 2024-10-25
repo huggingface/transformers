@@ -959,7 +959,7 @@ def pipeline(
     load_tokenizer = load_tokenizer and pipeline_class._load_tokenizer
     load_feature_extractor = load_feature_extractor and pipeline_class._load_feature_extractor
     load_image_processor = load_image_processor and pipeline_class._load_image_processor
-    load_processor = load_processor or pipeline_class._load_processor
+    load_processor = load_processor and pipeline_class._load_processor
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
