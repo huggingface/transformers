@@ -27,6 +27,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_detr"] = ["DetrFeatureExtractor"]
     _import_structure["image_processing_detr"] = ["DetrImageProcessor"]
+    _import_structure["image_processing_detr_fast"] = ["DetrImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_detr import DetrFeatureExtractor
         from .image_processing_detr import DetrImageProcessor
+        from .image_processing_detr_fast import DetrImageProcessorFast
 
     try:
         if not is_torch_available():

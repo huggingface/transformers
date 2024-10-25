@@ -265,7 +265,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
@@ -344,6 +344,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches_indices=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         if past_key_values:
             input_ids = input_ids[:, -1:]
 

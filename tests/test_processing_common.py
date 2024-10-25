@@ -16,7 +16,9 @@
 
 import inspect
 import json
+import random
 import tempfile
+from typing import Optional
 
 import numpy as np
 
@@ -30,11 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_vision_available
 
 
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
+global_rng = random.Random()
 
 if is_vision_available():
     from PIL import Image
@@ -45,6 +43,21 @@ def prepare_image_inputs():
     image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
     image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
     return image_inputs
+
+
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
+def floats_list(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = global_rng
+
+    values = []
+    for batch_idx in range(shape[0]):
+        values.append([])
+        for _ in range(shape[1]):
+            values[-1].append(rng.random() * scale)
+
+    return values
 
 
 @require_torch
@@ -66,7 +79,7 @@ class ProcessorTesterMixin:
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-        if attribute == "tokenizer" and not component.pad_token:
+        if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
                 component.pad_token_id = 0
@@ -86,10 +99,25 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer"]
+        return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
+
     @require_vision
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of PIL images for testing"""
-        return prepare_image_inputs()
+        if batch_size is None:
+            return prepare_image_inputs()[0]
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return prepare_image_inputs() * batch_size
 
     @require_vision
     def prepare_video_inputs(self):
@@ -148,7 +176,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
@@ -170,7 +198,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
@@ -184,7 +212,7 @@ class ProcessorTesterMixin:
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
@@ -203,7 +231,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
@@ -216,7 +244,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -238,8 +266,8 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -263,7 +291,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer"]
+        input_str = [self.prepare_text_inputs()]
         image_input = self.prepare_image_inputs()
         with self.assertRaises(ValueError):
             _ = processor(
@@ -281,7 +309,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -303,7 +331,7 @@ class ProcessorTesterMixin:
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -317,22 +345,145 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
+    #  text + audio kwargs testing
+    @require_torch
+    def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        feature_extractor = self.get_component("feature_extractor")
+        if hasattr(self, "get_tokenizer"):
+            tokenizer = self.get_tokenizer(max_length=117, padding="max_length")
+        elif hasattr(self, "get_component"):
+            tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        else:
+            self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        raw_speech = floats_list((3, 1000))
+        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
+        if "input_ids" in inputs:
+            self.assertEqual(len(inputs["input_ids"][0]), 117)
+        elif "labels" in inputs:
+            self.assertEqual(len(inputs["labels"][0]), 117)
+
+    @require_torch
+    def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        feature_extractor = self.get_component("feature_extractor")
+        if hasattr(self, "get_tokenizer"):
+            tokenizer = self.get_tokenizer(max_length=117)
+        elif hasattr(self, "get_component"):
+            tokenizer = self.get_component("tokenizer", max_length=117)
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        raw_speech = floats_list((3, 1000))
+        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=112, padding="max_length")
+        if "input_ids" in inputs:
+            self.assertEqual(len(inputs["input_ids"][0]), 112)
+        elif "labels" in inputs:
+            self.assertEqual(len(inputs["labels"][0]), 112)
+
+    @require_torch
+    def test_unstructured_kwargs_audio(self):
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        feature_extractor = self.get_component("feature_extractor")
+        if hasattr(self, "get_tokenizer"):
+            tokenizer = self.get_tokenizer(max_length=117)
+        elif hasattr(self, "get_component"):
+            tokenizer = self.get_component("tokenizer", max_length=117)
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        raw_speech = floats_list((3, 1000))
+        inputs = processor(
+            text=input_str,
+            audio=raw_speech,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=76,
+        )
+
+        if "input_ids" in inputs:
+            self.assertEqual(len(inputs["input_ids"][0]), 76)
+        elif "labels" in inputs:
+            self.assertEqual(len(inputs["labels"][0]), 76)
+
+    @require_torch
+    def test_doubly_passed_kwargs_audio(self):
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        feature_extractor = self.get_component("feature_extractor")
+        if hasattr(self, "get_tokenizer"):
+            tokenizer = self.get_tokenizer()
+        elif hasattr(self, "get_component"):
+            tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer"]
+        raw_speech = floats_list((3, 1000))
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                audio=raw_speech,
+                audio_kwargs={"padding": "max_length"},
+                padding="max_length",
+            )
+
+    @require_torch
+    @require_vision
+    def test_structured_kwargs_audio_nested(self):
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        feature_extractor = self.get_component("feature_extractor")
+        if hasattr(self, "get_tokenizer"):
+            tokenizer = self.get_tokenizer()
+        elif hasattr(self, "get_component"):
+            tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer"]
+        raw_speech = floats_list((3, 1000))
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+            "audio_kwargs": {"padding": "max_length", "max_length": 66},
+        }
+
+        inputs = processor(text=input_str, audio=raw_speech, **all_kwargs)
+        if "input_ids" in inputs:
+            self.assertEqual(len(inputs["input_ids"][0]), 76)
+        elif "labels" in inputs:
+            self.assertEqual(len(inputs["labels"][0]), 76)
+
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
     # TODO (molbap) use the same structure of attribute kwargs for other tests to avoid duplication
     def test_overlapping_text_kwargs_handling(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_kwargs = {}
-        processor_kwargs["image_processor"] = self.get_component("image_processor")
-        processor_kwargs["tokenizer"] = tokenizer = self.get_component("tokenizer")
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "video_processor" in self.processor_class.attributes:
-            processor_kwargs["video_processor"] = self.get_component("video_processor")
-        processor = self.processor_class(**processor_kwargs)
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         with self.assertRaises(ValueError):

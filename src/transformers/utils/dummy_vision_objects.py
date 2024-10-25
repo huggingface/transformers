@@ -191,6 +191,13 @@ class DetrImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DetrImageProcessorFast(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DonutFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -290,6 +297,13 @@ class IdeficsImageProcessor(metaclass=DummyObject):
 
 
 class Idefics2ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class Idefics3ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -402,6 +416,13 @@ class MaskFormerFeatureExtractor(metaclass=DummyObject):
 
 
 class MaskFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MllamaImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
