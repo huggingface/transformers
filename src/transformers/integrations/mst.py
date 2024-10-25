@@ -238,3 +238,7 @@ def replace_with_minis():
     Gemma2ForCausalLM.forward = minis_CausalLM_forward
     Qwen2ForCausalLM.forward = minis_CausalLM_forward
     MistralForCausalLM.forward = minis_CausalLM_forward
+
+def replace_model_with_minis(model):
+    model.gradient_checkpointing_enable()
+    replace_with_minis()
