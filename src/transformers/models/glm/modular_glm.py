@@ -46,7 +46,7 @@ from .configuration_glm import GlmConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "dummy"
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 
 
 class GlmRMSNorm(Phi3RMSNorm):
