@@ -3004,7 +3004,7 @@ class Trainer:
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
 
             if self.args.save_strategy == SaveStrategy.BEST:
-                self.control.should_save = new_best_metric
+                self.control.should_save = is_new_best_metric
 
         if self.control.should_save:
             self._save_checkpoint(model, trial)
@@ -3092,7 +3092,7 @@ class Trainer:
         Returns:
             bool: True if a new best metric was found, else False
         """
-        new_best_metric = False
+        is_new_best_metric = False
 
         if self.args.metric_for_best_model is not None:
             metric_to_check = self.args.metric_for_best_model
@@ -3121,9 +3121,9 @@ class Trainer:
                 self.state.best_metric = metric_value
                 self.state.best_model_checkpoint = output_dir
 
-                new_best_metric = True
+                is_new_best_metric = True
 
-        return new_best_metric
+        return is_new_best_metric
 
     def _save_checkpoint(self, model, trial):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
