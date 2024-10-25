@@ -172,7 +172,15 @@ class GenerationConfig(PushToHubMixin):
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
-            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+
+            - `"static"`: [`StaticCache`]
+            - `"offloaded_static"`: [`OffloadedStaticCache`]
+            - `"sliding_window"`: [`SlidingWindowCache`]
+            - `"hybrid"`: [`HybridCache`]
+            - `"mamba"`: [`MambaCache`]
+            - `"quantized"`: [`QuantizedCache`]
+
+            We support other cache types, but they must be manually instantiated and
             passed to `generate` through the `past_key_values` argument. See our
             [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
