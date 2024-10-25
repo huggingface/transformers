@@ -32,7 +32,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from .configuration_emu3 import Emu3Config, Emu3VQVAEConfig
+from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 if is_flash_attn_2_available():
