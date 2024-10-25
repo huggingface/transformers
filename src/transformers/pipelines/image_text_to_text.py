@@ -58,7 +58,7 @@ class Chat:
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        images = retrieve_images_in_chat(messages, images)
+        images = retrieve_images_in_messages(messages, images)
 
         self.messages = messages
         self.images = images
@@ -73,7 +73,9 @@ class ImageText:
         self.text = text
 
 
-def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]):
+def retrieve_images_in_messages(
+    messages: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]
+):
     """
     Retrieve and combine images from the chat and the images passed as input.
     """
@@ -81,7 +83,7 @@ def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "
         images = []
     idx_images = 0
     retrieved_images = []
-    for message in chat:
+    for message in messages:
         for content in message["content"]:
             if isinstance(content, dict) and content.get("type") == "image":
                 if "image" in content:
@@ -95,13 +97,13 @@ def retrieve_images_in_chat(chat: dict, images: Optional[Union[str, List[str], "
                     idx_images += 1
                 else:
                     raise ValueError(
-                        "The number of images in the chat should be the same as the number of images passed to the pipeline."
+                        "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
                     )
 
     # The number of images passed should be consistent with the number of images in the chat without an image key
     if idx_images != len(images):
         raise ValueError(
-            "The number of images in the chat should be the same as the number of images passed to the pipeline."
+            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
         )
 
     return retrieved_images
@@ -279,9 +281,7 @@ class ImageTextToTextPipeline(Pipeline):
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
 
-        if isinstance(text, (list, tuple, KeyDataset) if is_torch_available() else (list, tuple)) and isinstance(
-            text[0], (list, tuple, dict)
-        ):
+        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
             if isinstance(text[0], dict):
                 return super().__call__(Chat(text, images), **kwargs)
@@ -349,18 +349,10 @@ class ImageTextToTextPipeline(Pipeline):
                         images[sum(num_images_in_text[:i]) : sum(num_images_in_text[: i + 1])]
                         for i in range(len(num_images_in_text))
                     ]
-        else:
-            if hasattr(self.processor, "image_token") and self.processor.image_token is not None:
-                logger.warning(
-                    "The pipeline detected no image tokens in the prompt, but this model does support image tokens. "
-                    "Results may be suboptimal or unexpected."
-                )
-            if len(text) == 1 and len(images) > 1:
-                logger.warning(
-                    "The pipeline detected multiple images for one prompt, but no image tokens in the prompt. "
-                    "The prompt will be repeated for each image."
-                )
-                text = [text[0]] * len(images)
+        elif len(text) == 1 and len(images) > 1:
+            raise ValueError(
+                "The pipeline detected no image tokens in the prompt, but multiple images were passed. This behavior is not supported."
+            )
 
         # After reorganizing, these should be the same
         if len(text) > 1 and len(images) != len(text):
@@ -379,7 +371,7 @@ class ImageTextToTextPipeline(Pipeline):
         if isinstance(images[0], (list, tuple)):
             images = [img for img_list in images for img in img_list]
 
-        # Manually build batching as we are working with ImageText objects
+        # Manually build batching as we are working with multimodal inputs which need collating
         batching_index = 0
         results = []
         while batching_index < len(images):
@@ -471,13 +463,16 @@ class ImageTextToTextPipeline(Pipeline):
         if return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
             # Remove the input text from the generated text if the generated text starts with the input text
             # (accounting for the possibility of a space between the input and generated text)
-            indices = [
-                text_generated.find(decoded_input) + len(decoded_input)
-                if text_generated.find(decoded_input) != -1
-                else 0
-                for text_generated, decoded_input in zip(generated_texts, decoded_inputs)
-            ]
-            generated_texts = [text_generated[index:] for index, text_generated in zip(indices, generated_texts)]
+            new_generated_texts = []
+            for text_generated, decoded_input in zip(generated_texts, decoded_inputs):
+                # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
+                index_input_text = text_generated.find(decoded_input)
+                if index_input_text != -1:
+                    # If the input text is found, we remove it
+                    new_generated_texts.append(text_generated[index_input_text + len(decoded_input) :])
+                else:
+                    new_generated_texts.append(text_generated)
+            generated_texts = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
             for prompt_text, generated_text in zip(input_texts, generated_texts):
