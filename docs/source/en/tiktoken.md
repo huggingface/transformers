@@ -52,8 +52,8 @@ encoding = get_encoding("gpt2")
 convert_tiktoken_to_fast(encoding, "config/save/dir")
 ```
 
-This will convert tiktoken tokenizer to `PretrainedTokenizerFast` and save its configuration file, `tokenizer.json`, to
-provided directory.
+The resulting `tokenizer.json` file is saved to the specified directory and loaded with [`PreTrainedTokenizerFast`].
 
-You can load this tokenizer with `PretrainedTokenizerFast.from_pretrained("config/save/dir")`.
+```py
+PreTrainedTokenizerFast.from_pretrained("config/save/dir")
 
