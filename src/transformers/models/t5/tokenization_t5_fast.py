@@ -117,7 +117,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             kwargs["from_slow"] = True
 
         super().__init__(
-            vocab_file,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             unk_token=unk_token,
