@@ -40,9 +40,7 @@ def minis_mlp_forward(self, x):
 
     for i in range(len(x_list)):
         x = x_list[i]
-        output_list[i] = self.down_proj(
-            self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        )
+        output_list[i] = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
     down_proj = torch.cat(output_list, dim=1)
 
@@ -135,9 +133,7 @@ def minis_processing(hidden_states, labels, lm_head, mini_s):
 
     loss = None
     for i in range(mini_s):
-        shift_hidden_states = hidden_states[
-            ..., i * tmp : (i + 1) * tmp, :
-        ].contiguous()
+        shift_hidden_states = hidden_states[..., i * tmp : (i + 1) * tmp, :].contiguous()
         shift_hidden_states = shift_hidden_states.view(-1, hidden_size)
         shift_labels = labels[..., i * tmp : (i + 1) * tmp].contiguous()
         shift_labels = shift_labels.view(-1)
@@ -194,19 +190,11 @@ def minis_CausalLM_forward(
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
     ```"""
-    output_attentions = (
-        output_attentions
-        if output_attentions is not None
-        else self.config.output_attentions
-    )
+    output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
     output_hidden_states = (
-        output_hidden_states
-        if output_hidden_states is not None
-        else self.config.output_hidden_states
+        output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
     )
-    return_dict = (
-        return_dict if return_dict is not None else self.config.use_return_dict
-    )
+    return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
     # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
     outputs = self.model(
