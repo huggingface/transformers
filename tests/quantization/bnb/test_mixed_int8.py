@@ -29,6 +29,7 @@ from transformers import (
     BitsAndBytesConfig,
     pipeline,
 )
+from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
     apply_skip_if_not_implemented,
     is_accelerate_available,
@@ -868,7 +869,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
         # Step 2: add adapters
         for _, module in model.named_modules():
-            if "OPTAttention" in repr(type(module)):
+            if isinstance(module, OPTAttention):
                 module.q_proj = LoRALayer(module.q_proj, rank=16)
                 module.k_proj = LoRALayer(module.k_proj, rank=16)
                 module.v_proj = LoRALayer(module.v_proj, rank=16)
@@ -910,7 +911,7 @@ class MixedInt8GPT2Test(MixedInt8Test):
 
         model_id = "ybelkada/gpt2-xl-8bit"
 
-        model = AutoModelForCausalLM.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
         linear = get_some_linear_layer(model)
         self.assertTrue(linear.weight.__class__ == Int8Params)
@@ -918,6 +919,12 @@ class MixedInt8GPT2Test(MixedInt8Test):
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
+        output_sequences = model.generate(
+            input_ids=encoded_input["input_ids"].to(model.transformer.device), max_new_tokens=10
+        )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
