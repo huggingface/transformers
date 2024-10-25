@@ -120,6 +120,7 @@ class BarkSubModelConfig(PretrainedConfig):
 )
 class BarkSemanticConfig(BarkSubModelConfig):
     model_type = "semantic"
+    base_config_key = "semantic_config"
 
 
 @add_start_docstrings(
@@ -142,6 +143,7 @@ class BarkSemanticConfig(BarkSubModelConfig):
 )
 class BarkCoarseConfig(BarkSubModelConfig):
     model_type = "coarse_acoustics"
+    base_config_key = "coarse_acoustics_config"
 
 
 @add_start_docstrings(
@@ -169,6 +171,7 @@ class BarkCoarseConfig(BarkSubModelConfig):
 )
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
+    base_config_key = "fine_acoustics_config"
 
     def __init__(self, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs):
         self.n_codes_total = n_codes_total

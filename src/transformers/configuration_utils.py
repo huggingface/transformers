@@ -191,6 +191,7 @@ class PretrainedConfig(PushToHubMixin):
 
     model_type: str = ""
     base_config_key: str = ""
+    sub_configs: List[str] = []
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     _auto_class: Optional[str] = None
