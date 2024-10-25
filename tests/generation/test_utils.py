@@ -15,6 +15,7 @@
 
 
 import copy
+import gc
 import inspect
 import tempfile
 import unittest
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -84,6 +86,7 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
+        SynthIDTextWatermarkingConfig,
         WatermarkDetector,
         WatermarkingConfig,
     )
@@ -2045,6 +2048,86 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
+            inputs_dict = {}
+            for input_name, input_data in original_inputs_dict.items():
+                if isinstance(input_data, torch.Tensor) and input_data.dtype in [torch.float32, torch.bfloat16]:
+                    inputs_dict[input_name] = input_data.to(torch.float16)
+                else:
+                    inputs_dict[input_name] = input_data
+            main_input = inputs_dict[model_class.main_input_name]
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                del model
+                gc.collect()
+
+                generate_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": False,
+                    "return_dict_in_generate": True,
+                    "output_scores": True,
+                }
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+                res_sdpa = model_sdpa.generate(**inputs_dict, **generate_kwargs)
+                del model_sdpa
+                gc.collect()
+
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                    attn_implementation="eager",
+                ).to(torch_device)
+                res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
+                del model_eager
+                gc.collect()
+
+                # Eager and SDPA are very similar, but not exactly the same. Because we are using random models, this
+                # test would be flaky if we only checked the sequences. Two situations in which this test passes:
+                # 1. The sequences are the same
+                # 2. The sequences are different, but the scores up until the first mismatch are nearly identical
+                output_matches = res_eager.sequences == res_sdpa.sequences
+                has_matching_outputs = output_matches.all()
+                has_matching_scores = None
+                if not has_matching_outputs:
+                    input_length = main_input.shape[1]
+                    for batch_idx in range(res_eager.sequences.shape[0]):
+                        batch_matches = output_matches[batch_idx]
+                        if batch_matches.all():
+                            continue
+                        first_mismatch_idx = batch_matches.int().argmin()  # gets the index of the first False
+                        first_mismatch_idx -= input_length  # scores doesn't include data regarding input tokens
+                        sdpa_first_mismatch_scores = res_sdpa.scores[first_mismatch_idx][batch_idx]
+                        eager_first_mismatch_scores = res_eager.scores[first_mismatch_idx][batch_idx]
+                        has_matching_scores = torch.allclose(
+                            sdpa_first_mismatch_scores, eager_first_mismatch_scores, rtol=1e-3, atol=1e-3
+                        )
+                        if not has_matching_scores:
+                            break
+
+                self.assertTrue(has_matching_outputs or has_matching_scores)
+
     def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
         # we can be sure what is batch size from main input but seq length depends on model type and whether input is text/audio/image
         # so we infer actual text seq length from model_tester, same was as it is done in `test_modeling_common.py` tests`
@@ -2517,9 +2600,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @slow
-    def test_watermark_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2").to(torch_device)
+    def test_green_red_watermark_generation(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         model_inputs = tokenizer("I will be", return_tensors="pt").to(torch_device)
         input_len = model_inputs["input_ids"].shape[-1]
@@ -2547,6 +2630,61 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
         self.assertListEqual(detection_out.prediction.tolist(), [False])
+
+    """Check the mean bias inserted by the watermarking algorithm."""
+
+    @slow
+    def test_synthid_text_watermark_generation_mean_expected_bias(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I will be", return_tensors="pt").to(torch_device)
+        input_len = 5
+        batch_size = 200
+
+        # generation should work with both input types: WatermarkingConfig or Dict, so let's check it here :)
+        watermark_config = SynthIDTextWatermarkingConfig(keys=[10, 20], ngram_len=5, debug_mode=True)
+        logits_processor = watermark_config.construct_processor(model.config.vocab_size, torch_device)
+        mean_g_values_repeats = []
+        for _ in range(40):
+            input_ids = torch.zeros(
+                (batch_size, input_len),
+                dtype=torch.int64,
+                device=torch_device,
+            )
+            model_inputs = {
+                "input_ids": input_ids,
+                "attention_mask": torch.ones_like(input_ids, device=torch_device),
+            }
+            output = model.generate(
+                **model_inputs, watermarking_config=watermark_config, do_sample=True, max_length=500, top_k=1000
+            )
+            g_values = logits_processor.compute_g_values(input_ids=output[:, input_len:])
+            context_repetition_mask = logits_processor.compute_context_repetition_mask(
+                input_ids=output[:, input_len:],
+            ).unsqueeze(dim=2)
+
+            mean_g_values = torch.masked.mean(
+                g_values,
+                mask=context_repetition_mask,
+                dim=0,
+                keepdim=True,
+                dtype=torch.float64,
+            )
+            mean_g_values_repeats.append(mean_g_values)
+
+        mean_g_values = torch.concat(mean_g_values_repeats, dim=0).mean(dim=0)
+        expected_mean_g_value = logits_processor.expected_mean_g_value(
+            vocab_size=model.config.vocab_size,
+        )
+        atol = 0.03
+        is_close = torch.isclose(
+            mean_g_values,
+            torch.tensor(expected_mean_g_value, dtype=torch.float64),
+            atol=atol,
+            rtol=0,
+        )
+        self.assertTrue(torch.all(is_close))
 
     @slow
     def test_beam_search_example_integration(self):

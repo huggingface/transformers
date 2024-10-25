@@ -40,7 +40,6 @@ from ...image_utils import (
     get_image_type,
     infer_channel_dimension_format,
     make_list_of_images,
-    pil_torch_interpolation_mapping,
     validate_annotations,
     validate_kwargs,
 )
@@ -72,7 +71,8 @@ if is_vision_available():
 if is_torchvision_available():
     from torchvision.io import read_image
 
-    from ...image_utils import pil_torch_interpolation_mapping
+    if is_vision_available():
+        from ...image_utils import pil_torch_interpolation_mapping
 
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
