@@ -92,7 +92,6 @@ from .logits_process import (
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
-    WatermarkLogitsProcessor,
 )
 from .stopping_criteria import (
     ConfidenceCriteria,
@@ -1011,15 +1010,7 @@ class GenerationMixin:
             )
         if generation_config.watermarking_config is not None:
             processors.append(
-                WatermarkLogitsProcessor(
-                    vocab_size=self.config.vocab_size,
-                    device=device,
-                    greenlist_ratio=generation_config.watermarking_config.greenlist_ratio,
-                    bias=generation_config.watermarking_config.bias,
-                    hashing_key=generation_config.watermarking_config.hashing_key,
-                    seeding_scheme=generation_config.watermarking_config.seeding_scheme,
-                    context_width=generation_config.watermarking_config.context_width,
-                )
+                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
             )
 
         # TODO (joao): find a strategy to specify the order of the processors
@@ -1449,6 +1440,11 @@ class GenerationMixin:
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
+        elif has_default_max_length:  # by default let's always generate 20 new tokens
+            generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1535,8 +1531,12 @@ class GenerationMixin:
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "inputs_embeds" in model_kwargs:
+        if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+        elif "decoder_inputs_embeds" in model_kwargs and self.config.is_encoder_decoder:
+            cache_position = (
+                torch.ones_like(model_kwargs["decoder_inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+            )
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
 
@@ -1633,7 +1633,7 @@ class GenerationMixin:
 
             cache_kwargs = {
                 "config": self.config.get_text_config(),
-                "max_batch_size": batch_size,
+                "batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,

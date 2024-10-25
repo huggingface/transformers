@@ -356,6 +356,9 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
+
     def test_Mixtral_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
