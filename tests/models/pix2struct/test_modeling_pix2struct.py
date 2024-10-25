@@ -454,7 +454,7 @@ class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             output = model.generate(**input_dict, use_cache=False, min_new_tokens=10, max_new_tokens=10)
             output_use_cache = model.generate(**input_dict, use_cache=True, min_new_tokens=10, max_new_tokens=10)
 
-            torch.testing.assert_close(output, output_use_cache, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(output, output_use_cache)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
