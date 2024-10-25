@@ -28,6 +28,7 @@ from ..models.llama.modeling_llama import LlamaForCausalLM, LlamaMLP
 from ..models.mistral.modeling_mistral import MistralForCausalLM, MistralMLP
 from ..models.qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2MLP
 
+
 def minis_mlp_forward(self, x):
     bsz, q_len, _ = x.size()
     chunk_size = self.hidden_size
