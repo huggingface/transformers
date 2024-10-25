@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+import sentencepiece as spm
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -27,6 +27,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -38,7 +39,17 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..llama.tokenization_llama import LlamaTokenizer
 
+
+if TYPE_CHECKING:
+    from ...tokenization_utils_base import TextInput
+
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+
+SPIECE_UNDERLINE = "▁"
+
+_CHECKPOINT_FOR_DOC = "google/gemma-7b"
 
 logger = logging.get_logger(__name__)
 
@@ -162,6 +173,162 @@ class GemmaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
+    """
+    Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
+    no padding token in the original model.
+
+    Args:
+        vocab_file (`str`):
+            Path to the vocabulary file.
+        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
+            The end of sequence token.
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
+            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+            attention mechanisms or loss computation.
+        sp_model_kwargs (`Dict[str, Any]`, `Optional`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an `bos_token` at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an `eos_token` at the end of sequences.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Whether or not the default system prompt for Gemma should be used.
+        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not to add spaces between special tokens.
+    """
+
+    def __init__(
+        self,
+        vocab_file,
+        unk_token="<unk>",
+        bos_token="<bos>",
+        eos_token="<eos>",
+        pad_token="<pad>",
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        add_bos_token=True,
+        add_eos_token=False,
+        clean_up_tokenization_spaces=False,
+        use_default_system_prompt=False,
+        spaces_between_special_tokens=False,
+        **kwargs,
+    ):
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
+
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
+        PreTrainedTokenizer.__init__(
+            self,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
+            sp_model_kwargs=sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            use_default_system_prompt=use_default_system_prompt,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            **kwargs,
+        )
+
+    def get_spm_processor(self):
+        raise AttributeError("Not needed for Gemma")
+
+    def unk_token_length(self):
+        raise AttributeError("Not needed for Gemma")
+
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        """
+        Args:
+            text: TextInput
+        Simply calls PreTrainedTokenizer's method
+        """
+        return PreTrainedTokenizer.tokenize(self, text, **kwargs)
+
+    def _tokenize(self, text, **kwargs):
+        """
+        Args:
+            text: TextInput
+        Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
+        """
+        return self.sp_model.encode(text, out_type=str)
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        spaces_between_special_tokens: bool = False,
+        **kwargs,
+    ) -> str:
+        sub_texts = []
+        current_sub_text = []
+        for ids in token_ids:
+            if skip_special_tokens and ids in self.all_special_ids:
+                continue
+            if ids in self._added_tokens_decoder:
+                if current_sub_text:
+                    sub_texts.append(self.sp_model.decode(current_sub_text))
+                sub_texts.append(self._added_tokens_decoder[ids].content)
+                current_sub_text = []
+            else:
+                current_sub_text.append(ids)
+        if current_sub_text:
+            sub_texts.append(self.sp_model.decode(current_sub_text))
+
+        if spaces_between_special_tokens:
+            sub_texts = " ".join(sub_texts)
+        else:
+            sub_texts = "".join(sub_texts)
+
+        return sub_texts.replace(SPIECE_UNDERLINE, " ")
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self._added_tokens_encoder:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string
 
 
 class GemmaRMSNorm(nn.Module):
@@ -794,6 +961,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         ```python
@@ -836,18 +1004,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -874,3 +1031,13 @@ class GemmaForTokenClassification(LlamaForTokenClassification):
         super().__init__(config)
         self.model = GemmaModel(config)
         self.post_init()
+
+
+__all__ = [
+    "GemmaConfig",
+    "GemmaTokenizer",
+    "GemmaModel",
+    "GemmaForCausalLM",
+    "GemmaForSequenceClassification",
+    "GemmaForTokenClassification",
+]

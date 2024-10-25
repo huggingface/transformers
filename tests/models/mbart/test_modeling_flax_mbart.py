@@ -116,6 +116,7 @@ class FlaxMBartModelTester(unittest.TestCase):
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.initializer_range = initializer_range
+        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)

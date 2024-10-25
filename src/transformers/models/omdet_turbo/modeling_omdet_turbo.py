@@ -288,7 +288,7 @@ class OmDetTurboLRUCache:
 class OmDetTurboLanguageBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
-        self.model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.model = AutoModel.from_config(config.text_config)
         self.text_projection = nn.Parameter(torch.zeros(config.text_projection_in_dim, config.text_projection_out_dim))
 
     def forward(self, hidden_states, mask=None, encode_type="task"):
