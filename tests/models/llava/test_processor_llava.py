@@ -150,8 +150,8 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                  {"type": "image"},
-                  {"type": "text", "text": "Describe this image."},
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe this image."},
                 ],
             },
             {
