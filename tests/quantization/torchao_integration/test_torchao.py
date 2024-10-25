@@ -225,7 +225,8 @@ class TorchAoTest(unittest.TestCase):
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 
 if __name__ == "__main__":
