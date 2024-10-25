@@ -1288,7 +1288,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum().item()
-            n_image_features = image_tokens.shape[0]
+            n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
             if n_image_tokens_in_text != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens_in_text}, features {n_image_features}"
