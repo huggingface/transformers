@@ -594,6 +594,7 @@ class ProgressCallback(TrainerCallback):
     def __init__(self):
         self.training_bar = None
         self.prediction_bar = None
+        self.max_str_len = 100
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
@@ -631,7 +632,10 @@ class ProgressCallback(TrainerCallback):
             # but avoid doing any value pickling.
             shallow_logs = {}
             for k, v in logs.items():
-                shallow_logs[k] = v
+                if isinstance(v, str) and len(v) > self.max_str_len:
+                    shallow_logs[k] = f"[String too long to display, length: {len(v)}]"
+                else:
+                    shallow_logs[k] = v
             _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
             if "epoch" in shallow_logs:
