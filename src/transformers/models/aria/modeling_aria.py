@@ -2481,18 +2481,6 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class Idefics3Wrapper(AriaPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.vision_model = AutoModel.from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
-        self.post_init()
-
-    def forward(self, pixel_values, **kwargs):
-        return self.vision_model(pixel_values, **kwargs)
-
-
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
@@ -2509,12 +2497,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def __init__(self, config: AriaConfig):
         super().__init__(config)
 
-        self.vision_tower = Idefics3Wrapper(
-            config
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
-        print("PREFIX", self.vision_tower.base_model_prefix)
-        print(dir(self.vision_tower))
-        # self.vision_tower.base_model_prefix = "vision_tower.vision_model"
+
         self.multi_modal_projector = AriaProjector(
             patch_to_query_dict=config.projector_patch_to_query_dict,
             embed_dim=config.vision_config.hidden_size,

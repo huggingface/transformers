@@ -172,6 +172,7 @@ _import_structure = {
     "models.aria": [
         "AriaConfig",
         "AriaTextConfig",
+        "AriaProcessor",
     ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
@@ -5023,6 +5024,7 @@ if TYPE_CHECKING:
     from .models.aria import (
         AriaConfig,
         AriaTextConfig,
+        AriaProcessor,
     )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
