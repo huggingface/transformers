@@ -339,7 +339,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.full((batch_size, max_seq_len), True, dtype=torch.bool, device=inputs_embeds.device)
         image_to_overwrite[batch_indices, text_to_overwrite] = False
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        if left_padding:
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        else:
+            mask = torch.ones_like(image_to_overwrite, dtype=torch.bool).cumsum(-1) - 1
+            padding_mask = mask <= new_token_positions[:, -1:].to(target_device)
+            image_to_overwrite &= padding_mask
 
         if image_to_overwrite.sum() != visual_features.shape[:-1].numel():
             visual_type = "videos" if num_frames == 8 else "images"
