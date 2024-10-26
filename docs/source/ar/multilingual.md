@@ -107,7 +107,7 @@
 >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 ```
 
-قم بتحليل النص:
+تقسيم النّص إلى رموز:
 
 ```py
 >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
