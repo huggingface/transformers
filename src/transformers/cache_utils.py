@@ -1095,7 +1095,7 @@ class StaticCache(Cache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]`, `optional`):
             Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
@@ -1273,7 +1273,7 @@ class SlidingWindowCache(StaticCache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]`, `optional`):
             Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
@@ -1573,7 +1573,7 @@ class HybridCache(Cache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]`, `optional`):
             Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
@@ -1871,7 +1871,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
         max_batch_size (`int`, *optional*): The max batch size with which the model will be used.
-        layer_device_map (`Dict[int, Union[str, torch.device, int]]]`, *optional*): Mapping between the layers and its device.
+        layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*): Mapping between the layers and its device.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1890,7 +1890,7 @@ class OffloadedStaticCache(StaticCache):
             The device used to offload to.
         dtype (`torch.dtype`):
             The `dtype` used to initializing the cache.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`):
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]`):
             Mapping between the layers and its device.
 
     Example:
