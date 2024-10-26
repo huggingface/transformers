@@ -149,7 +149,7 @@
 >>> encoded_en = tokenizer(en_text, return_tensors="pt")
 ```
 
-يجبر MBart معرف لغة الهدف كأول رمز مولد للترجمة إلى لغة الهدف. قم بتعيين `forced_bos_token_id` إلى `en` في طريقة `generate` للترجمة إلى الإنجليزية:
+يجبر MBart معرف لغة الهدف كأول رمز مولد للترجمة إلى اللغة الهدف. قم بتعيين `forced_bos_token_id` إلى `en` في طريقة `generate` للترجمة إلى الإنجليزية:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
