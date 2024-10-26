@@ -1870,6 +1870,8 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
+        batch_size (`int`, *optional*):
+            The batch size with which the model will be used.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1878,8 +1880,8 @@ class OffloadedStaticCache(StaticCache):
         value_cache (`List[torch.Tensor]`):
             Off-loaded value cache tensors. First one will be on device, where-as the others are
             off-loaded.
-        max_batch_size (`int`):
-            The maximum batch size with which this cache can be used.
+        batch_size (`int`):
+            The batch size with which this cache can be used.
         max_cache_len (`int`):
             The maximum sequence length with which this cache can be used.
         device (`torch.device`):
@@ -1916,8 +1918,14 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
+        batch_size: Optional[int] = None,
     ) -> None:
-        self.max_batch_size = max_batch_size
+        if max_batch_size is not None:
+            logger.warning_once(
+                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
+                "v4.46. Use the more precisely named 'batch_size' argument instead."
+            )
+        self.batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
@@ -1930,7 +1938,7 @@ class OffloadedStaticCache(StaticCache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)
+        cache_shape = (self.batch_size, num_key_value_heads, self.max_cache_len, head_dim)
 
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
