@@ -22,7 +22,6 @@ import unittest
 
 import pytest
 
-from examples.research_projects.rag.use_own_knowledge_dataset import device
 from transformers import HubertConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 from transformers.utils import is_torch_fx_available
@@ -959,21 +958,21 @@ class HubertModelIntegrationTest(unittest.TestCase):
         # vocab_size=500, deduplicate=False, need_f0=False)
         # model(wav)['dense']
         expected_outputs_first = torch.tensor(
-                [
-                    [0.0267, 0.1776, -0.1706, -0.4559],
-                    [-0.2430, -0.2943, -0.1864, -0.1187],
-                    [-0.1812, -0.4239, -0.1916, -0.0858],
-                    [-0.1495, -0.4758, -0.4036, 0.0302],
-                ],
+            [
+                [0.0267, 0.1776, -0.1706, -0.4559],
+                [-0.2430, -0.2943, -0.1864, -0.1187],
+                [-0.1812, -0.4239, -0.1916, -0.0858],
+                [-0.1495, -0.4758, -0.4036, 0.0302],
+            ],
             device=torch_device,
         )
         expected_outputs_last = torch.tensor(
-                [
-                    [0.3366, -0.2734, -0.1415, -0.3055],
-                    [0.2329, -0.3580, -0.1421, -0.3197],
-                    [0.1631, -0.4301, -0.1965, -0.2956],
-                    [0.3342, -0.2185, -0.2253, -0.2363],
-                ],
+            [
+                [0.3366, -0.2734, -0.1415, -0.3055],
+                [0.2329, -0.3580, -0.1421, -0.3197],
+                [0.1631, -0.4301, -0.1965, -0.2956],
+                [0.3342, -0.2185, -0.2253, -0.2363],
+            ],
             device=torch_device,
         )
         expected_output_sum = 1681.7603
