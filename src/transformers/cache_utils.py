@@ -1871,7 +1871,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
         max_batch_size (`int`, *optional*): The max batch size with which the model will be used.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, *optional*):
             Mapping between the layers and its device.
 
     Attributes:
