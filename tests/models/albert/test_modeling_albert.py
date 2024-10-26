@@ -16,7 +16,10 @@
 
 import unittest
 
-from transformers import AlbertConfig, is_torch_available
+from packaging import version
+from parameterized import parameterized
+
+from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -342,3 +345,49 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    @slow
+    @parameterized.expand(
+        [
+            ("albert/albert-base-v2", ["joyah", "immortality", "happiness", "prosperity", "excellence"]),
+            ("albert/albert-large-v2", ["immortality", "simplicity", "happiness", "achieving", "fulfilling"]),
+            ("albert/albert-xlarge-v2", ["happiness", "learning", "change", "life", "peace"]),
+            ("albert/albert-xxlarge-v2", ["happiness", "fulfillment", "enlightenment", "immortality", "spirituality"]),
+        ]
+    )
+    def test_export(self, albert_model, expected):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 512
+
+        tokenizer = AutoTokenizer.from_pretrained(albert_model)
+        inputs = tokenizer(
+            "The goal of life is [MASK].",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = AlbertForMaskedLM.from_pretrained(
+            albert_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+        )
+
+        logits = model(**inputs).logits
+        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(expected, eg_predicted_mask.split())
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
