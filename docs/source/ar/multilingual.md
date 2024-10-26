@@ -113,7 +113,7 @@
 >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
 ```
 
-يجبر M2M100 معرف اللغة الهدف كأول رمز مولد للترجمة إلى لغة الهدف. قم بتعيين `forced_bos_token_id` إلى `en` في طريقة `generate` للترجمة إلى الإنجليزية:
+يجبر M2M100 معرف اللغة الهدف كأول رمز مولد للترجمة إلى اللغة الهدف. قم بتعيين `forced_bos_token_id` إلى `en` في طريقة `generate` للترجمة إلى الإنجليزية:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
