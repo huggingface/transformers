@@ -131,7 +131,7 @@
 - `facebook/mbart-large-50` (الترجمة متعددة اللغات، 50 لغة)
 - `facebook/mbart-large-cc25`
 
-في هذا المثال، قم بتحميل نقطة تفتيش `facebook/mbart-large-50-many-to-many-mmt` لترجمة النص من الفنلندية إلى الإنجليزية. يمكنك تعيين اللغة المصدر في المحلل:
+في هذا المثال، قم بتحميل نسخة `facebook/mbart-large-50-many-to-many-mmt` لترجمة النص من الفنلندية إلى الإنجليزية. يمكنك تعيين اللغة المصدر في المجزىء:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
