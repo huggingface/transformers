@@ -61,7 +61,6 @@ DistilBertConfig {
 ```
 
 بمجرد أن تصبح راضيًا عن تكوين نموذجك، يمكنك حفظه باستخدام [`~PretrainedConfig.save_pretrained`]. يتم تخزين ملف التكوين الخاص بك على أنه ملف JSON في دليل الحفظ المحدد:
-بمجرد أن تصبح راضيًا عن تكوين نموذجك، يمكنك حفظه باستخدام [`~PretrainedConfig.save_pretrained`]. يتم تخزين ملف التكوين الخاص بك على أنه ملف JSON في دليل الحفظ المحدد:
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
