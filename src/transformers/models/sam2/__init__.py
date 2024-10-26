@@ -64,7 +64,7 @@ if TYPE_CHECKING:
         Sam2MemoryEncoderConfig,
         Sam2PromptEncoderConfig,
     )
-    from .processing_sam import Sam2Processor
+    from .processing_sam2 import Sam2Processor
 
     try:
         if not is_torch_available():
