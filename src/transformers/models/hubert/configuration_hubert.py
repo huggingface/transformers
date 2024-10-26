@@ -95,7 +95,7 @@ class HubertConfig(PretrainedConfig):
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
         conv_pos_batch_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use batch norm instead of weight norm in conv_pos (for bf16 models)
+            Whether to use batch norm instead of weight norm in conv_pos
         do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether do apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
             True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
