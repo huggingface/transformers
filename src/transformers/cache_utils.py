@@ -1574,7 +1574,7 @@ class HybridCache(Cache):
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model are split between differents gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
