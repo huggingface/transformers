@@ -38,8 +38,8 @@ logger = logging.get_logger(__name__)
 
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
-    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv.0",
-    "encoder.pos_conv.1": "encoder.pos_conv_embed.conv.1",
+    "encoder.pos_conv.0": "encoder.pos_conv_embed.batch_norm",
+    "encoder.pos_conv.1": "encoder.pos_conv_embed.conv",
     "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
     "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
     "self_attn.q_proj": "encoder.layers.*.attention.q_proj",

@@ -271,9 +271,9 @@ class HubertPositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
+        self.batch_norm = None
         if config.conv_pos_batch_norm:
-            batch_norm = nn.BatchNorm1d(config.hidden_size)
-            self.conv = nn.Sequential(batch_norm, self.conv)
+            self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
             weight_norm = nn.utils.weight_norm
             if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -300,7 +300,8 @@ class HubertPositionalConvEmbedding(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
-
+        if self.batch_norm is not None:
+            hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
