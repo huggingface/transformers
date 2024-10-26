@@ -54,7 +54,7 @@ DistilBertConfig {
  
 ```
 
-يمكن تعديل سمات النموذج المدرب مسبقًا في دالة [`~PretrainedConfig.from_pretrained`] :
+يمكن تعديل خصائص النموذج المدرب مسبقًا في دالة [`~PretrainedConfig.from_pretrained`] :
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
