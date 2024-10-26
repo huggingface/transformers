@@ -45,13 +45,12 @@ from ...utils import (  # noqa: F401
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from ..bart.modeling_bart import BartForConditionalGeneration
-from .configuration_florence2 import Florence2Config, Florence2VisionConfig
+from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig  # noqa: F401
 
 
 _CHECKPOINT_FOR_DOC = "microsoft/Florence-2-large"
@@ -605,7 +604,7 @@ class DaViTBlock(nn.Module):
         return x, size
 
 
-class DaViT(nn.Module):
+class DaViT(PreTrainedModel):
     """DaViT: Dual-Attention Transformer
 
     Args:
@@ -647,8 +646,10 @@ class DaViT(nn.Module):
         norm_layer=nn.LayerNorm,
         conv_at_attn=True,
         conv_at_ffn=True,
+        config: Optional[Florence2VisionConfig] = None,
     ):
-        super().__init__()
+        super().__init__(config)
+        self.config = config
 
         self.num_classes = num_classes
         self.embed_dims = embed_dims
@@ -711,6 +712,14 @@ class DaViT(nn.Module):
     def dim_out(self):
         return self.embed_dims[-1]
 
+    @property
+    def _supports_flash_attn_2(self):
+        return False
+
+    @property
+    def _supports_sdpa(self):
+        return False
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=0.02)
@@ -770,6 +779,7 @@ class DaViT(nn.Module):
             patch_prenorm=config.patch_prenorm,
             drop_path_rate=config.drop_path_rate,
             window_size=config.window_size,
+            config=config,
         )
 
 
@@ -955,8 +965,6 @@ FLORENCE2_INPUTS_DOCSTRING = r"""
 class Florence2VisionModel(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        if config.model_type != "davit":
-            raise ValueError(f"only DaViT is supported for now, got {config.model_type}")
         self.vision_tower = DaViT.from_config(config=config)
 
         self.post_init()
@@ -972,8 +980,6 @@ class Florence2VisionModel(Florence2PreTrainedModel):
 class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        if config.model_type != "davit":
-            raise ValueError(f"only DaViT is supported for now, got {config.model_type}")
         self.vision_tower = DaViT.from_config(config=config)
 
         self._build_image_projection_layers(config)
@@ -1059,8 +1065,6 @@ class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration):
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        if config.vision_config.model_type != "davit":
-            raise ValueError(f"only DaViT is supported for now, got {config.vision_config.model_type}")
         self.vision_tower = DaViT.from_config(config=config.vision_config)
         # remove unused layers
         del self.vision_tower.head
@@ -1072,8 +1076,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
 
         language_model = Florence2LanguageForConditionalGeneration(config=config.text_config)
 
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1

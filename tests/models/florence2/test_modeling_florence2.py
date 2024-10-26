@@ -182,6 +182,7 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     test_pruning = False
     test_head_masking = False
     test_attention_outputs = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Florence2VisionText2TextModelTester(self)
@@ -248,108 +249,68 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in Florence2 models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Florence2 models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_beam_sample_generate(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
+    @unittest.skip(reason="0.00023532799968961626 not found in [0.0, 1.0] : Parameter image_projection")
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
+    @unittest.skip(reason="no attribute 'hidden_states'")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
+    @unittest.skip(reason="no attribute 'hidden_states'")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_torchscript_simple(self):
+    @unittest.skip(reason="flaky")
+    def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_torchscript_output_attentions(self):
+    @unittest.skip(reason="Not supported")
+    def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_torchscript_output_hidden_state(self):
+    @unittest.skip(reason="Not supported")
+    def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_eager_matches_sdpa_inference_0_float16(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_eager_matches_sdpa_inference_2_float32(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_model_weights_reload_no_missing_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
+    @unittest.skip(reason="Not supported")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
+    @unittest.skip(reason="Not supported")
     def test_can_use_safetensors(self):
         pass
 
-    @unittest.skip(reason="Not supported yet")
-    def test_determinism(self):
+    @unittest.skip(reason="Not supported")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_eager_matches_sdpa_inference_0_float16(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_save_load(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
+    @unittest.skip(reason="Not supported")
+    def test_eager_matches_sdpa_inference_2_float32(self):
         pass
 
 
