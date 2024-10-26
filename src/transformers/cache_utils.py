@@ -1913,12 +1913,12 @@ class OffloadedStaticCache(StaticCache):
     def __init__(
         self,
         config: PretrainedConfig,
-        max_batch_size: int,
+        batch_size: Optional[int],
         max_cache_len: Optional[int],
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
-        batch_size: Optional[int] = None,
+        max_batch_size: Optional[int] = None,
     ) -> None:
         if max_batch_size is not None:
             logger.warning_once(
