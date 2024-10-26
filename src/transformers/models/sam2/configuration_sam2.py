@@ -255,8 +255,13 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     def __init__(
         self,
         scalp=1,
-        embed_dim=96,
+        hidden_size=96,
         num_heads=1,
+        num_channels=3,
+        image_size=1024,
+        patch_size=7,
+        patch_stride=4,
+        patch_padding=3,
         drop_path_rate=0.0,
         q_pool=3,
         q_stride=(2, 2),
@@ -283,8 +288,13 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         assert len(stages) == len(window_spec)
 
         self.scalp = scalp
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.num_heads = num_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
         self.drop_path_rate = drop_path_rate
         self.q_pool = q_pool
         self.q_stride = q_stride
@@ -457,3 +467,9 @@ class Sam2Config(PretrainedConfig):
         # extra arguments used to construct the SAM mask decoder; if not None it should be a dict of kwargs to be passed into `MaskDecoder` class.
         self.sam_mask_decoder_extra_args = None
         self.compile_image_encoder = False
+
+        self._bb_feat_sizes = [
+            (256, 256),
+            (128, 128),
+            (64, 64),
+        ]

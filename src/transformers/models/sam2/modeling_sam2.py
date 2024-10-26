@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
+import collections
 import copy
 import math
 import os
@@ -168,6 +169,258 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+class Sam2PatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config: Sam2ImageEncoderConfig):
+        super().__init__()
+        image_size, patch_size, patch_stride, patch_padding = (
+            config.image_size,
+            config.patch_size,
+            config.patch_stride,
+            config.patch_padding,
+        )
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        patch_stride = (
+            patch_stride if isinstance(patch_stride, collections.abc.Iterable) else (patch_stride, patch_stride)
+        )
+        patch_padding = (
+            patch_padding if isinstance(patch_padding, collections.abc.Iterable) else (patch_padding, patch_padding)
+        )
+        self.image_size = image_size
+        self.num_channels = num_channels
+
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=patch_padding
+        )
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
+
+
+class Sam2VisionNeck(nn.Module):
+    """
+    A modified variant of Feature Pyramid Network (FPN) neck
+    (we remove output conv and also do bicubic interpolation similar to ViT
+    pos embed interpolation)
+    """
+
+    def __init__(self, config):
+        """Initialize the neck
+        :param trunk: the backbone
+        :param position_encoding: the positional encoding to use
+        :param d_model: the dimension of the model
+        :param neck_norm: the normalization to use
+        """
+        super().__init__()
+        self.position_encoding = Sam2PositionEmbeddingSine(
+            num_pos_feats=config.d_model, normalize=True, temperature=10000
+        )
+        self.convs = nn.ModuleList()
+        self.backbone_channel_list = config.backbone_channel_list
+        for dim in config.backbone_channel_list:
+            current = nn.Sequential()
+            current.add_module(
+                "conv",
+                nn.Conv2d(
+                    in_channels=dim,
+                    out_channels=config.d_model,
+                    kernel_size=config.kernel_size,
+                    stride=config.stride,
+                    padding=config.padding,
+                ),
+            )
+
+            self.convs.append(current)
+        self.fpn_interp_model = config.fpn_interp_model
+        assert config.fuse_type in ["sum", "avg"]
+        self.fuse_type = config.fuse_type
+
+        # levels to have top-down features in its outputs
+        # e.g. if fpn_top_down_levels is [2, 3], then only outputs of level 2 and 3
+        # have top-down propagation, while outputs of level 0 and level 1 have only
+        # lateral features from the same backbone level.
+        if config.fpn_top_down_levels is None:
+            # default is to have top-down features on all levels
+            config.fpn_top_down_levels = range(len(self.convs))
+        self.fpn_top_down_levels = list(config.fpn_top_down_levels)
+
+    def forward(self, xs: List[torch.Tensor]):
+        out = [None] * len(self.convs)
+        pos = [None] * len(self.convs)
+        assert len(xs) == len(self.convs)
+        # fpn forward pass
+        # see https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/fpn.py
+        prev_features = None
+        # forward in top-down order (from low to high resolution)
+        n = len(self.convs) - 1
+        for i in range(n, -1, -1):
+            x = xs[i]
+            lateral_features = self.convs[n - i](x)
+            if i in self.fpn_top_down_levels and prev_features is not None:
+                top_down_features = F.interpolate(
+                    prev_features.to(dtype=torch.float32),
+                    scale_factor=2.0,
+                    mode=self.fpn_interp_model,
+                    align_corners=(None if self.fpn_interp_model == "nearest" else False),
+                    antialias=False,
+                )
+                prev_features = lateral_features + top_down_features
+                if self.fuse_type == "avg":
+                    prev_features /= 2
+            else:
+                prev_features = lateral_features
+            x_out = prev_features
+            out[i] = x_out
+            pos[i] = self.position_encoding(x_out).to(x_out.dtype)
+
+        return out, pos
+
+
+class Sam2ImageEncoder(nn.Module):
+    def __init__(self, config: Sam2ImageEncoderConfig):
+        super().__init__()
+        self.config = config
+
+        # Patch embdding
+        self.patch_embed = Sam2PatchEmbeddings(config)
+        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
+        self.pos_embed = nn.Parameter(torch.zeros(1, config.hidden_size, *config.window_pos_embed_bkg_spatial_size))
+        self.pos_embed_window = nn.Parameter(
+            torch.zeros(1, config.hidden_size, config.window_spec[0], config.window_spec[0])
+        )
+
+        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
+        self.global_att_blocks = config.global_att_blocks
+
+        self.blocks = nn.ModuleList()
+        embed_dim = config.hidden_size
+        num_heads = config.num_heads
+        dpr = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.stages))
+        ]  # stochastic depth decay rule
+        self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
+        cur_stage = 1
+        for i in range(sum(config.stages)):
+            dim_out = embed_dim
+            # lags by a block, so first block of
+            # next stage uses an initial window size
+            # of previous stage and final window size of current stage
+            window_size = config.window_spec[cur_stage - 1]
+
+            if self.global_att_blocks is not None:
+                window_size = 0 if i in self.global_att_blocks else window_size
+
+            if i - 1 in self.stage_ends:
+                dim_out = int(embed_dim * config.dim_mul)
+                num_heads = int(num_heads * config.head_mul)
+                cur_stage += 1
+
+            block = Sam2MultiScaleBlock(
+                config=config,
+                dim=embed_dim,
+                dim_out=dim_out,
+                num_heads=num_heads,
+                drop_path=dpr[i],
+                q_stride=config.q_stride if i in self.q_pool_blocks else None,
+                window_size=window_size,
+            )
+
+            embed_dim = dim_out
+            self.blocks.append(block)
+
+        self.neck = Sam2VisionNeck(config)
+        self.scalp = config.scalp
+
+    def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
+        h, w = hw
+        window_embed = self.pos_embed_window
+        pos_embed = F.interpolate(self.pos_embed, size=(h, w), mode="bicubic")
+        pos_embed = pos_embed + window_embed.tile([x // y for x, y in zip(pos_embed.shape, window_embed.shape)])
+        pos_embed = pos_embed.permute(0, 2, 3, 1)
+        return pos_embed
+
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Sam2ImageEncoderOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        hidden_states = hidden_states + self._get_pos_embed(hidden_states.shape[1:3])
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        intermediate_hidden_states = ()
+        for i, block_module in enumerate(self.blocks):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            block_outputs = block_module(hidden_states, output_attentions=output_attentions)
+            hidden_states = block_outputs[0]
+
+            if (i == self.stage_ends[-1]) or (i in self.stage_ends):
+                intermediate_hidden_states = intermediate_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (block_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        # Forward through backbone
+        neck_hidden_states, neck_position_embedding = self.neck(intermediate_hidden_states)
+        if self.scalp > 0:
+            # Discard the lowest resolution features
+            neck_hidden_states, neck_position_embedding = (
+                neck_hidden_states[: -self.scalp],
+                neck_position_embedding[: -self.scalp],
+            )
+
+        if not return_dict:
+            outputs = (hidden_states, neck_hidden_states, neck_position_embedding)
+            if output_hidden_states:
+                outputs = outputs + (all_hidden_states,)
+            if output_attentions:
+                outputs = outputs + (all_self_attentions,)
+            return outputs
+
+        return Sam2ImageEncoderOutput(
+            last_hidden_state=hidden_states,
+            neck_hidden_states=neck_hidden_states,
+            neck_position_embedding=neck_position_embedding,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 class Sam2PositionalEmbedding(nn.Module):
@@ -408,7 +661,6 @@ class Sam2MaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        repeat_image: bool,
         high_res_features: Optional[List[torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -808,85 +1060,6 @@ class Sam2PositionEmbeddingSine(nn.Module):
         return pos
 
 
-class Sam2VisionNeck(nn.Module):
-    """
-    A modified variant of Feature Pyramid Network (FPN) neck
-    (we remove output conv and also do bicubic interpolation similar to ViT
-    pos embed interpolation)
-    """
-
-    def __init__(self, config):
-        """Initialize the neck
-        :param trunk: the backbone
-        :param position_encoding: the positional encoding to use
-        :param d_model: the dimension of the model
-        :param neck_norm: the normalization to use
-        """
-        super().__init__()
-        self.position_encoding = Sam2PositionEmbeddingSine(
-            num_pos_feats=config.d_model, normalize=True, temperature=10000
-        )
-        self.convs = nn.ModuleList()
-        self.backbone_channel_list = config.backbone_channel_list
-        for dim in config.backbone_channel_list:
-            current = nn.Sequential()
-            current.add_module(
-                "conv",
-                nn.Conv2d(
-                    in_channels=dim,
-                    out_channels=config.d_model,
-                    kernel_size=config.kernel_size,
-                    stride=config.stride,
-                    padding=config.padding,
-                ),
-            )
-
-            self.convs.append(current)
-        self.fpn_interp_model = config.fpn_interp_model
-        assert config.fuse_type in ["sum", "avg"]
-        self.fuse_type = config.fuse_type
-
-        # levels to have top-down features in its outputs
-        # e.g. if fpn_top_down_levels is [2, 3], then only outputs of level 2 and 3
-        # have top-down propagation, while outputs of level 0 and level 1 have only
-        # lateral features from the same backbone level.
-        if config.fpn_top_down_levels is None:
-            # default is to have top-down features on all levels
-            config.fpn_top_down_levels = range(len(self.convs))
-        self.fpn_top_down_levels = list(config.fpn_top_down_levels)
-
-    def forward(self, xs: List[torch.Tensor]):
-        out = [None] * len(self.convs)
-        pos = [None] * len(self.convs)
-        assert len(xs) == len(self.convs)
-        # fpn forward pass
-        # see https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/fpn.py
-        prev_features = None
-        # forward in top-down order (from low to high resolution)
-        n = len(self.convs) - 1
-        for i in range(n, -1, -1):
-            x = xs[i]
-            lateral_features = self.convs[n - i](x)
-            if i in self.fpn_top_down_levels and prev_features is not None:
-                top_down_features = F.interpolate(
-                    prev_features.to(dtype=torch.float32),
-                    scale_factor=2.0,
-                    mode=self.fpn_interp_model,
-                    align_corners=(None if self.fpn_interp_model == "nearest" else False),
-                    antialias=False,
-                )
-                prev_features = lateral_features + top_down_features
-                if self.fuse_type == "avg":
-                    prev_features /= 2
-            else:
-                prev_features = lateral_features
-            x_out = prev_features
-            out[i] = x_out
-            pos[i] = self.position_encoding(x_out).to(x_out.dtype)
-
-        return out, pos
-
-
 def window_partition(x, window_size):
     """
     Partition into non-overlapping windows with padding if needed.
@@ -930,37 +1103,6 @@ def window_unpartition(windows, window_size, pad_hw, hw):
     if Hp > H or Wp > W:
         x = x[:, :H, :W, :].contiguous()
     return x
-
-
-class Sam2PatchEmbed(nn.Module):
-    """
-    Image to Patch Embedding.
-    """
-
-    def __init__(
-        self,
-        kernel_size: Tuple[int, ...] = (7, 7),
-        stride: Tuple[int, ...] = (4, 4),
-        padding: Tuple[int, ...] = (3, 3),
-        in_chans: int = 3,
-        embed_dim: int = 768,
-    ):
-        """
-        Args:
-            kernel_size (Tuple): kernel size of the projection layer.
-            stride (Tuple): stride of the projection layer.
-            padding (Tuple): padding size of the projection layer.
-            in_chans (int): Number of input image channels.
-            embed_dim (int):  embed_dim (int): Patch embedding dimension.
-        """
-        super().__init__()
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.proj(x)
-        # B C H W -> B H W C
-        x = x.permute(0, 2, 3, 1)
-        return x
 
 
 def select_closest_cond_frames(frame_idx, cond_frame_outputs, max_cond_frame_num):
@@ -1253,136 +1395,6 @@ class Sam2MultiScaleBlock(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-
-
-class Sam2ImageEncoder(nn.Module):
-    def __init__(self, config: Sam2ImageEncoderConfig):
-        super().__init__()
-        self.config = config
-
-        # Patch embdding
-        self.patch_embed = Sam2PatchEmbed(
-            embed_dim=config.embed_dim,
-        )
-        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
-        self.pos_embed = nn.Parameter(torch.zeros(1, config.embed_dim, *config.window_pos_embed_bkg_spatial_size))
-        self.pos_embed_window = nn.Parameter(
-            torch.zeros(1, config.embed_dim, config.window_spec[0], config.window_spec[0])
-        )
-
-        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
-        self.global_att_blocks = config.global_att_blocks
-
-        self.blocks = nn.ModuleList()
-        embed_dim = config.embed_dim
-        num_heads = config.num_heads
-        dpr = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.stages))
-        ]  # stochastic depth decay rule
-        self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
-        cur_stage = 1
-        for i in range(sum(config.stages)):
-            dim_out = embed_dim
-            # lags by a block, so first block of
-            # next stage uses an initial window size
-            # of previous stage and final window size of current stage
-            window_size = config.window_spec[cur_stage - 1]
-
-            if self.global_att_blocks is not None:
-                window_size = 0 if i in self.global_att_blocks else window_size
-
-            if i - 1 in self.stage_ends:
-                dim_out = int(embed_dim * config.dim_mul)
-                num_heads = int(num_heads * config.head_mul)
-                cur_stage += 1
-
-            block = Sam2MultiScaleBlock(
-                config=config,
-                dim=embed_dim,
-                dim_out=dim_out,
-                num_heads=num_heads,
-                drop_path=dpr[i],
-                q_stride=config.q_stride if i in self.q_pool_blocks else None,
-                window_size=window_size,
-            )
-
-            embed_dim = dim_out
-            self.blocks.append(block)
-
-        self.neck = Sam2VisionNeck(config)
-        self.scalp = config.scalp
-
-    def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
-        h, w = hw
-        window_embed = self.pos_embed_window
-        pos_embed = F.interpolate(self.pos_embed, size=(h, w), mode="bicubic")
-        pos_embed = pos_embed + window_embed.tile([x // y for x, y in zip(pos_embed.shape, window_embed.shape)])
-        pos_embed = pos_embed.permute(0, 2, 3, 1)
-        return pos_embed
-
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Sam2ImageEncoderOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.patch_embed(pixel_values)
-        hidden_states = hidden_states + self._get_pos_embed(hidden_states.shape[1:3])
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        intermediate_hidden_states = ()
-        for i, block_module in enumerate(self.blocks):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            block_outputs = block_module(hidden_states, output_attentions=output_attentions)
-            hidden_states = block_outputs[0]
-
-            if (i == self.stage_ends[-1]) or (i in self.stage_ends):
-                intermediate_hidden_states = intermediate_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (block_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        # Forward through backbone
-        neck_hidden_states, neck_position_embedding = self.neck(intermediate_hidden_states)
-        if self.scalp > 0:
-            # Discard the lowest resolution features
-            neck_hidden_states, neck_position_embedding = (
-                neck_hidden_states[: -self.scalp],
-                neck_position_embedding[: -self.scalp],
-            )
-
-        if not return_dict:
-            outputs = (hidden_states, neck_hidden_states, neck_position_embedding)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
-
-        return Sam2ImageEncoderOutput(
-            last_hidden_state=hidden_states,
-            neck_hidden_states=neck_hidden_states,
-            neck_position_embedding=neck_position_embedding,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
 
 
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
@@ -2163,10 +2175,12 @@ class Sam2Model(Sam2PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeddings = vision_outputs[0]
+            image_embeddings = vision_outputs[2][-1]
+            vision_position_embeddings = vision_outputs[2]
+            feature_maps = vision_outputs[1]
 
             if output_hidden_states:
-                vision_hidden_states = vision_outputs[1]
+                vision_hidden_states = vision_outputs[-2]
             if output_attentions:
                 vision_attentions = vision_outputs[-1]
 
@@ -2189,14 +2203,32 @@ class Sam2Model(Sam2PreTrainedModel):
             input_masks=input_masks,
         )
 
+        if self.config.use_high_res_features_in_sam:
+            # precompute projected level 0 and level 1 features in SAM decoder
+            # to avoid running it again on every SAM click
+            feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
+            feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
+
+        num_feature_levels = 3 if self.config.use_high_res_features_in_sam else 1
+        feature_maps = feature_maps[-num_feature_levels:]
+        vision_position_embeddings = vision_position_embeddings[-num_feature_levels:]
+
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
+        vision_position_embeddings = [x.flatten(2).permute(2, 0, 1) for x in vision_position_embeddings]
+
+        high_res_features = [
+            feat.permute(1, 2, 0).view(1, -1, *feat_size)
+            for feat, feat_size in zip(feature_maps, self.config._bb_feat_sizes)
+        ]
+
         low_res_masks, iou_predictions, mask_decoder_attentions, _ = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            # repeat_image=repeat_image,
-            # high_res_features=high_res_features,
+            high_res_features=high_res_features[:-1],
         )
 
         if not return_dict:

@@ -31,6 +31,7 @@ from transformers import (
     Sam2Config,
     Sam2ImageEncoderConfig,
     Sam2ImageProcessor,
+    Sam2MaskDecoderConfig,
     Sam2MemoryAttentionConfig,
     Sam2MemoryEncoderConfig,
     Sam2Model,
@@ -43,6 +44,7 @@ def get_config(model_name):
     if "sam2_hiera_tiny" in model_name:
         image_encoder_config = Sam2ImageEncoderConfig()
         prompt_encoder_config = Sam2PromptEncoderConfig()
+        mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2_hiera_small" in model_name:
@@ -58,6 +60,7 @@ def get_config(model_name):
     config = Sam2Config(
         image_encoder_config=image_encoder_config,
         prompt_encoder_config=prompt_encoder_config,
+        mask_decoder_config=mask_decoder_config,
         memory_attention_config=memory_attention_config,
         memory_encoder_config=memory_encoder_config,
     )
@@ -87,6 +90,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
     "blocks": "layers",
+    "trunk.layers": "blocks",
+    "trunk.": "",
 }
 
 
@@ -96,11 +101,15 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
+    output_image_encoder_pattern = r"patch_embed.*.*"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
+
+        if re.match(output_image_encoder_pattern, key):
+            key = key.replace("projection", "proj")
 
         if re.match(output_hypernetworks_mlps_pattern, key):
             layer_nb = int(re.match(output_hypernetworks_mlps_pattern, key).group(2))
@@ -199,7 +208,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        repo_id = f"meta/{model_name}"
+        repo_id = f"danelcsb/{model_name}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
 
