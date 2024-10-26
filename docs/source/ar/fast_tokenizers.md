@@ -40,7 +40,7 @@
 >>> tokenizer.save("tokenizer.json")
 ```
 
-يمكن تمرير المسار الذي حفظنا به هذا الملف إلى طريقة تهيئة [`PreTrainedTokenizerFast`] باستخدام معلمة `tokenizer_file`:
+يمكن تمرير المسار الذي حفظنا به هذا الملف إلى طريقة تهيئة [`PreTrainedTokenizerFast`] باستخدام المُعامل  `tokenizer_file`:
 
 ```python
 >>> from transformers import PreTrainedTokenizerFast
