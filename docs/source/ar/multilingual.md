@@ -157,4 +157,4 @@
 "Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
 ```
 
-إذا كنت تستخدم نقطة تفتيش `facebook/mbart-large-50-many-to-one-mmt`، فلا تحتاج إلى إجبار معرف لغة الهدف كأول رمز مولد، وإلا فإن الاستخدام هو نفسه.
+إذا كنت تستخدم نسخة `facebook/mbart-large-50-many-to-one-mmt`، فلا تحتاج إلى إجبار معرف لغة الهدف كأول رمز مولد، وإلا فإن الاستخدام هو نفسه.
