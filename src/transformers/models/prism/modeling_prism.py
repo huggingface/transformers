@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, GenerationMixin
 from ...utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -1438,7 +1438,7 @@ class PrismModel(PrismPreTrainedModel):
 )
 
 
-class PrismForConditionalGeneration(PrismPreTrainedModel):
+class PrismForConditionalGeneration(PrismPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1592,4 +1592,3 @@ class PrismForConditionalGeneration(PrismPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
-

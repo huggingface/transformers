@@ -109,7 +109,7 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class PrismTokenizerIntegrationTest(unittest.TestCase):
-    checkpoint_name = "dariast/prism"
+    checkpoint_name = "facebook/prism"
     src_text = ["Hi world.", 
             "This is a Test.",
             "Some of my Best Friends are Linguists."]
