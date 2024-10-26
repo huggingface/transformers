@@ -1878,12 +1878,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if isinstance(final_message, (list, tuple)):
                     final_message = final_message[-1]["text"]
                 try:
-                    final_message = final_message
                     rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
                 except:  # noqa: E722
                     # Some chat templates like Llama-3.1 trim messages before rendering, so we must do the same here.
                     final_message = final_message.strip()
-                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
             rendered.append(rendered_chat)
 
         if not is_batched:
