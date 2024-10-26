@@ -1859,8 +1859,8 @@ class OffloadedStaticCache(StaticCache):
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize
             the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used.
+        batch_size (`int`):
+            The batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`Union[str, torch.device]`):
@@ -1870,8 +1870,7 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
-        batch_size (`int`, *optional*):
-            The batch size with which the model will be used.
+        max_batch_size (`int`, *optional*): The max batch size with which the model will be used.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1904,7 +1903,7 @@ class OffloadedStaticCache(StaticCache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = OffloadedStaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = OffloadedStaticCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
