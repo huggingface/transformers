@@ -131,6 +131,71 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         self.out_dim = out_dim
 
 
+class Sam2MaskDecoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM 2
+    memory encoder according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        in_dim (`int`, *optional*, defaults to 256):
+            Input dimension of the memory encoder.
+        out_dim (`int`, *optional*, defaults to 64):
+            Output dimension of the memory encoder.
+
+    """
+
+    def __init__(
+        self,
+        hidden_size=256,
+        num_multimask_outputs=3,
+        hidden_act="gelu",
+        iou_head_depth=3,
+        iou_head_hidden_dim=256,
+        use_high_res_features=True,
+        iou_prediction_use_sigmoid=True,
+        dynamic_multimask_via_stability=False,
+        dynamic_multimask_stability_delta=0.05,
+        dynamic_multimask_stability_thresh=0.98,
+        pred_obj_scores=True,
+        pred_obj_scores_mlp=True,
+        use_multimask_token_for_obj_ptr=True,
+        two_way_transformer_depth=2,
+        two_way_transformer_embedding_dim=256,
+        two_way_transformer_num_heads=8,
+        two_way_transformer_mlp_dim=2048,
+        two_way_transformer_activation="relu",
+        two_way_transformer_attention_downsample_rate=2,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        assert hidden_size == two_way_transformer_embedding_dim
+
+        self.hidden_size = hidden_size
+        self.num_multimask_outputs = num_multimask_outputs
+        self.hidden_act = hidden_act
+        self.iou_head_depth = iou_head_depth
+        self.iou_head_hidden_dim = iou_head_hidden_dim
+        self.use_high_res_features = use_high_res_features
+        self.iou_prediction_use_sigmoid = iou_prediction_use_sigmoid
+        self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
+        self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
+        self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
+        self.pred_obj_scores = pred_obj_scores
+        self.pred_obj_scores_mlp = pred_obj_scores_mlp
+        self.use_multimask_token_for_obj_ptr = use_multimask_token_for_obj_ptr
+
+        # TwoWayTransformer configuration
+        self.two_way_transformer_depth = two_way_transformer_depth
+        self.two_way_transformer_embedding_dim = two_way_transformer_embedding_dim
+        self.two_way_transformer_num_heads = two_way_transformer_num_heads
+        self.two_way_transformer_mlp_dim = two_way_transformer_mlp_dim
+        self.two_way_transformer_activation = two_way_transformer_activation
+        self.two_way_transformer_attention_downsample_rate = two_way_transformer_attention_downsample_rate
+
+
 class Sam2ImageEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2ImageEncoder`]. It is used to instantiate a SAM
@@ -209,6 +274,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         fpn_top_down_levels=[2, 3],
         fpn_interp_model="nearest",
         fuse_type="sum",
+        hidden_act="gelu",
         layer_norm_eps=1e-6,
         **kwargs,
     ):
@@ -239,6 +305,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.fpn_interp_model = fpn_interp_model
         self.fuse_type = fuse_type
 
+        self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
 
 
@@ -270,6 +337,8 @@ class Sam2Config(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     Sam2ImageEncoderConfig,
+    ...     Sam2PromptEncoderConfig,
+    ...     Sam2MaskDecoderConfig,
     ...     Sam2MemoryAttentionConfig,
     ...     Sam2MemoryEncoderConfig,
     ...     Sam2Model,
@@ -288,10 +357,12 @@ class Sam2Config(PretrainedConfig):
 
     >>> # Initializing SAM2 image encoder, memory attention, and memory encoder configurations
     >>> image_encoder_config = Sam2ImageEncoderConfig()
+    >>> prompt_encoder_config = Sam2PromptEncoderConfig()
+    >>> mask_decoder_config = Sam2MaskDecoderConfig()
     >>> memory_attention_config = Sam2MemoryAttentionConfig()
     >>> memory_encoder_config = Sam2MemoryEncoderConfig()
 
-    >>> config = Sam2Config(image_encoder_config, memory_attention_config, memory_encoder_config)
+    >>> config = Sam2Config(image_encoder_config, prompt_encoder_config, mask_decoder_config, memory_attention_config, memory_encoder_config)
     ```"""
 
     model_type = "sam2"
@@ -300,6 +371,7 @@ class Sam2Config(PretrainedConfig):
         self,
         image_encoder_config=None,
         prompt_encoder_config=None,
+        mask_decoder_config=None,
         memory_attention_config=None,
         memory_encoder_config=None,
         initializer_range=0.02,
@@ -308,13 +380,16 @@ class Sam2Config(PretrainedConfig):
         super().__init__(**kwargs)
         image_encoder_config = image_encoder_config if image_encoder_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
+        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
         memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
         memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
 
         self.image_encoder_config = Sam2ImageEncoderConfig(**image_encoder_config)
         self.prompt_encoder_config = Sam2PromptEncoderConfig(**prompt_encoder_config)
+        self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
         self.memory_attention_config = Sam2MemoryAttentionConfig(**memory_attention_config)
         self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
+
         self.initializer_range = initializer_range
         self.num_maskmem = 7  # default 1 input frame + 6 previous frames
         self.image_size = 1024

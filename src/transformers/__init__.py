@@ -724,6 +724,7 @@ _import_structure = {
     "models.sam2": [
         "Sam2Config",
         "Sam2ImageEncoderConfig",
+        "Sam2MaskDecoderConfig",
         "Sam2PromptEncoderConfig",
         "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
@@ -5636,6 +5637,7 @@ if TYPE_CHECKING:
     from .models.sam2 import (
         Sam2Config,
         Sam2ImageEncoderConfig,
+        Sam2MaskDecoderConfig,
         Sam2MemoryAttentionConfig,
         Sam2MemoryEncoderConfig,
         Sam2Processor,
