@@ -334,7 +334,7 @@ TOLERANCE = 1e-4
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-# @slow
+@slow
 class PrismModelIntegrationTests(unittest.TestCase):
     checkpoint_name = "facebook/prism"
     @cached_property
@@ -407,7 +407,7 @@ class PrismModelIntegrationTests(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    # @slow
+    @slow
     def test_flash_attn_2_seq_to_seq_generation(self):
         """
         Overwritting the common test as the test is flaky on tiny models
