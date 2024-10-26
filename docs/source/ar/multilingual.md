@@ -143,7 +143,7 @@
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 ```
 
-قم بتحليل النص:
+تقسيم النّص إلى رموز:
 
 ```py
 >>> encoded_en = tokenizer(en_text, return_tensors="pt")
