@@ -11,7 +11,7 @@
 
 ## التكوين
 
-يشير [التكوين](main_classes/configuration) إلى السمات المحددة للنموذج. لكل تكوين نموذج سمات مختلفة؛ على سبيل المثال، تمتلك جميع نماذج NLP سمات `hidden_size` و`num_attention_heads` و`num_hidden_layers` و`vocab_size` المشتركة. تحدد هذه السمات عدد رؤوس الاهتمام أو الطبقات المخفية لبناء نموذج بها.
+يشير مصطلح [التكوين](main_classes/configuration) إلى الخصائص المحددة للنموذج. لكل تكوين نموذج خصائصه الخاصة؛ على سبيل المثال، تشترك جميع نماذج NLP في الخصائص  `hidden_size` و`num_attention_heads` و`num_hidden_layers` و`vocab_size` المشتركة. تحدد هذه الخصائص عدد رؤوس الانتباه أو الطبقات المخفية لبناء نموذج بها.
 
 الق نظرة فاحصة على [DistilBERT](model_doc/distilbert) عن طريق الوصول إلى [`DistilBertConfig`] لفحص سماته:
 
