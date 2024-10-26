@@ -43,6 +43,7 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the encoder and pooler.
         layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+        scale (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
     """
 
     def __init__(
@@ -140,10 +141,25 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        in_dim (`int`, *optional*, defaults to 256):
-            Input dimension of the memory encoder.
-        out_dim (`int`, *optional*, defaults to 64):
-            Output dimension of the memory encoder.
+        hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        num_multimask_outputs (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        iou_head_depth (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        iou_head_hidden_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        use_high_res_features (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        iou_prediction_use_sigmoid (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        dynamic_multimask_via_stability (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dynamic_multimask_stability_delta (`<fill_type>`, *optional*, defaults to 0.05): <fill_docstring>
+        dynamic_multimask_stability_thresh (`<fill_type>`, *optional*, defaults to 0.98): <fill_docstring>
+        pred_obj_scores (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        pred_obj_scores_mlp (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_multimask_token_for_obj_ptr (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        two_way_transformer_depth (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        two_way_transformer_embedding_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        two_way_transformer_num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        two_way_transformer_mlp_dim (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        two_way_transformer_activation (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
+        two_way_transformer_attention_downsample_rate (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
 
     """
 
@@ -209,33 +225,35 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     Args:
         scalp (`int`, *optional*, defaults to 1):
             The scalp parameter for the image encoder.
-        embed_dim (`int`, *optional*, defaults to 112):
-            Initial embedding dimension.
-        num_heads (`int`, *optional*, defaults to 2):
+        hidden_size (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
+        num_heads (`int`, *optional*, defaults to 1):
             Initial number of attention heads.
+        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        image_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        patch_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
+        patch_stride (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        patch_padding (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
         q_pool (`int`, *optional*, defaults to 3):
             Number of q_pool stages.
         q_stride (`Tuple[int, int]`, *optional*, defaults to `(2, 2)`):
             Downsample stride between stages.
-        stages (`Tuple[int, ...]`, *optional*, defaults to `(2, 3, 16, 3)`):
+        stages (`Tuple[int, ...]`, *optional*, defaults to `(1, 2, 7, 2)`):
             Number of blocks per stage.
         dim_mul (`float`, *optional*, defaults to 2.0):
             Dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
             Head multiplier factor at stage shift.
-        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to `(14, 14)`):
+        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to `(7, 7)`):
             Window size per stage when not using global attention.
         window_spec (`Tuple[int, ...]`, *optional*, defaults to `(8, 4, 14, 7)`):
             Window specifications for each stage.
-        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to `(12, 16, 20)`):
+        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
             Blocks where global attention is used.
-        return_interm_layers (`bool`, *optional*, defaults to `True`):
-            Whether to return features from every stage.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model in the neck.
-        backbone_channel_list (`List[int]`, *optional*, defaults to `[896, 448, 224, 112]`):
+        backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             List of channel dimensions for the backbone.
         kernel_size (`int`, *optional*, defaults to 1):
             Kernel size for convolutions in the neck.
@@ -249,6 +267,8 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Interpolation model for FPN.
         fuse_type (`str`, *optional*, defaults to `"sum"`):
             Type of fusion to use in the neck.
+        hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
 
     """
 
@@ -333,6 +353,7 @@ class Sam2Config(PretrainedConfig):
         image_encoder_config (Union[`dict`, `Sam2ImageEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2ImageEncoderConfig`].
         prompt_encoder_config (`<fill_type>`, *optional*): <fill_docstring>
+        mask_decoder_config (`<fill_type>`, *optional*): <fill_docstring>
         memory_attention_config (Union[`dict`, `Sam2MemoryAttentionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
