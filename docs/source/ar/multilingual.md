@@ -30,7 +30,7 @@
 >>> model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
 ```
 
-تُظهر سمة `lang2id` في المحلل اللغات وأرقام تعريفها في هذا النموذج:
+تُظهر خاصية `lang2id` في المجزىء اللغات وأرقام تعريفها في هذا النموذج:
 
 ```py
 >>> print(tokenizer.lang2id)
