@@ -2277,12 +2277,13 @@ class Trainer:
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
 
-        # configure fsdp plugin for qlora if any
-        if use_accelerator_prepare:
-            self._fsdp_qlora_plugin_updates()
+        if use_accelerator_prepare and self.is_fsdp_enabled:
+            # Remove FSDP wrapping from sub-models.
+            self.model = extract_model_from_parallel(self.model, recursive=True)
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
+                self._fsdp_qlora_plugin_updates()
                 self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
