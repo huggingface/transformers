@@ -128,8 +128,8 @@ class Sam2ImageEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    neck_hidden_states: Optional[torch.FloatTensor] = None
-    neck_position_embedding: Optional[torch.FloatTensor] = None
+    fpn_hidden_states: Optional[torch.FloatTensor] = None
+    fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -179,15 +179,19 @@ class Sam2PatchEmbeddings(nn.Module):
 
     def __init__(self, config: Sam2ImageEncoderConfig):
         super().__init__()
-        image_size, patch_size, patch_stride, patch_padding = (
+        image_size, patch_kernel_size, patch_stride, patch_padding = (
             config.image_size,
-            config.patch_size,
+            config.patch_kernel_size,
             config.patch_stride,
             config.patch_padding,
         )
         num_channels, hidden_size = config.num_channels, config.hidden_size
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        patch_kernel_size = (
+            patch_kernel_size
+            if isinstance(patch_kernel_size, collections.abc.Iterable)
+            else (patch_kernel_size, patch_kernel_size)
+        )
         patch_stride = (
             patch_stride if isinstance(patch_stride, collections.abc.Iterable) else (patch_stride, patch_stride)
         )
@@ -198,7 +202,7 @@ class Sam2PatchEmbeddings(nn.Module):
         self.num_channels = num_channels
 
         self.projection = nn.Conv2d(
-            num_channels, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=patch_padding
+            num_channels, hidden_size, kernel_size=patch_kernel_size, stride=patch_stride, padding=patch_padding
         )
 
     def forward(self, pixel_values):
@@ -230,27 +234,24 @@ class Sam2VisionNeck(nn.Module):
         :param neck_norm: the normalization to use
         """
         super().__init__()
+        self.config = config
+
         self.position_encoding = Sam2PositionEmbeddingSine(
-            num_pos_feats=config.d_model, normalize=True, temperature=10000
+            num_pos_feats=config.fpn_hidden_size, normalize=True, temperature=10000
         )
         self.convs = nn.ModuleList()
-        self.backbone_channel_list = config.backbone_channel_list
-        for dim in config.backbone_channel_list:
-            current = nn.Sequential()
-            current.add_module(
-                "conv",
+        for in_channels in config.backbone_channel_list:
+            self.convs.append(
                 nn.Conv2d(
-                    in_channels=dim,
-                    out_channels=config.d_model,
-                    kernel_size=config.kernel_size,
-                    stride=config.stride,
-                    padding=config.padding,
+                    in_channels=in_channels,
+                    out_channels=config.fpn_hidden_size,
+                    kernel_size=config.fpn_kernel_size,
+                    stride=config.fpn_stride,
+                    padding=config.fpn_padding,
                 ),
             )
 
-            self.convs.append(current)
-        self.fpn_interp_model = config.fpn_interp_model
-        assert config.fuse_type in ["sum", "avg"]
+        self.fpn_interpolation_mode = config.fpn_interpolation_mode
         self.fuse_type = config.fuse_type
 
         # levels to have top-down features in its outputs
@@ -262,36 +263,33 @@ class Sam2VisionNeck(nn.Module):
             config.fpn_top_down_levels = range(len(self.convs))
         self.fpn_top_down_levels = list(config.fpn_top_down_levels)
 
-    def forward(self, xs: List[torch.Tensor]):
-        out = [None] * len(self.convs)
-        pos = [None] * len(self.convs)
-        assert len(xs) == len(self.convs)
-        # fpn forward pass
-        # see https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/fpn.py
-        prev_features = None
+    def forward(self, hidden_states):
+        fpn_hidden_states = [None] * len(self.convs)
+        fpn_position_encoding = [None] * len(self.convs)
+
         # forward in top-down order (from low to high resolution)
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
-            x = xs[i]
-            lateral_features = self.convs[n - i](x)
-            if i in self.fpn_top_down_levels and prev_features is not None:
+            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
+            lateral_features = self.convs[n - i](lateral_features)
+            if i not in self.fpn_top_down_levels or i == n:
+                prev_features = lateral_features
+            else:
                 top_down_features = F.interpolate(
                     prev_features.to(dtype=torch.float32),
                     scale_factor=2.0,
-                    mode=self.fpn_interp_model,
-                    align_corners=(None if self.fpn_interp_model == "nearest" else False),
+                    mode=self.fpn_interpolation_mode,
+                    align_corners=(None if self.fpn_interpolation_mode == "nearest" else False),
                     antialias=False,
                 )
                 prev_features = lateral_features + top_down_features
                 if self.fuse_type == "avg":
                     prev_features /= 2
-            else:
-                prev_features = lateral_features
-            x_out = prev_features
-            out[i] = x_out
-            pos[i] = self.position_encoding(x_out).to(x_out.dtype)
 
-        return out, pos
+            fpn_hidden_states[i] = prev_features
+            fpn_position_encoding[i] = self.position_encoding(prev_features).to(prev_features.dtype)
+
+        return fpn_hidden_states, fpn_position_encoding
 
 
 class Sam2ImageEncoder(nn.Module):
@@ -388,7 +386,7 @@ class Sam2ImageEncoder(nn.Module):
             hidden_states = block_outputs[0]
 
             if (i == self.stage_ends[-1]) or (i in self.stage_ends):
-                intermediate_hidden_states = intermediate_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
+                intermediate_hidden_states = intermediate_hidden_states + (hidden_states,)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (block_outputs[1],)
@@ -397,16 +395,16 @@ class Sam2ImageEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         # Forward through backbone
-        neck_hidden_states, neck_position_embedding = self.neck(intermediate_hidden_states)
+        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
         if self.scalp > 0:
             # Discard the lowest resolution features
-            neck_hidden_states, neck_position_embedding = (
-                neck_hidden_states[: -self.scalp],
-                neck_position_embedding[: -self.scalp],
+            fpn_hidden_states, fpn_position_encoding = (
+                fpn_hidden_states[: -self.scalp],
+                fpn_position_encoding[: -self.scalp],
             )
 
         if not return_dict:
-            outputs = (hidden_states, neck_hidden_states, neck_position_embedding)
+            outputs = (hidden_states, fpn_hidden_states, fpn_position_encoding)
             if output_hidden_states:
                 outputs = outputs + (all_hidden_states,)
             if output_attentions:
@@ -415,8 +413,8 @@ class Sam2ImageEncoder(nn.Module):
 
         return Sam2ImageEncoderOutput(
             last_hidden_state=hidden_states,
-            neck_hidden_states=neck_hidden_states,
-            neck_position_embedding=neck_position_embedding,
+            fpn_hidden_states=fpn_hidden_states,
+            fpn_position_encoding=fpn_position_encoding,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )

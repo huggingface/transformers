@@ -255,7 +255,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Dimension of the model in the neck.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             List of channel dimensions for the backbone.
-        kernel_size (`int`, *optional*, defaults to 1):
+        fpn_kernel_size (`int`, *optional*, defaults to 1):
             Kernel size for convolutions in the neck.
         stride (`int`, *optional*, defaults to 1):
             Stride for convolutions in the neck.
@@ -263,7 +263,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Padding for convolutions in the neck.
         fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
             Levels for top-down FPN connections.
-        fpn_interp_model (`str`, *optional*, defaults to `"nearest"`):
+        fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
             Interpolation model for FPN.
         fuse_type (`str`, *optional*, defaults to `"sum"`):
             Type of fusion to use in the neck.
@@ -279,7 +279,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         num_heads=1,
         num_channels=3,
         image_size=1024,
-        patch_size=7,
+        patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
         drop_path_rate=0.0,
@@ -291,13 +291,13 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         window_pos_embed_bkg_spatial_size=(7, 7),
         window_spec=(8, 4, 14, 7),
         global_att_blocks=(5, 7, 9),
-        d_model=256,
         backbone_channel_list=[768, 384, 192, 96],
-        kernel_size=1,
-        stride=1,
-        padding=0,
+        fpn_hidden_size=256,
+        fpn_kernel_size=1,
+        fpn_stride=1,
+        fpn_padding=0,
         fpn_top_down_levels=[2, 3],
-        fpn_interp_model="nearest",
+        fpn_interpolation_mode="nearest",
         fuse_type="sum",
         hidden_act="gelu",
         layer_norm_eps=1e-6,
@@ -305,14 +305,15 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        assert len(stages) == len(window_spec)
+        assert len(stages) == len(window_spec) == len(backbone_channel_list)
+        assert fuse_type in ["sum", "avg"]
 
         self.scalp = scalp
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.num_channels = num_channels
         self.image_size = image_size
-        self.patch_size = patch_size
+        self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.drop_path_rate = drop_path_rate
@@ -326,13 +327,13 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.global_att_blocks = global_att_blocks
 
         # Neck
-        self.d_model = d_model
         self.backbone_channel_list = backbone_channel_list
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.padding = padding
+        self.fpn_hidden_size = fpn_hidden_size
+        self.fpn_kernel_size = fpn_kernel_size
+        self.fpn_stride = fpn_stride
+        self.fpn_padding = fpn_padding
         self.fpn_top_down_levels = fpn_top_down_levels
-        self.fpn_interp_model = fpn_interp_model
+        self.fpn_interpolation_mode = fpn_interpolation_mode
         self.fuse_type = fuse_type
 
         self.hidden_act = hidden_act
