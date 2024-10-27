@@ -15,11 +15,11 @@
 import argparse
 
 import torch
-from torch import nn
 
 from transformers import PrismConfig, PrismForConditionalGeneration
 
 
+# Copied from transformers.models.m2m_100.convert_m2m100_original_checkpoint_to_pytorch.remove_ignore_keys_
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
         "encoder.version",
@@ -60,7 +60,6 @@ def convert_prism_checkpoint_from_disk(checkpoint_path):
         activation_function="relu",
         layernorm_embedding=args.layernorm_embedding,
         tie_word_embeddings=True,
-        
     )
 
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]

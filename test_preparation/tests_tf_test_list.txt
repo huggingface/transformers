@@ -1,0 +1,15 @@
+tests/models/auto/test_modeling_tf_auto.py
+tests/models/auto/test_modeling_tf_pytorch.py
+tests/models/bart/test_modeling_tf_bart.py
+tests/models/bert/test_modeling_tf_bert.py
+tests/models/clip/test_modeling_tf_clip.py
+tests/models/gpt2/test_modeling_tf_gpt2.py
+tests/models/layoutlm/test_modeling_tf_layoutlm.py
+tests/models/longformer/test_modeling_tf_longformer.py
+tests/models/mpnet/test_modeling_tf_mpnet.py
+tests/models/opt/test_modeling_tf_opt.py
+tests/models/t5/test_modeling_tf_t5.py
+tests/models/tapas/test_modeling_tf_tapas.py
+tests/models/vit/test_modeling_tf_vit.py
+tests/models/wav2vec2/test_modeling_tf_wav2vec2.py
+tests/models/whisper/test_modeling_tf_whisper.py

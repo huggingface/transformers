@@ -26,6 +26,7 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
+
 class PrismConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a `PrismModel`. It is used to instantiate a
@@ -33,23 +34,52 @@ class PrismConfig(PretrainedConfig):
     with the defaults will yield a similar configuration to that of the Prism architecture as described in the paper.
 
     Args:
-        vocab_size (int, optional, defaults to 50265): Vocabulary size of the Prism model.
-        d_model (int, optional, defaults to 1280): Dimensionality of the layers and the pooler layer.
-        encoder_layers (int, optional, defaults to 8): Number of encoder layers.
-        decoder_layers (int, optional, defaults to 8): Number of decoder layers.
-        encoder_attention_heads (int, optional, defaults to 20): Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (int, optional, defaults to 20): Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (int, optional, defaults to 12288): Dimensionality of the feed-forward layer in encoder.
-        decoder_ffn_dim (int, optional, defaults to 12288): Dimensionality of the feed-forward layer in decoder.
-        activation_function (str or function, optional, defaults to "relu"): The non-linear activation function in the encoder and decoder.
-        dropout (float, optional, defaults to 0.1): The dropout probability for all fully connected layers in the embeddings, encoder, and decoder.
-        attention_dropout (float, optional, defaults to 0.0): The dropout ratio for the attention probabilities.
-        activation_dropout (float, optional, defaults to 0.0): The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (int, optional, defaults to 1024): The maximum sequence length that this model might ever be used with.
-        init_std (float, optional, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop (float, optional, defaults to 0.0): The LayerDrop probability for the encoder.
-        decoder_layerdrop (float, optional, defaults to 0.0): The LayerDrop probability for the decoder.
-        use_cache (bool, optional, defaults to True): Whether or not the model should return the last key/values attentions (not used by all models).
+        vocab_size (`int`, *optional*, defaults to 65400):
+            Vocabulary size of the Prism model.
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with.
+        encoder_layers (`int`, *optional*, defaults to 8):
+            Number of encoder layers.
+        encoder_ffn_dim (`int`, *optional*, defaults to 12288):
+            Dimensionality of the feed-forward layer in the encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 20):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_layers (`int`, *optional*, defaults to 8):
+            Number of decoder layers.
+        decoder_ffn_dim (`int`, *optional*, defaults to 12288):
+            Dimensionality of the feed-forward layer in the decoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 20):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is an encoder-decoder architecture.
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the encoder and decoder.
+        d_model (`int`, *optional*, defaults to 1280):
+            Dimensionality of the layers and the pooler layer.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and decoder.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        decoder_start_token_id (`int`, *optional*, defaults to 2):
+            The token ID that indicates the start of the decoding sequence.
+        scale_embedding (`bool`, *optional*, defaults to `True`):
+            Whether to scale the embeddings by the square root of the `d_model`.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The token ID used for padding sequences.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            The token ID for the beginning of the sequence.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The token ID for the end of the sequence.
 
     Example:
 
@@ -127,6 +157,7 @@ class PrismConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -147,6 +178,7 @@ class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
         if self.use_past:
             self.fill_with_past_key_values_(common_inputs, direction="inputs")
         return common_inputs
+
     # Copied from BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
     # A better name would be _generate_dummy_inputs_for_encoder_and_decoder because sequence classification and question
     # answering are not supported for Prism, but this name is preserved to be able to check that the copy matches what
@@ -170,10 +202,12 @@ class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
             seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
         )
 
+        # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
         common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_default_and_seq2seq_lm
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -186,6 +220,7 @@ class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
             tokenizer, batch_size, seq_length, is_pair, framework
         )
 
+        # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
             tokenizer, batch_size, decoder_seq_length, is_pair, framework
@@ -220,6 +255,7 @@ class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
 
             common_inputs["past_key_values"] = []
+            # If the number of encoder and decoder layers are present in the model configuration, both are considered
             num_encoder_layers, num_decoder_layers = self.num_layers
             min_num_layers = min(num_encoder_layers, num_decoder_layers)
             max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
@@ -234,6 +270,7 @@ class PrismOnnxConfig(OnnxSeq2SeqConfigWithPast):
                         torch.zeros(encoder_shape),
                     )
                 )
+            # TODO: test this.
             shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
             for _ in range(min_num_layers, max_num_layers):
                 common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))

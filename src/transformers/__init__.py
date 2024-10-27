@@ -5577,13 +5577,13 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prism import PrismConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
     )
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
-    from .models.prism import PrismConfig
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
@@ -7661,6 +7661,11 @@ if TYPE_CHECKING:
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
         )
+        from .models.prism import (
+            PrismForConditionalGeneration,
+            PrismModel,
+            PrismPreTrainedModel,
+        )
         from .models.prophetnet import (
             ProphetNetDecoder,
             ProphetNetEncoder,
@@ -7679,11 +7684,6 @@ if TYPE_CHECKING:
             PvtV2ForImageClassification,
             PvtV2Model,
             PvtV2PreTrainedModel,
-        )
-        from .models.prism import (
-            PrismForConditionalGeneration,
-            PrismModel,
-            PrismPreTrainedModel,
         )
         from .models.qwen2 import (
             Qwen2ForCausalLM,

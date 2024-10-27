@@ -7385,6 +7385,27 @@ class Pop2PianoPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PrismForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PrismModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PrismPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ProphetNetDecoder(metaclass=DummyObject):
     _backends = ["torch"]
 

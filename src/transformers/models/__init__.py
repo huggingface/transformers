@@ -201,6 +201,7 @@ from . import (
     poolformer,
     pop2piano,
     prophetnet,
+    prism,
     pvt,
     pvt_v2,
     qwen2,

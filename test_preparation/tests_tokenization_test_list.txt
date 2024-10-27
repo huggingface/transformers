@@ -1,0 +1,16 @@
+tests/models/auto/test_tokenization_auto.py
+tests/models/bart/test_tokenization_bart.py
+tests/models/bert/test_tokenization_bert.py
+tests/models/bert/test_tokenization_bert_tf.py
+tests/models/clip/test_tokenization_clip.py
+tests/models/gpt2/test_tokenization_gpt2.py
+tests/models/gpt2/test_tokenization_gpt2_tf.py
+tests/models/layoutlm/test_tokenization_layoutlm.py
+tests/models/llama/test_tokenization_llama.py
+tests/models/longformer/test_tokenization_longformer.py
+tests/models/mpnet/test_tokenization_mpnet.py
+tests/models/prism/test_tokenization_prism.py
+tests/models/t5/test_tokenization_t5.py
+tests/models/tapas/test_tokenization_tapas.py
+tests/models/wav2vec2/test_tokenization_wav2vec2.py
+tests/models/whisper/test_tokenization_whisper.py

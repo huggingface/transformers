@@ -36,7 +36,6 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -157,7 +156,7 @@ class PrismModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            tie_word_embeddings=True
+            tie_word_embeddings=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -255,13 +254,12 @@ class PrismModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     test_missing_keys = False
     has_tied_weights = True
 
-
     def setUp(self):
         self.model_tester = PrismModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PrismConfig)
 
     def test_load_save_without_tied_weights(self):
-            self.skipTest("Model requires tied weights, skipping test_load_save_without_tied_weights.")
+        self.skipTest("Model requires tied weights, skipping test_load_save_without_tied_weights.")
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -322,7 +320,12 @@ class PrismModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        
+    def test_eager_matches_sdpa_inference_0_float16(self):
+        if not torch.cuda.is_available():
+            self.skipTest("Skipping float16 tests on CPU. Requires GPU.")
 
+        model = PrismModel.from_pretrained("dariast/prism").to(torch.float16)
 
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
@@ -336,15 +339,20 @@ TOLERANCE = 1e-4
 @require_tokenizers
 @slow
 class PrismModelIntegrationTests(unittest.TestCase):
-    checkpoint_name = "facebook/prism"
+    checkpoint_name = "dariast/prism"
+
     @cached_property
     def default_tokenizer(self):
-        return PrismTokenizer.from_pretrained("facebook/prism")
+        return PrismTokenizer.from_pretrained("dariast/prism")
 
     def test_inference_no_head(self):
-        model = PrismModel.from_pretrained("facebook/prism").to(torch_device)
-        input_ids = _long_tensor([[ 85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]])
-        decoder_input_ids = _long_tensor([[2, 85, 43185, 25, 38476, 165, 5330, 1185, 269, 784, 9474, 21,  7142, 220, 13, 3051, 3079, 6, 2]])
+        model = PrismModel.from_pretrained("dariast/prism").to(torch_device)
+        input_ids = _long_tensor(
+            [[85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[2, 85, 43185, 25, 38476, 165, 5330, 1185, 269, 784, 9474, 21, 7142, 220, 13, 3051, 3079, 6, 2]]
+        )
         inputs_dict = prepare_prism_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -352,15 +360,20 @@ class PrismModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[-0.1113, -0.0307, -0.5641], [-0.4884, -0.2435, -0.3268], [-0.3196, -0.2342, -1.3295]], device=torch_device
+            [[-0.1113, -0.0307, -0.5641], [-0.4884, -0.2435, -0.3268], [-0.3196, -0.2342, -1.3295]],
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = PrismForConditionalGeneration.from_pretrained("facebook/prism").to(torch_device)
+        model = PrismForConditionalGeneration.from_pretrained("dariast/prism").to(torch_device)
         # change to intended input
-        input_ids = _long_tensor([[ 85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]])
-        decoder_input_ids = _long_tensor([[2, 85, 43185, 25, 38476, 165, 5330, 1185, 269, 784, 9474, 21,  7142, 220, 13, 3051, 3079, 6, 2]])
+        input_ids = _long_tensor(
+            [[85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[2, 85, 43185, 25, 38476, 165, 5330, 1185, 269, 784, 9474, 21, 7142, 220, 13, 3051, 3079, 6, 2]]
+        )
         inputs_dict = prepare_prism_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -368,13 +381,13 @@ class PrismModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[-0.2506, -0.2493,  3.5705], [-0.1940, -0.2163,  3.7116], [0.2059,  0.1973,  5.9530]], device=torch_device
+            [[-0.2506, -0.2493, 3.5705], [-0.1940, -0.2163, 3.7116], [0.2059, 0.1973, 5.9530]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = PrismForConditionalGeneration.from_pretrained("facebook/prism").to(torch_device)
-        tokenizer = PrismTokenizer.from_pretrained("facebook/prism", src_lang="fr", tgt_lang="en")
+        model = PrismForConditionalGeneration.from_pretrained("dariast/prism").to(torch_device)
+        tokenizer = PrismTokenizer.from_pretrained("dariast/prism", src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -395,9 +408,11 @@ class PrismModelIntegrationTests(unittest.TestCase):
             forced_bos_token_id=tokenizer.get_lang_id("en"),
         )
 
-        expected_en = ['<en> but the NSA case highlights the total lack of debate on intelligence', 
-                       '<en> In my view, there are two levels of response on the part of the French Government.', 
-                       '<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.']
+        expected_en = [
+            "<en> but the NSA case highlights the total lack of debate on intelligence",
+            "<en> In my view, there are two levels of response on the part of the French Government.",
+            "<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.",
+        ]
 
         generated = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
@@ -413,10 +428,10 @@ class PrismModelIntegrationTests(unittest.TestCase):
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PrismForConditionalGeneration.from_pretrained(
-            "facebook/prism", attn_implementation="flash_attention_2"
+            "dariast/prism", attn_implementation="flash_attention_2"
         ).to(torch_device)
 
-        tokenizer = PrismTokenizer.from_pretrained("facebook/prism", src_lang="fr", tgt_lang="en")
+        tokenizer = PrismTokenizer.from_pretrained("dariast/prism", src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -437,9 +452,11 @@ class PrismModelIntegrationTests(unittest.TestCase):
             forced_bos_token_id=tokenizer.get_lang_id("en"),
         )
 
-        expected_en = ['<en> but the NSA case highlights the total lack of debate on intelligence', 
-                       '<en> In my view, there are two levels of response from the French Government.', 
-                       '<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.']
+        expected_en = [
+            "<en> but the NSA case highlights the total lack of debate on intelligence",
+            "<en> In my view, there are two levels of response from the French Government.",
+            "<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.",
+        ]
 
         generated = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True

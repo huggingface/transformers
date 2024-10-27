@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tokenization classes for Prism."""
 
-
 import json
 import os
 from pathlib import Path
@@ -25,6 +24,7 @@ import sentencepiece
 from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -34,71 +34,51 @@ VOCAB_FILES_NAMES = {
 }
 
 FAIRSEQ_LANGUAGE_CODES = {
-    "prism": ['ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'eo', 'fi', 'fr', 'he',
-                  'hr', 'hu', 'id', 'it', 'ja', 'kk', 'lt', 'lv', 'mk', 'nl', 'no', 'pl', 'pt', 'ro', 'ru',
-                  'sk', 'sl', 'sq', 'sr', 'sv', 'tr', 'uk', 'vi', 'zh']
+    "prism": [
+        "ar",
+        "bg",
+        "bn",
+        "ca",
+        "cs",
+        "da",
+        "de",
+        "el",
+        "en",
+        "es",
+        "et",
+        "eo",
+        "fi",
+        "fr",
+        "he",
+        "hr",
+        "hu",
+        "id",
+        "it",
+        "ja",
+        "kk",
+        "lt",
+        "lv",
+        "mk",
+        "nl",
+        "no",
+        "pl",
+        "pt",
+        "ro",
+        "ru",
+        "sk",
+        "sl",
+        "sq",
+        "sr",
+        "sv",
+        "tr",
+        "uk",
+        "vi",
+        "zh",
+    ]
 }
 
 
 class PrismTokenizer(PreTrainedTokenizer):
-    """
-    Construct an Prism tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
-
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
-
-    Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        spm_file (`str`):
-            Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
-            contains the vocabulary.
-        src_lang (`str`, *optional*):
-            A string representing the source language.
-        tgt_lang (`str`, *optional*):
-            A string representing the target language.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        sep_token (`str`, *optional*, defaults to `"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        language_codes (`str`, *optional*, defaults to `"prism"`):
-            What language codes to use. Should be one of `"prism"`.
-        sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
-    Examples:
-
-    ```python
-    >>> from transformers import PrismForConditionalGeneration, PrismTokenizer
-
-    >>> model = PrismForConditionalGeneration.from_pretrained("facebook/prism")
-    >>> tokenizer = PrismTokenizer.from_pretrained("facebook/prism", src_lang="en", tgt_lang="fr")
-    >>> src_text = "UN Chief Says There Is No Military Solution in Syria"
-    >>> tgt_text = "<fr> Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie."
-    >>> model_inputs = tokenizer(src_text, return_tensors="pt")
-    >>> out = model.generate(**inputs, forced_bos_token_id=tokenizer.get_lang_id('fr'), max_new_tokens=30)  # should work. We recommend setting `max_new_tokens` to control the maximum length of the generation.
-    ```"""
-        
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -143,11 +123,13 @@ class PrismTokenizer(PreTrainedTokenizer):
 
         self.lang_token_to_id = {
             self.get_lang_token(lang_code): self.encoder[self.get_lang_token(lang_code)]
-            for lang_code in fairseq_language_code if self.get_lang_token(lang_code) in self.encoder
+            for lang_code in fairseq_language_code
+            if self.get_lang_token(lang_code) in self.encoder
         }
         self.lang_code_to_id = {
             lang_code: self.encoder[self.get_lang_token(lang_code)]
-            for lang_code in fairseq_language_code if self.get_lang_token(lang_code) in self.encoder
+            for lang_code in fairseq_language_code
+            if self.get_lang_token(lang_code) in self.encoder
         }
         self.id_to_lang_token = {v: k for k, v in self.lang_token_to_id.items()}
 

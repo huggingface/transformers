@@ -1,0 +1,8 @@
+{
+  "_from_model_config": true,
+  "bos_token_id": 50256,
+  "decoder_start_token_id": 50256,
+  "eos_token_id": 50256,
+  "pad_token_id": 50256,
+  "transformers_version": "4.46.0.dev0"
+}

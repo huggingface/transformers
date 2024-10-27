@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    slow,
 )
 from transformers.utils import is_sentencepiece_available
 
@@ -40,7 +39,7 @@ if is_sentencepiece_available():
 
 
 if is_torch_available():
-    from transformers.models.m2m_100.modeling_m2m_100 import shift_tokens_right
+    pass
 
 EN_CODE = 37
 FR_CODE = 71
@@ -48,7 +47,7 @@ FR_CODE = 71
 
 @require_sentencepiece
 class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "facebook/prism"
+    from_pretrained_id = "dariast/prism"
     tokenizer_class = PrismTokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
@@ -86,7 +85,6 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "<s>")
 
-
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
@@ -109,14 +107,12 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class PrismTokenizerIntegrationTest(unittest.TestCase):
-    checkpoint_name = "facebook/prism"
-    src_text = ["Hi world.", 
-            "This is a Test.",
-            "Some of my Best Friends are Linguists."]
-    tgt_text = ['<fr> Hé, monde!', "<fr> C'est un test.", '<fr> Certains de mes meilleurs amis sont linguistes.']
+    checkpoint_name = "dariast/prism"
+    src_text = ["Hi world.", "This is a Test.", "Some of my Best Friends are Linguists."]
+    tgt_text = ["<fr> Hé, monde!", "<fr> C'est un test.", "<fr> Certains de mes meilleurs amis sont linguistes."]
 
     expected_src_tokens = [37, 5050, 21, 1951, 13934, 33789, 7, 269, 11348, 983, 9393, 6, 2]
-    
+
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: PrismTokenizer = PrismTokenizer.from_pretrained(
@@ -157,7 +153,7 @@ class PrismTokenizerIntegrationTest(unittest.TestCase):
             self.tokenizer.save_pretrained(tmpdirname)
             new_tok = PrismTokenizer.from_pretrained(tmpdirname)
             self.assertDictEqual(new_tok.lang_token_to_id, original_special_tokens)
-            
+
     def test_decoding(self):
         text = "Hello, world!"
         encoded = self.tokenizer.encode(text)
@@ -165,7 +161,7 @@ class PrismTokenizerIntegrationTest(unittest.TestCase):
         self.assertIsInstance(decoded, str)
         self.assertGreater(len(decoded), 0)
 
-    @require_torch 
+    @require_torch
     def test_src_lang_setter(self):
         self.tokenizer.src_lang = "uk"
         self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("uk")])
