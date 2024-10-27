@@ -87,12 +87,13 @@ class HfApiEngine:
     Raises:
         ValueError: If the model name is not provided.
     """
+
     def __init__(
         self,
         model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
         token: Optional[str] = None,
         max_tokens: int = 1500,
-        timeout: int = 120
+        timeout: int = 120,
     ):
         """
         Initializes the HfApiEngine.
