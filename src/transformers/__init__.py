@@ -677,6 +677,7 @@ _import_structure = {
         "ProphetNetConfig",
         "ProphetNetTokenizer",
     ],
+    "models.prism": ["PrismConfig"],
     "models.pvt": ["PvtConfig"],
     "models.pvt_v2": ["PvtV2Config"],
     "models.qwen2": [
@@ -1022,6 +1023,7 @@ else:
     _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
+    _import_structure["models.prism"].append("PrismTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
@@ -3114,6 +3116,13 @@ else:
             "PvtV2ForImageClassification",
             "PvtV2Model",
             "PvtV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.prism"].extend(
+        [
+            "PrismForConditionalGeneration",
+            "PrismModel",
+            "PrismPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2"].extend(
@@ -5568,6 +5577,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prism import PrismConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -5943,6 +5953,7 @@ if TYPE_CHECKING:
         from .models.nllb import NllbTokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.plbart import PLBartTokenizer
+        from .models.prism import PrismTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.seamless_m4t import SeamlessM4TTokenizer
@@ -7649,6 +7660,11 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.prism import (
+            PrismForConditionalGeneration,
+            PrismModel,
+            PrismPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,
