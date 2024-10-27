@@ -70,17 +70,13 @@ llama_role_conversions = {
 class HfApiEngine:
     """A class to interact with Hugging Face's Inference API for language model interaction.
 
-    This engine allows you to communicate with Hugging Face's models using the Inference API.
-    It can be used in both serverless mode or with a dedicated endpoint, supporting features
-    like stop sequences and grammar customization.
+    This engine allows you to communicate with Hugging Face's models using the Inference API. It can be used in both serverless mode or with a dedicated endpoint, supporting features like stop sequences and grammar customization.
 
     Parameters:
         model (`str`, *optional*, defaults to "meta-llama/Meta-Llama-3.1-8B-Instruct"):
-            The Hugging Face model ID to be used for inference. This can be a path or model
-            identifier from the Hugging Face model hub.
+            The Hugging Face model ID to be used for inference. This can be a path or model identifier from the Hugging Face model hub.
         token (`str`, *optional*):
-            The Hugging Face API token for authentication. If not provided, the class will
-            use the token stored in the Hugging Face CLI configuration.
+            The Hugging Face API token for authentication. If not provided, the class will use the token stored in the Hugging Face CLI configuration.
         max_tokens (`int`, *optional*, defaults to 1500):
             The maximum number of tokens allowed in the output.
         timeout (`int`, *optional*, defaults to 120):
@@ -111,16 +107,13 @@ class HfApiEngine:
     ) -> str:
         """Process the input messages and return the model's response.
 
-        This method sends a list of messages to the Hugging Face Inference API, optionally with
-        stop sequences and grammar customization.
+        This method sends a list of messages to the Hugging Face Inference API, optionally with stop sequences and grammar customization.
 
         Parameters:
             messages (`List[Dict[str, str]]`):
-                A list of message dictionaries to be processed. Each dictionary should have
-                the structure `{"role": "user/system", "content": "message content"}`.
+                A list of message dictionaries to be processed. Each dictionary should have the structure `{"role": "user/system", "content": "message content"}`.
             stop_sequences (`List[str]`, *optional*):
-                A list of strings that will stop the generation if encountered in the
-                model's output.
+                A list of strings that will stop the generation if encountered in the model's output.
             grammar (`str`, *optional*):
                 The grammar or formatting structure to use in the model's response.
 
