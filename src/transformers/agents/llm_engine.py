@@ -72,14 +72,11 @@ class HfApiEngine:
     A class to interact with Hugging Face's Inference API for language model interaction.
 
     This engine allows you to communicate with Hugging Face's models using the Inference API.
-    It can be used in both serverless mode or with a dedicated endpoint, supporting features 
-    like stop sequences and grammar customization.
+    It can be used in both serverless mode or with a dedicated endpoint, supporting features like stop sequences and grammar customization.
 
     Args:
-        model (str, optional): The Hugging Face model ID to be used for inference. This can be a path or model 
-            identifier from the Hugging Face model hub (default is "meta-llama/Meta-Llama-3.1-8B-Instruct").
-        token (str, optional): The Hugging Face API token for authentication. If not provided, the class will use
-            the token stored in the Hugging Face CLI configuration.
+        model (str, optional): The Hugging Face model ID to be used for inference. This can be a path or model identifier from the Hugging Face model hub (default is "meta-llama/Meta-Llama-3.1-8B-Instruct").
+        token (str, optional): The Hugging Face API token for authentication. If not provided, the class will use the token stored in the Hugging Face CLI configuration.
         max_tokens (int, optional): The maximum number of tokens allowed in the output (default is 1500).
         timeout (int, optional): Timeout for the API request, in seconds (default is 120).
 
@@ -91,10 +88,10 @@ class HfApiEngine:
         ValueError: If the model name is not provided.
     """
     def __init__(
-        self, 
-        model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct", 
-        token: Optional[str] = None, 
-        max_tokens: int = 1500, 
+        self,
+        model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        token: Optional[str] = None,
+        max_tokens: int = 1500,
         timeout: int = 120
     ):
         """
@@ -108,7 +105,7 @@ class HfApiEngine:
         """
         if not model:
             raise ValueError("Model name must be provided.")
-        
+
         self.model = model
         self.client = InferenceClient(self.model, token=token, timeout=timeout)
         self.max_tokens = max_tokens
@@ -119,24 +116,20 @@ class HfApiEngine:
         """
         Processes the input messages and returns the model's response.
 
-        This method sends a list of messages to the Hugging Face Inference API, optionally 
-        with stop sequences and grammar customization.
+        This method sends a list of messages to the Hugging Face Inference API, optionally with stop sequences and grammar customization.
 
         Args:
-            messages (List[Dict[str, str]]): A list of message dictionaries to be processed. 
-                Each dictionary should have the structure {"role": "user/system", "content": "message content"}.
-            stop_sequences (List[str], optional): A list of strings that will stop the generation 
-                if encountered in the model's output. Defaults to an empty list.
-            grammar (str, optional): The grammar or formatting structure to use in the model's response. 
-                Default is None, which means no specific grammar.
+            messages (List[Dict[str, str]]): A list of message dictionaries to be processed. Each dictionary should have the structure {"role": "user/system", "content": "message content"}.
+            stop_sequences (List[str], optional): A list of strings that will stop the generation if encountered in the model's output. Defaults to an empty list.
+            grammar (str, optional): The grammar or formatting structure to use in the model's response. Default is None, which means no specific grammar.
 
         Returns:
             str: The text content of the model's response.
 
         Examples:
             >>> engine = HfApiEngine(
-            ...     model="meta-llama/Meta-Llama-3.1-8B-Instruct", 
-            ...     token="your_hf_token_here", 
+            ...     model="meta-llama/Meta-Llama-3.1-8B-Instruct",
+            ...     token="your_hf_token_here",
             ...     max_tokens=2000
             ... )
             >>> messages = [{"role": "user", "content": "Explain quantum mechanics in simple terms."}]
