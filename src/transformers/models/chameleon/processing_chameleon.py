@@ -165,3 +165,17 @@ class ChameleonProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def postprocess_pixel_values(self, pixel_values):
+        """
+        Postprocess a batch of pixel values to images.
+
+        Args:
+            pixel_values (`np.ndarray` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
+                A batch or a single tensor of pixel values to postprocess.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`:
+                The postprocessed images.
+        """
+        return self.image_processor.postprocess(pixel_values)

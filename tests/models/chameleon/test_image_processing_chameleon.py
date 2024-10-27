@@ -204,3 +204,16 @@ class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Image processor should return same pixel values, independently of input format
         self.assertTrue((encoded_images_nested == encoded_images).all())
+
+    def test_postprocessing(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # Pixel values for an image with 3 channels and 32x32 resolution
+        pixel_values_single = torch.zeros((3, 32, 32))
+        # Pixel values for a batch of 2 images with 3 channels and 32x32 resolution
+        pixel_values_batch = torch.zeros((2, 3, 32, 32))
+
+        for pixel_values in [pixel_values_single, pixel_values_batch]:
+            unnormalized_pixel_values = image_processing.postprocess(pixel_values)
+            self.assertEqual(unnormalized_pixel_values.shape, pixel_values.shape)
+            expected_pixel_values = torch.full_like(pixel_values, 128)
+            self.assertTrue(torch.equal(unnormalized_pixel_values, expected_pixel_values))
