@@ -71,12 +71,14 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer=None,
         patch_size=None,
         vision_feature_select_strategy=None,
+        vision_feature_use_cls=True,
         chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_use_cls = vision_feature_use_cls
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -147,7 +149,9 @@ class LlavaProcessor(ProcessorMixin):
                 # Replace the image token with the expanded image token sequence
                 pixel_values = image_inputs["pixel_values"]
                 height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+                if self.vision_feature_use_cls:
+                    num_image_tokens += 1
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
 

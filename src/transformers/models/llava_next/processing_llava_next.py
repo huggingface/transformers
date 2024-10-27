@@ -74,12 +74,14 @@ class LlavaNextProcessor(ProcessorMixin):
         tokenizer=None,
         patch_size=None,
         vision_feature_select_strategy=None,
+        vision_feature_use_cls=True,
         chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_use_cls = vision_feature_use_cls
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -177,8 +179,11 @@ class LlavaNextProcessor(ProcessorMixin):
         unpadded_features, newline_features = self._get_unpadded_features(
             orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
+        base_features = patches_height * patches_width
+
         # The base patch covers the entire image (+1 for the CLS)
-        base_features = patches_height * patches_width + 1
+        if self.vision_feature_use_cls:
+            base_features += 1
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 

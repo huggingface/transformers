@@ -221,8 +221,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         unpadded_features, newline_features = self._get_unpadded_features(
             orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
+        base_features = patches_height * patches_width
+
         # The base patch covers the entire image (+1 for the CLS)
-        base_features = patches_height * patches_width + 1
+        if self.vision_feature_use_cls:
+            base_features += 1
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
