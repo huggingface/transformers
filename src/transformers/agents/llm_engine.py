@@ -68,24 +68,27 @@ llama_role_conversions = {
 
 
 class HfApiEngine:
-    """
-    A class to interact with Hugging Face's Inference API for language model interaction.
+    """A class to interact with Hugging Face's Inference API for language model interaction.
 
     This engine allows you to communicate with Hugging Face's models using the Inference API.
-    It can be used in both serverless mode or with a dedicated endpoint, supporting features like stop sequences and grammar customization.
+    It can be used in both serverless mode or with a dedicated endpoint, supporting features
+    like stop sequences and grammar customization.
 
-    Args:
-        model (str, optional): The Hugging Face model ID to be used for inference. This can be a path or model identifier from the Hugging Face model hub (default is "meta-llama/Meta-Llama-3.1-8B-Instruct").
-        token (str, optional): The Hugging Face API token for authentication. If not provided, the class will use the token stored in the Hugging Face CLI configuration.
-        max_tokens (int, optional): The maximum number of tokens allowed in the output (default is 1500).
-        timeout (int, optional): Timeout for the API request, in seconds (default is 120).
-
-    Attributes:
-        model (str): The model ID being used for inference.
-        client (InferenceClient): The Hugging Face Inference API client for communicating with the language model.
+    Parameters:
+        model (`str`, *optional*, defaults to "meta-llama/Meta-Llama-3.1-8B-Instruct"):
+            The Hugging Face model ID to be used for inference. This can be a path or model
+            identifier from the Hugging Face model hub.
+        token (`str`, *optional*):
+            The Hugging Face API token for authentication. If not provided, the class will
+            use the token stored in the Hugging Face CLI configuration.
+        max_tokens (`int`, *optional*, defaults to 1500):
+            The maximum number of tokens allowed in the output.
+        timeout (`int`, *optional*, defaults to 120):
+            Timeout for the API request, in seconds.
 
     Raises:
-        ValueError: If the model name is not provided.
+        ValueError:
+            If the model name is not provided.
     """
 
     def __init__(
@@ -95,15 +98,7 @@ class HfApiEngine:
         max_tokens: int = 1500,
         timeout: int = 120,
     ):
-        """
-        Initializes the HfApiEngine.
-
-        Args:
-            model (str, optional): The Hugging Face model to use (default is 'meta-llama/Meta-Llama-3.1-8B-Instruct').
-            token (str, optional): The Hugging Face API token for authentication.
-            max_tokens (int, optional): The maximum number of tokens allowed in the response (default is 1500).
-            timeout (int, optional): The API request timeout, in seconds (default is 120).
-        """
+        """Initialize the HfApiEngine."""
         if not model:
             raise ValueError("Model name must be provided.")
 
@@ -114,20 +109,26 @@ class HfApiEngine:
     def __call__(
         self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
     ) -> str:
-        """
-        Processes the input messages and returns the model's response.
+        """Process the input messages and return the model's response.
 
-        This method sends a list of messages to the Hugging Face Inference API, optionally with stop sequences and grammar customization.
+        This method sends a list of messages to the Hugging Face Inference API, optionally with
+        stop sequences and grammar customization.
 
-        Args:
-            messages (List[Dict[str, str]]): A list of message dictionaries to be processed. Each dictionary should have the structure {"role": "user/system", "content": "message content"}.
-            stop_sequences (List[str], optional): A list of strings that will stop the generation if encountered in the model's output. Defaults to an empty list.
-            grammar (str, optional): The grammar or formatting structure to use in the model's response. Default is None, which means no specific grammar.
+        Parameters:
+            messages (`List[Dict[str, str]]`):
+                A list of message dictionaries to be processed. Each dictionary should have
+                the structure `{"role": "user/system", "content": "message content"}`.
+            stop_sequences (`List[str]`, *optional*):
+                A list of strings that will stop the generation if encountered in the
+                model's output.
+            grammar (`str`, *optional*):
+                The grammar or formatting structure to use in the model's response.
 
         Returns:
-            str: The text content of the model's response.
+            `str`: The text content of the model's response.
 
-        Examples:
+        Example:
+            ```python
             >>> engine = HfApiEngine(
             ...     model="meta-llama/Meta-Llama-3.1-8B-Instruct",
             ...     token="your_hf_token_here",
@@ -137,6 +138,7 @@ class HfApiEngine:
             >>> response = engine(messages, stop_sequences=["END"])
             >>> print(response)
             "Quantum mechanics is the branch of physics that studies..."
+            ```
         """
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
