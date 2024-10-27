@@ -28,8 +28,8 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import partial, wraps
-from threading import Thread
+from functools import lru_cache, partial, wraps
+from threading import Thread, local
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
@@ -4092,7 +4092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            _thread_data.is_ds_init_called=True
+            _thread_data.is_ds_init_called = True
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif low_cpu_mem_usage:
             if not is_accelerate_available():
