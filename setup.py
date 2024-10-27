@@ -99,11 +99,11 @@ _deps = [
     "accelerate>=0.26.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
+    "blobfile",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
-    "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
@@ -150,7 +150,7 @@ _deps = [
     "pytest>=7.2.0,<8.0.0",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.8.0",
+    "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
@@ -162,6 +162,7 @@ _deps = [
     "sacremoses",
     "safetensors>=0.4.1",
     "sagemaker>=2.31.0",
+    "schedulefree>=1.2.6",
     "scikit-learn",
     "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -177,8 +178,9 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
+    "tiktoken",
     "timm<=0.9.16",
-    "tokenizers>=0.19,<0.20",
+    "tokenizers>=0.20,<0.21",
     "torch",
     "torchaudio",
     "torchvision",
@@ -189,6 +191,8 @@ _deps = [
     "urllib3<2.0.0",
     "uvicorn",
     "pytest-rich",
+    "libcst",
+    "rich",
 ]
 
 
@@ -308,9 +312,10 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord", "av")
+extras["video"] = deps_list("av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
+extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -341,7 +346,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["tf"]
@@ -430,7 +435,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.45.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.47.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -446,7 +451,7 @@ setup(
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.8.0",
+    python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -456,7 +461,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",

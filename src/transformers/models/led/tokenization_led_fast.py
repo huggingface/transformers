@@ -288,6 +288,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         encoded_inputs = super()._pad(
@@ -295,6 +296,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             padding_strategy=padding_strategy,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 

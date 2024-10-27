@@ -127,7 +127,7 @@ export UROMAN=$(pwd)
 ```
 
 You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
-`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromaize` function:
+`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromanize` function:
 
 ```python
 import torch
@@ -155,9 +155,9 @@ def uromanize(input_string, uroman_path):
     return stdout.decode()[:-1]
 
 text = "이봐 무슨 일이야"
-uromaized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
+uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-inputs = tokenizer(text=uromaized_text, return_tensors="pt")
+inputs = tokenizer(text=uromanized_text, return_tensors="pt")
 
 set_seed(555)  # make deterministic
 with torch.no_grad():

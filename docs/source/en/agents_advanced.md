@@ -34,7 +34,7 @@ You can easily build hierarchical multi-agent systems with `transformers.agents`
 
 To do so, encapsulate the agent in a [`ManagedAgent`] object. This object needs arguments `agent`, `name`, and a `description`, which will then be embedded in the manager agent's system prompt to let it know how to call this managed agent, as we also do for tools.
 
-Here's an example of making an agent that managed a specitif web search agent using our [`DuckDuckGoSearchTool`]:
+Here's an example of making an agent that managed a specific web search agent using our [`DuckDuckGoSearchTool`]:
 
 ```py
 from transformers.agents import ReactCodeAgent, HfApiEngine, DuckDuckGoSearchTool, ManagedAgent
@@ -60,7 +60,68 @@ manager_agent.run("Who is the CEO of Hugging Face?")
 > For an in-depth example of an efficient multi-agent implementation, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
 
 
-## Use tools from gradio or LangChain
+## Advanced tool usage
+
+### Directly define a tool by subclassing Tool, and share it to the Hub
+
+Let's take again the tool example from main documentation, for which we had implemented a `tool` decorator.
+
+If you need to add variation, like custom attributes for your tool, you can build your tool following the fine-grained method: building a class that inherits from the [`Tool`] superclass.
+
+The custom tool needs:
+- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name it `model_download_counter`.
+- An attribute `description` is used to populate the agent's system prompt.
+- An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
+- An `output_type` attribute, which specifies the output type.
+- A `forward` method which contains the inference code to be executed.
+
+The types for both `inputs` and `output_type` should be amongst [Pydantic formats](https://docs.pydantic.dev/latest/concepts/json_schema/#generating-json-schema).
+
+```python
+from transformers import Tool
+from huggingface_hub import list_models
+
+class HFModelDownloadsTool(Tool):
+    name = "model_download_counter"
+    description = """
+    This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub.
+    It returns the name of the checkpoint."""
+
+    inputs = {
+        "task": {
+            "type": "string",
+            "description": "the task category (such as text-classification, depth-estimation, etc)",
+        }
+    }
+    output_type = "string"
+
+    def forward(self, task: str):
+        model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
+        return model.id
+```
+
+Now that the custom `HfModelDownloadsTool` class is ready, you can save it to a file named `model_downloads.py` and import it for use.
+
+
+```python
+from model_downloads import HFModelDownloadsTool
+
+tool = HFModelDownloadsTool()
+```
+
+You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and are using a token with read access.
+
+```python
+tool.push_to_hub("{your_username}/hf-model-downloads")
+```
+
+Load the tool with the [`~Tool.load_tool`] function and pass it to the `tools` parameter in your agent.
+
+```python
+from transformers import load_tool, CodeAgent
+
+model_download_tool = load_tool("m-ric/hf-model-downloads")
+```
 
 ### Use gradio-tools
 

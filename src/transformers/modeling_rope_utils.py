@@ -251,7 +251,7 @@ def _compute_longrope_parameters(
         device (`torch.device`):
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
-            The current sequence length. Unused for this type of RoPE.
+            The current sequence length.
         rope_kwargs (`Dict`, *optional*):
             BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
     Returns:
@@ -279,8 +279,11 @@ def _compute_longrope_parameters(
     # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
     # values to compute the default attention scaling factor, instead of using `factor`.
     if hasattr(config, "original_max_position_embeddings"):
+        if seq_len and seq_len < config.original_max_position_embeddings:
+            expanded_max_position_embeddings = config.original_max_position_embeddings
+        else:
+            expanded_max_position_embeddings = config.max_position_embeddings
         max_position_embeddings = config.original_max_position_embeddings
-        expanded_max_position_embeddings = config.max_position_embeddings
         factor = expanded_max_position_embeddings / max_position_embeddings
     else:
         max_position_embeddings = config.max_position_embeddings
@@ -360,12 +363,22 @@ ROPE_INIT_FUNCTIONS = {
 }
 
 
-def _check_received_keys(rope_type: str, received_keys: set, required_keys: set, optional_keys: Optional[set] = None):
+def _check_received_keys(
+    rope_type: str,
+    received_keys: set,
+    required_keys: set,
+    optional_keys: Optional[set] = None,
+    ignore_keys: Optional[set] = None,
+):
     """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
-    # BC: "rope_type" was originally "type" -- let's gracefully handle it
-    if "rope_type" not in received_keys and "type" in received_keys:
+    # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
+    if "type" in received_keys:
         received_keys -= {"type"}
-        received_keys.add("rope_type")
+        required_keys.add("rope_type")
+
+    # Some models need to store model-specific keys, and we don't want to throw warning at them
+    if ignore_keys is not None:
+        received_keys -= ignore_keys
 
     missing_keys = required_keys - received_keys
     if missing_keys:
@@ -379,47 +392,47 @@ def _check_received_keys(rope_type: str, received_keys: set, required_keys: set,
         logger.warning(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def _validate_default_rope_parameters(config: PretrainedConfig):
+def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
 
-def _validate_linear_scaling_rope_parameters(config: PretrainedConfig):
+def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig):
+def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"original_max_position_embeddings"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_yarn_parameters(config: PretrainedConfig):
+def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
     optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -444,14 +457,14 @@ def _validate_yarn_parameters(config: PretrainedConfig):
         )
 
 
-def _validate_longrope_parameters(config: PretrainedConfig):
+def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "short_factor", "long_factor"}
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -494,12 +507,12 @@ def _validate_longrope_parameters(config: PretrainedConfig):
                 )
 
 
-def _validate_llama3_parameters(config: PretrainedConfig):
+def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor", "original_max_position_embeddings", "low_freq_factor", "high_freq_factor"}
     received_keys = set(rope_scaling.keys())
-    _check_received_keys(rope_type, received_keys, required_keys)
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -541,7 +554,7 @@ ROPE_VALIDATION_FUNCTIONS = {
 }
 
 
-def rope_config_validation(config: PretrainedConfig):
+def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] = None):
     """
     Validate the RoPE config arguments, given a `PretrainedConfig` object
     """
@@ -553,7 +566,7 @@ def rope_config_validation(config: PretrainedConfig):
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
     validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
     if validation_fn is not None:
-        validation_fn(config)
+        validation_fn(config, ignore_keys=ignore_keys)
     else:
         logger.warning(
             f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"

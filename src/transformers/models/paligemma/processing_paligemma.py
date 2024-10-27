@@ -16,26 +16,51 @@
 Processor class for PaliGemma.
 """
 
-import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import (
     AddedToken,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType
+from ...utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+
+
+class PaliGemmaTextKwargs(TextKwargs):
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+
+
+class PaliGemmaImagesKwargs(ImagesKwargs):
+    do_convert_rgb: Optional[bool]
+
+
+class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: PaliGemmaTextKwargs
+    images_kwargs: PaliGemmaImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
 
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
@@ -52,7 +77,7 @@ def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
-def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
+def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_images):
     """
     Builds a string from the input prompt and image tokens.
     For example, for the call:
@@ -69,8 +94,33 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         bos_token (`str`): The beginning of sentence token.
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
+        num_images (`int`): Number of images in the prompt.
     """
-    return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
+    return f"{image_token * image_seq_len * num_images}{bos_token}{prompt}\n"
+
+
+# Copied from transformers.models.llava_next.image_processing_llava_next.make_batched_images
+def make_batched_images(images) -> List[List[ImageInput]]:
+    """
+    Accepts images in list or nested list format, and makes a list of images for preprocessing.
+
+    Args:
+        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+            The input image.
+
+    Returns:
+        list: A list of images.
+    """
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_valid_image(images):
+        return [images]
+
+    raise ValueError(f"Could not make batched video from {images}")
 
 
 class PaliGemmaProcessor(ProcessorMixin):
@@ -122,27 +172,11 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        tokenize_newline_separately: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: bool = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[
-            Union[str, "ChannelDimension"]  # noqa: F821
-        ] = None,
-        resample: "PILImageResampling" = None,  # noqa: F821
-        do_convert_rgb: bool = None,
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_rescale: bool = None,
-        suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -171,29 +205,14 @@ class PaliGemmaProcessor(ProcessorMixin):
 
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            tokenize_newline_separately (`bool`, defaults to `True`):
-                Adds a separately tokenized '\n' at the end of the prompt.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -216,6 +235,15 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
+        # check if images and text inputs are reversed for BC
+        images, text = _validate_images_text_input_order(images, text)
+
+        output_kwargs = self._merge_kwargs(
+            PaliGemmaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
         return_token_type_ids = True if suffix is not None else False
 
@@ -227,54 +255,65 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
             text = ""
 
-        if isinstance(text, List) and isinstance(images, List):
-            if len(images) < len(text):
-                raise ValueError(
-                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
-                )
         if _is_str_or_image(text):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
-        if suffix is not None and _is_str_or_image(suffix):
-            suffix = [suffix]
-        if suffix is not None:
-            suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
 
-        input_strings = [
-            build_string_from_input(
-                prompt=prompt,
-                bos_token=self.tokenizer.bos_token,
-                image_seq_len=self.image_seq_length,
-                image_token=IMAGE_TOKEN,
-            )
-            for prompt in text
-        ]
+        if text is not None and images is not None:
+            if not any(IMAGE_TOKEN in sample for sample in text):
+                logger.warning(
+                    "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
+                    "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
+                    "add `<image>` tokens in the very beginning of your text and `<bos>` token after that. For this call, we will infer how many images "
+                    "each text has and add special tokens."
+                )
 
-        pixel_values = self.image_processor(
-            images,
-            do_resize=do_resize,
-            do_normalize=do_normalize,
-            return_tensors=return_tensors,
-            image_mean=image_mean,
-            image_std=image_std,
-            input_data_format=input_data_format,
-            data_format=data_format,
-            resample=resample,
-            do_convert_rgb=do_convert_rgb,
-        )["pixel_values"]
+                if isinstance(text, List) and isinstance(images, List):
+                    if len(images) != len(text):
+                        raise ValueError(
+                            f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
+                        )
 
-        if max_length is not None:
-            max_length += self.image_seq_length  # max_length has to account for the image tokens
+                # make a nested list of lists to be able to iterate over the images and text below
+                if is_valid_image(images):
+                    images = [[images]]
+                elif isinstance(images, list) and is_valid_image(images[0]):
+                    images = [[image] for image in images]
+                elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+                    raise ValueError("images must be an image, list of images or list of list of images")
+
+                if suffix is not None and _is_str_or_image(suffix):
+                    suffix = [suffix]
+                if suffix is not None:
+                    suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
+
+                input_strings = [
+                    build_string_from_input(
+                        prompt=prompt,
+                        bos_token=self.tokenizer.bos_token,
+                        image_seq_len=self.image_seq_length,
+                        image_token=IMAGE_TOKEN,
+                        num_images=len(image_list) if isinstance(image_list, list) else 1,
+                    )
+                    for prompt, image_list in zip(text, images)
+                ]
+                images = make_batched_images(images)
+            else:
+                text = [sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length) for sample in text]
+                input_strings = [f"{sample}\n" for sample in text]
+
+        pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+
+        # max_length has to account for the image tokens
+        if output_kwargs["text_kwargs"].get("max_length", None) is not None:
+            output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
 
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
             return_token_type_ids=return_token_type_ids,
+            **output_kwargs["text_kwargs"],
         )
 
         return_data = {**inputs, "pixel_values": pixel_values}

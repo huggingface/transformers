@@ -145,23 +145,27 @@ class VideoLlavaProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if encoded_images is not None and self.patch_size is None or self.vision_feature_select_strategy is None:
-            prompt_strings = text
+        prompt_strings = text
+        if encoded_images is not None and (self.patch_size is None or self.vision_feature_select_strategy is None):
             logger.warning_once(
                 "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
                 "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
             )
+        # Replace the image/video tokens with the expanded token sequence
         elif encoded_images is not None:
-            # Replace the image token with the expanded image token sequence
-            if "pixel_values" in encoded_images:
-                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values")[0]))
+            if "pixel_values_images" in encoded_images.keys():
+                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
                 num_frames = 1
-            else:
+
+            if "pixel_values_videos" in encoded_images.keys():
                 one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_video_tokens = num_image_tokens * num_frames
 
             num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
             num_video_tokens = num_image_tokens * num_frames

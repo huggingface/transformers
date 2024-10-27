@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.47.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
@@ -488,7 +488,7 @@ def main():
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
         compute_metrics=eval_compute_metrics_fn,
     )
