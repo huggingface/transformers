@@ -163,7 +163,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_position_embeddings(self, new_size):
+    def interpolate_pos_encoding(self, new_size):
         if len(new_size) != 2:
             raise ValueError("new_size should consist of 2 values")
 
@@ -182,7 +182,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
 
         return result
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = True) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -190,9 +190,9 @@ class CLIPSegVisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
 
-        if embeddings.shape[1] != self.num_positions:
+        if embeddings.shape[1] != self.num_positions and interpolate_pos_encoding:
             new_shape = int(math.sqrt(embeddings.shape[1] - 1))
-            embeddings = embeddings + self.interpolate_position_embeddings((new_shape, new_shape))
+            embeddings = embeddings + self.interpolate_pos_encoding((new_shape, new_shape))
             embeddings = embeddings.to(embeddings.dtype)
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
@@ -512,6 +512,8 @@ CLIPSEG_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -549,6 +551,8 @@ CLIPSEG_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -820,10 +824,11 @@ class CLIPSegVisionTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -835,10 +840,7 @@ class CLIPSegVisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -883,6 +885,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = True,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -911,6 +914,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1004,6 +1008,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1039,6 +1044,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1058,6 +1064,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPSegOutput]:
         r"""
@@ -1095,6 +1102,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1362,6 +1370,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPSegOutput]:
         r"""
@@ -1401,6 +1410,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=True,  # we need the intermediate hidden states
+                interpolate_pos_encoding=interpolate_pos_encoding,
                 return_dict=return_dict,
             )
             pooled_output = self.clip.visual_projection(vision_outputs[1])
