@@ -320,12 +320,11 @@ class PrismModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-        
+
     def test_eager_matches_sdpa_inference_0_float16(self):
         if not torch.cuda.is_available():
             self.skipTest("Skipping float16 tests on CPU. Requires GPU.")
 
-        model = PrismModel.from_pretrained("dariast/prism").to(torch.float16)
 
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
