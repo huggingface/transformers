@@ -106,6 +106,11 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
 
+    if "stablelm" in architecture:
+        attn_bias_name = {"attn_q.bias", "attn_k.bias", "attn_v.bias"}
+        qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
+        parsed_parameters["config"]["qkv_bias"] = qkv_bias
+
     model_size = ""
     # extract the number of params from file name as architectures can differ ;
     # eg. for falcon : `...falcon-7b-...`
