@@ -46,7 +46,7 @@ The next step is to pass all the relevant training objects to the [`~accelerate.
 
 ## Backward
 
-The last addition is to replace the typical `loss.backward()` in your training loop with 🤗 Accelerate's [`~accelerate.Accelerator.backward`]method:
+The last addition is to replace the typical `loss.backward()` in your training loop with 🤗 Accelerate's [`~accelerate.Accelerator.backward`] method:
 
 ```py
 >>> for epoch in range(num_epochs):

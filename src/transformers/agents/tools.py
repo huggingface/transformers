@@ -16,12 +16,13 @@
 # limitations under the License.
 import base64
 import importlib
+import inspect
 import io
 import json
 import os
 import tempfile
-from functools import lru_cache
-from typing import Any, Dict, List, Optional, Union
+from functools import lru_cache, wraps
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
@@ -35,7 +36,9 @@ from ..dynamic_module_utils import (
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
+    TypeHintParsingException,
     cached_file,
+    get_json_schema,
     is_accelerate_available,
     is_torch_available,
     is_vision_available,
@@ -84,6 +87,20 @@ launch_gradio_demo({class_name})
 """
 
 
+def validate_after_init(cls):
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def new_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        if not isinstance(self, PipelineTool):
+            self.validate_arguments()
+
+    cls.__init__ = new_init
+    return cls
+
+
+@validate_after_init
 class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -114,17 +131,35 @@ class Tool:
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
-    def validate_attributes(self):
+    def validate_arguments(self):
         required_attributes = {
             "description": str,
             "name": str,
             "inputs": Dict,
-            "output_type": type,
+            "output_type": str,
         }
+        authorized_types = ["string", "integer", "number", "image", "audio", "any", "boolean"]
+
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
             if not isinstance(attr_value, expected_type):
-                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
+                raise TypeError(f"You must set an attribute {attr} of type {expected_type.__name__}.")
+        for input_name, input_content in self.inputs.items():
+            assert "type" in input_content, f"Input '{input_name}' should specify a type."
+            if input_content["type"] not in authorized_types:
+                raise Exception(
+                    f"Input '{input_name}': type '{input_content['type']}' is not an authorized value, should be one of {authorized_types}."
+                )
+            assert "description" in input_content, f"Input '{input_name}' should have a description."
+
+        assert getattr(self, "output_type", None) in authorized_types
+
+        if not isinstance(self, PipelineTool):
+            signature = inspect.signature(self.forward)
+            if not set(signature.parameters.keys()) == set(self.inputs.keys()):
+                raise Exception(
+                    "Tool's 'forward' method should take 'self' as its first argument, then its next arguments should match the keys of tool attribute 'inputs'."
+                )
 
     def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -382,7 +417,7 @@ class Tool:
                 super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
-                self.output_type = "text"
+                self.output_type = "string"
                 self._gradio_tool = _gradio_tool
                 func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
                 self.inputs = {key: "" for key in func_args}
@@ -404,7 +439,7 @@ class Tool:
                 self.name = _langchain_tool.name.lower()
                 self.description = _langchain_tool.description
                 self.inputs = parse_langchain_args(_langchain_tool.args)
-                self.output_type = "text"
+                self.output_type = "string"
                 self.langchain_tool = _langchain_tool
 
             def forward(self, *args, **kwargs):
@@ -421,6 +456,7 @@ class Tool:
 DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
+    Returns an output of type: {{tool.output_type}}
 """
 
 
@@ -621,18 +657,18 @@ def launch_gradio_demo(tool_class: Tool):
     gradio_inputs = []
     for input_name, input_details in tool_class.inputs.items():
         input_type = input_details["type"]
-        if input_type == "text":
-            gradio_inputs.append(gr.Textbox(label=input_name))
-        elif input_type == "image":
+        if input_type == "image":
             gradio_inputs.append(gr.Image(label=input_name))
         elif input_type == "audio":
             gradio_inputs.append(gr.Audio(label=input_name))
+        elif input_type in ["string", "integer", "number"]:
+            gradio_inputs.append(gr.Textbox(label=input_name))
         else:
             error_message = f"Input type '{input_type}' not supported."
             raise ValueError(error_message)
 
     gradio_output = tool_class.output_type
-    assert gradio_output in ["text", "image", "audio"], f"Output type '{gradio_output}' not supported."
+    assert gradio_output in ["string", "image", "audio"], f"Output type '{gradio_output}' not supported."
 
     gr.Interface(
         fn=fn,
@@ -808,3 +844,37 @@ class ToolCollection:
         self._collection = get_collection(collection_slug, token=token)
         self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
         self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}
+
+
+def tool(tool_function: Callable) -> Tool:
+    """
+    Converts a function into an instance of a Tool subclass.
+
+    Args:
+        tool_function: Your function. Should have type hints for each input and a type hint for the output.
+        Should also have a docstring description including an 'Args:' part where each argument is described.
+    """
+    parameters = get_json_schema(tool_function)["function"]
+    if "return" not in parameters:
+        raise TypeHintParsingException("Tool return type not found: make sure your function has a return type hint!")
+    class_name = f"{parameters['name'].capitalize()}Tool"
+
+    class SpecificTool(Tool):
+        name = parameters["name"]
+        description = parameters["description"]
+        inputs = parameters["parameters"]["properties"]
+        output_type = parameters["return"]["type"]
+
+        @wraps(tool_function)
+        def forward(self, *args, **kwargs):
+            return tool_function(*args, **kwargs)
+
+    original_signature = inspect.signature(tool_function)
+    new_parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)] + list(
+        original_signature.parameters.values()
+    )
+    new_signature = original_signature.replace(parameters=new_parameters)
+    SpecificTool.forward.__signature__ = new_signature
+
+    SpecificTool.__name__ = class_name
+    return SpecificTool()

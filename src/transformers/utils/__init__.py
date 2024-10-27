@@ -15,6 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import lru_cache
+from typing import FrozenSet
+
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
@@ -34,6 +37,7 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
+    LossKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,
@@ -118,12 +122,13 @@ from .import_utils import (
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
-    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -158,6 +163,7 @@ from .import_utils import (
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
+    is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
@@ -175,6 +181,7 @@ from .import_utils import (
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
@@ -188,6 +195,7 @@ from .import_utils import (
     is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
+    is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
@@ -218,6 +226,7 @@ from .import_utils import (
     is_torchdynamo_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
+    is_torchvision_v2_available,
     is_training_run_on_sagemaker,
     is_uroman_available,
     is_vision_available,
@@ -275,3 +284,31 @@ def check_min_version(min_version):
             + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )
+
+
+@lru_cache()
+def get_available_devices() -> FrozenSet[str]:
+    """
+    Returns a frozenset of devices available for the current PyTorch installation.
+    """
+    devices = {"cpu"}  # `cpu` is always supported as a device in PyTorch
+
+    if is_torch_cuda_available():
+        devices.add("cuda")
+
+    if is_torch_mps_available():
+        devices.add("mps")
+
+    if is_torch_xpu_available():
+        devices.add("xpu")
+
+    if is_torch_npu_available():
+        devices.add("npu")
+
+    if is_torch_mlu_available():
+        devices.add("mlu")
+
+    if is_torch_musa_available():
+        devices.add("musa")
+
+    return frozenset(devices)

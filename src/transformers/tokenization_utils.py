@@ -316,6 +316,9 @@ class ExtensionsTrie(Trie):
         """
         node = self.data
         for char in token:
+            if char not in node:
+                break
+
             node = node[char]
         return node
 
@@ -749,6 +752,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -806,6 +810,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -833,6 +838,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -891,6 +897,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -913,6 +920,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -942,6 +950,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=None,  # we pad in batch afterward
+                padding_side=None,  # we pad in batch afterward
                 return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
@@ -963,6 +972,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             padding=padding_strategy.value,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 
@@ -1070,7 +1080,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _decode(
         self,
-        token_ids: List[int],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         spaces_between_special_tokens: bool = True,
@@ -1079,6 +1089,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # If given is a single id, prevents splitting the string in upcoming loop
+        if isinstance(filtered_tokens, str):
+            filtered_tokens = [filtered_tokens]
+
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
         }
@@ -1089,7 +1103,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         current_sub_text = []
         # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
+            if skip_special_tokens and token in self.all_special_tokens:
                 continue
             if token in legacy_added_tokens:
                 if current_sub_text:

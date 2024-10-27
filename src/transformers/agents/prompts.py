@@ -199,7 +199,7 @@ Thought: I will now generate an image showcasing the oldest person.
 Action:
 {
   "action": "image_generator",
-  "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
+  "action_input": {"prompt": "A portrait of John Doe, a 55-year-old man living in Canada."}
 }<end_action>
 Observation: "image.png"
 

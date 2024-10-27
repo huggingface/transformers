@@ -241,7 +241,8 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                     raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
                 trainer._hp_search_setup(trial)
-                torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                args_main_rank_list = [pickle.dumps(trainer.args)]
+                torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
                 trainer.train(resume_from_checkpoint=checkpoint)
             else:
                 trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
@@ -267,11 +268,11 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     else:
         for i in range(n_trials):
             trainer.objective = None
-            args_main_rank = list(pickle.dumps(trainer.args))
+            args_main_rank_list = [None]
             if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
-            torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            args = pickle.loads(bytes(args_main_rank))
+            torch.distributed.broadcast_object_list(args_main_rank_list, src=0)
+            args = pickle.loads(bytes(args_main_rank_list[0]))
             for key, value in asdict(args).items():
                 if key != "local_rank":
                     setattr(trainer.args, key, value)
@@ -803,6 +804,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         self._initialized = True
+
+        # prepare to handle potential configuration issues during setup
+        from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
+
         if state.is_world_process_zero:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
@@ -852,7 +857,13 @@ class WandbCallback(TrainerCallback):
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                logger.info("Could not log the number of model parameters in Weights & Biases.")
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+            except WandbConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
 
             # log the initial model architecture to an artifact
             if self._log_model.is_enabled:
@@ -905,7 +916,7 @@ class WandbCallback(TrainerCallback):
         if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
             from ..trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
+            fake_trainer = Trainer(args=args, model=model, processing_class=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
@@ -1207,6 +1218,8 @@ class MLflowCallback(TrainerCallback):
             and other parameters are ignored.
         - **MLFLOW_FLATTEN_PARAMS** (`str`, *optional*, defaults to `False`):
             Whether to flatten the parameters dictionary before logging.
+        - **MLFLOW_MAX_LOG_PARAMS** (`int`, *optional*):
+            Set the maximum number of parameters to log in the run.
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
@@ -1214,6 +1227,7 @@ class MLflowCallback(TrainerCallback):
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
         self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
+        self._max_log_params = os.getenv("MLFLOW_MAX_LOG_PARAMS", None)
 
         # "synchronous" flag is only available with mlflow version >= 2.8.0
         # https://github.com/mlflow/mlflow/pull/9705
@@ -1262,6 +1276,13 @@ class MLflowCallback(TrainerCallback):
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
+            if self._max_log_params and self._max_log_params.isdigit():
+                max_log_params = int(self._max_log_params)
+                if max_log_params < len(combined_dict_items):
+                    logger.debug(
+                        f"Reducing the number of parameters to log from {len(combined_dict_items)} to {max_log_params}."
+                    )
+                    combined_dict_items = combined_dict_items[:max_log_params]
             for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
                 if self._async_log:
                     self._ml_flow.log_params(
@@ -2102,7 +2123,7 @@ class DVCLiveCallback(TrainerCallback):
             from transformers.trainer import Trainer
 
             if self._log_model is True:
-                fake_trainer = Trainer(args=args, model=kwargs.get("model"), tokenizer=kwargs.get("tokenizer"))
+                fake_trainer = Trainer(args=args, model=kwargs.get("model"), processing_class=kwargs.get("tokenizer"))
                 name = "best" if args.load_best_model_at_end else "last"
                 output_dir = os.path.join(args.output_dir, name)
                 fake_trainer.save_model(output_dir)

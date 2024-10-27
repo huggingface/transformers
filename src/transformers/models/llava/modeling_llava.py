@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -43,7 +44,6 @@ _CHECKPOINT_FOR_DOC = "llava-hf/llava-1.5-7b-hf"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
 class LlavaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for Llava causal language model (or autoregressive) outputs.
@@ -70,11 +70,9 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -82,7 +80,7 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class LlavaMultiModalProjector(nn.Module):
@@ -127,8 +125,9 @@ class LlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
     _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only
@@ -151,14 +150,6 @@ class LlavaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 LLAVA_INPUTS_DOCSTRING = r"""
@@ -240,16 +231,14 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel):
+class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -280,6 +269,35 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
+
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+    ):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+            vision_feature_layer (`int`):
+                The index of the layer to select the vision feature.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        else:
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+        image_features = self.multi_modal_projector(selected_image_feature)
+        return image_features
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
@@ -336,7 +354,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
         )
         image_to_overwrite[batch_indices, text_to_overwrite] = False
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        if left_padding:
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        else:
+            mask = torch.ones_like(image_to_overwrite, dtype=torch.bool).cumsum(-1) - 1
+            padding_mask = mask <= new_token_positions[:, -1:].to(target_device)
+            image_to_overwrite &= padding_mask
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
@@ -408,7 +431,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
@@ -431,9 +454,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -452,17 +473,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-            # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
-            elif vision_feature_select_strategy == "full":
-                selected_image_feature = selected_image_feature
-            else:
-                raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
-
-            image_features = self.multi_modal_projector(selected_image_feature)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
 
             if legacy_processing:
                 logger.warning_once(
@@ -476,6 +491,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                         image_features, inputs_embeds, input_ids, attention_mask, labels
                     )
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
@@ -506,11 +522,23 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[
+                        -target_length:
+                    ]
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
+                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                n_image_features = image_features.shape[1]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -534,7 +562,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -556,6 +586,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def prepare_inputs_for_generation(
@@ -569,6 +600,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = (
             input_ids is not None
@@ -585,9 +618,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             **kwargs,
         )
 
-        if legacy_processing:
-            model_inputs["pixel_values"] = pixel_values
-        elif cache_position[0] == 0:
+        if legacy_processing or cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values

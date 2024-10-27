@@ -23,10 +23,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -123,6 +124,12 @@ def unpad_image(tensor, original_size):
     Returns:
         `torch.Tensor`: The unpadded image tensor.
     """
+    if not isinstance(original_size, (list, tuple)):
+        if not isinstance(original_size, (torch.Tensor, np.ndarray)):
+            raise TypeError(
+                f"image_size invalid type: {type(original_size)} not valid, should be either list, tuple, np.ndarray or tensor"
+            )
+        original_size = original_size.tolist()
     original_height, original_width = original_size
     current_height, current_width = tensor.shape[1:]
 
@@ -144,7 +151,6 @@ def unpad_image(tensor, original_size):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaNext
 class LlavaNextCausalLMOutputWithPast(ModelOutput):
     """
     Base class for LlavaNext causal language model (or autoregressive) outputs.
@@ -171,11 +177,9 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -183,7 +187,7 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaNext
@@ -230,8 +234,9 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaNextVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
     _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of LlavaNext isn't meant for training from scratch - only
@@ -254,14 +259,6 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 LLAVA_NEXT_INPUTS_DOCSTRING = r"""
@@ -346,7 +343,7 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_START_DOCSTRING,
 )
-class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
+class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -356,9 +353,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
@@ -648,7 +643,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         return final_embedding, final_attention_mask, position_ids, final_labels, final_input_ids
 
-    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -657,6 +652,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
+            vision_feature_select_strategy (`str`)
+                The feature selection strategy used to select the vision feature from the vision backbone.
             image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
         Returns:
@@ -671,8 +668,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-                if height * width != base_image_feature.shape[0]:
+
+                if vision_feature_select_strategy == "default":
+                    expected_num_patches = height * width
+                elif vision_feature_select_strategy == "full":
+                    expected_num_patches = height * width + 1
+                if expected_num_patches != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
+
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
@@ -701,6 +704,57 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         image_features = torch.cat(new_image_features, dim=0)
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int,
+        vision_feature_select_strategy: str,
+    ):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+               The tensors corresponding to the input images.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+            vision_feature_layer (`int`):
+                The index of the layer to select the vision feature.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
+        Returns:
+            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
+            and are of shape `(num_patches, image_length, embed_dim)`).
+        """
+        # ! infer image_num_patches from image_sizes
+        image_num_patches = [
+            image_size_to_num_patches(
+                image_size=imsize,
+                grid_pinpoints=self.config.image_grid_pinpoints,
+                patch_size=self.config.vision_config.image_size,
+            )
+            for imsize in image_sizes
+        ]
+        if pixel_values.dim() == 5:
+            # stacked if input is (batch_size, num_patches, num_channels, height, width)
+            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
+            pixel_values = torch.cat(_pixel_values_list, dim=0)
+        elif pixel_values.dim() != 4:
+            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
+            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+
+        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = torch.split(image_features, image_num_patches, dim=0)
+        return image_features
 
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -751,7 +805,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
@@ -774,9 +828,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -795,39 +847,18 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None and pixel_values.size(0) > 0:
-            # ! infer image_num_patches from image_sizes
-            image_num_patches = [
-                image_size_to_num_patches(
-                    image_size=imsize,
-                    grid_pinpoints=self.config.image_grid_pinpoints,
-                    patch_size=self.config.vision_config.image_size,
-                )
-                for imsize in image_sizes
-            ]
-            # figure out if pixel_values is concatenated or stacked
-            if pixel_values.dim() == 5:
-                # stacking when input is (batch_size, num_patches, num_channels, height, width)
-                _pixel_values_list = [
-                    pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)
-                ]
-                pixel_values = torch.cat(_pixel_values_list, dim=0)
-            elif pixel_values.dim() != 4:
-                # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-                raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
-
-            image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-            selected_image_feature = image_features.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
-            elif vision_feature_select_strategy == "full":
-                selected_image_feature = selected_image_feature
-            image_features = self.multi_modal_projector(selected_image_feature)
-            image_features = torch.split(image_features, image_num_patches, dim=0)
+            image_features = self.get_image_features(
+                pixel_values,
+                image_sizes,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
 
             # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
             image_features, feature_lens = self.pack_image_features(
                 image_features,
                 image_sizes,
+                vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
             if legacy_processing:
@@ -848,6 +879,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         position_ids,
                         labels=labels,
                     )
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
@@ -877,11 +909,23 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[
+                        -target_length:
+                    ]
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
+                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+                n_image_features = image_features.shape[0]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
                 special_image_mask = (
-                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
                 )
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -905,7 +949,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
@@ -927,6 +973,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
     def prepare_inputs_for_generation(
@@ -941,6 +988,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         num_logits_to_keep=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         legacy_processing = (
             input_ids is not None
             and (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
@@ -956,12 +1005,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             **kwargs,
         )
 
-        if legacy_processing:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-        elif cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model
+        if legacy_processing or cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
 

@@ -17,20 +17,12 @@ Processor class for Grounding DINO.
 """
 
 import pathlib
-import sys
 from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import AnnotationFormat, ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
-
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
 

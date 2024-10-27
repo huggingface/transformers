@@ -370,7 +370,7 @@ def cached_file(
     if os.path.isdir(path_or_repo_id):
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
-            if _raise_exceptions_for_missing_entries:
+            if _raise_exceptions_for_missing_entries and filename not in ["config.json", f"{subfolder}/config.json"]:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
                     f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
@@ -454,6 +454,8 @@ def cached_file(
             return None
         if revision is None:
             revision = "main"
+        if filename in ["config.json", f"{subfolder}/config.json"]:
+            return None
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
@@ -800,7 +802,7 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
-        if revision is not None:
+        if revision is not None and not revision.startswith("refs/pr"):
             try:
                 create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
             except HfHubHTTPError as e:
@@ -1196,6 +1198,9 @@ def create_and_tag_model_card(
         model_card = ModelCard.from_template(card_data, model_description=model_description)
 
     if tags is not None:
+        # Ensure model_card.data.tags is a list and not None
+        if model_card.data.tags is None:
+            model_card.data.tags = []
         for model_tag in tags:
             if model_tag not in model_card.data.tags:
                 model_card.data.tags.append(model_tag)
