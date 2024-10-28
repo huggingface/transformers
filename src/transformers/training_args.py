@@ -1532,6 +1532,15 @@ class TrainingArguments:
         },
     )
 
+    average_tokens_across_devices: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
+            "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
+            "https://github.com/huggingface/transformers/issues/34242"
+        },
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1764,6 +1773,19 @@ class TrainingArguments:
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():
             self.device
+
+        # Disable average tokens when using single device
+        if self.average_tokens_across_devices:
+            try:
+                if self.world_size == 1:
+                    logger.warning(
+                        "average_tokens_across_devices is set to True but it is invalid when world size is"
+                        "1. Turn it to False automatically."
+                    )
+                    self.average_tokens_across_devices = False
+            except ImportError as e:
+                logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
+                self.average_tokens_across_devices = False
 
         if self.torchdynamo is not None:
             warnings.warn(
