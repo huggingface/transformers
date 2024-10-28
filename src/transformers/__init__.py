@@ -1707,7 +1707,6 @@ else:
             "Emu3ForCausalLM",
             "Emu3TextModel",
             "Emu3PreTrainedModel",
-            "Emu3Processor",
             "Emu3VQVAE",
         ]
     )
@@ -6950,7 +6949,6 @@ if TYPE_CHECKING:
             Emu3ForCausalLM,
             Emu3ForConditionalGeneration,
             Emu3PreTrainedModel,
-            Emu3Processor,
             Emu3TextModel,
             Emu3VQVAE,
         )
