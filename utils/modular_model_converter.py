@@ -148,12 +148,9 @@ ASSIGNMENTS_TO_KEEP = {
 }
 
 class ClassDependencyMapper(CSTVisitor):
-    """A visitor which analyzes classes to get their dependencies. If `global_names` is passed, only dependencies
-    present in the `global_names` will be added.
-    This class is used through the 3 convenient class methods allowing to get the dependencies of a given class node.
-    The `ClassFinder` uses it to get dependencies of classes.
+    """A visitor which is designed to analyze a single class node to get all its dependencies that are mutual with `global_names`.
+    This class is used through the 2 convenient class methods.
     """
-
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
     def __init__(self, class_name: str, global_names: set | None):
@@ -191,39 +188,20 @@ class ClassDependencyMapper(CSTVisitor):
 
 
 class ModuleMapper(CSTVisitor, ABC):
-    """A visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
-    The `class_dependency_mapping` created contains 1st-level classes and assignments dependencies, as well
-    as all (recursively) functions dependencies.
-    The `function_call_recursive_dependecy_mapping` created contains all function definitions, and all their (recursively)
-    dependencies.
-
-    For example if the visited code has
-    ```python3
-    def init_value(): return 1
-
-    class LlamaModel(PreTrainedModel):
-        def __init__(self):
-            super().__init__(self)
-            self.value = init_value()
-    ```
-    then the `class_dependency_mapping` should be: `{"LlamaModel": {"PreTrainedModel", "init_value"}}
-
-    The dependency mapping is updated via the `ClassDependencyMapper`, then augmented with `augment_dependencies_with_functions`
-    to get all functions dependencies.
+    """An abstract visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
+    It defines common visiting patterns between the modular file and the model-specific modules that are imported in the modular file.
     """
-
-    METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
+    METADATA_DEPENDENCIES = (ParentNodeProvider, PositionProvider)
 
     def __init__(self, python_module: cst.Module):
         # fmt: off
-        self.python_module: cst.Module = python_module  # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}      # mapping from class names to Nodes
-        self.imports = {}                               # stores all import statements
-        self.functions = {}                             # mapping of global scope function names to Nodes
-        self.assignments = {}                           # mapping of global assignments names to Nodes
-        self.class_dependency_mapping = {}              # mapping of function name to immediate dependencies
+        self.python_module: cst.Module = python_module             # original cst.Module being visited
+        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes
+        self.imports = []                                          # stores all import statements
+        self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
+        self.function_call_dependency_mapping = defaultdict(set)   # 1st-level function dependency mapping
+        self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None
-        self.function_call_dependency_mapping = defaultdict(set)
         # fmt: on
 
     def visit_SimpleStatementLine(self, node):
@@ -241,7 +219,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 for idx, target in enumerate(list(left_hand_side.elements)):
                     self.assignments[target.value.value] = node.body[0].value.elements[idx].value
         if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
-            self.imports[node.body[0].names] = node
+            self.imports.append(node)
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -257,7 +235,7 @@ class ModuleMapper(CSTVisitor, ABC):
     def leave_If(self, node):
         for stmt in node.body.body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports[stmt.body[0].names] = node
+                self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
@@ -320,6 +298,7 @@ class ModuleMapper(CSTVisitor, ABC):
         # Create the global mapping of recursive dependencies for functions
         self.function_call_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
 
+        self.class_dependency_mapping = {}
         for class_name, class_node in self.classes.items():
             dependencies = ClassDependencyMapper.dependencies_for_node(class_node, set(self.global_nodes.keys()))
             # Corretcly augment class dependencies with all needed functions
@@ -331,6 +310,10 @@ class ModuleMapper(CSTVisitor, ABC):
     
 
 class ModelFileMapper(ModuleMapper):
+    """A mapper designed for model-specific files (i.e. a `transformers.models.xxx` file). When encountering such a file
+    in the `modular_xxx.py` file, we need to correctly visit it and merge the dependencies of the modular and current file.
+    For this reason, this class should only be instantiated from the class method `visit_and_merge_dependencies`, which takes
+    care of correctly merging dependencies, then finalizes all dependency graph computations."""
 
     def __init__(self, python_module: cst.Module):
         super().__init__(python_module)
@@ -900,6 +883,16 @@ def get_new_part(class_name, base_class):
     return snake_case
 
 
+def find_file_type(class_name: str) -> str:
+    """Based on a class name, find the file type corresponding to the class."""
+    match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
+    match = re.search(rf"({match_pattern})$", class_name)
+    if match:
+        file_type = TYPE_TO_FILE_TYPE[match.group(1)]
+    else:
+        file_type = "modeling"
+    return file_type
+
 # These top-level variables will always appear the very beginning of the file, in the order they are defined in
 # this list (this is to avoid having variables at weird places, even if they are not used before)
 VARIABLES_AT_THE_BEGINNING = [
@@ -909,8 +902,10 @@ VARIABLES_AT_THE_BEGINNING = [
 ]
 
 class ModularFileMapper(ModuleMapper):
-    METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
-
+    """This is a Mapper for a modular file. It visits the whole file, recording dependency, then visits all model-specific
+    files that should be visited, and manages their mutual dependencies.
+    Calling the method `create_modules()` after visit will create all modules based on this modular file.
+    """
     def __init__(self, python_module, new_name, given_old_name=None, given_new_name=None):
         super().__init__(python_module)
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
@@ -921,14 +916,11 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.match_patterns = "|".join(list(TYPE_TO_FILE_TYPE.values()).append("modeling"))
-        self.all_imports = []
         self.all_all_to_add = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        """When visiting imports from `transformers.models.xxx` we need to:
-        1. Get the original source code
-        2. Parse it into an AST Tree
-        3. Add this import to `self.transformers_imports` as visited to not parse it twice
+        """When visiting imports from model-specific files (i.e. `transformers.models.xxx`) we get the code, parse it,
+        and record it in `self.model_specific_modules`. The imported objects are recorded in `self.model_specific_imported_objects`.
         """
         import_statement = self.python_module.code_for_node(node.module)
         if "auto.modeling_auto" in import_statement:
@@ -959,14 +951,17 @@ class ModularFileMapper(ModuleMapper):
                 )
 
     def visit_SimpleStatementLine(self, node):
+        """If we visit an import statement not previously visited, record it. If we visit a top-level assignment,
+        simply record it or, if it is `__all__`, split it between files where we should dispatch it.
+        """
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
         if m.matches(parent_node, m.Module()):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
-                if node not in self.all_imports:
-                    self.all_imports.append(node)
+                if node not in self.imports:
+                    self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(node.body[0].module)
                 if (
@@ -975,8 +970,8 @@ class ModularFileMapper(ModuleMapper):
                     and "auto.modeling_auto" not in full_statement
                 ):
                     return
-                if node not in self.all_imports:
-                    self.all_imports.append(node)
+                if node not in self.imports:
+                    self.imports.append(node)
             elif m.matches(node, simple_top_level_assign_structure):
                 assigned_variable = node.body[0].targets[0].target.value
                 # __all__ is treated differently and not added to general assignments
@@ -991,7 +986,7 @@ class ModularFileMapper(ModuleMapper):
                             if isinstance(element.value, cst.SimpleString):
                                 # Remove quotes and add the string to the elements list
                                 class_name = element.value.value
-                                file = self.find_file_type(element.value.evaluated_value)
+                                file = find_file_type(element.value.evaluated_value)
                                 all_all_to_add[file] += [class_name]
                         for file, new_alls in all_all_to_add.items():
                             new_node = assign_node.with_changes(
@@ -1000,10 +995,11 @@ class ModularFileMapper(ModuleMapper):
                             self.all_all_to_add[file] = node.with_changes(body=[new_node])
 
     def leave_Module(self, node):
-        """When leaving the module, we finally create the `function_call_recursive_dependency_mapping`, then we
-        compute the dependencies for all recorded classes based on all the nodes we visited.
-        We also store the position of each global scoped node to allow sorting the dependencies based on their
-        position in the code later. We use the PositionProvider metadata wrapper for this.
+        """When we leave the modular file, we do the following in order:
+        - compute recursive function dependencies
+        - for each model-specific file found in the imports, rename it with the new model name, visit it, and update
+        its dependency graph with the new function and assignment definitions found in the modular
+        - update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
         """
         super().leave_Module(node)
 
@@ -1026,8 +1022,8 @@ class ModularFileMapper(ModuleMapper):
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
         
     def merge_model_specific_imports(self, visited_modules):
-        # In turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the 
-        # definitions found in the visited files
+        """Merge the model-specific imported functions and assignments to the modular nodes and dependency graph,
+        based on the visited files."""
         self.start_lines_file_mapping = {}
         self.added_objects_file_mapping = {}
         for object_name, file in self.model_specific_imported_objects.items():
@@ -1075,21 +1071,11 @@ class ModularFileMapper(ModuleMapper):
             idx += 1
 
         return relative_order
-    
 
-    def find_file_type(self, class_name: str) -> str:
-        match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
-        match = re.search(rf"({match_pattern})$", class_name)
-        if match:
-            file_type = TYPE_TO_FILE_TYPE[match.group(1)]
-        else:
-            file_type = "modeling"
-        return file_type
-    
-
-    def add_class_node(self, class_name: str, node: cst.CSTNode, files: dict[str, dict]):
-        """Add a single class node (and its dependencies), to the `files`."""
-
+    def add_class_node(self, class_name: str, node: cst.CSTNode, files: dict[str, dict]) -> tuple[dict, str]:
+        """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
+        class node based on the inherited classes if needed.
+        """
         bases = [k.value.value for k in node.bases if k.value.value in self.model_specific_imported_objects]
         if len(bases) > 1:
             raise ValueError(
@@ -1097,7 +1083,7 @@ class ModularFileMapper(ModuleMapper):
             )
         all_bases = [k.value.value for k in node.bases]
 
-        file_type = self.find_file_type(class_name)
+        file_type = find_file_type(class_name)
         file_to_update = files[file_type]
 
         # We need to replace the class node with the super class node
@@ -1151,9 +1137,8 @@ class ModularFileMapper(ModuleMapper):
 
         return nodes_to_add, file_type
 
-
-    def create_files(self) -> dict[str, cst.Module]:
-
+    def create_modules(self) -> dict[str, cst.Module]:
+        """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
         files = defaultdict(dict)
         current_file_indices = defaultdict(lambda: 0)
 
@@ -1173,14 +1158,14 @@ class ModularFileMapper(ModuleMapper):
                     current_file_indices[file_type] += 1
                 files[file_type][dependency] = {"insert_idx": idx, "node": node}
 
-        # Add the __all__ statement to files
+        # Add the __all__ statement to files at the end
         for file_type, node in self.all_all_to_add.items():
             idx = current_file_indices[file_type]
             files[file_type]["__all__"] = {"insert_idx": idx, "node": node}
 
         # Merge imports
         # TODO: use scope solution instead
-        imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
+        imports = {self.python_module.code_for_node(k): k for k in self.imports}
         dependency_imports = {file_type: imports.copy() for file_type in files}
         for super_file_name, visiter in self.visited_modules.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
@@ -1210,8 +1195,8 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         if cst_transformers is None:
             cst_transformers = ModularFileMapper(module, model_name, old_model_name, new_model_name)
         wrapper.visit(cst_transformers)
-        for file, node in cst_transformers.create_files().items():
-            if node != {}:
+        for file, module in cst_transformers.create_modules().items():
+            if module != {}:
                 # Get relative path starting from src/transformers/
                 relative_path = re.search(
                     r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
@@ -1220,7 +1205,7 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
                 )
-                ruffed_code = run_ruff(header + node.code, True)
+                ruffed_code = run_ruff(header + module.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
                 output[file] = [formatted_code, ruffed_code]
         return output
