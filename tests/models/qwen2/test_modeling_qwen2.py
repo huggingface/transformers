@@ -343,14 +343,6 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     ):
         return True
 
-    # Ignore copy
-    # TODO: @Fxmarty
-    @require_torch_sdpa
-    @slow
-    @unittest.skip(reason="Currently failing.")
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
     def setUp(self):
         self.model_tester = Qwen2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2Config, hidden_size=37)
@@ -367,6 +359,9 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     def test_Qwen2_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
