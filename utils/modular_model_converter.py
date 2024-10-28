@@ -154,6 +154,8 @@ class ClassDependencyMapper(CSTVisitor):
     The `ClassFinder` uses it to get dependencies of classes.
     """
 
+    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+
     def __init__(self, class_name: str, global_names: set | None):
         super().__init__()
         self.class_name = class_name
@@ -162,14 +164,18 @@ class ClassDependencyMapper(CSTVisitor):
 
     def visit_Name(self, node):
         if node.value != self.class_name and node.value in self.global_names:
-            self.dependencies.add(node.value)
+            parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+            # If it is only an annotation, do not add dependency
+            if not m.matches(parent_node, m.Annotation()):
+                self.dependencies.add(node.value)
 
     @classmethod
     def dependencies_for_node(cls, node: cst.ClassDef, global_names: set) -> set:
         """Create dependencies for a node in the `ModuleMapper`."""
         temp_module = cst.Module(body=[node])
+        wrapper = MetadataWrapper(temp_module)
         visitor = cls(node.name.value, global_names)
-        temp_module.visit(visitor)
+        wrapper.visit(visitor)
         return visitor.dependencies
 
     @classmethod
@@ -178,8 +184,9 @@ class ClassDependencyMapper(CSTVisitor):
         `replace_call_to_super`).
         """
         temp_module = cst.Module(body=[updated_node])
+        wrapper = MetadataWrapper(temp_module)
         visitor = cls(updated_node.name.value, set(mapper.global_nodes.keys()))
-        temp_module.visit(visitor)
+        wrapper.visit(visitor)
         return mapper.augment_dependencies_with_functions(visitor.dependencies)
 
 
@@ -1143,7 +1150,7 @@ class ModularFileMapper(ModuleMapper):
             relative_dependency_order = self.compute_relative_order(all_dependencies_to_add)
             nodes_to_add = {
                 dep: (relative_dependency_order[dep], self.global_nodes[dep])
-                for dep in all_dependencies_to_add
+                for dep in all_dependencies_to_add if dep not in file_to_update.keys()
             }
 
         # Add the class node itself to the nodes to add
@@ -1252,7 +1259,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/glm/modular_glm.py"],
+        default=["src/transformers/models/gemma/modular_gemma.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
