@@ -920,15 +920,7 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_imported_objects: Dict[str, str] = {} # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
         self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
-        self.files = {  # mapping for different component bodies
-            "modeling": {},
-            "configuration": {},
-            "tokenization": {},
-            "processing": {},
-            "image_processing": {},
-            "feature_extractor": {},
-        }
-        self.match_patterns = "|".join(self.files.keys())
+        self.match_patterns = "|".join(list(TYPE_TO_FILE_TYPE.values()).append("modeling"))
         self.all_imports = []
         self.all_all_to_add = {}
 
