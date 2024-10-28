@@ -25,7 +25,6 @@ from datasets import load_dataset
 
 from transformers import (
     AutoImageProcessor,
-    HfArgumentParser,
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
@@ -135,4 +134,5 @@ def augment_and_transform_batch(
     return BatchFeature(data=processed_images.data, pixel_mask=return_pixel_mask)
 
     # Further code would go here (e.g., model training, dataset preparation)
-    
+
+
